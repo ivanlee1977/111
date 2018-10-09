@@ -1,0 +1,314 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPQM004F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:BEGIN OF lt_qals OCCURS 0,
+         prueflos   LIKE qals-prueflos,
+         werk       LIKE qals-werk,
+         selmatnr   LIKE qals-selmatnr,
+         lifnr      LIKE qals-lifnr,
+         gesstichpr LIKE qals-gesstichpr,
+       END OF lt_qals.
+  DATA:lt_qmfel LIKE qmfel OCCURS 0 WITH HEADER LINE.
+  DATA:BEGIN OF lt_lfa1 OCCURS 0,
+         lifnr LIKE lfa1-lifnr,
+         sortl LIKE lfa1-sortl,
+       END OF lt_lfa1.
+  DATA:lt_ztqm005 LIKE ztqm005 OCCURS 0 WITH HEADER LINE.
+
+***获取满足条件的检验批数据
+  SELECT a~prueflos
+         a~werk
+         a~selmatnr
+         a~lifnr
+         a~gesstichpr
+    INTO CORRESPONDING FIELDS OF TABLE lt_qals
+    FROM qals AS a
+    INNER JOIN mara AS b
+    ON a~selmatnr = b~matnr
+    WHERE a~pastrterm IN s_pastr
+*      AND a~paendterm IN s_paend
+      AND a~sellifnr  IN s_lifnr
+      AND b~matkl     IN s_matkl
+      AND a~selmatnr  IN s_matnr
+      AND a~werk      IN s_werk
+      AND a~charg     IN s_charg
+      AND a~prueflos  IN s_pruef
+      AND a~art = '01'.
+
+  CHECK lt_qals[] IS NOT INITIAL.
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE lt_qmfel
+    FROM qmfel
+    FOR ALL ENTRIES IN lt_qals
+    WHERE prueflos = lt_qals-prueflos
+      AND kzloesch = space.
+
+***供应商简称
+  SELECT lifnr sortl
+    INTO CORRESPONDING FIELDS OF TABLE lt_lfa1
+    FROM lfa1
+    FOR ALL ENTRIES IN lt_qals
+    WHERE lifnr = lt_qals-lifnr.
+
+***获取目标值
+  SELECT *
+    INTO TABLE lt_ztqm005
+    FROM ztqm005
+    FOR ALL ENTRIES IN lt_qals
+    WHERE lifnr = lt_qals-lifnr
+      AND werks = lt_qals-werk.
+
+  SORT lt_lfa1 BY lifnr.
+
+  LOOP AT lt_qals.
+    gt_out-werks = lt_qals-werk.
+    gt_out-lifnr = lt_qals-lifnr.
+    READ TABLE lt_lfa1 WITH KEY lifnr = lt_qals-lifnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-sortl = lt_lfa1-sortl.
+    ENDIF.
+    gt_out-gesstichpr = lt_qals-gesstichpr.
+
+    LOOP AT lt_qmfel WHERE prueflos = lt_qals-prueflos.
+***抽检不良数
+      IF lt_qmfel-vorglfnr IS INITIAL AND lt_qmfel-merknr IS INITIAL.
+        gt_out-cjbls = gt_out-cjbls + lt_qmfel-anzfehler.
+      ENDIF.
+***致命缺陷数
+      IF lt_qmfel-vorglfnr IS NOT INITIAL AND lt_qmfel-merknr IS NOT INITIAL AND lt_qmfel-feqklas = '01'.
+        gt_out-zmqxs = gt_out-zmqxs + lt_qmfel-anzfehler.
+      ENDIF.
+***重缺陷数
+      IF lt_qmfel-vorglfnr IS NOT INITIAL AND lt_qmfel-merknr IS NOT INITIAL AND lt_qmfel-feqklas = '02'.
+        gt_out-zzqxs = gt_out-zzqxs + lt_qmfel-anzfehler.
+      ENDIF.
+***轻缺陷数
+      IF lt_qmfel-vorglfnr IS NOT INITIAL AND lt_qmfel-merknr IS NOT INITIAL AND lt_qmfel-feqklas = '03'.
+        gt_out-zqqxs = gt_out-zqqxs + lt_qmfel-anzfehler.
+      ENDIF.
+    ENDLOOP.
+    COLLECT gt_out.
+    CLEAR gt_out.
+  ENDLOOP.
+
+***获取上月数据
+  PERFORM frm_get_last_month_data.
+
+***整理数据到输出表
+  SORT lt_ztqm005 BY lifnr werks.
+  SORT gt_data BY lifnr werks.
+
+  LOOP AT gt_out.
+***抽检不良率
+    IF gt_out-gesstichpr NE 0.
+      gt_out-cjbll = ( ( gt_out-zmqxs + gt_out-zzqxs ) * 1 + gt_out-zqqxs * ( '0.3' ) ) / gt_out-gesstichpr * 100.
+    ENDIF.
+***目标值
+    READ TABLE lt_ztqm005 WITH KEY lifnr = gt_out-lifnr werks = gt_out-werks BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-zmbz = lt_ztqm005-zvalue.
+    ENDIF.
+***是否达标
+    IF gt_out-cjbll <= gt_out-zmbz.
+      gt_out-zsfdb = '是'.
+    ELSE.
+      gt_out-zsfdb = '否'.
+    ENDIF.
+***上个月数据
+    READ TABLE gt_data WITH KEY lifnr = gt_out-lifnr werks = gt_out-werks BINARY SEARCH.
+    IF sy-subrc = 0.
+      IF gt_data-gesstichpr NE 0.
+        gt_out-zsysj = ( ( gt_data-zmqxs + gt_data-zzqxs ) * 1 + gt_data-zqqxs * ( '0.3' ) ) / gt_data-gesstichpr * 100.
+      ENDIF.
+    ENDIF.
+    IF gt_out-cjbll <= gt_out-zsysj.
+      gt_out-zqs = '升高'.
+    ELSE.
+      gt_out-zqs = '下降'.
+    ENDIF.
+    MODIFY gt_out.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_LAST_MONTH_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_GT_DATA  text
+*----------------------------------------------------------------------*
+FORM frm_get_last_month_data.
+  DATA:BEGIN OF lt_qals OCCURS 0,
+         prueflos   LIKE qals-prueflos,
+         werk       LIKE qals-werk,
+         selmatnr   LIKE qals-selmatnr,
+         lifnr      LIKE qals-lifnr,
+         gesstichpr LIKE qals-gesstichpr,
+       END OF lt_qals.
+  DATA:lt_qmfel LIKE qmfel OCCURS 0 WITH HEADER LINE.
+  DATA:lv_date      LIKE sy-datum,
+       lv_date_from LIKE sy-datum,
+       lv_date_to   LIKE sy-datum.
+
+  lv_date = s_pastr-low.
+  CALL FUNCTION 'BKK_ADD_MONTH_TO_DATE'
+    EXPORTING
+      months  = '-1'
+      olddate = lv_date
+    IMPORTING
+      newdate = lv_date.
+  CONCATENATE lv_date(6) '01' INTO lv_date_from.
+  CALL FUNCTION 'FKK_LAST_DAY_OF_MONTH'
+    EXPORTING
+      day_in            = lv_date_from
+    IMPORTING
+      last_day_of_month = lv_date_to
+    EXCEPTIONS
+      day_in_no_date    = 1
+      OTHERS            = 2.
+
+  SELECT   a~prueflos
+           a~werk
+           a~selmatnr
+           a~lifnr
+           a~gesstichpr
+      INTO CORRESPONDING FIELDS OF TABLE lt_qals
+      FROM qals AS a
+      INNER JOIN mara AS b
+      ON a~selmatnr = b~matnr
+      WHERE a~pastrterm BETWEEN lv_date_from AND lv_date_to
+        AND a~sellifnr  IN s_lifnr
+        AND b~matkl     IN s_matkl
+        AND a~selmatnr  IN s_matnr
+        AND a~werk      IN s_werk.
+
+  CHECK lt_qals[] IS NOT INITIAL.
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE lt_qmfel
+    FROM qmfel
+    FOR ALL ENTRIES IN lt_qals
+    WHERE prueflos = lt_qals-prueflos
+      AND kzloesch = space.
+
+  LOOP AT lt_qals.
+    gt_data-werks = lt_qals-werk.
+    gt_data-lifnr = lt_qals-lifnr.
+    gt_data-gesstichpr = lt_qals-gesstichpr.
+
+    LOOP AT lt_qmfel WHERE prueflos = lt_qals-prueflos.
+***抽检不良数
+      IF lt_qmfel-vorglfnr IS INITIAL AND lt_qmfel-merknr IS INITIAL.
+        gt_data-cjbls = gt_data-cjbls + lt_qmfel-anzfehler.
+      ENDIF.
+***致命缺陷数
+      IF lt_qmfel-vorglfnr IS NOT INITIAL AND lt_qmfel-merknr IS NOT INITIAL AND lt_qmfel-feqklas = '01'.
+        gt_data-zmqxs = gt_data-zmqxs + lt_qmfel-anzfehler.
+      ENDIF.
+***重缺陷数
+      IF lt_qmfel-vorglfnr IS NOT INITIAL AND lt_qmfel-merknr IS NOT INITIAL AND lt_qmfel-feqklas = '02'.
+        gt_data-zzqxs = gt_data-zzqxs + lt_qmfel-anzfehler.
+      ENDIF.
+***轻缺陷数
+      IF lt_qmfel-vorglfnr IS NOT INITIAL AND lt_qmfel-merknr IS NOT INITIAL AND lt_qmfel-feqklas = '03'.
+        gt_data-zqqxs = gt_data-zqqxs + lt_qmfel-anzfehler.
+      ENDIF.
+    ENDLOOP.
+    COLLECT gt_data.
+    CLEAR gt_data.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  mcr_build_fieldcat:'WERKS'          '工厂'             'WERKS'         'QALS'   ''    '',
+                     'LIFNR'          '供应商代码'       'LIFNR'         'QALS'   ''    '',
+                     'SORTL'          '供应商简称'       'SORTL'         'LFA1'   ''    '',
+                     'GESSTICHPR'     '抽检数量'         'GESSTICHPR'    'QALS'   ''    '',
+                     'CJBLS'          '抽检不良数'       ''              ''       'P'   '15',
+                     'ZMQXS'          '致命缺陷数'       ''              ''       'P'   '15',
+                     'ZZQXS'          '重缺陷数'         ''              ''       'P'   '15',
+                     'ZQQXS'          '轻缺陷数'         ''              ''       'P'   '15',
+                     'CJBLL'          '抽检不良率(%)'    ''              ''       'P'   '15',
+                     'ZMBZ'           '目标值'           ''              ''       'P'   '15',
+                     'ZSFDB'          '是否达标'         ''              ''       'C'   '2',
+                     'ZSYSJ'          '上月数据'         ''              ''       'C'   '2',
+                     'ZQS'            '趋势'             ''              ''       'C'   '5'.
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK  = ' '
+*     I_BYPASSING_BUFFER =
+*     I_BUFFER_ACTIVE    =
+      i_callback_program = sy-repid
+*     I_CALLBACK_PF_STATUS_SET          = ' '
+*     I_CALLBACK_USER_COMMAND           = ' '
+*     I_CALLBACK_TOP_OF_PAGE            = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME   =
+*     I_BACKGROUND_ID    = ' '
+*     I_GRID_TITLE       =
+*     I_GRID_SETTINGS    =
+      is_layout_lvc      = gs_layout
+      it_fieldcat_lvc    = gt_fcat[]
+*     IT_EXCLUDING       =
+*     IT_SPECIAL_GROUPS_LVC             =
+*     IT_SORT_LVC        =
+*     IT_FILTER_LVC      =
+*     IT_HYPERLINK       =
+*     IS_SEL_HIDE        =
+      i_default          = 'X'
+      i_save             = 'A'
+*     IS_VARIANT         =
+*     IT_EVENTS          =
+*     IT_EVENT_EXIT      =
+*     IS_PRINT_LVC       =
+*     IS_REPREP_ID_LVC   =
+*     I_SCREEN_START_COLUMN             = 0
+*     I_SCREEN_START_LINE               = 0
+*     I_SCREEN_END_COLUMN               = 0
+*     I_SCREEN_END_LINE  = 0
+*     I_HTML_HEIGHT_TOP  =
+*     I_HTML_HEIGHT_END  =
+*     IT_ALV_GRAPHICS    =
+*     IT_EXCEPT_QINFO_LVC               =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER           =
+*     ES_EXIT_CAUSED_BY_USER            =
+    TABLES
+      t_outtab           = gt_out[]
+    EXCEPTIONS
+      program_error      = 1
+      OTHERS             = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.

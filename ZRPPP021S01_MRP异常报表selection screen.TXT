@@ -1,0 +1,12 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPPP021S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_matnr FOR marc-matnr,
+               s_dismm FOR marc-dismm,
+               s_dispo FOR marc-dispo,
+               s_beskz FOR marc-beskz,
+               s_sobsl FOR marc-sobsl,
+               s_delb0 FOR mdez-delb0.
+SELECTION-SCREEN END OF BLOCK blc.

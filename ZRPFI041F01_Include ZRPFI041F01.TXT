@@ -1,0 +1,118 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI041F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  mcr_build_fieldcat:
+  'EBELN' '采购订单号' 'EKPO',
+  'EBELP' '采购订单项目号' 'EKPO',
+  'LIFNR' '供应商' 'EKKO',
+  'NAME1' '供应商描述' 'LFA1',
+  'MENGE' '数量' 'EKPO',
+  'MATNR' '物料编码' 'EKPO',
+  'MAKTX' '物料描述' 'MAKT',
+  'MBLNR' '收货凭证' 'MSEG',
+  'MENGE1' '收货数量' '',
+  'BUDAT_MKPF' '收货日期' 'MSEG',
+  'EKGRP' '采购组' '',
+  'EKNAM' '采购组描述' '',
+  'UNAME' '操作人' '',
+  'ZDATE' '操作日期' '',
+  'ZTIME' '操作时间' 'ZTFI005'.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK  = ' '
+*     I_BYPASSING_BUFFER =
+*     I_BUFFER_ACTIVE    =
+      i_callback_program = sy-repid
+*     I_CALLBACK_PF_STATUS_SET          = ' '
+*     I_CALLBACK_USER_COMMAND           = ' '
+*     I_CALLBACK_TOP_OF_PAGE            = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME   =
+*     I_BACKGROUND_ID    = ' '
+*     I_GRID_TITLE       =
+*     I_GRID_SETTINGS    =
+      is_layout_lvc      = gs_layout
+      it_fieldcat_lvc    = gt_fcat[]
+*     IT_EXCLUDING       =
+*     IT_SPECIAL_GROUPS_LVC             =
+*     IT_SORT_LVC        =
+*     IT_FILTER_LVC      =
+*     IT_HYPERLINK       =
+*     IS_SEL_HIDE        =
+*     I_DEFAULT          = 'X'
+*     I_SAVE             = ' '
+*     IS_VARIANT         =
+*     IT_EVENTS          =
+*     IT_EVENT_EXIT      =
+*     IS_PRINT_LVC       =
+*     IS_REPREP_ID_LVC   =
+*     I_SCREEN_START_COLUMN             = 0
+*     I_SCREEN_START_LINE               = 0
+*     I_SCREEN_END_COLUMN               = 0
+*     I_SCREEN_END_LINE  = 0
+*     I_HTML_HEIGHT_TOP  =
+*     I_HTML_HEIGHT_END  =
+*     IT_ALV_GRAPHICS    =
+*     IT_EXCEPT_QINFO_LVC               =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER           =
+*     ES_EXIT_CAUSED_BY_USER            =
+    TABLES
+      t_outtab           = gt_fi
+* EXCEPTIONS
+*     PROGRAM_ERROR      = 1
+*     OTHERS             = 2
+    .
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GETDATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_getdata .
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE gt_fi FROM ztfi005
+    WHERE uname IN s_uname
+    AND zdate IN s_zdate
+    AND ebeln IN s_ebeln
+    AND ekgrp IN s_ekgrp
+    AND budat_mkpf IN s_budat.
+
+  LOOP AT gt_fi.
+    SELECT SINGLE lifnr INTO gt_fi-lifnr FROM ekko WHERE ebeln = gt_fi-ebeln.
+    SELECT SINGLE name1 INTO gt_fi-name1 FROM lfa1 WHERE lifnr = gt_fi-lifnr.
+    SELECT SINGLE maktx INTO gt_fi-maktx FROM makt WHERE matnr  = gt_fi-matnr AND spras = 1.
+    SELECT SINGLE menge INTO gt_fi-menge1 FROM mseg WHERE mblnr = gt_fi-mblnr.
+    SELECT SINGLE eknam INTO gt_fi-eknam FROM t024 WHERE ekgrp = gt_fi-ekgrp.
+    MODIFY gt_fi.
+    CLEAR gt_fi.
+  ENDLOOP.
+ENDFORM.

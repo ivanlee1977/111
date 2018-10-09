@@ -1,0 +1,41 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM028T01
+*&---------------------------------------------------------------------*
+TABLES:ekko,ekpo,ztmm004,ztmm005.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       lifnr LIKE ekko-lifnr,
+       name1 LIKE lfa1-name1,
+       ebeln LIKE ekko-ebeln,
+       waers LIKE ekko-waers, "币别
+       zxhm  LIKE ztmm004-zxhm, "装箱单号
+       land1 LIKE lfa1-land1, "国家
+       landx LIKE t005t-landx, "国家中文名字
+       ktext LIKE tcurt-ktext, "币别描述
+       check TYPE c,
+     END OF gt_out.
+DATA: gt_ztmm005 LIKE ztmm005 OCCURS 0 WITH HEADER LINE.
+
+***alv data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  gt_fcat-inttype   = &5.
+  gt_fcat-intlen    = &6.
+  IF &1 = 'CHECK'.
+    gt_fcat-checkbox = 'X'.
+    gt_fcat-edit = 'X'.
+  ENDIF.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.
+
+CONSTANTS:gcst_excel_template TYPE w3objid VALUE 'ZMM030'.

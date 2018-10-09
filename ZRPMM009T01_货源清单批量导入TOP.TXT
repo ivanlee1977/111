@@ -1,0 +1,49 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM009T01
+*&---------------------------------------------------------------------*
+TABLES:sscrfields,mara,t001w,lfa1,t024e.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       matnr     LIKE eord-matnr,   "物料号码
+       werks     LIKE eord-werks,   "工厂
+       vdatu     LIKE eord-vdatu,   "生效日期从
+       bdatu     LIKE eord-bdatu,   "生效日期到
+       lifnr     LIKE eord-lifnr,   "供应商
+       ekorg     LIKE eord-ekorg,   "采购组织
+       flifn     LIKE eord-flifn,   "标识：固定
+       notkz     LIKE eord-notkz,   "冻结
+       autet     LIKE eord-autet,   "MRP
+       ematn     LIKE eord-ematn,   "MPN
+       zicon(30) TYPE c,            "icon
+       zmsg(200) TYPE c,            "message
+     END OF gt_out.
+
+DATA:gt_upload LIKE alsmex_tabline OCCURS 0 WITH HEADER LINE.
+FIELD-SYMBOLS:<fs_data> LIKE LINE OF gt_upload.
+
+***ALV data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+CONSTANTS:c_pf_status    TYPE slis_formname VALUE 'FRM_SET_PF_STATUS',
+          c_user_command TYPE slis_formname VALUE 'FRM_USER_COMMAND'.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  gt_fcat-inttype = &5.
+  gt_fcat-intlen = &6.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.
+
+DATA:  bdcdata LIKE bdcdata    OCCURS 0 WITH HEADER LINE.
+DATA:  messtab LIKE bdcmsgcoll OCCURS 0 WITH HEADER LINE.
+data:gv_mode TYPE c VALUE 'N'.
+
+data:gv_flag TYPE c.

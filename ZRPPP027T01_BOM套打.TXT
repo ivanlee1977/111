@@ -1,0 +1,25 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPPP010T01
+*&---------------------------------------------------------------------*
+TABLES:mast,stko,stpo,marc,mara.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       sel   TYPE char1,
+       matnr LIKE mast-matnr,
+       maktx LIKE makt-maktx,
+
+       werks LIKE mast-werks,
+       stlan LIKE mast-stlan,
+*       stlal LIKE mast-stlal,
+       stlst LIKE stko-stlst,
+       stlnr LIKE mast-stlnr,
+       stlty LIKE stko-stlty,
+       andat LIKE stko-andat,
+       annam LIKE stko-annam,
+       aedat LIKE stko-aedat,
+       aenam LIKE stko-aenam,
+     END OF gt_out.
+
+DATA: fieldcat    TYPE lvc_t_fcat,
+      gs_layout   TYPE lvc_s_layo,
+      fieldcat_ln TYPE lvc_s_fcat.

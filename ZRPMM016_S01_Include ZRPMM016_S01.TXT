@@ -1,0 +1,7 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM016_S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS: s_udate    FOR cdhdr-udate OBLIGATORY, "变更日期
+                s_lifnr    FOR lfa1-lifnr."供应商
+SELECTION-SCREEN END OF BLOCK b1.

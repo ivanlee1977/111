@@ -1,0 +1,503 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM013F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+
+  REFRESH: gt_alv,gt_out,gt_qave,gt_alv_col,gt_qmfel,gt_qmur,gt_ztqm003.
+* 根据取出的检验批从表qals中取出详细的检验批信息
+  SELECT a~prueflos a~ebeln a~pastrterm a~paendterm a~charg a~werk a~sellifnr a~selmatnr a~losmenge a~gesstichpr
+         b~matkl
+    INTO CORRESPONDING FIELDS OF TABLE gt_alv_col
+    FROM qals AS a INNER JOIN mara AS b ON a~selmatnr = b~matnr
+    WHERE a~prueflos IN s_pruef
+      AND a~pastrterm IN s_pastr
+      AND a~paendterm IN s_paend
+      AND a~sellifnr IN s_lifnr
+      AND a~selmatnr IN s_matnr
+      AND a~werk EQ p_werk
+      AND a~charg IN s_charg
+      AND b~matkl IN s_matkl
+      AND a~art EQ '01'.
+  SORT gt_alv_col BY prueflos.
+
+  CHECK gt_alv_col[] IS NOT INITIAL.
+*  先从表QAVE中取出已经使用决策的检验批
+  SELECT * INTO TABLE gt_qave
+    FROM qave
+    FOR ALL ENTRIES IN gt_alv_col
+    WHERE prueflos = gt_alv_col-prueflos.
+  SORT gt_qave BY prueflos.
+
+  SELECT * INTO TABLE gt_lfa1 FROM lfa1 WHERE lifnr IN s_lifnr.
+  SORT gt_lfa1 BY lifnr.
+
+*从表ZTQM003中取出物料组对应的物料分类
+  SELECT * INTO TABLE gt_ztqm003 FROM ztqm003 WHERE werks EQ p_werk.
+  SORT gt_ztqm003 BY werks matkl.
+
+  IF p_r3 EQ 'X'.
+* 根据检验批从表QMFEL中取出检验批的缺陷数据记录
+    SELECT * INTO TABLE gt_qmfel
+      FROM qmfel
+      FOR ALL ENTRIES IN gt_qave
+      WHERE prueflos = gt_qave-prueflos
+        AND kzloesch NE 'X'.
+    SORT gt_qmfel BY qmnum fenum.
+*  根据取出的缺陷数据从表QMUR中取出不良原因
+    IF gt_qmfel[] IS NOT INITIAL.
+      SELECT * INTO TABLE gt_qmur
+        FROM qmur
+        FOR ALL ENTRIES IN gt_qmfel
+        WHERE qmnum = gt_qmfel-qmnum
+          AND fenum = gt_qmfel-fenum.
+      SORT gt_qmur BY qmnum fenum.
+    ENDIF .
+* 根据物料取物料组
+    IF gt_alv_col[] IS NOT INITIAL.
+      SELECT * INTO TABLE gt_makt
+        FROM makt
+        FOR ALL ENTRIES IN gt_alv_col
+        WHERE matnr = gt_alv_col-selmatnr
+          AND spras = sy-langu.
+      SORT gt_makt BY matnr.
+    ENDIF.
+    SELECT * INTO TABLE gt_qpct FROM qpct WHERE sprache = sy-langu.
+    SORT gt_qpct BY katalogart codegruppe code.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PROCESS_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_process_data .
+  DATA: lv_cjbll TYPE p DECIMALS 3.
+  REFRESH:gt_qmfel_a,gt_qmfel_b.
+  LOOP AT gt_qmfel WHERE vorglfnr = '' AND merknr = '' AND fegrp = 'QM-D' AND fecod = '1'.
+    CLEAR:gt_qmfel_a.
+    gt_qmfel_a-qmnum = gt_qmfel-qmnum.
+    gt_qmfel_a-anzfehler = gt_qmfel-anzfehler.
+    COLLECT gt_qmfel_a.
+    CLEAR:gt_qmfel.
+  ENDLOOP.
+  SORT gt_qmfel_a BY qmnum.
+
+  LOOP AT gt_alv_col.
+    CLEAR: gt_alv,gt_qmur,gt_qpct.
+    MOVE-CORRESPONDING gt_alv_col TO gt_alv.
+*  根据检验批取出最终处理结果
+    READ TABLE gt_qave WITH KEY prueflos = gt_alv_col-prueflos BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-vdatum = gt_qave-vdatum.
+      CLEAR: gt_qpct.
+      READ TABLE gt_qpct WITH KEY katalogart = gt_qave-vkatart codegruppe = gt_qave-vcodegrp code = gt_qave-vcode BINARY SEARCH.
+      gt_alv-zzcljg = gt_qpct-kurztext.
+    ELSE.
+      CONTINUE.
+    ENDIF.
+*  计算实际检验天数
+    gt_alv-sjjyts = gt_qave-vdatum - gt_alv-pastrterm.
+*  取供应商名称
+    READ TABLE gt_lfa1 WITH KEY lifnr = gt_alv-sellifnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-sortl = gt_lfa1-sortl.
+    ENDIF.
+*  取物料分类
+    READ TABLE gt_ztqm003 WITH KEY werks = gt_alv-werk matkl = gt_alv-matkl BINARY SEARCH.
+    IF sy-subrc = 0 .
+      gv_zwlfl = gt_ztqm003-zwlfl.
+      PERFORM frm_get_domain USING 'ZWLFL' gv_zwlfl
+                            CHANGING gt_alv-wlfl.
+    ENDIF.
+
+*    IF gt_alv-matkl BETWEEN '1010' AND '1090'.
+*      gt_alv-wlfl = '电子料'.
+*    ELSEIF gt_alv-matkl BETWEEN '1110' AND '1114' OR gt_alv-matkl = '1120' OR gt_alv-matkl BETWEEN '1130' AND '1135'.
+*      gt_alv-wlfl = '五金结构件'.
+*    ELSEIF gt_alv-matkl = '1140'.
+*      gt_alv-wlfl = '包材'.
+*    ELSEIF gt_alv-matkl = '1150'.
+*      gt_alv-wlfl = '辅料'.
+*    ENDIF.
+*  取物料描述
+    READ TABLE gt_makt WITH KEY matnr = gt_alv-selmatnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-maktx = gt_makt-maktx.
+    ENDIF.
+
+* 取批次属性中的供应商批次
+    IF gt_alv-selmatnr IS NOT INITIAL AND gt_alv-charg IS NOT INITIAL.
+      PERFORM frm_get_gyspc USING gt_alv-selmatnr gt_alv-charg CHANGING gt_alv-gyspc.
+    ENDIF.
+*   根据检验批取检验批相关信息
+    LOOP AT gt_qmfel WHERE prueflos = gt_alv_col-prueflos .
+      gt_alv-fecod = gt_qmfel-fecod. "缺陷代码
+      IF  gt_qmfel-vorglfnr NE '' AND gt_qmfel-merknr NE ''.
+        gt_alv-qxsl = gt_qmfel-anzfehler. "缺陷数量
+      ENDIF.
+*  取缺陷代码描述
+      READ TABLE gt_qpct WITH KEY katalogart = gt_qmfel-fekat codegruppe = gt_qmfel-fegrp code = gt_qmfel-fecod BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_alv-kurztext = gt_qpct-kurztext.
+      ENDIF.
+*  根据质量通知取不良原因代码
+      READ TABLE gt_qmur WITH KEY qmnum = gt_qmfel-qmnum fenum = gt_qmfel-fenum BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_alv-urcod = gt_qmur-urcod.
+      ENDIF.
+*  取不良原因代码描述
+      READ TABLE gt_qpct WITH KEY katalogart = gt_qmur-urkat codegruppe = gt_qmur-urgrp code = gt_qmur-urcod BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_alv-blyyms = gt_qpct-kurztext.
+      ENDIF.
+*  计算抽检不良数
+      READ TABLE gt_qmfel_a WITH KEY qmnum = gt_qmfel-qmnum BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_alv-cjbls = gt_qmfel_a-anzfehler.
+      ENDIF.
+*  计算抽检不良率
+      CLEAR:lv_cjbll.
+      IF gt_alv-gesstichpr NE 0.
+        lv_cjbll = gt_alv-cjbls / gt_alv-gesstichpr * 100.
+        IF lv_cjbll NE 0.
+          gt_alv-cjbll = lv_cjbll .
+          CONCATENATE gt_alv-cjbll '%' INTO gt_alv-cjbll. CONDENSE gt_alv-cjbll.
+        ENDIF.
+      ENDIF.
+      APPEND gt_alv.
+      CLEAR: gt_qmfel.
+    ENDLOOP.
+    IF sy-subrc <> 0 AND p_c1 NE 'X'.
+      APPEND gt_alv.
+    ENDIF.
+  ENDLOOP.
+
+*  IF p_c1 EQ 'X'.
+*    DELETE gt_alv WHERE urcod IS INITIAL.
+*  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PRPCESS_HZ
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_prpcess_hz .
+  DATA: BEGIN OF lt_qals OCCURS 0 ,
+          prueflos LIKE qals-prueflos,
+          sellifnr LIKE qals-sellifnr,
+          selmatnr LIKE qals-selmatnr,
+          werk     LIKE qals-werk,
+          matkl    LIKE mara-matkl,
+          xmfl(10),            "项目分类
+        END OF lt_qals.
+  DATA: lt_qave LIKE qave OCCURS 0 WITH HEADER LINE,
+        lt_out  LIKE gt_out OCCURS 0 WITH HEADER LINE.
+
+  DATA:lv_date      LIKE sy-datum,
+       lv_date_from LIKE sy-datum,
+       lv_date_to   LIKE sy-datum.
+
+  lv_date = s_pastr-low.
+  CALL FUNCTION 'BKK_ADD_MONTH_TO_DATE'
+    EXPORTING
+      months  = '-1'
+      olddate = lv_date
+    IMPORTING
+      newdate = lv_date.
+  CONCATENATE lv_date(6) '01' INTO lv_date_from.
+  CALL FUNCTION 'FKK_LAST_DAY_OF_MONTH'
+    EXPORTING
+      day_in            = lv_date_from
+    IMPORTING
+      last_day_of_month = lv_date_to
+    EXCEPTIONS
+      day_in_no_date    = 1
+      OTHERS            = 2.
+* 根据取出的检验批从表qals中取出详细的检验批信息
+  SELECT a~prueflos a~sellifnr a~selmatnr a~werk b~matkl
+    INTO CORRESPONDING FIELDS OF TABLE lt_qals
+    FROM qals AS a INNER JOIN mara AS b ON a~selmatnr = b~matnr
+    WHERE a~pastrterm BETWEEN lv_date_from AND lv_date_to
+      AND b~matkl IN s_matkl.
+  IF lt_qals[] IS NOT INITIAL.
+    SELECT * INTO TABLE lt_qave
+      FROM qave
+      FOR ALL ENTRIES IN lt_qals
+      WHERE prueflos = lt_qals-prueflos.
+    SORT lt_qave BY prueflos.
+  ENDIF.
+
+*  计算上月数据
+  LOOP AT lt_qals .
+    CLEAR: lt_out.
+*  取物料分类
+    IF p_r1 EQ 'X'.
+      READ TABLE gt_ztqm003 WITH KEY werks = lt_qals-werk matkl = lt_qals-matkl BINARY SEARCH.
+      IF sy-subrc = 0 .
+        lt_out-zwlfl = gt_ztqm003-zwlfl.
+        gv_zwlfl = gt_ztqm003-zwlfl.
+        PERFORM frm_get_domain USING 'ZWLFL' gv_zwlfl
+                            CHANGING lt_out-xmfl.
+      ENDIF.
+
+*      IF lt_qals-matkl BETWEEN '1010' AND '1090'.
+*        lt_out-xmfl = '电子料'.
+*        lt_out-zwlfl = 'A'.
+*      ELSEIF lt_qals-matkl BETWEEN '1110' AND '1114' OR lt_qals-matkl = '1120' OR lt_qals-matkl BETWEEN '1130' AND '1135'.
+*        lt_out-xmfl = '五金结构件'.
+*        lt_out-zwlfl = 'B'.
+*      ELSEIF lt_qals-matkl = '1140'.
+*        lt_out-xmfl = '包材'.
+*        lt_out-zwlfl = 'C'.
+*      ELSEIF lt_qals-matkl = '1150'.
+*        lt_out-xmfl = '辅料'.
+*        lt_out-zwlfl = 'D'.
+*      ENDIF.
+    ELSE.
+      lt_out-sellifnr = lt_qals-sellifnr.
+      SELECT SINGLE sortl INTO lt_out-xmfl FROM lfa1 WHERE lifnr = lt_out-sellifnr.
+    ENDIF.
+    READ TABLE lt_qave WITH KEY prueflos = lt_qals-prueflos BINARY SEARCH.
+    IF sy-subrc = 0.
+      LOOP AT lt_qave WHERE prueflos = lt_qals-prueflos.
+        lt_out-llpc = lt_out-llpc + 1.
+        CASE lt_qave-vbewertung.
+          WHEN 'R'.
+            lt_out-blpc = lt_out-blpc + 1.
+          WHEN 'A'.
+            lt_out-hgpc = lt_out-hgpc + 1.
+          WHEN OTHERS.
+        ENDCASE.
+      ENDLOOP.
+    ENDIF.
+    COLLECT lt_out.
+  ENDLOOP.
+  SORT lt_out BY xmfl.
+
+  LOOP AT gt_alv_col.
+    CLEAR: gt_out.
+*  取物料分类
+    IF p_r1 EQ 'X'.
+      READ TABLE gt_ztqm003 WITH KEY werks = gt_alv_col-werk matkl = gt_alv_col-matkl BINARY SEARCH.
+      IF sy-subrc = 0 .
+        gt_out-zwlfl = gt_ztqm003-zwlfl.
+        gv_zwlfl = gt_ztqm003-zwlfl.
+        PERFORM frm_get_domain USING 'ZWLFL' gv_zwlfl
+                            CHANGING gt_out-xmfl.
+      ENDIF.
+*      IF gt_alv_col-matkl BETWEEN '1010' AND '1090'.
+*        gt_out-xmfl = '电子料'.
+*        gt_out-zwlfl = 'A'.
+*      ELSEIF gt_alv_col-matkl BETWEEN '1110' AND '1114' OR gt_alv_col-matkl = '1120' OR gt_alv_col-matkl BETWEEN '1130' AND '1135'.
+*        gt_out-xmfl = '五金结构件'.
+*        gt_out-zwlfl = 'B'.
+*      ELSEIF gt_alv_col-matkl = '1140'.
+*        gt_out-xmfl = '包材'.
+*        gt_out-zwlfl = 'C'.
+*      ELSEIF gt_alv_col-matkl = '1150'.
+*        gt_out-xmfl = '辅料'.
+*        gt_out-zwlfl = 'D'.
+*      ENDIF.
+    ELSE.
+      gt_out-sellifnr = gt_alv_col-sellifnr.
+      SELECT SINGLE sortl INTO gt_out-xmfl FROM lfa1 WHERE lifnr = gt_out-sellifnr.
+    ENDIF.
+    LOOP AT gt_qave WHERE prueflos = gt_alv_col-prueflos.
+      gt_out-llpc = gt_out-llpc + 1.
+      CASE gt_qave-vbewertung.
+        WHEN 'R'.
+          gt_out-blpc = gt_out-blpc + 1.
+        WHEN 'A'.
+          gt_out-hgpc = gt_out-hgpc + 1.
+        WHEN OTHERS.
+      ENDCASE.
+    ENDLOOP.
+    IF sy-subrc EQ 0.
+      COLLECT gt_out.
+    ENDIF.
+    CLEAR: gt_alv_col.
+  ENDLOOP.
+
+  LOOP AT gt_out.
+*  计算批次合格率
+    IF gt_out-llpc NE 0.
+      gt_out-pchgl = gt_out-hgpc / gt_out-llpc * 100.
+    ENDIF.
+
+    READ TABLE lt_out WITH KEY xmfl = gt_out-xmfl BINARY SEARCH.
+    IF sy-subrc = 0 AND lt_out-llpc NE 0.
+      gt_out-sysj = lt_out-hgpc / lt_out-llpc * 100 .
+    ENDIF.
+*  取目标值
+    IF p_r1 EQ 'X'.
+      SELECT SINGLE zvalue INTO gt_out-zmbz FROM ztqm003 WHERE zwlfl = gt_out-zwlfl.
+    ELSE.
+      SELECT SINGLE zvalue INTO gt_out-zmbz FROM ztqm004 WHERE lifnr = gt_out-sellifnr.
+    ENDIF.
+*  判断是否达标
+    IF gt_out-pchgl GE gt_out-zmbz.
+      gt_out-sfdb = '是'.
+    ELSE.
+      gt_out-sfdb = '否'.
+    ENDIF.
+* 判断趋势
+    IF gt_out-pchgl GE gt_out-sysj.
+      gt_out-qs = '升高'.
+    ELSE.
+      gt_out-qs = '下降'.
+    ENDIF.
+    MODIFY gt_out.
+    CLEAR: gt_out.
+  ENDLOOP.
+
+  IF p_r1 EQ 'X'."按物料查
+    DELETE gt_out WHERE xmfl IS INITIAL.
+  ELSEIF p_r2 EQ 'X'."按供应商
+    DELETE gt_out WHERE sellifnr IS INITIAL.
+  ENDIF.
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SUB_BUILD_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM sub_build_fieldcat .
+  REFRESH:g_it_fieldcat.
+  IF p_r3 EQ 'X'.
+    PERFORM sub_set_fieldcat USING 'X'  'WERK'       '工厂'                '' '' ''  ''  ''  ''  '' '' .
+    PERFORM sub_set_fieldcat USING 'X'  'PRUEFLOS'    '检验批'              'X' '' ''  ''  ''  'PRUEFLOS'  'QALS' '' .
+    PERFORM sub_set_fieldcat USING ''   'EBELN'       '采购订单号'          'X' '' ''  ''  ''  'EBELN'  'QALS' '' .
+    PERFORM sub_set_fieldcat USING ''   'PASTRTERM'   '检验开始日期'        '' '' ''  ''  ''  ''  '' '' .
+    PERFORM sub_set_fieldcat USING ''   'PAENDTERM'   '检验结束日期'        '' '' ''  ''  ''  ''  '' '' .
+    PERFORM sub_set_fieldcat USING ''   'VDATUM'      '检验决策日期'        '' '' ''  ''  ''  ''  '' '' .
+    PERFORM sub_set_fieldcat USING ''   'CHARG'       '批次'                '' '' ''  ''  ''  ''  '' '' .
+    PERFORM sub_set_fieldcat USING ''   'GYSPC'       '供应商批次'          '' '' ''  ''  ''  ''  '' '' .
+    PERFORM sub_set_fieldcat USING ''   'SELLIFNR'    '供应商'              'X' '' ''  ''  ''  'LIFNR'  'LFA1' '' .
+    PERFORM sub_set_fieldcat USING ''   'SORTL'       '供应商简称'          '' '' ''  ''  ''  ''  '' '' .
+    PERFORM sub_set_fieldcat USING ''   'MATKL'       '物料组'              '' '' ''  ''  ''  ''  '' '' .
+    PERFORM sub_set_fieldcat USING ''   'WLFL'        '物料分类'            '' '' ''  ''  ''  ''  '' '' .
+    PERFORM sub_set_fieldcat USING ''   'SELMATNR'    '物料号'              'X' '' ''  ''  ''  'MATNR'  'MARA' '' .
+    PERFORM sub_set_fieldcat USING ''   'MAKTX'       '物料描述'            '' '' ''  ''  ''  ''  '' '' .
+    PERFORM sub_set_fieldcat USING ''   'LOSMENGE'    '数量'                'X' '' ''  ''  ''  ''  '' '' .
+    PERFORM sub_set_fieldcat USING ''   'GESSTICHPR'  '抽检数量'            'X' '' ''  ''  ''  ''  '' '' .
+    PERFORM sub_set_fieldcat USING ''   'CJBLS'       '抽检不良数'          'X' '' ''  ''  ''  ''  '' '' .
+    PERFORM sub_set_fieldcat USING ''   'CJBLL'       '抽检不良率'          '' '' ''  ''  ''  ''  '' '' .
+    PERFORM sub_set_fieldcat USING ''   'FECOD'       '缺陷代码'            '' '' ''  ''  ''  ''  '' '' .
+    PERFORM sub_set_fieldcat USING ''   'KURZTEXT'    '缺陷代码描述'        '' '' ''  ''  ''  ''  '' '' .
+    PERFORM sub_set_fieldcat USING ''   'QXSL'        '缺陷数量'            'X' '' ''  ''  ''  ''  '' '' .
+    PERFORM sub_set_fieldcat USING ''   'URCOD'       '不良原因代码'        '' '' ''  ''  ''  ''  '' '' .
+    PERFORM sub_set_fieldcat USING ''   'BLYYMS'      '不良原因代码描述'    '' '' ''  ''  ''  ''  '' '' .
+    PERFORM sub_set_fieldcat USING ''   'ZZCLJG'      '最终处理结果'        '' '' ''  ''  ''  ''  '' '' .
+    PERFORM sub_set_fieldcat USING ''   'SJJYTS'      '实际检验天数'        'X' '' ''  ''  ''  ''  '' '' .
+  ELSE.
+    IF p_r1 EQ 'X'.
+      PERFORM sub_set_fieldcat USING ''   'XMFL'       '物料分类'            '' '' ''  ''  ''  ''  '' '' .
+    ELSE.
+      PERFORM sub_set_fieldcat USING ''   'XMFL'       '供应商'            '' '' ''  ''  ''  ''  '' '' .
+    ENDIF.
+    PERFORM sub_set_fieldcat USING ''   'LLPC'       '来料批次'            'X' '' ''  ''  ''  ''  '' '' .
+    PERFORM sub_set_fieldcat USING ''   'HGPC'       '合格批次'            'X' '' ''  ''  ''  ''  '' '' .
+    PERFORM sub_set_fieldcat USING ''   'BLPC'       '不良批次'            'X' '' ''  ''  ''  ''  '' '' .
+    PERFORM sub_set_fieldcat USING ''   'PCHGL'      '批次合格率(%)'          'X' '' ''  ''  ''  ''  '' '' .
+    PERFORM sub_set_fieldcat USING ''   'ZMBZ'       '目标值'              'X' '' ''  ''  ''  ''  '' '' .
+    PERFORM sub_set_fieldcat USING ''   'SFDB'       '是否达标'            'X' '' ''  ''  ''  ''  '' '' .
+    PERFORM sub_set_fieldcat USING ''   'SYSJ'       '上个月数据(%)'          'X' '' ''  ''  ''  ''  '' '' .
+    PERFORM sub_set_fieldcat USING ''   'QS'         '趋势'                '' '' ''  ''  ''  ''  '' '' .
+
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_GYSPC
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_GT_ALV_SELMATNR  text
+*      -->P_GT_ALV_CHARG  text
+*      <--P_GT_ALV_GYSPC  text
+*----------------------------------------------------------------------*
+FORM frm_get_gyspc  USING    pv_selmatnr
+                             pv_charg
+                    CHANGING pv_gyspc.
+  DATA: im_objectkey       TYPE bapi1003_key-object,
+        lt_allocvaluesnum  LIKE bapi1003_alloc_values_num OCCURS 0 WITH HEADER LINE,
+        lt_allocvalueschar LIKE bapi1003_alloc_values_char OCCURS 0 WITH HEADER LINE,
+        lt_allocvaluescurr LIKE bapi1003_alloc_values_curr OCCURS 0 WITH HEADER LINE,
+        lt_return          LIKE bapiret2 OCCURS 0 WITH HEADER LINE.
+  DATA: lv_objectkeyimp TYPE bapi1003_key-object,
+        lt_alloclist    LIKE bapi1003_alloc_list OCCURS 0 WITH HEADER LINE.
+
+  lv_objectkeyimp = pv_selmatnr.
+  CALL FUNCTION 'BAPI_OBJCL_GETCLASSES'
+    EXPORTING
+      objectkey_imp   = lv_objectkeyimp
+      objecttable_imp = 'MARA'
+      classtype_imp   = '023'
+      language        = sy-langu
+    TABLES
+      alloclist       = lt_alloclist
+      return          = lt_return.
+  LOOP AT lt_alloclist .
+    CLEAR:im_objectkey.
+    REFRESH:lt_allocvaluesnum,lt_allocvalueschar,lt_allocvaluescurr,lt_return.
+    CONCATENATE gt_alv-selmatnr gt_alv-charg INTO im_objectkey.
+    CALL FUNCTION 'BAPI_OBJCL_GETDETAIL'
+      EXPORTING
+        objectkey       = im_objectkey "物料编号+批次编号
+        objecttable     = 'MCH1'
+        classnum        = lt_alloclist-classnum
+        classtype       = '023'
+      TABLES
+        allocvaluesnum  = lt_allocvaluesnum
+        allocvalueschar = lt_allocvalueschar
+        allocvaluescurr = lt_allocvaluescurr
+        return          = lt_return.
+    IF sy-subrc = 0.
+      READ TABLE lt_allocvalueschar  WITH KEY charact = 'Z_BATCH_VBATCH'.
+      IF sy-subrc EQ 0.
+        pv_gyspc = lt_allocvalueschar-value_char.
+      ENDIF.
+    ENDIF.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DOMAIN
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0386   text
+*      -->P_GT_ZTQM003_ZWLFL  text
+*      <--P_GT_ALV_WLFL  text
+*----------------------------------------------------------------------*
+FORM frm_get_domain  USING    lv_value LIKE dd07v-domname
+                              pv_zwlfl LIKE dd07v-domvalue_l
+                     CHANGING pv_wlfl.
+
+  CALL FUNCTION 'C_DIC_DOMAIN_VALUE_TEXT_READ'
+    EXPORTING
+      name      = lv_value
+      spras     = sy-langu
+      value     = pv_zwlfl
+    IMPORTING
+      text      = pv_wlfl
+    EXCEPTIONS
+      not_found = 1.
+ENDFORM.

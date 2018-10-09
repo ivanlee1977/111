@@ -1,0 +1,113 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPFI017_T01
+*&---------------------------------------------------------------------*
+TABLES:faglflext.
+TYPE-POOLS:sils.
+
+DATA: BEGIN OF gt_fi OCCURS 0,
+        rbukrs LIKE faglflext-rbukrs,
+        prctr  LIKE faglflext-prctr,
+        ryear  LIKE faglflext-ryear,
+        rpmax  LIKE faglflext-rpmax,
+        racct  LIKE faglflext-racct,
+        hslvt  LIKE faglflext-hslvt,
+        hsl01  LIKE faglflext-hslvt,
+        hsl02  LIKE faglflext-hslvt,
+        hsl03  LIKE faglflext-hslvt,
+        hsl04  LIKE faglflext-hslvt,
+        hsl05  LIKE faglflext-hslvt,
+        hsl06  LIKE faglflext-hslvt,
+        hsl07  LIKE faglflext-hslvt,
+        hsl08  LIKE faglflext-hslvt,
+        hsl09  LIKE faglflext-hslvt,
+        hsl10  LIKE faglflext-hslvt,
+        hsl11  LIKE faglflext-hslvt,
+        hsl12  LIKE faglflext-hslvt,
+        hsl13  LIKE faglflext-hslvt,
+        hsl14  LIKE faglflext-hslvt,
+        hsl15  LIKE faglflext-hslvt,
+        hsl16  LIKE faglflext-hslvt,
+        drcrk  LIKE faglflext-drcrk,
+        rtcur  LIKE faglflext-rtcur,
+        tslvt  LIKE faglflext-tslvt,
+        tsl01  LIKE faglflext-tslvt,
+        tsl02  LIKE faglflext-tslvt,
+        tsl03  LIKE faglflext-tslvt,
+        tsl04  LIKE faglflext-tslvt,
+        tsl05  LIKE faglflext-tslvt,
+        tsl06  LIKE faglflext-tslvt,
+        tsl07  LIKE faglflext-tslvt,
+        tsl08  LIKE faglflext-tslvt,
+        tsl09  LIKE faglflext-tslvt,
+        tsl10  LIKE faglflext-tslvt,
+        tsl11  LIKE faglflext-tslvt,
+        tsl12  LIKE faglflext-tslvt,
+        tsl13  LIKE faglflext-tslvt,
+        tsl14  LIKE faglflext-tslvt,
+        tsl15  LIKE faglflext-tslvt,
+        tsl16  LIKE faglflext-tslvt,
+
+      END OF gt_fi.
+
+DATA: BEGIN OF gt_last OCCURS 0,
+        sa1 LIKE faglflext-hslvt,
+        sa2 LIKE faglflext-hslvt,
+        sa3 LIKE faglflext-hslvt,
+        sa4 LIKE faglflext-hslvt,
+        sa5 LIKE faglflext-hslvt,
+        sa6 LIKE faglflext-hslvt,
+        sa7 LIKE faglflext-hslvt,
+        sa8 LIKE faglflext-hslvt,
+        sa9 LIKE faglflext-hslvt,
+*        sa10 LIKE faglflext-hslvt,
+*        sa11 LIKE faglflext-hslvt,
+*        sa12 LIKE faglflext-hslvt,
+
+        sb1 LIKE faglflext-hslvt,
+        sb2 LIKE faglflext-hslvt,
+        sb3 LIKE faglflext-hslvt,
+        sb4 LIKE faglflext-hslvt,
+        sb5 LIKE faglflext-hslvt,
+        sb6 LIKE faglflext-hslvt,
+        sb7 LIKE faglflext-hslvt,
+        sb8 LIKE faglflext-hslvt,
+        sb9 LIKE faglflext-hslvt,
+*        sb10 LIKE faglflext-hslvt,
+*        sb11 LIKE faglflext-hslvt,
+*        sb12 LIKE faglflext-hslvt,
+
+        ta1 LIKE faglflext-hslvt,
+        ta2 LIKE faglflext-hslvt,
+        ta3 LIKE faglflext-hslvt,
+        ta4 LIKE faglflext-hslvt,
+        ta5 LIKE faglflext-hslvt,
+        ta6 LIKE faglflext-hslvt,
+        ta7 LIKE faglflext-hslvt,
+        ta8 LIKE faglflext-hslvt,
+        ta9 LIKE faglflext-hslvt,
+
+        tb1 LIKE faglflext-hslvt,
+        tb2 LIKE faglflext-hslvt,
+        tb3 LIKE faglflext-hslvt,
+        tb4 LIKE faglflext-hslvt,
+        tb5 LIKE faglflext-hslvt,
+        tb6 LIKE faglflext-hslvt,
+        tb7 LIKE faglflext-hslvt,
+        tb8 LIKE faglflext-hslvt,
+        tb9 LIKE faglflext-hslvt,
+
+
+      END OF gt_last.
+
+DATA:
+  cur01 LIKE faglflext-rtcur,
+  cur02 LIKE faglflext-rtcur,
+  cur03 LIKE faglflext-rtcur.
+
+DATA:gt_t001 LIKE t001 OCCURS 0 WITH HEADER LINE.
+
+CONSTANTS:gcst_excel_template TYPE w3objid VALUE 'ZFI017'.
+*DATA fmoney LIKE faglflext-hslvt.
+
+
+DATA:  fieldname TYPE string.

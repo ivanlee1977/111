@@ -1,0 +1,44 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPPP017T01
+*&---------------------------------------------------------------------*
+TABLES:sscrfields,mara.
+
+DATA:gt_upload LIKE alsmex_tabline OCCURS 0 WITH HEADER LINE.
+FIELD-SYMBOLS:<fs_data> LIKE LINE OF gt_upload.
+
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       matnr     LIKE mara-matnr,
+       maktx     LIKE makt-maktx,
+       eisbe     LIKE marc-eisbe,
+       zjhcpfl   LIKE ztpp001-zjhcpfl,
+       zicon(20) TYPE c,
+       msgty     LIKE sy-msgty,
+       zmsg      TYPE bapi_msg,
+     END OF gt_out.
+
+DEFINE mcr_add_msg.
+  IF gt_out-zmsg IS INITIAL.
+    gt_out-zmsg = &1.
+  ELSE.
+    CONCATENATE gt_out-zmsg &1 INTO gt_out-zmsg SEPARATED BY ','.
+  ENDIF.
+END-OF-DEFINITION.
+
+***alv data definr
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  gt_fcat-inttype = &5.
+  gt_fcat-intlen = &6.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

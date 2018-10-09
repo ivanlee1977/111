@@ -1,0 +1,7 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPCO026S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS: s_matnr FOR marc-matnr OBLIGATORY,
+            s_werks FOR marc-werks DEFAULT 1000 OBLIGATORY.
+SELECTION-SCREEN END OF BLOCK blc.

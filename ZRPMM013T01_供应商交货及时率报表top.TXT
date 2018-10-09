@@ -1,0 +1,63 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM013T01
+*&---------------------------------------------------------------------*
+TABLES:ekko,ekpo,mkpf,eket.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       lifnr     LIKE ekko-lifnr,  "供应商代码
+       name1     LIKE lfa1-name1,  "供应商名称
+       ztqcs     TYPE i,           "交货提前次数
+       ztqzb(20) TYPE c,           "提前占比
+       zyccs     TYPE i,           "交货延迟次数
+       zyczb(20) TYPE c,           "延迟占比
+     END OF gt_out.
+
+DATA:BEGIN OF gt_mat_detail OCCURS 0,
+       lifnr     LIKE ekko-lifnr,     "供应商
+       name1     LIKE lfa1-name1,     "供应商名称
+       matnr     LIKE ekpo-matnr,     "物料号码
+       txz01     LIKE ekpo-txz01,     "物料描述
+       ztqcs     TYPE i,              "交货提前次数
+       ztqzb(20) TYPE c,              "提前占比
+       zyccs     TYPE i,              "交货延迟次数
+       zyczb(20) TYPE c,              "延迟占比
+     END OF gt_mat_detail.
+
+DATA:gt_mat_detail_alv LIKE gt_mat_detail OCCURS 0 WITH HEADER LINE.
+
+DATA:BEGIN OF gt_detail OCCURS 0,
+       lifnr    LIKE ekko-lifnr,     "供应商
+       name1    LIKE lfa1-name1,     "供应商名称
+       ebeln    LIKE ekpo-ebeln,     "采购订单号
+       ebelp    LIKE ekpo-ebelp,     "采购订单项次
+       mblnr    LIKE mseg-mblnr,     "物料凭证号
+       mjahr    LIKE mseg-mjahr,     "年度
+       zeile    LIKE mseg-zeile,     "项次
+       matnr    LIKE ekpo-matnr,     "物料号码
+       txz01    LIKE ekpo-txz01,     "物料描述
+       menge    LIKE ekpo-menge,     "数量
+       eindt    LIKE eket-eindt,     "计划交期
+       budat    LIKE mkpf-budat,     "实际交期
+       zcyts    TYPE i,              "差异天数
+       color(5) TYPE c,
+     END OF gt_detail.
+
+DATA:gt_detail_alv LIKE gt_detail OCCURS 0 WITH HEADER LINE.
+
+***alv data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  &1-fieldname = &2.
+  &1-coltext   = &3.
+  &1-scrtext_l = &3.
+  &1-scrtext_m = &3.
+  &1-scrtext_s = &3.
+  &1-inttype = &4.
+  &1-intlen = &5.
+  &1-ref_field = &6.
+  &1-ref_table = &7.
+  APPEND &1.
+  CLEAR &1.
+END-OF-DEFINITION.

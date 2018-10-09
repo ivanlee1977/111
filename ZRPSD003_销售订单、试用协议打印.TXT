@@ -1,0 +1,23 @@
+*&---------------------------------------------------------------------*
+*& Report ZRPSD003
+*&---------------------------------------------------------------------*
+*&销售订单、试用协议打印
+*&-制作人：雷鸣涛
+*&-制作日期：2017-7-26
+*&---------------------------------------------------------------------*
+REPORT ZRPSD003.
+
+INCLUDE ZRPSD003_T01.
+INCLUDE ZRPSD003_S01.
+INCLUDE ZRPSD003_F01.
+
+AT SELECTION-SCREEN.
+  PERFORM FRM_CHECK_AUTH.
+
+at SELECTION-SCREEN OUTPUT.
+
+  START-OF-SELECTION.
+
+  PERFORM frm_getdata.
+  PERFORM frm_getfact.
+  PERFORM frm_show.

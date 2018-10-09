@@ -1,0 +1,549 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI007AF01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_MODIFY_SCREEN
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_modify_screen .
+  CASE 'X'.
+    WHEN r1.
+      LOOP AT SCREEN.
+        IF screen-group1 = 'M2'.
+          screen-input = 0.
+          screen-invisible = 1.
+          MODIFY SCREEN.
+        ENDIF.
+      ENDLOOP.
+    WHEN r2.
+      LOOP AT SCREEN.
+        IF screen-group1 = 'M1'.
+          screen-input = 0.
+          screen-invisible = 1.
+          MODIFY SCREEN.
+        ENDIF.
+      ENDLOOP.
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_INITIAL_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_initial_data .
+*******数据定义*******
+  INCLUDE <icon>.
+  DATA ls_functxt TYPE smp_dyntxt.
+  DATA:gt_exbut TYPE TABLE OF sy-ucomm.
+*******初始化*******
+*******程序主体*******
+  "屏幕工具栏中按饼
+  "启用自定义工具
+  CLEAR ls_functxt.
+  ls_functxt-icon_text = TEXT-002."'Download Template'.
+  ls_functxt-icon_id   = '@49@'.
+  ls_functxt-quickinfo = TEXT-002."'
+  sscrfields-functxt_01 = ls_functxt.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FILENAME_FIND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      <--P_P_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_filename_find  CHANGING xc_file.
+  CALL FUNCTION 'WS_FILENAME_GET'
+    EXPORTING
+      def_filename     = xc_file
+      def_path         = 'C:\'
+      mask             = ',*.XLS.'
+      mode             = 'O'
+      title            = '文件名'
+    IMPORTING
+      filename         = xc_file
+    EXCEPTIONS
+      inv_winsys       = 1
+      no_batch         = 2
+      selection_cancel = 3
+      selection_error  = 4
+      OTHERS           = 5.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DOWNLOAD_TEMPLATE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      <--P_P_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_download_template  CHANGING ic_file.
+
+  DATA:l_path   TYPE string.
+
+  CALL METHOD zcl_ole_excel=>download_templet
+    EXPORTING
+      iv_objid        = gcst_excel_template
+      iv_win_title    = TEXT-004
+      iv_df_extension = 'XLS'
+    IMPORTING
+      ev_fullpath     = l_path.
+
+  CALL METHOD cl_gui_frontend_services=>execute
+    EXPORTING
+      document = l_path
+    EXCEPTIONS
+      OTHERS   = 10.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_UPLOAD_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_upload_data .
+  FIELD-SYMBOLS:<fs_data> LIKE LINE OF gt_upload.
+
+  CALL FUNCTION 'ALSM_EXCEL_TO_INTERNAL_TABLE'
+    EXPORTING
+      filename                = p_file
+      i_begin_col             = 1
+      i_begin_row             = 2
+      i_end_col               = 10
+      i_end_row               = 99999
+    TABLES
+      intern                  = gt_upload
+    EXCEPTIONS
+      inconsistent_parameters = 1
+      upload_ole              = 2
+      OTHERS                  = 3.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+  LOOP AT gt_upload ASSIGNING <fs_data>.
+    AT NEW row.
+      CLEAR gt_data.
+    ENDAT.
+    CASE <fs_data>-col.
+      WHEN '1'.  "银行账户
+        gt_data-zyhzh = <fs_data>-value.
+      WHEN '2'. "银行流水号
+        gt_data-zyhlsh = <fs_data>-value.
+      WHEN '3'."公司代码
+        gt_data-bukrs = <fs_data>-value.
+      WHEN '4'."利润中心
+        gt_data-prctr = <fs_data>-value.
+      WHEN '5'."交易日期
+        gt_data-zjyrq = <fs_data>-value.
+      WHEN '6'."摘要
+        gt_data-zzy = <fs_data>-value.
+      WHEN '7'."金额
+        REPLACE ALL OCCURRENCES OF ',' IN <fs_data>-value WITH space.
+        CONDENSE <fs_data>-value NO-GAPS.
+        gt_data-zje = <fs_data>-value.
+      WHEN OTHERS.
+    ENDCASE.
+    AT END OF row.
+***检查数据有效性
+      PERFORM frm_check_data.
+      APPEND gt_data.
+      CLEAR gt_data.
+    ENDAT.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_data .
+  DEFINE mcr_add_msg.
+    IF gt_data-zmsg IS INITIAL.
+      gt_data-zmsg = &1.
+    ELSE.
+      CONCATENATE gt_data-zmsg &1 INTO gt_data-zmsg.
+    ENDIF.
+  END-OF-DEFINITION.
+  DATA:lv_date LIKE sy-datum.
+
+  IF gt_data-zyhzh IS INITIAL.
+    mcr_add_msg:'银行账户为空'.
+  ENDIF.
+  IF gt_data-zyhlsh IS INITIAL.
+    mcr_add_msg:'银行流水号为空'.
+  ENDIF.
+  IF gt_data-bukrs IS INITIAL.
+    mcr_add_msg:'公司代码为空'.
+  ENDIF.
+  IF gt_data-prctr IS INITIAL.
+    mcr_add_msg:'利润中心为空'.
+  ENDIF.
+  IF gt_data-zjyrq IS INITIAL.
+    mcr_add_msg:'交易日期为空'.
+  ELSE.
+    lv_date = gt_data-zjyrq.
+    CALL FUNCTION 'DATE_CHECK_PLAUSIBILITY'
+      EXPORTING
+        date                      = lv_date
+      EXCEPTIONS
+        plausibility_check_failed = 1
+        OTHERS                    = 2.
+    IF sy-subrc <> 0.
+      mcr_add_msg:'交易日期无效'.
+    ENDIF.
+  ENDIF.
+  IF gt_data-zje IS INITIAL.
+    mcr_add_msg:'金额为空'.
+  ENDIF.
+
+  IF gt_data-zyhzh IS NOT INITIAL AND gt_data-zyhlsh IS NOT INITIAL AND gt_data-bukrs IS NOT INITIAL.
+    SELECT SINGLE * FROM ztfi002 WHERE zyhzh = gt_data-zyhzh AND zyhlsh = gt_data-zyhlsh AND bukrs  = gt_data-bukrs.
+    IF sy-subrc = 0 AND ztfi002-zsfdz IS NOT INITIAL.
+      mcr_add_msg:'已对账，不允许再导入'.
+    ENDIF.
+  ENDIF.
+
+  IF gt_data-zmsg IS NOT INITIAL.
+    gt_data-zstat  = icon_led_red.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  IF r1 = 'X'.
+    mcr_build_fieldcat:'ZSTAT'   '状态'  'C'    '30'.
+  ENDIF.
+
+  mcr_build_fieldcat:'ZYHZH'   '银行账户'    'C'    '10',
+                     'ZYHLSH'  '银行流水号'  'C'    '15',
+                     'BUKRS'   '公司代码'    'C'    '4',
+                     'PRCTR'   '利润中心'    'C'    '10',
+                     'ZJYRQ'   '交易日期'    'D'    '10',
+                     'ZZY'     '摘要'        'C'    '50',
+                     'ZJE'     '金额'        'P'    '15'.
+
+  IF r1 = 'X'.
+    mcr_build_fieldcat:'ZMSG'   '消息'  'C'    '200'.
+  ENDIF.
+
+  IF r2 = 'X'.
+    mcr_build_fieldcat:'ZSFDZ'   '是否对账'    'C'    '1'.
+
+    gs_layout-box_fname = 'CHECK'.
+    gs_layout-sel_mode = 'A'.
+  ENDIF.
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+  gs_layout-no_toolbar = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK        = ' '
+*     I_BYPASSING_BUFFER       =
+*     I_BUFFER_ACTIVE          =
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = c_pf_status
+      i_callback_user_command  = c_user_command
+*     I_CALLBACK_TOP_OF_PAGE   = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME         =
+*     I_BACKGROUND_ID          = ' '
+*     I_GRID_TITLE             =
+*     I_GRID_SETTINGS          =
+      is_layout_lvc            = gs_layout
+      it_fieldcat_lvc          = gt_fcat[]
+*     IT_EXCLUDING             =
+*     IT_SPECIAL_GROUPS_LVC    =
+*     IT_SORT_LVC              =
+*     IT_FILTER_LVC            =
+*     IT_HYPERLINK             =
+*     IS_SEL_HIDE              =
+*     I_DEFAULT                = 'X'
+      i_save                   = 'A'
+*     IS_VARIANT               =
+*     IT_EVENTS                =
+*     IT_EVENT_EXIT            =
+*     IS_PRINT_LVC             =
+*     IS_REPREP_ID_LVC         =
+*     I_SCREEN_START_COLUMN    = 0
+*     I_SCREEN_START_LINE      = 0
+*     I_SCREEN_END_COLUMN      = 0
+*     I_SCREEN_END_LINE        = 0
+*     I_HTML_HEIGHT_TOP        =
+*     I_HTML_HEIGHT_END        =
+*     IT_ALV_GRAPHICS          =
+*     IT_EXCEPT_QINFO_LVC      =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER  =
+*     ES_EXIT_CAUSED_BY_USER   =
+    TABLES
+      t_outtab                 = gt_data[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SET_PF_STATUS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_set_pf_status USING rt_extab TYPE slis_t_extab.
+  IF r1 = 'X'.
+    SET PF-STATUS 'STANDARD_FULLSCREEN' EXCLUDING 'ZDELETE'.
+  ELSEIF r2 = 'X'.
+    SET PF-STATUS 'STANDARD_FULLSCREEN' EXCLUDING 'ZUPLOAD'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_USER_COMMAND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_user_command USING r_ucomm LIKE sy-ucomm
+                            rs_selfield TYPE slis_selfield..
+  DATA:lv_grid TYPE REF TO cl_gui_alv_grid.
+
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = lv_grid.
+
+  CASE r_ucomm.
+    WHEN 'ZUPLOAD'.
+      PERFORM frm_modify_data.
+      CALL METHOD lv_grid->set_frontend_layout
+        EXPORTING
+          is_layout = gs_layout.
+    WHEN 'ZDELETE'. "删除数据
+      PERFORM frm_delete_data.
+    WHEN OTHERS.
+  ENDCASE.
+
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_MODIFY_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_modify_data .
+  DATA:lt_data_mod LIKE ztfi002 OCCURS 0 WITH HEADER LINE.
+
+***抓取系统已经存在的数据
+  READ TABLE gt_data WITH KEY zstat = icon_led_red.
+  IF sy-subrc = 0.
+    MESSAGE '上传数据存在错误,请先修正'(m02) TYPE 'E'.
+  ENDIF.
+
+  IF gt_data[] IS NOT INITIAL.
+    LOOP AT gt_data.
+      MOVE-CORRESPONDING gt_data TO lt_data_mod.
+      APPEND lt_data_mod.
+      CLEAR lt_data_mod.
+    ENDLOOP.
+  ENDIF.
+
+  IF lt_data_mod[] IS NOT INITIAL.
+    MODIFY ztfi002 FROM TABLE lt_data_mod.
+    IF sy-subrc = 0.
+      COMMIT WORK AND WAIT.
+      LOOP AT gt_data WHERE zstat IS INITIAL.
+        gt_data-zstat = icon_led_green.
+        gt_data-zmsg = '导入成功'(m03).
+        MODIFY gt_data INDEX sy-tabix.
+      ENDLOOP.
+    ELSE.
+      ROLLBACK WORK.
+      LOOP AT gt_data WHERE zstat IS INITIAL.
+        gt_data-zstat = icon_led_red.
+        gt_data-zmsg = '导入失败'(m04).
+        MODIFY gt_data INDEX sy-tabix.
+      ENDLOOP.
+    ENDIF.
+  ELSE.
+    MESSAGE '没有需要导入的数据'(m05) TYPE 'E'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SELECT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_select_data .
+***抓取满足条件的数据
+  SELECT *
+       INTO CORRESPONDING FIELDS OF TABLE gt_data
+       FROM ztfi002
+       WHERE zyhzh IN s_zyhzh
+         AND zyhlsh IN s_yhlsh
+         AND bukrs IN s_bukrs
+         AND prctr IN s_prctr
+         AND zjyrq IN s_zjyrq
+         AND zjyrq IN s_zjyrq.
+  SORT gt_data.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_ZYHZH_F4
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0091   text
+*----------------------------------------------------------------------*
+FORM frm_zyhzh_f4 USING u_fname TYPE help_info-dynprofld.
+  DATA:BEGIN OF lt_skb1 OCCURS 0,
+         bukrs LIKE skb1-bukrs,
+         saknr LIKE skb1-saknr,
+         txt50 LIKE skat-txt50,
+       END OF lt_skb1.
+
+  SELECT a~bukrs
+         a~saknr
+         b~txt50
+    INTO CORRESPONDING FIELDS OF TABLE lt_skb1
+    FROM skb1 AS a
+    LEFT JOIN skat AS b
+    ON a~saknr = b~saknr
+    AND b~spras = sy-langu
+    AND b~ktopl = '1000'
+    WHERE a~saknr LIKE '1002%'.
+
+  CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+    EXPORTING
+*     DDIC_STRUCTURE  = ' '
+      retfield        = 'SAKNR'
+*     PVALKEY         = ' '
+      dynpprog        = sy-repid
+      dynpnr          = sy-dynnr
+      dynprofield     = u_fname
+*     STEPL           = 0
+*     WINDOW_TITLE    =
+*     VALUE           = ' '
+      value_org       = 'S'
+*     MULTIPLE_CHOICE = ' '
+*     DISPLAY         = ' '
+*     CALLBACK_PROGRAM       = ' '
+*     CALLBACK_FORM   = ' '
+*     CALLBACK_METHOD =
+*     MARK_TAB        =
+*     IMPORTING
+*     USER_RESET      =
+    TABLES
+      value_tab       = lt_skb1
+*     FIELD_TAB       =
+*     RETURN_TAB      =
+*     DYNPFLD_MAPPING =
+    EXCEPTIONS
+      parameter_error = 1
+      no_values_found = 2
+      OTHERS          = 3.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DELETE_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_delete_data .
+  DATA:lt_data LIKE ztfi002 OCCURS 0 WITH HEADER LINE.
+  DATA:lv_answer TYPE c.
+
+  READ TABLE gt_data WITH KEY check = 'X'.
+  IF sy-subrc NE 0.
+    MESSAGE '请至少选择一行数据' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  READ TABLE gt_data WITH KEY check = 'X' zsfdz = 'X'.
+  IF sy-subrc = 0.
+    MESSAGE '已对过账的数据不能删除' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  LOOP AT gt_data WHERE check EQ 'X'.
+    MOVE-CORRESPONDING gt_data TO lt_data.
+    APPEND lt_data.
+    CLEAR lt_data.
+  ENDLOOP.
+
+  IF lt_data[] IS  NOT INITIAL.
+    CALL FUNCTION 'POPUP_TO_CONFIRM'
+      EXPORTING
+        text_question  = '确定要删除数据？'
+        text_button_1  = '确定'
+        text_button_2  = '取消'
+      IMPORTING
+        answer         = lv_answer
+      EXCEPTIONS
+        text_not_found = 1
+        OTHERS         = 2.
+    IF lv_answer EQ '1'.
+      DELETE ztfi002 FROM TABLE lt_data.
+      IF sy-subrc = 0.
+        COMMIT WORK AND WAIT.
+        MESSAGE '删除数据成功' TYPE 'S'.
+      ELSE.
+        ROLLBACK WORK.
+        MESSAGE '删除数据失败' TYPE 'E'.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+ENDFORM.

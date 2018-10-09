@@ -1,0 +1,36 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPSD012S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-002.
+PARAMETERS:
+  p_wdz RADIOBUTTON GROUP g1 DEFAULT 'X' USER-COMMAND flag,
+  p_ydz RADIOBUTTON GROUP g1.
+SELECTION-SCREEN END OF BLOCK blc.
+
+SELECTION-SCREEN BEGIN OF BLOCK blc1 WITH FRAME TITLE TEXT-001.
+PARAMETERS:p_zdate1 LIKE ztsd004-zdate MODIF ID mr2 DEFAULT sy-datum."对账日期
+SELECT-OPTIONS:s_dzdhm FOR ztsd004-dzdhm MODIF ID mr1,"对账单
+               s_zdate2 FOR ztsd004-zdate MODIF ID mr1."对账日期
+PARAMETERS:    p_vkorg LIKE likp-vkorg OBLIGATORY DEFAULT '1100'."销售组织
+SELECT-OPTIONS:s_bzirk FOR vbkd-bzirk,"大区
+               s_kvgr1 FOR vbak-kvgr1,"业务员
+               s_kvgr2 FOR vbak-kvgr2,"商务
+               s_kunag FOR likp-kunag,"客户
+               s_vbeln FOR likp-vbeln,"交货单
+               s_wadat FOR likp-wadat_ist,"交货日期
+               s_zterm FOR vbkd-zterm MODIF ID mr2."付款条件
+SELECTION-SCREEN END OF BLOCK blc1.
+
+SELECTION-SCREEN BEGIN OF BLOCK blc2 WITH FRAME TITLE TEXT-003.
+PARAMETERS:
+  p_sz RADIOBUTTON GROUP g2 DEFAULT 'X' MODIF ID mr1,
+  p_hk RADIOBUTTON GROUP g2 MODIF ID mr1.
+SELECTION-SCREEN END OF BLOCK blc2.
+
+SELECTION-SCREEN BEGIN OF BLOCK blc3 WITH FRAME TITLE TEXT-004.
+PARAMETERS:
+  p_all RADIOBUTTON GROUP g3 DEFAULT 'X' MODIF ID mr1,
+  p_ysp RADIOBUTTON GROUP g3 MODIF ID mr1,
+  p_wsp RADIOBUTTON GROUP g3 MODIF ID mr1.
+SELECTION-SCREEN END OF BLOCK blc3.

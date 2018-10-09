@@ -1,0 +1,313 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM013F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  REFRESH: gt_mseg,gt_mara,gt_lfa1,gt_t023t,gt_t024,gt_alv.
+* 根据选择屏幕条件从表MSEG中取出移动类型为101 102 161 162 122 123的采购订单入库记录
+  SELECT mblnr mjahr zeile bwart matnr shkzg menge ebeln ebelp budat_mkpf AS budat smbln sjahr smblp
+    INTO CORRESPONDING FIELDS OF TABLE gt_mseg
+    FROM mseg
+    WHERE bukrs EQ p_bukrs
+      AND bwart IN ('101','102','122','123','161','162')
+      AND ebeln IS NOT NULL
+      AND lifnr IN s_lifnr
+      AND budat_mkpf IN s_budat
+      AND matnr <> space.
+
+*  根据采购订单号和行项目从表EKKO中取出入库期间内采购订单信息
+  IF gt_mseg[] IS NOT INITIAL.
+    SELECT a~ebeln a~ebelp a~matnr a~netpr a~peinh a~ematn b~lifnr b~ekgrp b~aedat b~bukrs
+      INTO CORRESPONDING FIELDS OF TABLE gt_ekpo
+      FROM ekpo AS a INNER JOIN ekko AS b ON a~ebeln = b~ebeln
+      FOR ALL ENTRIES IN gt_mseg
+      WHERE a~ebeln = gt_mseg-ebeln
+        AND a~ebelp = gt_mseg-ebelp
+        AND b~ekgrp IN s_ekgrp
+        AND b~bsart NOT IN ('UB','Z006').
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PROCESS_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_process_data .
+  DATA: lt_mseg     LIKE gt_mseg OCCURS 0 WITH HEADER LINE,
+        lt_mseg_col LIKE gt_mseg OCCURS 0 WITH HEADER LINE,
+        lt_ekpo     LIKE gt_ekpo OCCURS 0 WITH HEADER LINE,
+        lv_tabix    LIKE sy-tabix.
+
+* 处理冲销
+  lt_mseg[] = gt_mseg[].
+  DELETE gt_mseg WHERE smbln IS NOT INITIAL AND sjahr IS NOT  INITIAL AND zeile IS NOT INITIAL.
+  LOOP AT lt_mseg WHERE smbln IS NOT INITIAL AND sjahr IS NOT INITIAL AND zeile IS NOT INITIAL.
+    DELETE gt_mseg WHERE mblnr = lt_mseg-smbln AND mjahr = lt_mseg-sjahr AND zeile = lt_mseg-smblp.
+  ENDLOOP.
+
+* 处理入库凭证中采购订单相关信息
+  SORT gt_ekpo BY ebeln ebelp.
+  LOOP AT gt_mseg .
+    CLEAR:gt_alv.
+    READ TABLE gt_ekpo WITH KEY ebeln = gt_mseg-ebeln ebelp = gt_mseg-ebelp BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_mseg-netpr = gt_ekpo-netpr. "采购凭证中的净价
+      gt_mseg-peinh = gt_ekpo-peinh. "采购价格单位
+      gt_mseg-ematn = gt_ekpo-ematn. "品牌物料号码
+      gt_mseg-lifnr = gt_ekpo-lifnr. "供应商
+      gt_mseg-aedat = gt_ekpo-aedat. "采购订单创建日期
+      gt_mseg-bukrs = gt_ekpo-bukrs. "公司代码
+      gt_mseg-ekgrp = gt_ekpo-ekgrp. "采购组
+      gt_mseg-matkl = gt_ekpo-matkl. "物料组
+    ENDIF.
+    IF gt_mseg-shkzg = 'H'.
+      gt_mseg-menge = gt_mseg-menge * ( -1 ).
+    ENDIF.
+    gt_alv-matnr = gt_mseg-matnr.
+    gt_alv-lifnr = gt_mseg-lifnr.
+    gt_alv-ekgrp = gt_mseg-ekgrp.
+    gt_alv-ematn = gt_mseg-ematn.
+    COLLECT gt_alv.
+    MODIFY gt_mseg.
+    CLEAR: gt_mseg.
+  ENDLOOP.
+
+  SORT gt_alv BY matnr lifnr ekgrp ematn.
+*  DELETE ADJACENT DUPLICATES FROM gt_alv COMPARING matnr lifnr ekgrp ematn.
+
+  IF gt_alv[] IS NOT INITIAL.
+*    根据EMATN从表MARA中取出品牌物料编码的信息
+    SELECT * INTO TABLE gt_mara FROM mara FOR ALL ENTRIES IN gt_alv WHERE matnr = gt_alv-ematn.
+*    根据品牌物料找到的品牌制造商从表LFA1中取出制造商描述
+    IF gt_mara[] IS NOT INITIAL.
+      SELECT * INTO TABLE gt_lfa1 FROM lfa1 FOR ALL ENTRIES IN gt_mara WHERE lifnr = gt_mara-mfrnr.
+    ENDIF.
+*   取出采购订单中物料的信息
+    SELECT * APPENDING TABLE gt_mara FROM mara FOR ALL ENTRIES IN gt_alv WHERE matnr = gt_alv-matnr.
+*   取出采购订单中物料描述
+    SELECT * INTO TABLE gt_makt FROM makt FOR ALL ENTRIES IN gt_alv WHERE matnr = gt_alv-matnr.
+*   取出采购订单中供应商的描述
+    SELECT * APPENDING TABLE gt_lfa1 FROM lfa1 FOR ALL ENTRIES IN gt_alv WHERE lifnr = gt_alv-lifnr.
+    SELECT * INTO TABLE gt_t024 FROM t024 .
+    SELECT * INTO TABLE gt_t023t FROM t023t WHERE spras = sy-langu.
+
+    SORT gt_mara BY matnr.
+    SORT gt_lfa1 BY lifnr.
+    SORT gt_makt BY matnr.
+    SORT gt_t024 BY ekgrp.
+    SORT gt_t023t BY matkl.
+  ENDIF.
+
+
+  lt_mseg[] = gt_mseg[].
+  DELETE lt_mseg WHERE budat > p_eindt.
+  SORT lt_mseg BY matnr budat DESCENDING.
+
+  lt_ekpo[] = gt_ekpo[].
+  SORT lt_ekpo BY matnr lifnr ekgrp aedat DESCENDING .
+
+*  处理区间内的收货金额
+  LOOP AT gt_alv.
+    lv_tabix = sy-tabix.
+* 基准价格： 基准日期前最后一笔入库的价格，根据物料，基准日期取MKPF~ BUDAT前面的那条数据
+*  (如果取不到，在内表中删除该条目)，找到MSEG~ EBELN,MSEG~ EBELP，取EKPO的NETPR/ PEINH作为基准价格
+    READ TABLE lt_mseg WITH KEY matnr = gt_alv-matnr lifnr = gt_alv-lifnr ekgrp = gt_alv-ekgrp ematn = gt_alv-ematn.
+    IF sy-subrc = 0 .
+      gt_alv-zjzjg = lt_mseg-netpr / lt_mseg-peinh.
+    ENDIF.
+    IF gt_alv-zjzjg EQ 0.
+      DELETE gt_alv INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+*   订单价格区间截止日期的采购订单的价格，根据物料，工厂=公司代码，供应商，采购组织(1000)
+*    确定EIPA最近一笔的价格。如果在区间内没有找到，在内表中删除此条码；
+    READ TABLE lt_ekpo WITH KEY matnr = gt_alv-matnr lifnr = gt_alv-lifnr ekgrp = gt_alv-ekgrp ematn = gt_alv-ematn.
+    IF sy-subrc = 0.
+      gt_alv-zddjg = lt_ekpo-netpr / lt_ekpo-peinh.
+    ENDIF.
+*   降价价格=订单价格-基准价格
+    gt_alv-zjjjg = gt_alv-zjzjg - gt_alv-zddjg.
+*   降价比例=降价价格/基准价格*100%
+    IF gt_alv-zjzjg NE 0.
+      gt_alv-zjjbl_1 = gt_alv-zjjjg / gt_alv-zjzjg * 100.
+    ENDIF.
+    gt_alv-zjjbl = gt_alv-zjjbl_1.
+    IF gt_alv-zjjbl = 0.
+      DELETE gt_alv INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+    CALL FUNCTION 'CLOI_PUT_SIGN_IN_FRONT'
+      CHANGING
+        value = gt_alv-zjjbl.
+    CONCATENATE gt_alv-zjjbl '%' INTO gt_alv-zjjbl. CONDENSE gt_alv-zjjbl.
+
+*   降价后累计收货数量、金额
+    LOOP AT gt_mseg WHERE matnr = gt_alv-matnr AND lifnr = gt_alv-lifnr AND ekgrp = gt_alv-ekgrp AND ematn = gt_alv-ematn.
+      gt_alv-zshje = gt_alv-zshje + gt_mseg-menge * ( gt_mseg-netpr / gt_mseg-peinh ).
+      gt_alv-zjcbje = gt_alv-zjcbje + gt_mseg-menge * ( gt_alv-zjzjg - gt_mseg-netpr / gt_mseg-peinh ).
+      CLEAR: gt_mseg.
+    ENDLOOP.
+*    降本比例
+    IF gt_alv-zshje NE 0.
+      gt_alv-zjbbl_1 = gt_alv-zjcbje / gt_alv-zshje * 100.
+    ENDIF.
+    gt_alv-zjbbl = gt_alv-zjbbl_1.
+    CALL FUNCTION 'CLOI_PUT_SIGN_IN_FRONT'
+      CHANGING
+        value = gt_alv-zjbbl.
+    CONCATENATE gt_alv-zjbbl '%' INTO gt_alv-zjbbl. CONDENSE gt_alv-zjbbl.
+
+*    取物料组
+    READ TABLE gt_mara WITH KEY matnr = gt_alv-matnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-matkl = gt_mara-matkl.
+      READ TABLE gt_t023t WITH KEY matkl = gt_alv-matkl BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_alv-wgbez = gt_t023t-wgbez.
+      ENDIF.
+    ENDIF.
+*   取物料描述
+    READ TABLE gt_makt WITH KEY matnr = gt_alv-matnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-maktx = gt_makt-maktx.
+    ENDIF.
+*   取采购组
+    READ TABLE gt_t024 WITH KEY ekgrp = gt_alv-ekgrp BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-eknam = gt_t024-eknam.
+    ENDIF.
+*   取供应商名称
+    READ TABLE gt_lfa1 WITH KEY lifnr = gt_alv-lifnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-name1 = gt_lfa1-name1.
+    ENDIF.
+*   取品牌物料编码
+    READ TABLE gt_mara WITH KEY matnr = gt_alv-ematn BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-mfrnr = gt_mara-mfrnr.
+    ENDIF.
+*   取品牌名称
+    READ TABLE gt_lfa1 WITH KEY lifnr = gt_alv-mfrnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-name1_pp = gt_lfa1-name1.
+    ENDIF.
+    MODIFY gt_alv.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SUB_BUILD_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM sub_build_fieldcat .
+  REFRESH:g_it_fieldcat.
+  PERFORM sub_set_fieldcat USING 'X' 'MATNR'    '物料代码'           'X'  ''  ''  ''  ''  'MATNR'  'MARA' ''.
+  PERFORM sub_set_fieldcat USING ''  'MAKTX'    '物料描述'           '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'EKGRP'    '采购组'             '' '' ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'EKNAM'    '采购组描述'         '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'LIFNR'    '供应商'             'X' '' ''  ''  ''  'LIFNR'  'LFA1' '' .
+  PERFORM sub_set_fieldcat USING ''  'NAME1'    '供应商名称'         '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'MFRNR'    '品牌（制造商）'     '' '' ''  ''  ''  ''  '' '' .
+*  PERFORM sub_set_fieldcat USING ''  'NAME_PP'  '品牌名称'           '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'MATKL'    '物料组'             '' '' ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'WGBEZ'    '物料组描述'         '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'ZJZJG'    '基准价格'           'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'ZDDJG'    '订单价格'           'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'ZJJJG'    '降价价格'           'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'ZJJBL'    '降价比例(%)'        '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'ZSHJE'    '降价后累计收货金额' 'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'ZJCBJE'   '降成本金额'         'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'ZJBBL'    '降本比例(%)'        '' '' ''  ''  ''  ''  '' '' .
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  alv_user_command
+*&---------------------------------------------------------------------*
+*----------------------------------------------------------------------*
+*      -->UCOMM      text
+*      -->SELFIELD   text
+*----------------------------------------------------------------------*
+
+FORM alv_user_command USING ucomm LIKE sy-ucomm
+                          selfield TYPE slis_selfield.
+  PERFORM sub_check_changed_data.
+  CASE ucomm.
+    WHEN '&IC1'.
+      CLEAR: gt_alv.
+      READ TABLE gt_alv INDEX selfield-tabindex.
+      PERFORM frm_display_detail_data1 USING gt_alv.
+      PERFORM sub_build_fieldcat2.
+      PERFORM sub_build_layout.
+      PERFORM sub_display_alv TABLES gt_alv2 USING '' ''.
+    WHEN OTHERS.
+  ENDCASE.
+  PERFORM sub_refresh_data.
+ENDFORM. "alv_user_command
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DISPLAY_DETAIL_DATA1
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_display_detail_data1 USING gt_alv STRUCTURE gt_alv.
+  REFRESH: gt_alv2.
+  LOOP AT gt_mseg WHERE matnr = gt_alv-matnr AND lifnr = gt_alv-lifnr AND ekgrp = gt_alv-ekgrp AND ematn = gt_alv-ematn.
+    MOVE-CORRESPONDING gt_mseg TO gt_alv2.
+    gt_alv2-zrksl = gt_mseg-menge. "入库数量
+    IF gt_mseg-peinh NE 0.
+      gt_alv2-zrkje = gt_mseg-menge * ( gt_mseg-netpr / gt_mseg-peinh ) . "入库金额
+      gt_alv2-zjcbje = gt_mseg-menge * ( gt_alv-zjzjg - gt_mseg-netpr / gt_mseg-peinh )."降成本金额
+    ENDIF.
+    gt_alv2-name1 = gt_alv-name1."供应商名称
+    gt_alv2-maktx = gt_alv-maktx."物料描述
+    gt_alv2-eknam = gt_alv-eknam."采购组描述
+    gt_alv2-maktx = gt_alv-maktx."物料描述
+    gt_alv2-matkl = gt_alv-matkl."物料组
+    gt_alv2-wgbez = gt_alv-wgbez."物料组描述
+    APPEND gt_alv2.
+    CLEAR: gt_alv2,gt_mseg.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SUB_BUILD_FIELDCAT2
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM sub_build_fieldcat2 .
+  REFRESH:g_it_fieldcat.
+
+  PERFORM sub_set_fieldcat USING ''  'LIFNR'    '供应商'             'X' '' ''  ''  ''  'LIFNR'  'LFA1' '' .
+  PERFORM sub_set_fieldcat USING ''  'NAME1'    '供应商名称'         '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'EKGRP'    '采购组'             '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'EKNAM'    '采购组描述'         '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'MATKL'    '物料组'             '' '' ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'WGBEZ'    '物料组描述'         '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'EBELN'    '采购订单'           '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'EBELP'    '采购订单行项目'     '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'MATNR'    '物料代码'           'X'  ''  ''  ''  ''  'MATNR'  'MARA' '' .
+  PERFORM sub_set_fieldcat USING ''  'MAKTX'    '物料描述'           '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'ZRKSL'    '入库数量'           'X' '' ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'ZRKJE'    '入库金额'           'X' '' ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'BUDAT'    '入库时间'           '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'ZJCBJE'   '降成本金额'         'X' '' ''  ''  ''  ''  '' '' .
+
+ENDFORM.

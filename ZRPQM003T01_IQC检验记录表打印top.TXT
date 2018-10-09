@@ -1,0 +1,77 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM013T01
+*&---------------------------------------------------------------------*
+TABLES:qals,ztqm002,zprintnum.
+
+DATA:BEGIN OF gt_alv OCCURS 0,
+       box(1),
+*      sel(1),
+       werk       LIKE qals-werk, "工厂
+       selmatnr   LIKE qals-selmatnr, "物料
+       maktx      LIKE makt-maktx, "物料描述
+       prueflos   LIKE qals-prueflos, "检验批
+       charg      LIKE qals-charg, "批次
+       art        LIKE qals-art, "检验类型
+       kurztext   LIKE tq30t-kurztext, "检验类型
+       pastrterm  LIKE qals-pastrterm, "检验开始日期
+       paendterm  LIKE qals-paendterm, "检验结束日期
+       lagortchrg LIKE qals-lagortchrg, "库存地点
+       lgobe      LIKE t001l-lgobe, "库存地点描述
+       sellifnr   LIKE qals-sellifnr, "供应商
+       sortl      LIKE lfa1-sortl, "供应商
+       name1      LIKE lfa1-name1, "供应商描述
+       ebeln      LIKE qals-ebeln, "采购订单
+       mblnr      LIKE qals-mblnr, "物料凭证
+       zgdsj      LIKE ztqm002-zgdsj, "固定时间
+       zdgsj      LIKE ztqm002-zdgsj, "单个时间
+*       zjygs      LIKE ztqm002-zdgsj, "检验工时
+       zjygs      TYPE p LENGTH 15 DECIMALS 5, "检验工时
+*       gesstichpr LIKE qals-gesstichpr, "抽样数
+       gesstichpr TYPE i, "抽样数
+*       losmenge   LIKE qals-losmenge, "批量
+       losmenge   TYPE i, "批量
+       mengeneinh LIKE qals-mengeneinh, "单位
+       lifnr_pp   LIKE lfa1-lifnr, "品牌代码
+       sortl_pp   LIKE lfa1-sortl, "品牌
+       zjgth      LIKE ausp-atwrt, "结构图号
+       zsyth      LIKE ausp-atwrt, "丝印图号
+       zmh        LIKE ausp-atwrt, "结构模号
+       zsum       LIKE zprintnum-zsum,
+       zdate      LIKE zprintnum-zdate, "最后打印日期
+       ztime      LIKE zprintnum-ztime, "最后打印时间
+       objek      LIKE ausp-objek,
+       objnr      LIKE qals-objnr, "对象号 ADD BY PFT 20171211
+       status     TYPE bsvx-sttxt , "检验批状态 ADD BY PFT 20171211
+     END OF gt_alv,
+     it_alv LIKE gt_alv OCCURS 0 WITH HEADER LINE.
+
+DATA:gt_ztqm002 LIKE ztqm002 OCCURS 0 WITH HEADER LINE,
+     gt_tq30t   LIKE tq30t OCCURS 0 WITH HEADER LINE,
+     gt_lfa1    LIKE lfa1 OCCURS 0 WITH HEADER LINE,
+     gt_t001l   LIKE t001l OCCURS 0 WITH HEADER LINE.
+
+DATA: BEGIN OF gt_makt OCCURS 0,
+        matnr LIKE makt-matnr,
+        maktx LIKE makt-maktx,
+      END OF gt_makt.
+
+DATA: BEGIN OF gt_mara OCCURS 0,
+        matnr LIKE mara-matnr,
+        bmatn LIKE mara-bmatn,
+        mfrnr LIKE mara-mfrnr,
+        sortl LIKE lfa1-sortl,
+      END OF gt_mara.
+
+* 存放结构图号、丝印图号、结构模号
+DATA:BEGIN OF gt_ausp OCCURS 0,
+       objek LIKE ausp-objek,
+       atinn LIKE ausp-atinn,
+       atwrt LIKE ausp-atwrt,
+       atnam LIKE cabn-atnam,
+     END OF gt_ausp.
+
+
+DATA: lv_jygs(15) TYPE p  DECIMALS 5, "检验工时
+      lv_dtrl(15) TYPE p  DECIMALS 5, "当天人力
+      lv_jyts(15) TYPE p  DECIMALS 5, "所需检验天数
+      lv_yxtm     TYPE i.             "已选检验批条目数

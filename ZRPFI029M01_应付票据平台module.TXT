@@ -1,0 +1,219 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPFI029M01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Module  INIT_ALV  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE init_alv OUTPUT.
+  IF cl_alv IS INITIAL.
+    CREATE OBJECT cl_alv "Éú³ÉALV
+      EXPORTING
+        i_parent = cl_gui_custom_container=>screen0.
+
+    PERFORM f_alv_set_fieldcats.
+    PERFORM f_alv_set_layout.
+    PERFORM f_alv_exclude_toolbar.
+
+    CONCATENATE sy-repid  '0100' INTO gs_variant-report.
+
+    CALL METHOD cl_alv->set_table_for_first_display
+      EXPORTING
+        is_variant           = gs_variant
+        i_save               = 'A'
+        i_default            = 'X'
+        is_layout            = gs_layout
+        it_toolbar_excluding = gt_toolbar_excluding
+      CHANGING
+        it_outtab            = gt_alv[]
+        it_fieldcatalog      = gt_alv_fcat[].
+
+    CREATE OBJECT cl_button_event.
+    SET HANDLER cl_button_event->handle_user_command FOR cl_alv.
+    SET HANDLER cl_button_event->handle_toolbar FOR cl_alv.
+    SET HANDLER cl_button_event->handle_on_f4 FOR cl_alv.
+    SET HANDLER cl_button_event->handle_double_click FOR cl_alv.
+    SET HANDLER cl_button_event->handle_hotspot_click FOR cl_alv.
+
+    CALL METHOD cl_alv->register_edit_event
+      EXPORTING
+        i_event_id = cl_gui_alv_grid=>mc_evt_modified.
+
+    CALL METHOD cl_alv->set_ready_for_input
+      EXPORTING
+        i_ready_for_input = 1.
+
+    CALL METHOD cl_alv->set_toolbar_interactive.
+
+  ELSE.
+    PERFORM f_refresh_alv_display.
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  STATUS_0100  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE status_0100 OUTPUT.
+  SET PF-STATUS 'PF_100'.
+  SET TITLEBAR 'TITLE'.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0100  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_0100 INPUT.
+  CLEAR:save_ok.
+  save_ok = ok_code.
+  CLEAR: ok_code.
+  CASE save_ok.
+    WHEN 'BACK' .
+      LEAVE TO SCREEN 0.
+    WHEN 'EXIT'.
+      LEAVE TO SCREEN 0.
+    WHEN 'CANCEL'.
+      LEAVE TO SCREEN 0.
+  ENDCASE.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  STATUS_0200  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE status_0200 OUTPUT.
+  SET PF-STATUS 'PF_0200'.
+  SET TITLEBAR 'T_0200'.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0200  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_0200 INPUT.
+  CLEAR:save_ok.
+  save_ok = ok_code.
+  CLEAR: ok_code.
+  CASE save_ok.
+    WHEN 'ZOK' .
+      PERFORM frm_check_data_bs.
+    WHEN 'ZCANCEL'.
+      LEAVE TO SCREEN 0.
+    WHEN OTHERS.
+  ENDCASE.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  STATUS_0300  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE status_0300 OUTPUT.
+  SET PF-STATUS 'PF_0300'.
+  SET TITLEBAR 'T_0300'.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0300  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_0300 INPUT.
+  CLEAR:save_ok.
+  save_ok = ok_code.
+  CLEAR: ok_code.
+  CASE save_ok.
+    WHEN 'ZOK' .
+      PERFORM frm_check_data_ts.
+    WHEN 'ZCANCEL'.
+      LEAVE TO SCREEN 0.
+    WHEN OTHERS.
+  ENDCASE.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  SAKNR_F4  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE saknr_f4 INPUT.
+  PERFORM frm_saknr_f4 USING 'SAKNR'  'GW_ZTS-SAKNR'.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  STATUS_0400  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE status_0400 OUTPUT.
+  SET PF-STATUS 'PF_0400'.
+  SET TITLEBAR 'T_0400'.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0400  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_0400 INPUT.
+  CLEAR:save_ok.
+  save_ok = ok_code.
+  CLEAR: ok_code.
+  CASE save_ok.
+    WHEN 'ZOK' .
+      PERFORM frm_check_data_tp.
+    WHEN 'ZCANCEL'.
+      LEAVE TO SCREEN 0.
+    WHEN OTHERS.
+  ENDCASE.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  STGRD_F4  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE stgrd_f4 INPUT.
+  DATA:lt_t041ct LIKE t041ct OCCURS 0 WITH HEADER LINE.
+
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE lt_t041ct
+    FROM t041ct
+    WHERE spras = sy-langu.
+
+  CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+    EXPORTING
+*     DDIC_STRUCTURE  = ' '
+      retfield        = 'STGRD'
+*     PVALKEY         = ' '
+      dynpprog        = sy-repid
+      dynpnr          = sy-dynnr
+      dynprofield     = 'GW_ZTP-STGRD'
+*     STEPL           = 0
+*     WINDOW_TITLE    =
+*     VALUE           = ' '
+      value_org       = 'S'
+*     MULTIPLE_CHOICE = ' '
+*     DISPLAY         = ' '
+*     CALLBACK_PROGRAM       = ' '
+*     CALLBACK_FORM   = ' '
+*     CALLBACK_METHOD =
+*     MARK_TAB        =
+*     IMPORTING
+*     USER_RESET      =
+    TABLES
+      value_tab       = lt_t041ct
+*     FIELD_TAB       =
+*     RETURN_TAB      =
+*     DYNPFLD_MAPPING =
+    EXCEPTIONS
+      parameter_error = 1
+      no_values_found = 2
+      OTHERS          = 3.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  SAKNR1_F4  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE saknr1_f4 INPUT.
+  PERFORM frm_saknr_f4 USING 'SAKNR'  'GW_ZTS-SAKNR1'.
+ENDMODULE.

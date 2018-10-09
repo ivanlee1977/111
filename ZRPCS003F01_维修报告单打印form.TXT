@@ -1,0 +1,582 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM013F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_ZWXZT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_zwxzt .
+  REFRESH: s_zwxzt.
+  IF p_r0 EQ 'X'.
+    mcr_zwxzt: 'A2'.
+    mcr_zwxzt: 'B2'.
+  ELSEIF p_r1 EQ 'X'.
+    mcr_zwxzt: 'A8'.
+    mcr_zwxzt: 'B8'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SUB_SEARCH_HELP_ZWXZT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM sub_search_help_zwxzt .
+  DATA:lt_return_tab LIKE ddshretval OCCURS  0 WITH HEADER LINE.
+  DATA:lv_display TYPE c.
+  DATA:BEGIN OF gt_zstat OCCURS 0,
+         zstat LIKE ztcs002-zstat,
+         ztext LIKE ztcs002-ztext,
+       END OF gt_zstat.
+  REFRESH gt_zstat .
+
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE gt_zstat FROM ztcs002.
+
+  CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+    EXPORTING
+      retfield        = 'ZSTAT'
+      pvalkey         = 'ZSTAT'
+      dynpprog        = sy-repid
+      dynpnr          = sy-dynnr
+      dynprofield     = 'ZWXZT'
+      value_org       = 'S'
+*     multiple_choice = 'X'
+      display         = lv_display
+    TABLES
+      value_tab       = gt_zstat
+*     FIELD_TAB       =
+      return_tab      = lt_return_tab
+*     DYNPFLD_MAPPING =
+    EXCEPTIONS
+      parameter_error = 1
+      no_values_found = 2
+      OTHERS          = 3.
+  IF sy-subrc = 0.
+    REFRESH: s_zwxzt.
+    LOOP AT lt_return_tab.
+      mcr_zwxzt: lt_return_tab-fieldval.
+    ENDLOOP.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  REFRESH: gt_alv,gt_knvv,gt_ztcs003,gt_ztcs004,gt_adrc,gt_mara,gt_makt,gt_qpct.
+  DATA: lv_tabix LIKE sy-tabix.
+
+* 根据选择屏幕筛选出复合条件的客户
+  SELECT * INTO TABLE gt_knvv
+    FROM knvv
+    WHERE vkorg IN s_vkorg
+      AND kunnr IN s_kunum
+      AND kvgr2 IN s_kvgr2.
+
+*  根据客户取出维修通知单
+  IF gt_knvv[] IS NOT INITIAL.
+    SELECT a~qmnum a~qmart a~qmtxt a~ernam a~erdat a~kunum a~adrnr
+           b~zindx b~zbarcode b~matnr b~menge b~zreason b~zwhwl1 b~zwhwl2 b~zwhwl3 b~zwhwl4 b~zwhwl5 b~zswbz b~zsjfy
+           b~zthwx b~zwxzt b~zwxcs b~zversion a~bstnk b~zkhqr AS zzjtg b~zwxy b~zwczt b~zsfbs b~zgbbs
+      INTO CORRESPONDING FIELDS OF TABLE gt_alv
+      FROM qmel AS a INNER JOIN ztcs001 AS b ON a~qmnum = b~qmnum
+      FOR ALL ENTRIES IN gt_knvv
+      WHERE a~qmart IN s_qmart
+        AND a~qmnum IN s_qmnum
+        AND b~matnr IN s_matnr
+        AND b~zwxzt IN s_zwxzt
+        AND b~erdat IN s_erdat
+        AND b~zkhqr IN s_zkhqr
+        AND b~zcpfh IN s_zcpfh
+        AND b~zwxy  IN s_zwxy
+        AND a~kunum  = gt_knvv-kunnr
+        AND b~zthwx IN s_zthwx.
+    SORT gt_alv BY qmnum zindx.
+  ENDIF.
+
+  IF p_zwczt NE 'X'.
+    DELETE gt_alv WHERE zwczt EQ 'X'.
+  ENDIF.
+
+  LOOP AT gt_alv WHERE adrnr IS INITIAL.
+    lv_tabix = sy-tabix.
+    READ TABLE gt_tq80_t WITH KEY qmart = gt_alv-qmart BINARY SEARCH.
+    IF sy-subrc <> 0.
+      DELETE gt_alv INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+    SELECT SINGLE adrnr INTO gt_alv-adrnr FROM kna1 WHERE kunnr = gt_alv-kunum.
+    MODIFY gt_alv TRANSPORTING adrnr.
+    CLEAR: gt_alv.
+  ENDLOOP.
+
+  IF gt_alv[] IS NOT INITIAL.
+    SELECT * INTO TABLE gt_adrc
+      FROM adrc
+      FOR ALL ENTRIES IN gt_alv
+      WHERE addrnumber = gt_alv-adrnr.
+    SORT gt_adrc BY addrnumber.
+
+    SELECT * INTO TABLE gt_mara
+      FROM mara
+      FOR ALL ENTRIES IN gt_alv
+      WHERE matnr = gt_alv-matnr.
+    SORT gt_mara BY matnr.
+
+    SELECT * INTO TABLE gt_ztcs003
+      FROM ztcs003
+      FOR ALL ENTRIES IN gt_alv
+      WHERE qmnum = gt_alv-qmnum
+        AND zindx = gt_alv-zindx.
+    SORT gt_ztcs003 BY qmnum zindx.
+
+    SELECT * INTO TABLE gt_ztcs004
+      FROM ztcs004
+      FOR ALL ENTRIES IN gt_alv
+      WHERE qmnum = gt_alv-qmnum
+        AND zindx = gt_alv-zindx.
+    SORT gt_ztcs004 BY qmnum zindx.
+  ENDIF.
+
+  IF gt_mara[] IS NOT INITIAL.
+    SELECT * INTO TABLE gt_makt
+      FROM makt
+      FOR ALL ENTRIES IN gt_mara
+      WHERE matnr = gt_mara-matnr
+        AND spras = sy-langu.
+    SORT gt_makt BY matnr.
+  ENDIF.
+
+  SELECT * INTO TABLE gt_qpct FROM qpct WHERE sprache = sy-langu.
+  SORT gt_qpct BY codegruppe code.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PROCESS_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_process_data .
+  FIELD-SYMBOLS:<fs_alv> LIKE gt_alv.
+
+  LOOP AT gt_alv ASSIGNING <fs_alv>.
+*  根据地址号取客户名称 、联系人、联系方式、客户地址
+    READ TABLE gt_adrc WITH KEY addrnumber = <fs_alv>-adrnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      CONCATENATE gt_adrc-name1 gt_adrc-name2 INTO <fs_alv>-name.
+      CONDENSE <fs_alv>-name.
+      <fs_alv>-extension1 = gt_adrc-extension1.
+      <fs_alv>-tel_number = gt_adrc-tel_number.
+      CONCATENATE gt_adrc-street gt_adrc-str_suppl3 INTO <fs_alv>-street.
+      CONDENSE <fs_alv>-street.
+    ENDIF.
+*  取产品描述和单位
+    READ TABLE gt_mara WITH KEY matnr = <fs_alv>-matnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      <fs_alv>-meins = gt_mara-meins.
+    ENDIF.
+    READ TABLE gt_makt WITH KEY matnr = <fs_alv>-matnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      <fs_alv>-maktx = gt_makt-maktx.
+    ENDIF.
+*  维修/退货
+    IF <fs_alv>-zthwx = 'X'.
+      <fs_alv>-zthwx_ms = '退货'.
+    ELSEIF <fs_alv>-zthwx = 'Y'.
+      <fs_alv>-zthwx_ms = '电机退换'.
+    ELSEIF <fs_alv>-zthwx = 'Z'.
+      <fs_alv>-zthwx_ms = '上线前样品退货'.
+    ELSE.
+      <fs_alv>-zthwx_ms = '维修'.
+    ENDIF.
+*   故障现象代码
+    LOOP AT gt_ztcs003 WHERE qmnum = <fs_alv>-qmnum AND zindx = <fs_alv>-zindx.
+      CLEAR: gt_qpct.
+      READ TABLE gt_qpct WITH KEY codegruppe = gt_ztcs003-fegrp code = gt_ztcs003-fecod BINARY SEARCH.
+      IF <fs_alv>-fecod IS INITIAL.
+        <fs_alv>-fecod = gt_ztcs003-fecod.
+        <fs_alv>-fecod_ms = gt_qpct-kurztext.
+      ELSE.
+        CONCATENATE <fs_alv>-fecod gt_ztcs003-fecod INTO <fs_alv>-fecod SEPARATED BY '、'.
+        CONCATENATE <fs_alv>-fecod_ms gt_qpct-kurztext INTO <fs_alv>-fecod_ms SEPARATED BY '、'.
+      ENDIF.
+      CLEAR: gt_ztcs003.
+    ENDLOOP.
+*   不良原因描述
+    LOOP AT gt_ztcs004 WHERE qmnum = <fs_alv>-qmnum AND zindx = <fs_alv>-zindx.
+      CLEAR: gt_qpct.
+      READ TABLE gt_qpct WITH KEY codegruppe = gt_ztcs004-urgrp code = gt_ztcs004-urcod BINARY SEARCH.
+      IF <fs_alv>-urcod IS INITIAL.
+        <fs_alv>-urcod = gt_ztcs004-urcod.
+        <fs_alv>-urcod_ms = gt_qpct-kurztext.
+      ELSE.
+        CONCATENATE <fs_alv>-urcod gt_ztcs004-urcod INTO <fs_alv>-urcod SEPARATED BY '、'.
+        CONCATENATE <fs_alv>-urcod_ms gt_qpct-kurztext INTO <fs_alv>-urcod_ms SEPARATED BY '、'.
+      ENDIF.
+      CLEAR: gt_ztcs003.
+    ENDLOOP.
+*  是否保修
+    IF <fs_alv>-zgbbs = 'X'.
+      <fs_alv>-zgbbs_ms = '过保'.
+    ELSE.
+      <fs_alv>-zgbbs_ms = '保修内'.
+    ENDIF.
+*   是否收费
+    IF <fs_alv>-zsjfy > 0.
+      <fs_alv>-zsfsf = '收费'.
+    ELSE.
+      <fs_alv>-zsfsf = '不收费'.
+    ENDIF.
+*  维修员
+    READ TABLE gt_zwxy WITH KEY zcode = <fs_alv>-zwxy.
+    IF sy-subrc = 0.
+      <fs_alv>-zwxy = gt_zwxy-zwxy.
+    ENDIF.
+  ENDLOOP.
+
+  SORT gt_alv BY qmart qmnum zindx kunum.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SUB_BUILD_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM sub_build_fieldcat .
+  REFRESH:g_it_fieldcat.
+  PERFORM sub_set_fieldcat USING 'X' 'QMNUM'      '通知单号'           'X'  ''  ''  ''  ''  'QMNUM'  'QMEL' ''.
+  PERFORM sub_set_fieldcat USING ''  'ZINDX'      '项目'               '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'QMART'      '通知单类型'         '' '' ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'ZWXZT'      '维修状态'           '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'QMTXT'      '通知单描述'         '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'ERNAM'      '创建人'             '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'ERDAT'      '创建时间'           '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'KUNUM'      '客户代码'           'X' '' ''  ''  ''  'KUNUM'  'QMEL' '' .
+  PERFORM sub_set_fieldcat USING ''  'NAME'       '客户名称'           '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'EXTENSION1' '联系人'             '' '' ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'TEL_NUMBER' '联系方式'           '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'STREET'     '客户地址'           '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'ZBARCODE'   '序列号'             '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'MATNR'      '产品代码'           'X' '' ''  ''  ''  'MATNR'  'MARA' '' .
+  PERFORM sub_set_fieldcat USING ''  'MAKTX'      '产品描述'           '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'MENGE'      '数量'               'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'MEINS'      '单位'               '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'ZSJFY'      '金额'               'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'ZTHWX_MS'   '退货标识'          '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'ZZJTG'      '确认维修日期'       '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'ZREASON'    '客户问题描述'       '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'FECOD'      '故障现象代码'       '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'FECOD_MS'   '故障现象描述'       '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'URCOD'      '不良原因代码'       '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'URCOD_MS'   '不良原因描述'       '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'ZWHWL1'     '更换物料及位号1'    'X' '' ''  ''  ''  'ZWHWL1'  'ZTCS001' '' .
+  PERFORM sub_set_fieldcat USING ''  'ZWHWL2'     '更换物料及位号2'    'X' '' ''  ''  ''  'ZWHWL2'  'ZTCS001' '' .
+  PERFORM sub_set_fieldcat USING ''  'ZWHWL3'     '更换物料及位号3'    'X' '' ''  ''  ''  'ZWHWL3'  'ZTCS001' '' .
+  PERFORM sub_set_fieldcat USING ''  'ZWHWL4'     '更换物料及位号4'    'X' '' ''  ''  ''  'ZWHWL4'  'ZTCS001' '' .
+  PERFORM sub_set_fieldcat USING ''  'ZWHWL5'     '更换物料及位号5'    'X' '' ''  ''  ''  'ZWHWL5'  'ZTCS001' '' .
+  PERFORM sub_set_fieldcat USING ''  'ZGBBS_MS'   '是否保修内'         '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'ZWXCS'      '维修次数'         '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'ZSWBZ'      '特殊要求'           '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'ZSFSF'      '是否收费'           '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'BSTNK'      '存放位置'           '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'ZWXY'       '维修员'           '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'ZSFBS'      '收发标识'           '' '' ''  ''  ''  ''  '' '' .
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  pf_status_set
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->RT_EXTAB   text
+*----------------------------------------------------------------------*
+FORM pf_status_set USING rt_extab TYPE slis_t_extab.
+  DATA:fcode           TYPE TABLE OF sy-ucomm.
+  REFRESH: fcode.
+  IF p_r0 EQ 'X' .
+    APPEND 'PRINT2' TO fcode.
+    APPEND 'PRINT3' TO fcode.
+  ELSEIF p_r1 EQ 'X'.
+    APPEND 'PRINT1' TO fcode.
+  ENDIF.
+  SET PF-STATUS 'ZSTANDARD' EXCLUDING fcode.
+ENDFORM. "pf_status_set
+*&---------------------------------------------------------------------*
+*&      Form  alv_user_command
+*&---------------------------------------------------------------------*
+*----------------------------------------------------------------------*
+*      -->UCOMM      text
+*      -->SELFIELD   text
+*----------------------------------------------------------------------*
+FORM alv_user_command USING ucomm LIKE sy-ucomm
+                          selfield TYPE slis_selfield.
+  DATA:lv_qmart LIKE qmel-qmart.
+  PERFORM sub_check_changed_data.
+  CASE ucomm.
+    WHEN '&IC1'.
+      READ TABLE gt_alv INDEX selfield-tabindex."读取当前行
+      SET PARAMETER ID : 'IQM' FIELD gt_alv-qmnum.
+      CALL TRANSACTION  'IW53' AND SKIP FIRST SCREEN.
+    WHEN 'PRINT1'. "打印内部维修报告
+      PERFORM frm_print_data USING ucomm.
+    WHEN 'PRINT2' OR 'PRINT3'.  "PRINT2 :仅打印客户维修报告 PRINT3:仅打印送货单
+      LOOP AT gt_alv WHERE box = 'X'.
+        IF lv_qmart IS INITIAL.
+          lv_qmart = gt_alv-qmart.
+        ELSE.
+          IF lv_qmart NE gt_alv-qmart.
+            MESSAGE e398(00) WITH '请选择相同类型的维修通知单' DISPLAY LIKE 'E'.
+            EXIT.
+          ENDIF.
+        ENDIF.
+      ENDLOOP.
+      PERFORM frm_print_data USING ucomm.
+    WHEN OTHERS.
+  ENDCASE.
+  PERFORM sub_refresh_data.
+ENDFORM. "alv_user_command
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PRINT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_UCOMM  text
+*----------------------------------------------------------------------*
+FORM frm_print_data  USING p_ucomm TYPE sy-ucomm.
+  DATA fm_name TYPE rs38l_fnam.
+  DATA:xssfctrlop        LIKE ssfctrlop,
+       w_job_output_info TYPE ssfcrescl.
+
+  DATA: wa_head   LIKE zszcs003_head,
+        lv_qmnum  LIKE qmel-qmnum,
+        lv_qmnum2 LIKE qmel-qmnum,
+        lv_zwxzt  LIKE ztcs001-zwxzt.
+*  BREAK-POINT.
+* 将选中的记录加入表IT_HEAD中，针对客户进行去重
+  REFRESH:it_head.
+  LOOP AT gt_alv WHERE box = 'X'.
+    CLEAR:it_head.
+    MOVE-CORRESPONDING gt_alv TO it_head.
+    COLLECT it_head.
+    CLEAR: gt_alv.
+  ENDLOOP.
+
+  IF p_ucomm EQ 'PRINT1'.
+    SORT it_head BY kunum qmnum.
+    DELETE ADJACENT DUPLICATES FROM it_head COMPARING kunum qmnum.
+  ELSE.
+    SORT it_head BY kunum.
+    DELETE ADJACENT DUPLICATES FROM it_head COMPARING kunum.
+  ENDIF.
+
+  CASE p_ucomm.
+    WHEN 'PRINT1'.
+      PERFORM frm_get_smartforms USING 'ZSFCS_003A' CHANGING fm_name.
+    WHEN 'PRINT2'.
+      PERFORM frm_get_smartforms USING 'ZSFCS_003B' CHANGING fm_name.
+    WHEN 'PRINT3'.
+      PERFORM frm_get_smartforms USING 'ZSFCS_003C' CHANGING fm_name.
+    WHEN OTHERS.
+  ENDCASE.
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+
+  LOOP AT it_head.
+    CLEAR: wa_head.
+    AT FIRST.
+      xssfctrlop-no_close = 'X'.
+    ENDAT.
+    AT LAST.
+      xssfctrlop-no_close = ''.
+    ENDAT.
+
+*  处理抬头
+    CLEAR: lv_qmnum2. REFRESH:it_item.
+    IF p_ucomm EQ 'PRINT1'.
+      LOOP AT gt_alv WHERE box = 'X' AND kunum = it_head-kunum AND qmnum = it_head-qmnum.
+        CLEAR: lv_qmnum,it_item.
+        CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+          EXPORTING
+            input  = gt_alv-qmnum
+          IMPORTING
+            output = lv_qmnum.
+        MOVE-CORRESPONDING gt_alv TO wa_head.
+        wa_head-qmnum = lv_qmnum.
+        MOVE-CORRESPONDING gt_alv TO it_item.
+        APPEND it_item.
+        CLEAR: gt_alv.
+      ENDLOOP.
+    ELSE.
+      LOOP AT gt_alv WHERE box = 'X' AND kunum = it_head-kunum.
+        CLEAR: lv_qmnum,it_item.
+        CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+          EXPORTING
+            input  = gt_alv-qmnum
+          IMPORTING
+            output = lv_qmnum.
+        IF wa_head-qmnum IS INITIAL.
+          MOVE-CORRESPONDING gt_alv TO wa_head.
+          wa_head-qmnum = lv_qmnum.
+        ELSE.
+          IF lv_qmnum2 NE lv_qmnum.
+            CONCATENATE wa_head-qmnum lv_qmnum INTO wa_head-qmnum SEPARATED BY '/'.
+          ENDIF.
+        ENDIF.
+        lv_qmnum2 = lv_qmnum.
+        MOVE-CORRESPONDING gt_alv TO it_item.
+        APPEND it_item.
+        CLEAR: gt_alv.
+      ENDLOOP.
+    ENDIF.
+
+    CALL FUNCTION fm_name
+      EXPORTING
+        control_parameters = xssfctrlop
+        wa_head            = wa_head
+      IMPORTING
+        job_output_info    = w_job_output_info
+      TABLES
+        it_item            = it_item
+      EXCEPTIONS
+        formatting_error   = 1
+        internal_error     = 2
+        send_error         = 3
+        user_canceled      = 4.
+
+    xssfctrlop-no_open = 'X'.
+    FREE: it_item.
+
+    IF sy-subrc = 0.
+*      BREAK-POINT.
+      IF w_job_output_info-outputdone = 'X' AND ( p_ucomm = 'PRINT1' OR p_ucomm = 'PRINT2' ).
+        LOOP AT gt_alv WHERE box = 'X' AND ( zwxzt = 'A2' OR zwxzt = 'B2' )." OR zwxzt = 'A8' OR zwxzt = 'B8' ) .
+          CLEAR: lv_zwxzt.
+          CASE gt_alv-zwxzt.
+            WHEN 'A2'.
+              lv_zwxzt = 'A3'.
+            WHEN 'B2'.
+              lv_zwxzt = 'B3'.
+*            WHEN 'A8'.
+*              lv_zwxzt = 'A9'.
+*            WHEN 'B8'.
+*              lv_zwxzt = 'B9'.
+            WHEN OTHERS.
+          ENDCASE.
+          gt_alv-zwxzt = lv_zwxzt.
+          MODIFY gt_alv TRANSPORTING zwxzt.
+          UPDATE ztcs001 SET zwxzt = lv_zwxzt
+                       WHERE qmnum = gt_alv-qmnum
+                         AND zindx = gt_alv-zindx.
+          IF sy-subrc = 0.
+            COMMIT WORK AND WAIT .
+          ELSE.
+            ROLLBACK WORK.
+          ENDIF.
+          CLEAR: gt_alv.
+        ENDLOOP.
+      ENDIF.
+    ELSE.
+      MESSAGE s000(oo) WITH '请先选择要打印的记录' DISPLAY LIKE 'E'.
+    ENDIF.
+
+  ENDLOOP.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_SMARTFORMS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_1262   text
+*      <--P_FM_NAME  text
+*----------------------------------------------------------------------*
+FORM frm_get_smartforms  USING  lv_formname TYPE tdsfname
+                         CHANGING lv_name TYPE rs38l_fnam.
+  CLEAR: lv_name.
+  CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
+    EXPORTING
+      formname           = lv_formname
+    IMPORTING
+      fm_name            = lv_name
+    EXCEPTIONS
+      no_form            = 1
+      no_function_module = 2
+      OTHERS             = 3.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  frm_check_auth
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_auth .
+  CHECK sy-ucomm = 'ONLI'.
+  REFRESH: gt_tq80_t.
+  "检查销售组织权限
+  SELECT * INTO TABLE gt_tq80_t FROM tq80_t WHERE spras = sy-langu AND qmart IN s_qmart.
+  LOOP AT gt_tq80_t.
+    AUTHORITY-CHECK OBJECT 'I_QMEL'
+             ID 'QMART' FIELD gt_tq80_t-qmart.
+    IF sy-subrc <> 0.
+      DELETE gt_tq80_t.
+    ENDIF.
+  ENDLOOP.
+  SORT gt_tq80_t BY qmart.
+
+  "没有任何销售组织权限，终止取数据
+  IF gt_tq80_t[] IS INITIAL.
+    MESSAGE e398(00) WITH '您没有查看该通知单类型的权限' DISPLAY LIKE 'E'.
+    EXIT.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_ZWXY_F4
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0123   text
+*----------------------------------------------------------------------*
+FORM frm_zwxy_f4  USING  u_fname TYPE help_info-dynprofld.
+  DATA:lt_return_tab LIKE ddshretval OCCURS  0 WITH HEADER LINE.
+
+  REFRESH gt_zwxy .
+
+  SELECT zcode zwxy INTO CORRESPONDING FIELDS OF TABLE gt_zwxy FROM ztcs005 .
+
+  CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+    EXPORTING
+*     DDIC_STRUCTURE  = ' '
+      retfield        = 'ZWXY'
+      pvalkey         = 'ZWXY'
+      dynpprog        = sy-repid
+      dynpnr          = sy-dynnr
+      dynprofield     = u_fname
+      value_org       = 'S'
+    TABLES
+      value_tab       = gt_zwxy
+      return_tab      = lt_return_tab
+    EXCEPTIONS
+      parameter_error = 1
+      no_values_found = 2
+      OTHERS          = 3.
+  IF sy-subrc = 0.
+
+  ENDIF.
+
+ENDFORM.

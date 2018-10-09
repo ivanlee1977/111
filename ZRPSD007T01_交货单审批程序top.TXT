@@ -1,0 +1,91 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPSD007T01
+*&---------------------------------------------------------------------*
+TABLES:vbak,vbkd,likp.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       vbeln         LIKE lips-vbeln,  "交货单号
+       posnr         LIKE lips-posnr,  "项次
+       kunag         LIKE likp-kunag,  "客户
+       name1         LIKE kna1-name1,  "客户名称
+       erdat         LIKE likp-erdat,  "订单日期
+       lifsk         LIKE likp-lifsk,  "订单状态
+       vtext         LIKE tvlst-vtext, "订单状态描述
+       matnr         LIKE lips-matnr,  "物料号码
+       arktx         LIKE lips-arktx,  "物料描述
+       lfimg         LIKE lips-lfimg,  "数量
+       vrkme         LIKE lips-vrkme,  "单位
+       netpr         TYPE p DECIMALS 2, "单价
+       amount        TYPE p DECIMALS 2, "金额
+       kwmeng        TYPE vbap-kwmeng, "销售订单数量
+       netwr         TYPE vbap-netwr,  "金额
+       mwsbp         TYPE vbap-mwsbp,  "税
+       waerk         TYPE vbak-waerk,  "币别
+       zjlqr         TYPE sy-datum,    "经理\主管确认日期
+       kvgr2         TYPE vbak-kvgr2,  "商务人员
+       bezei         TYPE tvv2t-bezei, "商务人员描述
+       vkorg         TYPE vbak-vkorg,  "销售组织
+       vtweg         TYPE vbak-vtweg,  "分销渠道
+       spart         TYPE vbak-spart,  "产品组
+       bzirk         TYPE vbkd-bzirk, "大区
+       bztxt         TYPE t171t-bztxt, "大区描述
+       vkbur         TYPE vbak-vkbur,  "行办
+       vkbur_txt     TYPE tvkbt-bezei, "行办描述
+       kvgr1         TYPE vbak-kvgr1,  "业务员
+       kvgr1_txt     TYPE tvv1t-bezei, "业务员描述
+       kdgrp         TYPE vbkd-kdgrp,  "行业
+       kdgrp_txt     TYPE t151t-ktext, "行业描述
+       kukla         TYPE kna1-kukla,  "客户分类
+       kukla_txt     TYPE tkukt-vtext, "客户分类描述
+***add by quyantao 2017.10.17
+       vsart         LIKE likp-vsart,
+       vsart_txt     LIKE t173t-bezei, "快递公司
+       ztext1(200)   TYPE c,           "文本-注意事项
+       ztext2(200)   TYPE c,           "文本-特殊包装
+       ztext3(200)   TYPE c,           "文本-提单要求
+       ztext4(200)   TYPE c,           "文本-标签要求
+       ztext5(200)   TYPE c,           "文本-箱唛要求
+       ztext6(200)   TYPE c,           "文本-随货单证
+       cmgst         LIKE vbuk-cmgst,  "信用状态
+       cmgst_txt(30) TYPE c,         "信用状态描述
+***end add
+***add by quyantao 2017.12.04
+       werks         TYPE lips-werks,  "工厂
+       lgort         TYPE lips-lgort,  "库位
+       lgobe         TYPE t001l-lgobe, "库位描述
+***end add
+       objectid      TYPE cdhdr-objectid,  "对象号
+***ADD BY PFT 20171204
+       lfart         LIKE likp-lfart, "交货单类型
+       lfart_txt     LIKE tvlkt-vtext, "交货单类型描述
+       zterm         LIKE vbkd-zterm, "付款条件
+       zterm_txt     TYPE tvzbt-vtext, "付款条件描述
+       street        TYPE char100, "送货地址
+***END BY PFT 20171204
+       check         TYPE c,           "选择
+       zstat(30)     TYPE c,           "状态
+       zmsg(200)     TYPE c,           "消息
+     END OF gt_out.
+
+RANGES:r_kvgr1 FOR tvv1-kvgr1.
+
+***alv data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  gt_fcat-inttype = &5.
+  gt_fcat-intlen = &6.
+*  IF &1 = 'ZMSG' OR &1 = 'ZSTAT'.
+*    gt_fcat-tech = 'X'.
+*  ENDIF.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

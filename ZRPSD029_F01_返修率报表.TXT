@@ -1,0 +1,332 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM031_F01
+*&---------------------------------------------------------------------*
+FORM get_data."取数据
+  CLEAR:gt_item[].
+  DATA: p_aedat1 TYPE sy-datum,p_aedat2 TYPE sy-datum.
+
+  CONCATENATE p_aedat '01' INTO p_aedat1.
+  CALL FUNCTION 'RP_LAST_DAY_OF_MONTHS'
+    EXPORTING
+      day_in            = p_aedat1     "输入日期
+    IMPORTING
+      last_day_of_month = p_aedat2           "返回日期：20140131
+    EXCEPTIONS
+      day_in_no_date    = 1
+      OTHERS            = 2.
+  SELECT
+         *
+        INTO CORRESPONDING FIELDS OF TABLE gt_item
+        FROM ztcs001
+        WHERE  zwxzt IN s_zwxzt
+          AND erdat BETWEEN p_aedat1 AND p_aedat2
+          AND zwxy IN s_zwxy
+          AND zwxzt NE ''.
+  p_aedat2 = p_aedat1 - 1.
+  CALL FUNCTION 'CCM_GO_BACK_MONTHS'
+    EXPORTING
+      currdate   = p_aedat1   "输入日期
+      backmonths = 13            "过去月数
+    IMPORTING
+      newdate    = p_aedat1.
+
+  SELECT a~lfimg a~matnr a~vbeln INTO CORRESPONDING FIELDS OF TABLE lt_lips
+    FROM lips AS a INNER JOIN likp AS b ON a~vbeln = b~vbeln
+    FOR ALL ENTRIES IN gt_item
+    WHERE a~matnr = gt_item-matnr
+    AND b~lfart IN ('ZLF1','ZLR1')
+    AND a~erdat BETWEEN p_aedat1 AND p_aedat2
+    AND a~shkzg = ''
+.
+ENDFORM.
+
+FORM process_data."处理数据
+  DATA: lv_matnr TYPE char18,lv_spart TYPE mara-spart,lv_matkl TYPE mara-matkl.
+  DATA lt_mara TYPE TABLE OF mara WITH HEADER LINE.
+
+  SORT gt_item BY matnr.
+  LOOP AT gt_item INTO gw_item.
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+      EXPORTING
+        input  = gw_item-matnr
+      IMPORTING
+        output = lv_matnr.
+    lv_matnr = lv_matnr+0(3).
+    IF lv_matnr+0(1) = 6 OR lv_matnr+0(1) = 8 OR lv_matnr+0(1) = 9.
+
+    ELSE.
+      DELETE gt_item.
+      CONTINUE.
+    ENDIF.
+    SELECT SINGLE spart matkl INTO (lv_spart,lv_matkl) FROM mara WHERE matnr = gw_item-matnr.
+      IF s_spart IS NOT INITIAL AND lv_spart NOT IN s_spart.
+        DELETE gt_item.
+        CONTINUE.
+      ENDIF.
+      IF s_matkl IS NOT INITIAL AND lv_matkl NOT IN s_matkl.
+        DELETE gt_item.
+        CONTINUE.
+      ENDIF.
+      SELECT SINGLE zxflms INTO gw_item-zxflms FROM ztsd011 WHERE zmatnr =  lv_matnr.
+        READ TABLE gt_ausp WITH  KEY objek = gw_item-matnr atnam = 'ZFER_DYZXH'.
+        IF s_dyzxh[] IS NOT INITIAL AND gt_ausp-atwrt NOT IN s_dyzxh.
+          DELETE gt_item.
+          CONTINUE.
+        ENDIF.
+        MOVE  gt_ausp-atwrt TO gw_item-atwrt.
+        READ TABLE gt_ausp WITH  KEY objek = gw_item-matnr atnam = 'ZFER_CPX'.
+        IF s_cpx[] IS NOT INITIAL AND gt_ausp-atwrt NOT IN s_cpx.
+          DELETE gt_item.
+          CONTINUE.
+        ENDIF.
+
+        LOOP AT lt_lips WHERE matnr = gw_item-matnr.
+          gw_item-lfimg = gw_item-lfimg + lt_lips-lfimg.
+        ENDLOOP.
+        IF gw_item-lfimg <> 0.
+          gw_item-lfimg = gw_item-lfimg / 12.
+        ENDIF.
+
+        IF gw_item-zwxy <> ''.
+          IF gw_item-zbarcode <> ''.
+            gw_item-menge1 = 1.
+          ELSE.
+            gw_item-menge1 = gw_item-menge.
+          ENDIF.
+          IF gw_item-zgbbs <> 'X'.
+            gw_item-menge2 = gw_item-menge.
+          ENDIF.
+        ENDIF.
+        SELECT SINGLE a~menge INTO gw_item-menge3 FROM ztcs001 AS a INNER JOIN ztcs003 AS b ON a~zindx = b~zindx AND a~qmnum = b~qmnum
+          WHERE a~qmnum = gw_item-qmnum AND a~zindx = gw_item-zindx   AND   b~fecod = 'B29'      .
+
+          MODIFY gt_item FROM gw_item.
+          MOVE-CORRESPONDING gw_item TO gt_item1.
+          APPEND gt_item1.
+          CLEAR gw_item.
+        ENDLOOP.
+        DATA lt_item LIKE TABLE OF gt_item1 WITH HEADER LINE.
+        LOOP AT gt_item1.
+          COLLECT gt_item1 INTO lt_item.
+        ENDLOOP.
+        CLEAR gt_item1.
+        REFRESH gt_item1[].
+        gt_item1[] = lt_item[].
+
+        LOOP AT gt_item1.
+          gt_item1-lfimg1 =  gt_item1-lfimg.
+          IF gt_item1-lfimg1 <> 0.
+            gt_item1-zfxl = gt_item1-menge2 / gt_item1-lfimg1 * 100.
+          ENDIF.
+          MODIFY gt_item1.
+        ENDLOOP.
+        SORT gt_item1 BY zxflms.
+ENDFORM.
+
+
+FORM get_alv."显示数据
+  DATA : col_pos TYPE i VALUE 1.
+
+  CLEAR:it_fieldcat,wa_fieldcat.
+
+  gs_layout-zebra = 'X'.
+  gs_layout-cwidth_opt = 'X'."
+*  gs_layout-stylefname = 'FIELD_STYLE'. " 将内表中的字段名存入显示格式
+*  gs_layout-box_fname        = 'SEL'.
+  i_grid_settings-edt_cll_cb = 'X'.
+*  wa_events-name = 'CALLER_EXIT'.
+*  wa_events-form = 'CALLER_EXIT'.
+*  APPEND wa_events TO it_events.
+  PERFORM fieldcat_int USING col_pos  'ZXFLMS'     '类别'     'ZXFLMS' 'ZTSD011' .
+  PERFORM fieldcat_int USING col_pos  'ATWRT'     '主型号'     'ATWRT' 'AUSP' .
+  PERFORM fieldcat_int USING col_pos  'LFIMG1'     '平均销售量'     'LFIMG' 'LIPS' .
+  PERFORM fieldcat_int USING col_pos  'MENGE1'     '返修数量'     'MENGE' 'ZTCS001' .
+  PERFORM fieldcat_int USING col_pos  'MENGE2'     '保修数量'     'MENGE' 'ZTCS001' .
+  PERFORM fieldcat_int USING col_pos  'MENGE3'     '无异常数量'     'MENGE' 'ZTCS001' .
+  PERFORM fieldcat_int USING col_pos  'ZFXL'     '返修率'     'MENGE' 'ZTCS001' .
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program = sy-repid
+      is_layout_lvc      = gs_layout
+      it_fieldcat_lvc    = it_fieldcat
+      it_events          = it_events
+      i_save             = 'A'
+*     I_CALLBACK_PF_STATUS_SET = 'SET_PF_STATUS'
+*     I_CALLBACK_USER_COMMAND  = 'ALV_USER_COMMAND'
+*     i_grid_settings    = i_grid_settings
+    TABLES
+      t_outtab           = gt_item1[]
+    EXCEPTIONS
+      program_error      = 1
+      OTHERS             = 2.
+
+  IF sy-subrc <> 0.
+* MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+*         WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+  ENDIF.
+ENDFORM.
+
+FORM fieldcat_int  USING   p_col_pos         " 1
+                            p_fieldname       " 2
+*                            p_key             " 3
+                            p_seltext_l       " 4
+*                            p_zero
+                            p_filename
+                            p_talbename.
+*                            p_outputlen
+*                            p_edit .
+
+  wa_fieldcat-col_pos       = p_col_pos.
+  wa_fieldcat-fieldname     = p_fieldname.
+*  wa_fieldcat-key           = p_key.
+  wa_fieldcat-coltext     = p_seltext_l.
+*  wa_fieldcat-no_zero        = p_zero.
+  wa_fieldcat-ref_field   = p_filename.
+  wa_fieldcat-ref_table    = p_talbename.
+  wa_fieldcat-tipddictxt       = 'L'.
+*  wa_fieldcat-edit           = p_edit  .
+  APPEND wa_fieldcat TO it_fieldcat.
+  p_col_pos = p_col_pos + 1.
+  CLEAR: wa_fieldcat.
+ENDFORM.                    " FIELDCAT_INT
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_AUSP
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_ausp .
+  REFRESH:gt_ausp.
+*  根据物料取出产品线和系列
+  SELECT a~objek a~atinn a~atwrt b~atnam
+   INTO CORRESPONDING FIELDS OF TABLE gt_ausp
+   FROM ausp AS a INNER JOIN cabn AS b ON a~atinn = b~atinn
+   WHERE b~atnam IN ('ZFER_XL','ZFER_CPX','ZFER_ZXL','ZFER_DYZXH','ZFER_CPXH','ZFER_PP').
+    SORT gt_ausp BY objek.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SUB_SEARCH_HELP_ZXL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM sub_search_help_zxl USING lv_field LIKE dfies-fieldname
+                               lv_dynfield LIKE help_info-dynprofld
+                               lv_atnam LIKE cabn-atnam.
+  DATA: lv_pvalkey TYPE ddshpvkey.
+
+  DATA: lt_zxl LIKE gt_xl OCCURS 0 WITH HEADER LINE.
+
+  LOOP AT gt_ausp WHERE atnam = lv_atnam.
+    lt_zxl-atwrt = gt_ausp-atwrt.
+    APPEND lt_zxl.
+  ENDLOOP.
+
+  SORT lt_zxl BY atwrt.
+  DELETE ADJACENT DUPLICATES FROM lt_zxl.
+
+  lv_pvalkey = lv_field.
+  CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+    EXPORTING
+      retfield        = lv_field
+      pvalkey         = lv_pvalkey
+      dynpprog        = sy-repid
+      dynpnr          = sy-dynnr
+      dynprofield     = lv_dynfield
+      window_title    = '选择'
+      value           = ' '
+      value_org       = 'S'
+    TABLES
+      value_tab       = lt_zxl
+    EXCEPTIONS
+      parameter_error = 1
+      no_values_found = 2
+      OTHERS          = 3.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SUB_SEARCH_HELP
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0069   text
+*      -->P_0070   text
+*      -->P_0071   text
+*----------------------------------------------------------------------*
+FORM sub_search_help  USING   lv_field LIKE dfies-fieldname
+                               lv_dynfield LIKE help_info-dynprofld.
+
+
+  DATA: lv_pvalkey TYPE ddshpvkey.
+
+  DATA: BEGIN OF lt_matnr OCCURS 0,
+          zmatnr TYPE ztsd011-zmatnr,
+        END OF lt_matnr.
+
+  SELECT zmatnr INTO CORRESPONDING FIELDS OF TABLE lt_matnr FROM ztsd011.
+    LOOP AT lt_matnr .
+      IF ( lt_matnr-zmatnr+0(1) <> 6 AND lt_matnr-zmatnr+0(1) <> 8 AND lt_matnr-zmatnr+0(1) <> 9 ) .
+        DELETE lt_matnr.
+        CONTINUE.
+      ENDIF.
+    ENDLOOP.
+
+    lv_pvalkey = lv_field.
+    CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+      EXPORTING
+        retfield        = lv_field
+        pvalkey         = lv_pvalkey
+        dynpprog        = sy-repid
+        dynpnr          = sy-dynnr
+        dynprofield     = lv_dynfield
+        window_title    = '选择'
+        value           = ' '
+        value_org       = 'S'
+      TABLES
+        value_tab       = lt_matnr
+      EXCEPTIONS
+        parameter_error = 1
+        no_values_found = 2
+        OTHERS          = 3.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SUB_SEARCH_F4
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0080   text
+*----------------------------------------------------------------------*
+FORM sub_search_f4  USING  lv_field LIKE dfies-fieldname.
+  DATA: lv_pvalkey TYPE ddshpvkey.
+
+  DATA: BEGIN OF lt_matnr OCCURS 0,
+          zwxy TYPE ztcs001-zwxy,
+        END OF lt_matnr.
+
+  SELECT zwxy INTO CORRESPONDING FIELDS OF TABLE lt_matnr FROM ztcs001.
+    SORT lt_matnr BY zwxy.
+    DELETE ADJACENT DUPLICATES FROM lt_matnr COMPARING ALL FIELDS.
+
+    lv_pvalkey = lv_field.
+    CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+      EXPORTING
+        retfield        = 'ZWXY'
+        pvalkey         = lv_pvalkey
+        dynpprog        = sy-repid
+        dynpnr          = sy-dynnr
+        dynprofield     = 'S_ZWXY'
+        window_title    = '选择'
+        value           = ' '
+        value_org       = 'S'
+      TABLES
+        value_tab       = lt_matnr
+      EXCEPTIONS
+        parameter_error = 1
+        no_values_found = 2
+        OTHERS          = 3.
+ENDFORM.

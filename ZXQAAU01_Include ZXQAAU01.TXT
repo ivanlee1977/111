@@ -1,0 +1,12 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZXQAAU01
+*&---------------------------------------------------------------------*
+
+DATA:ls_data LIKE ztqm001.
+
+e_tq32 = i_tq32.
+
+SELECT SINGLE * INTO CORRESPONDING FIELDS OF ls_data FROM ztqm001 WHERE werks = i_werks AND lgort = i_lgort AND art = i_tq32-art.
+IF sy-subrc NE 0.  "如果不存在，则不产生检验批
+  e_no_inspection = 'X'.
+ENDIF.

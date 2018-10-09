@@ -1,0 +1,140 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPSD013T01
+*&---------------------------------------------------------------------*
+TABLES:likp,lips,vbkd,vbak,vbuk,ausp.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       kunag       LIKE likp-kunag,   "客户
+       zsold(70)   TYPE c,           "客户名称
+       sortl       LIKE kna1-sortl,   "客户简称
+       vbeln       LIKE lips-vbeln,   "交货单
+       posnr       LIKE lips-posnr,   "项次
+       matnr       LIKE lips-matnr,   "物料号码
+       arktx       LIKE lips-arktx,   "物料描述
+       zxh         LIKE ausp-atwrt,   "对应主型号
+       xl          LIKE ausp-atwrt,   "系列
+       zxl         LIKE ausp-atwrt,   "子系列
+       zcpx        LIKE ausp-atwrt,   "产品线
+       spart       LIKE lips-spart,   "产品组
+       vtext       LIKE tspat-vtext,  "产品组描述
+       lfimg       LIKE lips-lfimg,   "发货数量
+       vrkme       LIKE lips-vrkme,   "单位
+       netpr       TYPE p DECIMALS 2, "单价
+       amount      TYPE p DECIMALS 2, "金额
+       waerk       LIKE vbak-waerk,   "币别
+       vsart       LIKE likp-vsart,   "运输方式代码
+       bezei       LIKE t173t-bezei,  "运输方式描述
+       bolnr       LIKE likp-bolnr,   "物流单号
+       lifsk       LIKE likp-lifsk,   "审批状态码
+       lifsk_txt   LIKE tvlst-vtext,  "审批状态描述
+       wbstk       LIKE vbuk-wbstk,   "发货状态
+       cmgst       LIKE vbuk-cmgst,   "信用状态
+       wadat_ist   LIKE likp-wadat_ist, "发货日期
+       wadat       LIKE likp-wadat,   "计划交货日期
+       bldat       LIKE likp-bldat,   "交货单创建日期
+       vkorg       LIKE likp-vkorg,   "销售组织
+       vtweg       LIKE lips-vtweg,   "渠道
+       vtweg_txt   LIKE tvtwt-vtext,  "渠道描述
+       lfart       LIKE likp-lfart,   "交货单类型
+       lfart_txt   LIKE tvlkt-vtext,  "交货单类型描述
+       werks       LIKE lips-werks,   "工厂
+       lgort       LIKE lips-lgort,   "仓库
+       lgobe       LIKE t001l-lgobe,  "仓库描述
+       kunnr       LIKE likp-kunnr,   "送达方
+       zname(70)   TYPE c,            "送达方名称
+       vgbel       LIKE lips-vgbel,   "销售订单号
+       vgpos       LIKE lips-vgpos,   "项次
+       charg       LIKE lips-charg, "批次   ADD BY PFT 20171225
+       bzirk       LIKE vbkd-bzirk,   "销售大区代码
+       bztxt       LIKE t171t-bztxt,  "销售大区描述
+       vkbur       LIKE vbak-vkbur,   "行办代码
+       vkbur_txt   LIKE tvkbt-bezei,  "行办描述
+       vkgrp       LIKE vbak-vkgrp,   "销售组
+       vkgrp_txt   LIKE tvgrt-bezei,  "销售组描述
+       kvgr1       LIKE vbak-kvgr1,   "业务员代码
+       kvgr1_txt   LIKE tvv1t-bezei,  "业务员描述
+       kvgr2       LIKE vbak-kvgr2,   "商务代码
+       kvgr2_txt   LIKE tvv2t-bezei,  "商务描述
+       kdgrp       LIKE vbkd-kdgrp,   "行业
+       ktext       LIKE t151t-ktext,  "行业描述
+       zterm       LIKE vbkd-zterm,   "付款条件
+       zterm_txt   LIKE tvzbt-vtext,  "付款条件描述
+       inco1       LIKE vbkd-inco1,
+       inco2       LIKE vbkd-inco2,
+       zgjmy(50)   TYPE c,            "国际贸易条件
+       augru       LIKE vbak-augru,   "订单原因
+       augru_txt   LIKE tvaut-bezei,  "订单原因描述
+       bname       LIKE vbak-bname,   "交货地点
+       ihrez       LIKE vbkd-ihrez,   "试用期
+       bstnk       LIKE vbak-bstnk,   "采购订单号
+       objek       LIKE ausp-objek,
+       street(200), "送货地址
+       tel_number  LIKE adrc-tel_number, "电话
+       tel_number2 LIKE adr2-tel_number, "手机
+       fax_number  LIKE adrc-fax_number, "传真
+       extension1  LIKE adrc-extension1, "收件人
+       ztext1      TYPE char255, "注意事项
+       ztext2      TYPE char255, "提单要求
+       ztext3      TYPE char255, "标签要求
+       ztext4      TYPE char255, "箱唛要求
+       ztext5      TYPE char255, "随货单证
+       kursk       LIKE vbkd-kursk, "汇率
+       ktgrd       LIKE vbkd-ktgrd, "内外销
+       ktgrd_vtext LIKE tvktt-vtext, "内外销描述
+       amount_bb   TYPE p DECIMALS 2, "金额
+       auart       LIKE vbak-auart, "订单类型
+       sfakn       LIKE vbrk-sfakn, "已取消的开票凭证
+     END OF gt_out.
+
+DATA:gv_atinn_zxh LIKE ausp-atinn,
+     gv_atinn_xl  LIKE ausp-atinn,
+     gv_atinn_zxl LIKE ausp-atinn,
+     gv_atinn_cpx LIKE ausp-atinn.
+
+*  ADD BY PFT 20171204
+DATA:gt_vbpa LIKE vbpa OCCURS 0 WITH HEADER LINE,
+     gt_adrc LIKE adrc OCCURS 0 WITH HEADER LINE,
+     gt_adr2 LIKE adr2 OCCURS 0 WITH HEADER LINE.
+*  获取主型号、系列、产品线
+DATA: BEGIN OF gt_ausp OCCURS 0,
+        objek LIKE ausp-objek,
+        matnr LIKE mara-matnr,
+        atinn LIKE ausp-atinn,
+        atwrt LIKE ausp-atwrt,
+        atnam LIKE cabn-atnam,
+      END OF gt_ausp.
+*  系列内表
+DATA:BEGIN OF gt_xl OCCURS 0,
+       atwrt LIKE ausp-atwrt,
+     END OF gt_xl,
+     gt_zxl LIKE gt_xl OCCURS 0 WITH HEADER LINE. "子系列内表
+*  END BY PFT 20171204
+
+DEFINE mcr_convert_atinn.
+  CALL FUNCTION 'CONVERSION_EXIT_ATINN_INPUT'
+    EXPORTING
+      input         = &1
+   IMPORTING
+     output        = &2.
+END-OF-DEFINITION.
+
+***alv data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  gt_fcat-inttype = &5.
+  gt_fcat-intlen = &6.
+  IF &1 = 'VBELN'.
+    gt_fcat-hotspot = 'X'.
+  ENDIF.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

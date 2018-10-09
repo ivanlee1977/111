@@ -1,0 +1,85 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM013T01
+*&---------------------------------------------------------------------*
+TABLES:ekko,ekpo,mkpf,ekpa.
+
+DATA: BEGIN OF gt_alv OCCURS 0,
+        box(1),
+        matnr    LIKE mara-matnr, "物料代码
+        maktx    LIKE makt-maktx, "物料描述
+        ekgrp    LIKE ekko-ekgrp, "采购组
+        eknam    LIKE t024-eknam, "采购组描述
+        lifnr    LIKE ekko-lifnr, "供应商
+        name1    LIKE lfa1-name1, "供应商名称
+        ematn    LIKE ekpo-ematn, "品牌物料编码
+        mfrnr    LIKE mara-mfrnr, "品牌（制造商）
+        name1_pp LIKE lfa1-name1, "品牌名称
+        matkl    LIKE mara-matkl, "物料组
+        wgbez    LIKE t023t-wgbez, "物料组描述
+        zjzjg    TYPE dmbtr, "基准价格
+        zddjg    TYPE dmbtr, "订单价格
+        zjjjg    TYPE dmbtr, "降价价格
+        zjjbl_1  TYPE p DECIMALS 3, "降价比例
+        zjjbl    TYPE c LENGTH 20, "降价比例
+        zshje    TYPE dmbtr, "降价后累计收货金额
+        zjcbje   TYPE dmbtr, "降成本金额
+        zjbbl_1  TYPE p DECIMALS 3, "降本比例
+        zjbbl    TYPE c LENGTH 20, "降本比例
+      END OF gt_alv.
+
+DATA:BEGIN OF gt_ekpo OCCURS 0,
+       box(1),
+       ebeln  LIKE ekpo-ebeln, "采购订单号
+       ebelp  LIKE ekpo-ebelp, "采购订单行项目
+       matnr  LIKE ekpo-matnr, "物料编码
+       netpr  LIKE ekpo-netpr, "采购凭证中的净价
+       peinh  LIKE ekpo-peinh, "采购价格单位
+       ematn  LIKE ekpo-ematn, "品牌物料号码
+       lifnr  LIKE ekko-lifnr, "供应商
+       aedat  LIKE ekko-aedat, "采购订单创建日期
+       bukrs  LIKE ekko-bukrs, "公司代码
+       name1  LIKE lfa1-name1, "供应商名称
+       ekgrp  LIKE ekko-ekgrp, "采购组
+       eknam  LIKE t024-eknam, "采购组描述
+       matkl  LIKE mara-matkl, "物料组
+       wgbez  LIKE t023t-wgbez, "物料组描述
+       maktx  LIKE makt-maktx, "物料描述
+       zrksl  LIKE mseg-menge, "入库数量
+       zrkje  TYPE dmbtr,      "入库金额
+       budat  LIKE mseg-budat_mkpf, "入库时间
+       zjcbje TYPE dmbtr,     "降成本金额
+     END OF gt_ekpo,
+     gt_alv2 LIKE gt_ekpo OCCURS 0 WITH HEADER LINE.
+
+DATA: gt_eipa LIKE eipa OCCURS 0 WITH HEADER LINE."订购价格历史：信息记录
+
+DATA: BEGIN OF gt_mseg OCCURS 0,
+        mblnr LIKE mseg-mblnr, "入库订单号
+        mjahr LIKE mseg-mjahr, "入库年度
+        zeile LIKE mseg-zeile, "入库行项目号
+        bwart LIKE mseg-bwart, "移动类型
+        matnr LIKE mseg-matnr, "物料编码
+        shkzg LIKE mseg-shkzg, "借贷标识
+        menge LIKE mseg-menge, "数量
+        dmbtr TYPE dmbtr, "金额
+        ebeln LIKE mseg-ebeln, "采购订单号
+        ebelp LIKE mseg-ebelp, "采购订单行项目
+        budat LIKE mseg-budat_mkpf, "入库时间
+        smbln LIKE mseg-smbln, "冲销凭证
+        sjahr LIKE mseg-sjahr, "冲销年度
+        smblp LIKE mseg-smblp, "冲销行项目
+        netpr LIKE ekpo-netpr, "采购凭证中的净价
+        peinh LIKE ekpo-peinh, "采购价格单位
+        ematn LIKE ekpo-ematn, "品牌物料号码
+        lifnr LIKE ekko-lifnr, "供应商
+        aedat LIKE ekko-aedat, "采购订单创建日期
+        bukrs LIKE ekko-bukrs, "公司代码
+        ekgrp LIKE ekko-ekgrp, "采购组
+        matkl LIKE mara-matkl, "物料组
+      END OF gt_mseg.
+
+DATA: gt_mara  LIKE mara OCCURS 0 WITH HEADER LINE,
+      gt_makt  LIKE makt OCCURS 0 WITH HEADER LINE,
+      gt_lfa1  LIKE lfa1 OCCURS 0 WITH HEADER LINE,
+      gt_t024  LIKE t024 OCCURS 0 WITH HEADER LINE,
+      gt_t023t LIKE t023t OCCURS 0 WITH HEADER LINE.

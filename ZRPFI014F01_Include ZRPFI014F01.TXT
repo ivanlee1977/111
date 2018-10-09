@@ -1,0 +1,424 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI014F01
+*&---------------------------------------------------------------------*
+
+FORM frm_get_data.
+  DATA:lt_ce11000 TYPE TABLE OF ce11000,
+       ls_ce11000 TYPE ce11000.
+
+  DATA:lv_periomax_bq TYPE jahrper,
+       lv_periomin_bq TYPE jahrper,
+       lv_periomax_tq TYPE jahrper,
+       lv_periomin_tq TYPE jahrper.
+  DATA: BEGIN OF it_kna1 OCCURS 0,
+          kunnr LIKE kna1-kunnr,
+          name1 LIKE kna1-name1,
+        END OF it_kna1.
+
+  DATA:BEGIN OF it_kunnr OCCURS 0,
+         kunnr LIKE kna1-kunnr,
+       END OF it_kunnr.
+
+
+  DATA:lv_perion(7) TYPE c."期间 / 年度
+  DATA:lv_ryear LIKE faglflext-ryear.
+
+  "取期间 min max
+  IF s_rpmax-high IS NOT INITIAL AND s_rpmax-low IS NOT INITIAL.
+    lv_rpmin = s_rpmax-low.
+    lv_rpmax = s_rpmax-high.
+  ELSEIF s_rpmax-low IS NOT INITIAL AND s_rpmax-high IS INITIAL.
+    lv_rpmin = s_rpmax-low.
+    lv_rpmax = s_rpmax-low.
+  ELSEIF s_rpmax-low IS INITIAL AND s_rpmax-high IS NOT INITIAL.
+    lv_rpmin = s_rpmax-high.
+    lv_rpmax = s_rpmax-high.
+  ENDIF.
+  "取上一年
+  lv_ryear = p_ryear - 1.
+
+  "获取期间/年度 min max
+  CLEAR:lv_perion.
+  CONCATENATE p_ryear '0'lv_rpmin INTO lv_perion.
+  lv_periomin_bq  = lv_perion.
+  CLEAR:lv_perion.
+  CONCATENATE p_ryear'0' lv_rpmax INTO lv_perion.
+  lv_periomax_bq  = lv_perion.
+  CLEAR:lv_perion.
+  CONCATENATE lv_ryear'0' lv_rpmin INTO lv_perion.
+  lv_periomin_tq  = lv_perion.
+  CLEAR:lv_perion.
+  CONCATENATE lv_ryear '0'lv_rpmax INTO lv_perion.
+  lv_periomax_tq  = lv_perion.
+
+  "获利分析表
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_ce11000
+    FROM ce11000
+   WHERE prctr IN s_prctr
+    AND  bukrs IN r_bukrs
+    AND ( paledger EQ '10' OR paledger EQ '02' )
+    AND ( perio BETWEEN lv_periomin_bq AND lv_periomax_bq
+    OR perio BETWEEN lv_periomin_tq AND lv_periomax_tq ).
+
+  "取客户名称
+  SELECT kunnr name1 INTO TABLE it_kna1 FROM kna1
+    FOR ALL ENTRIES IN lt_ce11000
+    WHERE kunnr EQ lt_ce11000-kndnr
+     AND  ktokd EQ 'ZAG4'.
+
+  "获取所有的客户
+  LOOP AT lt_ce11000 INTO ls_ce11000.
+
+    "汇总所有客户的销售收入（不含税）
+    IF ls_ce11000-perio BETWEEN lv_periomin_bq AND lv_periomax_bq .
+      lv_vv001_bq = lv_vv001_bq + ls_ce11000-vv001.
+    ENDIF.
+
+    IF ls_ce11000-perio BETWEEN lv_periomin_tq AND lv_periomax_tq.
+      lv_vv001_tq = lv_vv001_tq + ls_ce11000-vv001.
+    ENDIF.
+    "关联方名称
+    READ TABLE  it_kna1 WITH KEY kunnr = ls_ce11000-kndnr.
+    IF sy-subrc <> 0.
+      "以上客户中，从KNA1取账户组KNA1-KTOKD为ZAG4的客户的名称NAME1。
+      DELETE lt_ce11000.
+      CONTINUE.
+    ENDIF.
+    it_kunnr-kunnr = ls_ce11000-kndnr.
+    APPEND it_kunnr.
+
+
+
+  ENDLOOP.
+  SORT it_kunnr.
+  DELETE ADJACENT DUPLICATES FROM it_kunnr COMPARING kunnr.
+
+  LOOP AT it_kunnr.
+    gt_item-kunnr = it_kunnr-kunnr.
+    "关联方名称
+    READ TABLE  it_kna1 WITH KEY kunnr = it_kunnr-kunnr.
+    IF sy-subrc EQ 0.
+      gt_item-name1 = it_kna1-name1.
+    ENDIF.
+
+    LOOP AT lt_ce11000 INTO ls_ce11000 WHERE kndnr EQ it_kunnr-kunnr.
+      IF ls_ce11000-perio BETWEEN lv_periomin_bq AND lv_periomax_bq .
+        gt_item-zamount_bq = gt_item-zamount_bq + ls_ce11000-vv001.
+      ENDIF.
+
+      IF ls_ce11000-perio BETWEEN lv_periomin_tq AND lv_periomax_tq.
+        gt_item-zamount_tq = gt_item-zamount_tq + ls_ce11000-vv001.
+      ENDIF.
+    ENDLOOP.
+    PERFORM cal_percent USING gt_item-zamount_bq lv_vv001_bq CHANGING gt_item-zratio_bq.
+    PERFORM cal_percent USING gt_item-zamount_tq lv_vv001_tq CHANGING gt_item-zratio_tq.
+*    gt_item-zratio_bq  = gt_item-zamount_bq /  lv_vv001_bq  * 100."本期占总销售比例
+*    gt_item-zratio_tq  = gt_item-zamount_tq /  lv_vv001_tq  * 100. "上年同期占总销售比例
+*    CONCATENATE gt_item-zratio_bq '%' INTO  gt_item-zratio_bq.
+*    CONCATENATE gt_item-zratio_tq '%' INTO  gt_item-zratio_tq.
+    APPEND gt_item.
+    CLEAR gt_item.
+  ENDLOOP.
+
+ENDFORM.
+
+FORM frm_output_data .
+********数据定义*******
+  DATA:lv_file   TYPE string,
+       lv_result TYPE c. "标识: 空表示文件不存在;否则,表示存在
+  DATA lv_answer TYPE c.
+  DATA:li_lines TYPE i.
+  DATA:ls_key   TYPE wwwdatatab,
+       lv_subrc TYPE sy-subrc.
+  DATA lv_file1 LIKE rlgrap-filename.
+*******初始化*******
+*******程序主体*******
+
+  CONCATENATE 'C:\FI\' sy-title '-'   sy-datum '.xls' INTO lv_file.
+
+  CALL METHOD cl_gui_frontend_services=>file_exist
+    EXPORTING
+      file                 = lv_file
+    RECEIVING
+      result               = lv_result
+    EXCEPTIONS
+      cntl_error           = 1
+      error_no_gui         = 2
+      wrong_parameter      = 3
+      not_supported_by_gui = 4
+      OTHERS               = 5.
+  IF lv_result IS NOT  INITIAL. "文件已经存在
+    CALL FUNCTION 'POPUP_TO_CONFIRM'
+      EXPORTING
+        titlebar              = '请确认'
+        text_question         = '文件已经存在，是否要覆盖?'
+        text_button_1         = '是'
+        text_button_2         = '否'
+        default_button        = '2' "缺省选中按钮: 1 是; 2 否
+        display_cancel_button = ''  "标识: 为空,不显示 取消按钮
+      IMPORTING
+        answer                = lv_answer "标识： 1 是;
+      EXCEPTIONS
+        text_not_found        = 1
+        OTHERS                = 2.
+    IF lv_answer NE '1'.
+      EXIT.
+    ENDIF.
+  ENDIF.
+
+  ls_key-relid = 'MI'.
+  ls_key-objid = gcst_excel_template.
+  lv_file1 = lv_file.
+  CALL FUNCTION 'DOWNLOAD_WEB_OBJECT'
+    EXPORTING
+      key         = ls_key
+      destination = lv_file1
+    IMPORTING
+      rc          = lv_subrc.
+  IF lv_subrc <> 0.
+    MESSAGE '下载模板出错，请检查，谢谢' TYPE 'E'.
+    EXIT.
+  ENDIF.
+
+***填充EXCEL数据
+  PERFORM frm_filldata_excel USING lv_file.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FILLDATA_EXCEL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LV_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_filldata_excel  USING  iv_file TYPE string.
+  DATA: comp_t(50) TYPE c.
+*******数据定义*******
+  DATA:lo_excel     TYPE ole2_object,
+       lo_workbooks TYPE ole2_object,
+       lo_workbook  TYPE ole2_object,
+       lo_sheet     TYPE ole2_object,
+       lo_range     TYPE ole2_object,
+       borders_obj  TYPE ole2_object,
+       row_obj      TYPE ole2_object,
+       lo_cell      TYPE ole2_object,
+       lo_cell1     TYPE ole2_object.
+  DATA lv_file LIKE rlgrap-filename.
+  DATA:lt_excel_in                    "内表：从源文件中读取到的数据
+         TYPE STANDARD TABLE OF alsmex_tabline WITH HEADER LINE.
+  DATA lv_value TYPE char200.
+  DATA:lv_sc_bq     TYPE rke2_vv001, "同期
+       lv_sc_tq     TYPE rke2_vv001, "上期
+       lv_zratio_bq TYPE string, "本期占总销售比例
+       lv_zratio_tq TYPE string, "上年同期占总销售比例
+       lv_rate_bq   TYPE c, "本期占总销售比例
+       lv_rate_tq   TYPE c. "上年同期占总销售比例
+  DATA:lv_str1(200) TYPE c,
+       lv_str2(200) TYPE c.
+
+
+  DATA lv_row TYPE i.
+  DATA lv_col TYPE i.
+
+  DATA:
+    row_c TYPE char4,
+    row_1 TYPE i,
+    cell  TYPE char9.
+
+  DEFINE mac_fill_cell.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+      EXPORTING
+        #1 = &1
+        #2 = &2.
+    SET PROPERTY OF lo_cell 'VALUE' = &3.
+  END-OF-DEFINITION.
+
+  DEFINE mac_mer_cell.
+    CALL METHOD OF
+      lo_sheet
+      'RANGE' = lo_cell
+      EXPORTING
+      #1 = &1.
+    CALL METHOD OF
+      lo_cell
+      'MERGE'.
+    FREE OBJECT lo_cell.
+
+  END-OF-DEFINITION.               "mergerange
+
+  DEFINE mac_bord_cell.
+    CALL METHOD OF
+      lo_sheet"lo_workbook
+      'RANGE' = lo_cell
+      EXPORTING
+      #1 = &1.
+    DO 4 TIMES .
+      CALL METHOD OF
+        lo_cell
+        'BORDERS' = borders_obj
+        EXPORTING
+        #1 = sy-index.
+      SET PROPERTY OF borders_obj 'LineStyle' = '1'.
+      SET PROPERTY OF borders_obj 'WEIGHT' = '2'.
+      SET PROPERTY OF borders_obj 'ColorIndex' = '1'.
+      FREE OBJECT borders_obj.
+    ENDDO.
+    FREE OBJECT borders_obj.
+    FREE OBJECT lo_cell.
+
+  END-OF-DEFINITION.
+
+*******程序主体*******
+*读取模板数
+
+
+*填充excel
+  CREATE OBJECT lo_excel 'EXCEL.APPLICATION'.
+  CALL METHOD OF lo_excel 'WORKBOOKS' = lo_workbooks.
+  CALL METHOD OF lo_workbooks 'OPEN' = lo_workbook EXPORTING #1 = iv_file.
+  CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = 1.
+*  CLEAR:comp_t .
+*  SELECT SINGLE butxt INTO comp_t FROM t001 WHERE bukrs EQ s_bukrs.
+*  CONCATENATE '编制单位:'comp_t INTO comp_t .
+*  mac_fill_cell 3 2 comp_t.
+  CLEAR:comp_t .
+  CONCATENATE '编制时间:'p_ryear'年'lv_rpmax'月' INTO comp_t .
+  mac_fill_cell 3 6 comp_t.
+  lv_row = 5.
+  "数值
+  LOOP AT gt_item.
+    lv_col = lv_col + 1.
+    lv_row = lv_row + 1.
+    "excel模版的行数
+    row_c = lv_row.
+    CONDENSE row_c NO-GAPS..
+    row_obj = row_c.
+    CALL METHOD OF row_obj 'AUTOFIT'."自适应
+    CONCATENATE 'A' row_c ':G'row_c INTO cell.
+    mac_bord_cell cell.
+    mac_fill_cell lv_row lv_col gt_item-kunnr.
+    lv_col = lv_col + 1.
+    mac_fill_cell lv_row lv_col gt_item-name1.
+    lv_col = lv_col + 2.
+    IF gt_item-zamount_bq NE 0.
+      mac_fill_cell lv_row lv_col gt_item-zamount_bq.
+    ENDIF.
+    lv_col = lv_col + 1.
+    mac_fill_cell lv_row lv_col gt_item-zratio_bq.
+    lv_col = lv_col + 1.
+    IF gt_item-zamount_tq NE 0.
+      mac_fill_cell lv_row lv_col gt_item-zamount_tq.
+    ENDIF.
+    lv_col = lv_col + 1.
+    mac_fill_cell lv_row lv_col gt_item-zratio_tq.
+    CLEAR:lv_col.
+
+    "在此处汇总合计数据，合计数据设置变量
+    lv_sc_bq = lv_sc_bq + gt_item-zamount_bq. "十大供应商的销售收入（不含税）同期
+    lv_sc_tq = lv_sc_tq + gt_item-zamount_tq."十大供应商的销售收入（不含税）上期
+    CLEAR: lv_str1,lv_str2.
+    SPLIT gt_item-zratio_bq AT '%' INTO lv_str1 lv_str2."十大供应商本期占总销售比例
+    lv_zratio_bq = lv_zratio_bq + lv_str1.
+
+    CLEAR: lv_str1,lv_str2.
+    SPLIT gt_item-zratio_tq AT '%' INTO lv_str1 lv_str2."十大供应商上期期占总销售比例
+    lv_zratio_tq = lv_zratio_tq + lv_str1.
+
+  ENDLOOP.
+
+  CONCATENATE  lv_zratio_bq '%' INTO lv_zratio_bq.
+  CONCATENATE  lv_zratio_tq '%' INTO lv_zratio_tq.
+
+  "合计
+  lv_col = lv_col + 1.
+  lv_row = lv_row + 1.
+  row_c  = lv_row.
+  CONDENSE row_c NO-GAPS..
+  mac_fill_cell lv_row lv_col '合计'.
+  CONCATENATE 'A' row_c ':C'row_c INTO cell.
+  mac_mer_cell cell.
+  CONCATENATE 'A' row_c ':G'row_c INTO cell.
+  mac_bord_cell cell.
+
+  lv_col = lv_col + 3.
+  IF lv_sc_bq NE  0.
+    mac_fill_cell lv_row lv_col lv_sc_bq.
+  ENDIF.
+  lv_col = lv_col + 1.
+  mac_fill_cell lv_row lv_col lv_zratio_bq  .
+  lv_col = lv_col + 1.
+  IF lv_sc_tq NE 0.
+    mac_fill_cell lv_row lv_col lv_sc_tq.
+  ENDIF.
+  lv_col = lv_col + 1.
+  mac_fill_cell lv_row lv_col lv_zratio_tq.
+  CLEAR:lv_col.
+
+
+  CALL METHOD OF lo_sheet 'CELLS' = lo_cell EXPORTING #1 = 1 #2 = 1.
+  CALL METHOD OF lo_cell 'SELECT'.
+  SET PROPERTY OF lo_excel 'CutCopyMode' = 0.
+
+  CALL METHOD OF lo_workbook 'SAVE'.
+  SET PROPERTY OF lo_excel 'VISIBLE' = 1.
+  FREE OBJECT:lo_excel,lo_workbooks,lo_workbook,lo_sheet,lo_range,lo_cell.
+ENDFORM.
+
+FORM cal_percent  USING    p_val1
+                           p_val2
+                  CHANGING p_percent.
+  DATA: lv_percent(5) TYPE n.
+
+  IF p_val2 = 0.
+    RETURN.
+  ENDIF.
+
+  lv_percent = p_val1 * 10000 / p_val2.
+
+  IF lv_percent+0(3) = 0.
+    CONCATENATE '0.' lv_percent+3 '%' INTO p_percent.
+  ELSEIF lv_percent+0(3) < 10.
+    CONCATENATE lv_percent+2(1) '.' lv_percent+3 '%' INTO p_percent.
+  ELSEIF lv_percent+0(3) = 100.
+    CONCATENATE lv_percent+0(3) '.' lv_percent+3 '%' INTO p_percent.
+  ELSE.
+    CONCATENATE lv_percent+1(2) '.' lv_percent+3 '%' INTO p_percent.
+  ENDIF.
+
+ENDFORM.                    " CAL_PERCENT
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_AUTH
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_auth .
+  DATA:BEGIN OF lt_bukrs OCCURS 0,
+         bukrs LIKE t001-bukrs,
+       END OF lt_bukrs.
+  CHECK sy-ucomm = 'ONLI'.
+  REFRESH r_bukrs.
+
+  SELECT bukrs INTO TABLE lt_bukrs FROM t001 WHERE bukrs IN s_bukrs.
+  IF sy-subrc NE 0.
+    MESSAGE '输入公司代码无效' TYPE 'E'.
+  ELSE.
+    LOOP AT lt_bukrs.
+      AUTHORITY-CHECK OBJECT 'F_BKPF_BUK'
+                    ID 'BUKRS' FIELD lt_bukrs-bukrs
+                    ID 'ACTVT' FIELD '03'.
+      IF sy-subrc <> 0.
+        DELETE lt_bukrs.
+      ELSE.
+        r_bukrs = 'IEQ'.
+        r_bukrs-low = lt_bukrs-bukrs.
+        APPEND r_bukrs.
+        CLEAR r_bukrs.
+      ENDIF.
+    ENDLOOP.
+    IF r_bukrs[] IS INITIAL.
+      MESSAGE '你没有公司代码的权限' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+ENDFORM.

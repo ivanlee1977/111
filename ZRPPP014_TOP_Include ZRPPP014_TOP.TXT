@@ -1,0 +1,84 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP014_TOP
+*&---------------------------------------------------------------------*
+TYPE-POOLS:truxs,slis.
+DATA:xlstab TYPE truxs_t_text_data.
+TABLES:afko,afpo,afru.
+
+
+********************ALV 事件****************
+DATA:
+  it_fieldcat TYPE lvc_t_fcat,
+  wa_fieldcat LIKE LINE OF it_fieldcat,
+  gs_layout   TYPE lvc_s_layo,
+  it_events   TYPE slis_t_event, ""事件属性
+  wa_events   TYPE slis_alv_event.
+
+
+DATA:BEGIN OF gw_item,"展示内表
+       sel(1)      TYPE c,
+       fevor       TYPE afko-fevor, "生产管理员（线别）
+       aufnr       TYPE afpo-aufnr, "生产订单
+       pwerk       TYPE afpo-pwerk, "工厂
+       gstrp       TYPE afko-gstrp, "基本开始日期
+       gltrp       TYPE afko-gltrp, "基本结束日期
+       dauat       TYPE afpo-dauat, "订单类型
+       matnr       TYPE afpo-matnr, "物料
+       maktx       TYPE makt-maktx, "物料描述
+       charg       TYPE afpo-charg, "版本
+       vornr       TYPE afvc-vornr, "工序
+       rueck       TYPE afvc-rueck, "操作完成的确认编号
+       arbid       TYPE afvc-arbid, "
+       aufpl       TYPE afko-aufpl, "
+       arbpl       TYPE crhd-arbpl, "工作中心
+       mgvrg       TYPE afvv-mgvrg, "计划数量
+       gmnga       TYPE afru-gmnga, "实际完成数（报工良品数）
+       ism01_vv    TYPE afru-ism01, "实际工时
+       ile01       TYPE afru-ile01, "实际工时单位
+       ism01       TYPE afvv-ism01, "累计实际工时
+       lmnga       TYPE afvv-lmnga, "累计良品数
+       lmnga_end   TYPE afvv-lmnga, "每次最后一道工序累计良品数
+       rmnga       TYPE afvv-rmnga, "累计不良数
+       vgw01       TYPE afvv-vgw01, "标准工时（准备）
+       vgw02       TYPE afvv-vgw02, " 标准工时（工时）
+       zbll        TYPE p DECIMALS 3, "不良率
+       zztl        TYPE p DECIMALS 3, "直通率
+       zjhgs       TYPE afvv-ism01, "累计计划工时
+       zcegs       TYPE p DECIMALS 3, "累计超额工时
+       vge01       TYPE afvv-vge01, "
+       vge02       TYPE afvv-vge02, "
+       grund(1000) TYPE c, "异常代码（抓第一个）
+       grdtx(1000) TYPE c, "
+       ltxa1(1000) TYPE c, "责任部门
+       beizhu      TYPE char200, "备注
+       field_style TYPE lvc_t_styl, " 为内表添加设置编辑状态所需的字段
+     END OF gw_item.
+DATA:gt_item LIKE gw_item OCCURS 0.
+DATA:gt_data LIKE gw_item OCCURS 0 WITH HEADER LINE.
+
+DATA: i_grid_settings TYPE lvc_s_glay.
+
+DATA:ok_code   TYPE sy-ucomm,
+     save_ok   TYPE sy-ucomm,
+     errorcode TYPE i.
+DATA: l_grid TYPE REF TO cl_gui_alv_grid,
+      stbl   TYPE lvc_s_stbl. ""稳定刷新
+
+
+CONSTANTS:gcst_excel_template TYPE w3objid VALUE 'ZPP014'.
+
+
+*******数据定义*******
+DATA:lo_excel     TYPE ole2_object,
+     lo_workbooks TYPE ole2_object,
+     lo_workbook  TYPE ole2_object,
+     lo_sheet     TYPE ole2_object,
+     tmp_sheet    TYPE ole2_object, "EMPTY SHEET
+     lo_cell      TYPE ole2_object,
+     borders_obj  TYPE ole2_object,
+     lo_range     TYPE ole2_object,
+     row_obj      TYPE ole2_object,
+     lo_cell1     TYPE ole2_object.
+DATA lv_file LIKE rlgrap-filename.
+DATA:lt_excel_in                    "内表：从源文件中读取到的数据
+       TYPE STANDARD TABLE OF alsmex_tabline WITH HEADER LINE.

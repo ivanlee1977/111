@@ -1,0 +1,38 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPSD001T01
+*&---------------------------------------------------------------------*
+TABLES:sscrfields,
+       ztsd007.
+
+DATA:gt_upload LIKE alsmex_tabline OCCURS 0 WITH HEADER LINE.
+FIELD-SYMBOLS:<fs_data> LIKE LINE OF gt_upload.
+
+DATA:BEGIN OF gt_data OCCURS 0.
+DATA:zstat(30) TYPE c.
+    INCLUDE STRUCTURE ztsd007.
+DATA:zmsg(200) TYPE c.
+DATA:END OF gt_data.
+
+DATA: BEGIN OF gt_zxh OCCURS 0,
+        atwrt LIKE ausp-atwrt,
+      END OF gt_zxh,
+      gt_xl  LIKE gt_zxh OCCURS 0 WITH HEADER LINE,
+      gt_cpx LIKE gt_zxh OCCURS 0 WITH HEADER LINE.
+
+***ALV data define
+DATA:gs_layout TYPE slis_layout_alv,
+     gt_fcat   TYPE slis_t_fieldcat_alv WITH HEADER LINE.
+
+CONSTANTS:c_pf_status    TYPE slis_formname VALUE 'FRM_SET_PF_STATUS',
+          c_user_command TYPE slis_formname VALUE 'FRM_USER_COMMAND'.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-seltext_l = &2.
+  gt_fcat-seltext_m = &2.
+  gt_fcat-seltext_s = &2.
+  gt_fcat-inttype   = &3.
+  gt_fcat-intlen    = &4.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

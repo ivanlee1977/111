@@ -1,0 +1,19 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI005T01
+*&---------------------------------------------------------------------*
+
+TABLES:faglflext.
+
+TYPES:BEGIN OF tps_list,
+        zexno      TYPE i,
+        zamount_nc TYPE tslvt12, "年初数
+        zamount_qm TYPE tslvt12, "期末数
+      END OF tps_list,
+      tpt_list TYPE TABLE OF tps_list.
+
+DATA gt_list TYPE tpt_list.
+
+
+CONSTANTS:gcst_excel_template TYPE w3objid VALUE 'ZFI005'.
+
+ranges:r_bukrs FOR t001-bukrs.

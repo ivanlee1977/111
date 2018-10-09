@@ -1,0 +1,939 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPSD001F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_INITIAL_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_initial_data .
+*******数据定义*******
+  INCLUDE <icon>.
+  DATA ls_functxt TYPE smp_dyntxt.
+  DATA:gt_exbut TYPE TABLE OF sy-ucomm.
+*******初始化*******
+*******程序主体*******
+  "屏幕工具栏中按饼
+  "启用自定义工具
+  CLEAR ls_functxt.
+  ls_functxt-icon_text = '模板下载'."'Download Template'.
+  ls_functxt-icon_id   = '@49@'.
+  ls_functxt-quickinfo =  '模板下载'.
+  sscrfields-functxt_01 = ls_functxt.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FILENAME_FIND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      <--P_P_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_filename_find  CHANGING xc_file.
+  CALL FUNCTION 'WS_FILENAME_GET'
+    EXPORTING
+      def_filename     = xc_file
+      def_path         = 'C:\'
+      mask             = ',*.XLS.'
+      mode             = 'O'
+      title            = '文件名'
+    IMPORTING
+      filename         = xc_file
+    EXCEPTIONS
+      inv_winsys       = 1
+      no_batch         = 2
+      selection_cancel = 3
+      selection_error  = 4
+      OTHERS           = 5.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_MODIFY_SCREEN
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_modify_screen .
+  IF r4 = 'X'.    "数据导入
+    LOOP AT SCREEN.
+      IF screen-group1 BETWEEN 'M2' AND 'M5'.
+        screen-active = 0.
+        screen-invisible = 1.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+  ELSEIF r5 = 'X'."数据查询
+    LOOP AT SCREEN.
+      CASE 'X'.
+        WHEN r1.
+          IF screen-group1 = 'M5' OR screen-group1 = 'M1'.
+            screen-active = 0.
+            screen-invisible = 1.
+          ENDIF.
+        WHEN r2.
+          IF screen-group1 = 'M4' OR screen-group1 = 'M1'.
+            screen-active = 0.
+            screen-invisible = 1.
+          ENDIF.
+        WHEN r3.
+          IF screen-group1 = 'M3' OR screen-group1 = 'M4' OR screen-group1 = 'M5' OR screen-group1 = 'M1'.
+            screen-active = 0.
+            screen-invisible = 1.
+          ENDIF.
+        WHEN OTHERS.
+      ENDCASE.
+      MODIFY SCREEN.
+    ENDLOOP.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DOWNLOAD_TEMPLATE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      <--P_P_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_download_template USING u_objid LIKE wwwdatatab-objid CHANGING ic_file.
+  DATA:l_path   TYPE string.
+
+  CALL METHOD zcl_ole_excel=>download_templet
+    EXPORTING
+      iv_objid        = u_objid
+      iv_win_title    = '请指定下载路径'
+      iv_df_extension = 'XLS'
+    IMPORTING
+      ev_fullpath     = l_path.
+
+  CALL METHOD cl_gui_frontend_services=>execute
+    EXPORTING
+      document = l_path
+    EXCEPTIONS
+      OTHERS   = 10.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_UPLOAD_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_upload_data .
+
+  CALL FUNCTION 'ALSM_EXCEL_TO_INTERNAL_TABLE'
+    EXPORTING
+      filename                = p_file
+      i_begin_col             = 1
+      i_begin_row             = 2
+      i_end_col               = 30
+      i_end_row               = 9999
+    TABLES
+      intern                  = gt_upload
+    EXCEPTIONS
+      inconsistent_parameters = 1
+      upload_ole              = 2
+      OTHERS                  = 3.
+
+  LOOP AT gt_upload ASSIGNING <fs_data>.
+    CASE 'X'.
+      WHEN r1. "销售需求计划导入-客户
+        AT NEW row.
+          CLEAR:gt_data_a.
+        ENDAT.
+        PERFORM frm_convert_data1.
+        AT END OF row.
+***check data
+          PERFORM frm_check_vkorg USING gt_data_a-vkorg CHANGING gt_data_a-zmsg.
+          PERFORM frm_check_kunnr USING gt_data_a-kunnr CHANGING gt_data_a-zmsg.
+          PERFORM frm_check_matnr USING gt_data_a-matnr CHANGING gt_data_a-zmsg.
+
+          SHIFT gt_data_a-zmsg LEFT DELETING LEADING ','.
+          CONDENSE gt_data_a-zmsg.
+          IF gt_data_a-zmsg IS NOT INITIAL.
+            gt_data_a-zstat = icon_led_red.
+          ELSE.
+            gt_data_a-zstat = icon_led_green.
+            gt_data_a-zmsg = '数据检查通过'.
+          ENDIF.
+          APPEND gt_data_a.
+          CLEAR gt_data_a.
+        ENDAT.
+      WHEN r2. "销售需求计划导入-大区
+        AT NEW row.
+          CLEAR:gt_data_b.
+        ENDAT.
+        PERFORM frm_convert_data2.
+        AT END OF row.
+***check data
+          PERFORM frm_check_vkorg USING gt_data_b-vkorg CHANGING gt_data_b-zmsg.
+          PERFORM frm_check_bzirk USING gt_data_b-bzirk CHANGING gt_data_b-zmsg.
+          PERFORM frm_check_matnr USING gt_data_b-matnr CHANGING gt_data_b-zmsg.
+
+          SHIFT gt_data_b-zmsg LEFT DELETING LEADING ','.
+          CONDENSE gt_data_b-zmsg.
+          IF gt_data_b-zmsg IS NOT INITIAL.
+            gt_data_b-zstat = icon_led_red.
+          ELSE.
+            gt_data_b-zstat = icon_led_green.
+            gt_data_b-zmsg = '数据检查通过'.
+          ENDIF.
+          APPEND gt_data_b.
+          CLEAR gt_data_b.
+        ENDAT.
+      WHEN r3."销售需求计划导入-公司
+        AT NEW row.
+          CLEAR:gt_data_c.
+        ENDAT.
+        PERFORM frm_convert_data3.
+        AT END OF row.
+          PERFORM frm_check_matnr USING gt_data_c-matnr CHANGING gt_data_c-zmsg.
+          SHIFT gt_data_c-zmsg LEFT DELETING LEADING ','.
+          CONDENSE gt_data_c-zmsg.
+
+          IF gt_data_c-zmsg IS NOT INITIAL.
+            gt_data_c-zstat = icon_led_red.
+          ELSE.
+            gt_data_c-zstat = icon_led_green.
+            gt_data_c-zmsg = '数据检查通过'.
+          ENDIF.
+          APPEND gt_data_c.
+          CLEAR gt_data_c.
+        ENDAT.
+      WHEN OTHERS.
+    ENDCASE.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CONVERT_DATA1
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_convert_data1 .
+  CASE <fs_data>-col.
+    WHEN '1'.         "销售组织
+      gt_data_a-vkorg = <fs_data>-value.
+    WHEN '4'.         "客户编号
+      gt_data_a-kunnr = <fs_data>-value.
+    WHEN '6'.         "物料编号
+      gt_data_a-matnr = <fs_data>-value.
+    WHEN '11'.        "本月计划-业务
+      mcr_convert_data:<fs_data>-value gt_data_a-zbyjh_yw.
+    WHEN '12'.        "月度预测1-业务
+      mcr_convert_data:<fs_data>-value gt_data_a-zydyc_yw1.
+    WHEN '13'        ."月度预测2-业务
+      mcr_convert_data:<fs_data>-value gt_data_a-zydyc_yw2.
+    WHEN '14'.        "本月计划-商务
+      mcr_convert_data:<fs_data>-value gt_data_a-zbyjh_sw.
+    WHEN '15'.        "月度预测1-商务
+      mcr_convert_data:<fs_data>-value gt_data_a-zydyc_sw1.
+    WHEN '16'.       "月度预测2-商务
+      mcr_convert_data:<fs_data>-value gt_data_a-zydyc_sw2.
+    WHEN OTHERS.
+  ENDCASE.
+
+  CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+    EXPORTING
+      input  = gt_data_a-kunnr
+    IMPORTING
+      output = gt_data_a-kunnr.
+
+  CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+    EXPORTING
+      input        = gt_data_a-matnr
+    IMPORTING
+      output       = gt_data_a-matnr
+    EXCEPTIONS
+      length_error = 1
+      OTHERS       = 2.
+
+  gt_data_a-zmonth = p_month.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CONVERT_DATA2
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_convert_data2 .
+  CASE <fs_data>-col.
+    WHEN '1'.         "销售组织
+      gt_data_b-vkorg = <fs_data>-value.
+    WHEN '2'.         "销售地区
+      gt_data_b-bzirk = <fs_data>-value.
+    WHEN '4'.         "物料编号
+      gt_data_b-matnr = <fs_data>-value.
+    WHEN '16'.        "本月计划
+      mcr_convert_data:<fs_data>-value gt_data_b-zbyjh.
+    WHEN '17'.        "月度预测1
+      mcr_convert_data:<fs_data>-value gt_data_b-zbyyc1.
+    WHEN '18'        ."月度预测2
+      mcr_convert_data:<fs_data>-value gt_data_b-zbyyc2.
+    WHEN OTHERS.
+  ENDCASE.
+  gt_data_b-zmonth = p_month.
+
+  CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+    EXPORTING
+      input        = gt_data_b-matnr
+    IMPORTING
+      output       = gt_data_b-matnr
+    EXCEPTIONS
+      length_error = 1
+      OTHERS       = 2.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CONVERT_DATA3
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_convert_data3 .
+  CASE <fs_data>-col.
+    WHEN '1'.         "物料编号
+      gt_data_c-matnr = <fs_data>-value.
+    WHEN '13'.        "本月计划
+      mcr_convert_data:<fs_data>-value gt_data_c-zbyjh.
+    WHEN '14'.        "月度预测1
+      mcr_convert_data:<fs_data>-value gt_data_c-zbyyc1.
+    WHEN '15'        ."月度预测2
+      mcr_convert_data:<fs_data>-value gt_data_c-zbyyc2.
+    WHEN OTHERS.
+  ENDCASE.
+
+  CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+    EXPORTING
+      input        = gt_data_c-matnr
+    IMPORTING
+      output       = gt_data_c-matnr
+    EXCEPTIONS
+      length_error = 1
+      OTHERS       = 2.
+  gt_data_c-zmonth = p_month.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_VKORG
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_GT_DATA_A_VKORG  text
+*      <--P_GT_DATA_A_ZMSG  text
+*----------------------------------------------------------------------*
+FORM frm_check_vkorg  USING    u_vkorg
+                      CHANGING c_zmsg.
+  DATA:lv_vkorg LIKE tvko-vkorg.
+  IF u_vkorg IS INITIAL.
+    CONCATENATE c_zmsg ',销售组织为空' INTO c_zmsg.
+  ELSE.
+    SELECT SINGLE vkorg INTO lv_vkorg FROM tvko WHERE vkorg = u_vkorg.
+    IF sy-subrc NE 0.
+      CONCATENATE c_zmsg ',销售组织不存在' INTO c_zmsg.
+    ELSE.
+      AUTHORITY-CHECK OBJECT 'V_VBAK_VKO'
+               ID 'VKORG' FIELD u_vkorg
+               ID 'VTWEG' DUMMY
+               ID 'SPART' DUMMY
+               ID 'ACTVT' FIELD '03'.
+      IF sy-subrc NE 0.
+        CONCATENATE c_zmsg ',没有销售组织的权限' INTO c_zmsg.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+  CONDENSE c_zmsg.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_KUNNR
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_GT_DATA_A_KUNNR  text
+*      <--P_GT_DATA_A_ZMSG  text
+*----------------------------------------------------------------------*
+FORM frm_check_kunnr  USING    u_kunnr
+                      CHANGING c_zmsg.
+  DATA:lv_kunnr LIKE kna1-kunnr,
+       lv_kvgr1 LIKE knvv-kvgr1.
+  IF u_kunnr IS INITIAL.
+    CONCATENATE c_zmsg ',客户为空' INTO c_zmsg.
+  ELSE.
+    SELECT SINGLE kunnr INTO lv_kunnr FROM kna1 WHERE kunnr = u_kunnr.
+    IF sy-subrc NE 0.
+      CONCATENATE c_zmsg ',客户不存在' INTO c_zmsg.
+    ELSE.
+      SELECT SINGLE kvgr1 INTO lv_kvgr1 FROM knvv WHERE kunnr = u_kunnr.
+      AUTHORITY-CHECK OBJECT 'Z_KVGR1'
+                   ID 'KVGR1' FIELD lv_kvgr1.
+      IF sy-subrc <> 0.
+        CONCATENATE c_zmsg ',没有客户权限' INTO c_zmsg.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+  CONDENSE c_zmsg.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_MATNR
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_GT_DATA_A_MATNR  text
+*      <--P_GT_DATA_A_ZMSG  text
+*----------------------------------------------------------------------*
+FORM frm_check_matnr  USING    u_matnr
+                      CHANGING c_zmsg.
+  DATA:lv_matnr LIKE mara-matnr.
+  IF u_matnr IS INITIAL.
+    CONCATENATE c_zmsg ',物料为空' INTO c_zmsg.
+  ELSE.
+    SELECT SINGLE matnr INTO lv_matnr FROM mara WHERE matnr = u_matnr.
+    IF sy-subrc NE 0.
+      CONCATENATE c_zmsg ',物料不存在' INTO c_zmsg.
+    ENDIF.
+  ENDIF.
+  CONDENSE c_zmsg.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_BZIRK
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_GT_DATA_B_BZIRK  text
+*      <--P_GT_DATA_B_ZMSG  text
+*----------------------------------------------------------------------*
+FORM frm_check_bzirk  USING    u_bzirk
+                      CHANGING c_zmsg.
+  DATA:lv_bzirk LIKE t171-bzirk.
+  IF u_bzirk IS INITIAL.
+    CONCATENATE c_zmsg ',大区为空' INTO c_zmsg.
+  ELSE.
+    SELECT SINGLE bzirk INTO lv_bzirk FROM t171 WHERE bzirk = u_bzirk.
+    IF sy-subrc NE 0.
+      CONCATENATE c_zmsg ',大区不存在' INTO c_zmsg.
+    ENDIF.
+  ENDIF.
+  CONDENSE c_zmsg.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  DATA:lt_fcat TYPE slis_t_fieldcat_alv WITH HEADER LINE.
+  DATA:lv_index LIKE sy-tabix.
+
+  IF r4 = 'X'.
+    mcr_build_fieldcat:'ZSTAT'   '状态'  'C'    '30'.
+  ENDIF.
+
+  IF r1 = 'X'.
+    PERFORM frm_get_fieldcat_merge TABLES lt_fcat USING 'ZTSD001A'.
+  ELSEIF r2 = 'X'.
+    PERFORM frm_get_fieldcat_merge TABLES lt_fcat USING 'ZTSD001B' .
+  ELSEIF r3 = 'X'.
+    PERFORM frm_get_fieldcat_merge TABLES lt_fcat USING 'ZTSD001C' .
+  ENDIF.
+  IF r4 = 'X'.
+    mcr_build_fieldcat:'ZMSG'   '消息'  'C'    '200'.
+  ELSEIF r5 = 'X'.
+    LOOP AT gt_fcat.
+      gt_fcat-key = space.
+      CLEAR gt_fcat-col_pos.
+      MODIFY gt_fcat.
+    ENDLOOP.
+    IF r1 = 'X'.
+      READ TABLE gt_fcat WITH KEY fieldname = 'KUNNR' TRANSPORTING NO FIELDS.
+      IF sy-subrc = 0.
+        CLEAR gt_fcat.
+        lv_index = sy-tabix + 1.
+        gt_fcat-fieldname = 'SORTL'.
+        gt_fcat-seltext_l = '客户名称'.
+        gt_fcat-seltext_m = '客户名称'.
+        gt_fcat-seltext_s = '客户名称'.
+        gt_fcat-ddictxt   = 'L'.
+        gt_fcat-inttype   = 'C'.
+        gt_fcat-intlen    = '20'.
+        INSERT gt_fcat INDEX lv_index.
+      ENDIF.
+
+    ELSEIF r2 = 'X'.
+      READ TABLE gt_fcat WITH KEY fieldname = 'BZIRK' TRANSPORTING NO FIELDS.
+      IF sy-subrc = 0.
+        CLEAR gt_fcat.
+        lv_index = sy-tabix + 1.
+        gt_fcat-fieldname = 'BZTXT'.
+        gt_fcat-seltext_l = '区域名称'.
+        gt_fcat-seltext_m = '区域名称'.
+        gt_fcat-seltext_s = '区域名称'.
+        gt_fcat-ddictxt   = 'L'.
+        gt_fcat-inttype   = 'C'.
+        gt_fcat-intlen    = '20'.
+        INSERT gt_fcat INDEX lv_index.
+      ENDIF.
+    ENDIF.
+    READ TABLE gt_fcat WITH KEY fieldname = 'MATNR' TRANSPORTING NO FIELDS.
+    IF sy-subrc = 0.
+      CLEAR gt_fcat.
+      lv_index = sy-tabix + 1.
+      gt_fcat-fieldname = 'MAKTX'.
+      gt_fcat-seltext_l = '物料名称'.
+      gt_fcat-seltext_m = '物料名称'.
+      gt_fcat-seltext_s = '物料名称'.
+      gt_fcat-ddictxt   = 'L'.
+      gt_fcat-inttype   = 'C'.
+      gt_fcat-intlen    = '40'.
+      INSERT gt_fcat INDEX lv_index.
+    ENDIF.
+  ENDIF.
+
+  gs_layout-colwidth_optimize = 'X'.
+  gs_layout-zebra = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  FIELD-SYMBOLS:<fs_tab> TYPE STANDARD TABLE.
+  CASE 'X'.
+    WHEN r1.
+      ASSIGN gt_data_a[] TO <fs_tab>.
+    WHEN r2.
+      ASSIGN gt_data_b[] TO <fs_tab>.
+    WHEN r3.
+      ASSIGN gt_data_c[] TO <fs_tab>.
+    WHEN OTHERS.
+  ENDCASE.
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+*     I_INTERFACE_CHECK        = ' '
+*     I_BYPASSING_BUFFER       = ' '
+*     I_BUFFER_ACTIVE          = ' '
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = c_pf_status
+      i_callback_user_command  = c_user_command
+*     I_CALLBACK_TOP_OF_PAGE   = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME         =
+*     I_BACKGROUND_ID          = ' '
+*     I_GRID_TITLE             =
+*     I_GRID_SETTINGS          =
+      is_layout                = gs_layout
+      it_fieldcat              = gt_fcat[]
+*     IT_EXCLUDING             =
+*     IT_SPECIAL_GROUPS        =
+*     IT_SORT                  =
+*     IT_FILTER                =
+*     IS_SEL_HIDE              =
+      i_default                = 'X'
+      i_save                   = 'A'
+*     IS_VARIANT               =
+*     IT_EVENTS                =
+*     IT_EVENT_EXIT            =
+*     IS_PRINT                 =
+*     IS_REPREP_ID             =
+*     I_SCREEN_START_COLUMN    = 0
+*     I_SCREEN_START_LINE      = 0
+*     I_SCREEN_END_COLUMN      = 0
+*     I_SCREEN_END_LINE        = 0
+*     I_HTML_HEIGHT_TOP        = 0
+*     I_HTML_HEIGHT_END        = 0
+*     IT_ALV_GRAPHICS          =
+*     IT_HYPERLINK             =
+*     IT_ADD_FIELDCAT          =
+*     IT_EXCEPT_QINFO          =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER  =
+*     ES_EXIT_CAUSED_BY_USER   =
+    TABLES
+      t_outtab                 = <fs_tab>
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT_MERGE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LT_FCAT  text
+*      -->P_0826   text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat_merge  TABLES lt_fcat TYPE slis_t_fieldcat_alv
+                             USING   u_tabname TYPE dd02l-tabname.
+  REFRESH lt_fcat.
+  CALL FUNCTION 'REUSE_ALV_FIELDCATALOG_MERGE'
+    EXPORTING
+      i_program_name         = sy-repid
+*     I_INTERNAL_TABNAME     =
+      i_structure_name       = u_tabname
+*     I_CLIENT_NEVER_DISPLAY = 'X'
+*     I_INCLNAME             =
+*     I_BYPASSING_BUFFER     =
+*     I_BUFFER_ACTIVE        =
+    CHANGING
+      ct_fieldcat            = lt_fcat[]
+    EXCEPTIONS
+      inconsistent_interface = 1
+      program_error          = 2
+      OTHERS                 = 3.
+  DELETE  lt_fcat WHERE fieldname = 'MANDT'.
+  IF r4 = 'X'.
+    DELETE lt_fcat WHERE fieldname = 'ERNAM' OR fieldname = 'ERDAT' OR fieldname = 'UZEIT'.
+  ENDIF.
+  APPEND LINES OF lt_fcat TO gt_fcat.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SET_PF_STATUS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_set_pf_status USING rt_extab TYPE slis_t_extab.
+  IF r4 = 'X'.
+    SET PF-STATUS 'PF_001'.
+  ELSEIF r5 = 'X'.
+    SET PF-STATUS 'PF_001' EXCLUDING 'ZUPLOAD'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_USER_COMMAND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_user_command USING r_ucomm LIKE sy-ucomm
+                            rs_selfield TYPE slis_selfield..
+  DATA:lv_grid TYPE REF TO cl_gui_alv_grid.
+  DATA:ls_layout TYPE lvc_s_layo.
+
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = lv_grid.
+
+  CASE r_ucomm.
+    WHEN 'ZUPLOAD'.
+      PERFORM frm_modify_data.
+      ls_layout-cwidth_opt = 'X'.
+      ls_layout-no_toolbar = 'X'.
+      CALL METHOD lv_grid->set_frontend_layout
+        EXPORTING
+          is_layout = ls_layout.
+    WHEN OTHERS.
+  ENDCASE.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_MODIFY_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_modify_data .
+  DATA:lt_data_a LIKE ztsd001a OCCURS 0 WITH HEADER LINE,
+       lt_data_b LIKE ztsd001b OCCURS 0 WITH HEADER LINE,
+       lt_data_c LIKE ztsd001c OCCURS 0 WITH HEADER LINE.
+  IF r1 = 'X'.
+    READ TABLE gt_data_a WITH KEY zstat = icon_led_red.
+    IF sy-subrc = 0.
+      MESSAGE '上传数据有错误，请先修正' TYPE 'I'.
+      EXIT.
+    ENDIF.
+    IF gt_data_a[] IS NOT INITIAL.
+      LOOP AT gt_data_a.
+        "删除历史导入的客户数据
+        DELETE FROM ztsd001a WHERE zmonth = p_month AND kunnr = gt_data_a-kunnr.
+        MOVE-CORRESPONDING gt_data_a TO lt_data_a.
+        lt_data_a-ernam = sy-uname.
+        lt_data_a-erdat = sy-datum.
+        lt_data_a-uzeit = sy-uzeit.
+        APPEND lt_data_a.
+        CLEAR lt_data_a.
+      ENDLOOP.
+      MODIFY ztsd001a FROM TABLE lt_data_a.
+      IF sy-subrc = 0.
+        COMMIT WORK AND WAIT.
+        LOOP AT gt_data_a.
+          gt_data_a-zstat = icon_led_green.
+          gt_data_a-zmsg = '导入数据成功'.
+          MODIFY  gt_data_a.
+        ENDLOOP.
+      ELSE.
+        ROLLBACK WORK.
+        LOOP AT gt_data_a.
+          gt_data_a-zstat = icon_led_red.
+          gt_data_a-zmsg = '导入数据失败'.
+          MODIFY  gt_data_a.
+        ENDLOOP.
+      ENDIF.
+    ELSE.
+      MESSAGE '没有需要导入的数据' TYPE 'E'.
+    ENDIF.
+  ELSEIF r2 = 'X'.
+    READ TABLE gt_data_b WITH KEY zstat = icon_led_red.
+    IF sy-subrc = 0.
+      MESSAGE '上传数据有错误，请先修正' TYPE 'I'.
+      EXIT.
+    ENDIF.
+    IF gt_data_b[] IS NOT INITIAL.
+      LOOP AT gt_data_b.
+        "删除导入的大区数据
+        DELETE FROM ztsd001b WHERE zmonth = p_month AND bzirk = gt_data_b-bzirk.
+        MOVE-CORRESPONDING gt_data_b TO lt_data_b.
+        lt_data_b-ernam = sy-uname.
+        lt_data_b-erdat = sy-datum.
+        lt_data_b-uzeit = sy-uzeit.
+        APPEND lt_data_b.
+        CLEAR lt_data_b.
+      ENDLOOP.
+      MODIFY ztsd001b FROM TABLE lt_data_b.
+      IF sy-subrc = 0.
+        COMMIT WORK AND WAIT.
+        LOOP AT gt_data_b.
+          gt_data_b-zstat = icon_led_green.
+          gt_data_b-zmsg = '导入数据成功'.
+          MODIFY  gt_data_b.
+        ENDLOOP.
+      ELSE.
+        ROLLBACK WORK.
+        LOOP AT gt_data_b.
+          gt_data_b-zstat = icon_led_red.
+          gt_data_b-zmsg = '导入数据失败'.
+          MODIFY  gt_data_b.
+        ENDLOOP.
+      ENDIF.
+    ELSE.
+      MESSAGE '没有需要导入的数据' TYPE 'E'.
+    ENDIF.
+  ELSEIF r3 = 'X'.
+    READ TABLE gt_data_c WITH KEY zstat = icon_led_red.
+    IF sy-subrc = 0.
+      MESSAGE '上传数据有错误，请先修正' TYPE 'I'.
+      EXIT.
+    ENDIF.
+    IF gt_data_c[] IS NOT INITIAL.
+      LOOP AT gt_data_c.
+        MOVE-CORRESPONDING gt_data_c TO lt_data_c.
+        lt_data_c-ernam = sy-uname.
+        lt_data_c-erdat = sy-datum.
+        lt_data_c-uzeit = sy-uzeit.
+        APPEND lt_data_c.
+        CLEAR lt_data_c.
+      ENDLOOP.
+      MODIFY ztsd001c FROM TABLE lt_data_c.
+      IF sy-subrc = 0.
+        COMMIT WORK AND WAIT.
+        LOOP AT gt_data_c.
+          gt_data_c-zstat = icon_led_green.
+          gt_data_c-zmsg = '导入数据成功'.
+          MODIFY  gt_data_c.
+        ENDLOOP.
+      ELSE.
+        ROLLBACK WORK.
+        LOOP AT gt_data_c.
+          gt_data_c-zstat = icon_led_red.
+          gt_data_c-zmsg = '导入数据失败'.
+          MODIFY  gt_data_c.
+        ENDLOOP.
+      ENDIF.
+    ELSE.
+      MESSAGE '没有需要导入的数据' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SELECT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_select_data .
+  DATA:BEGIN OF lt_kna1 OCCURS 0,
+         kunnr LIKE kna1-kunnr,
+         sortl LIKE kna1-sortl,
+       END OF lt_kna1.
+  DATA:lt_t171t LIKE t171t OCCURS 0 WITH HEADER LINE.
+  DATA:lt_makt LIKE makt OCCURS 0 WITH HEADER LINE.
+
+  IF r1 = 'X'.
+    SELECT a~zmonth
+           a~vkorg
+           a~kunnr
+           a~matnr
+           a~zbyjh_yw
+           a~zydyc_yw1
+           a~zydyc_yw2
+           a~zbyjh_sw
+           a~zydyc_sw1
+           a~zydyc_sw2
+           a~ernam
+           a~erdat
+           a~uzeit
+           b~kvgr1
+      INTO CORRESPONDING FIELDS OF TABLE gt_data_a
+      FROM ztsd001a AS a
+      INNER JOIN knvv AS b
+      ON a~kunnr = b~kunnr
+      AND a~vkorg = b~vkorg
+      WHERE a~zmonth IN s_month
+        AND a~vkorg IN s_vkorg
+        AND a~kunnr IN s_kunnr
+        AND a~matnr IN s_matnr
+        AND b~kvgr1 IN s_kvgr1
+        AND b~kvgr2 IN s_kvgr2.
+    IF gt_data_a[] IS NOT INITIAL.
+      SELECT kunnr sortl
+        INTO CORRESPONDING FIELDS OF TABLE lt_kna1
+        FROM kna1
+        FOR ALL ENTRIES IN gt_data_a
+        WHERE kunnr = gt_data_a-kunnr.
+      SELECT * INTO TABLE lt_makt FROM makt FOR ALL ENTRIES IN gt_data_a WHERE spras = sy-langu AND matnr = gt_data_a-matnr.
+    ENDIF.
+    SORT lt_kna1 BY kunnr.
+    SORT lt_makt BY matnr.
+    LOOP AT gt_data_a.
+      AUTHORITY-CHECK OBJECT 'V_VBAK_VKO'
+                     ID 'VKORG' FIELD gt_data_a-vkorg
+                     ID 'VTWEG' DUMMY
+                     ID 'SPART' DUMMY
+                     ID 'ACTVT' FIELD '03'.
+      IF sy-subrc <> 0.
+        DELETE gt_data_a.
+        CONTINUE.
+      ENDIF.
+      AUTHORITY-CHECK OBJECT 'Z_KVGR1'
+               ID 'KVGR1' FIELD gt_data_a-kvgr1..
+      IF sy-subrc <> 0.
+        DELETE gt_data_a.
+        CONTINUE.
+      ENDIF.
+      READ TABLE lt_kna1 WITH KEY kunnr = gt_data_a-kunnr BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_data_a-sortl = lt_kna1-sortl.
+      ENDIF.
+      READ TABLE lt_makt WITH KEY matnr = gt_data_a-matnr BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_data_a-maktx = lt_makt-maktx.
+      ENDIF.
+      MODIFY gt_data_a.
+    ENDLOOP.
+  ELSEIF r2 = 'X'.
+    SELECT *
+     INTO CORRESPONDING FIELDS OF TABLE gt_data_b
+     FROM ztsd001b
+     WHERE zmonth IN s_month
+       AND vkorg IN s_vkorg
+       AND bzirk IN s_bzirk
+       AND matnr IN s_matnr.
+    CHECK gt_data_b[] IS NOT INITIAL.
+    SELECT * INTO TABLE lt_t171t FROM t171t WHERE spras = sy-langu.
+    SELECT * INTO TABLE lt_makt FROM makt FOR ALL ENTRIES IN gt_data_b WHERE spras = sy-langu AND matnr = gt_data_b-matnr.
+    SORT lt_t171t BY bzirk.
+    SORT lt_makt BY matnr.
+    LOOP AT gt_data_b.
+      AUTHORITY-CHECK OBJECT 'V_VBAK_VKO'
+               ID 'VKORG' FIELD gt_data_b-vkorg
+               ID 'VTWEG' DUMMY
+               ID 'SPART' DUMMY
+               ID 'ACTVT' FIELD '03'.
+      IF sy-subrc <> 0.
+        DELETE gt_data_b.
+        CONTINUE.
+      ENDIF.
+      READ TABLE lt_t171t WITH KEY bzirk = gt_data_b-bzirk BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_data_b-bztxt = lt_t171t-bztxt.
+      ENDIF.
+      READ TABLE lt_makt WITH KEY matnr = gt_data_b-matnr BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_data_b-maktx = lt_makt-maktx.
+      ENDIF.
+      MODIFY gt_data_b.
+    ENDLOOP.
+  ELSEIF r3 = 'X'.
+    SELECT *
+      INTO CORRESPONDING FIELDS OF TABLE gt_data_c
+      FROM ztsd001c
+     WHERE zmonth IN s_month
+       AND matnr IN s_matnr.
+    IF gt_data_c[] IS NOT INITIAL.
+      SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_makt FROM makt FOR ALL ENTRIES IN gt_data_c WHERE matnr = gt_data_c-matnr AND spras = sy-langu.
+    ENDIF.
+    SORT lt_makt BY matnr.
+    LOOP AT gt_data_c.
+      READ TABLE lt_makt WITH KEY matnr = gt_data_c-matnr BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_data_c-maktx = lt_makt-maktx.
+        MODIFY gt_data_c.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_AUTH
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_auth .
+
+  CASE 'X'.
+    WHEN r1.
+      AUTHORITY-CHECK OBJECT 'ZXSTYPE'
+               ID 'ZXSTYPE' FIELD '01'.
+      IF sy-subrc <> 0.
+        MESSAGE '你没有导入和查询客户数据的权限' TYPE 'E'.
+      ENDIF.
+    WHEN r2.
+      AUTHORITY-CHECK OBJECT 'ZXSTYPE'
+               ID 'ZXSTYPE' FIELD '02'.
+      IF sy-subrc <> 0.
+        MESSAGE '你没有导入和查询销售大区数据的权限' TYPE 'E'.
+      ENDIF.
+    WHEN r3.
+      AUTHORITY-CHECK OBJECT 'ZXSTYPE'
+       ID 'ZXSTYPE' FIELD '03'.
+      IF sy-subrc <> 0.
+        MESSAGE '你没有导入和查询公司数据的权限' TYPE 'E'.
+      ENDIF.
+    WHEN OTHERS.
+  ENDCASE.
+
+ENDFORM.

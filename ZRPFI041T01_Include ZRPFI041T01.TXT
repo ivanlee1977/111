@@ -1,0 +1,31 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPFI041T01
+*&---------------------------------------------------------------------*
+TABLES: ztfi005,ekko,usr21.
+
+DATA: BEGIN OF gt_fi OCCURS 0.
+DATA: maktx  TYPE makt-maktx,
+      menge1 TYPE mseg-menge,
+      lifnr  TYPE ekko-lifnr,
+      name1  TYPE LFA1-name1,
+      eknam  TYPE t024-eknam.
+    INCLUDE STRUCTURE ztfi005.
+DATA  END OF gt_fi.
+
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat  WITH HEADER LINE.
+gs_layout-cwidth_opt = 'X'.
+gs_layout-zebra = 'X'.
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext = &2.
+*  gt_fcat-seltext_m = &2.
+*  gt_fcat-seltext_s = &2.
+  gt_fcat-ref_field = &1.
+  gt_fcat-ref_table = &3.
+IF &1 = 'ZTIME'.
+gt_fcat-ref_field = 'CPUTM'.
+ENDIF.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

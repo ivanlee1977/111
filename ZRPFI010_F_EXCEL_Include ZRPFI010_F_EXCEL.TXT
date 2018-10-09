@@ -1,0 +1,276 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI010_F_EXCEL
+*&---------------------------------------------------------------------*
+*FORM frm_init_excel .
+**
+***  创建EXCEL模板
+**  PERFORM create_basic_objects USING ''  doc_classname doc_classtype doc_object_key gc_document_name.
+***  输出EXCEL
+**  PERFORM output_to_excel.
+*
+*  DATA: lr_error         TYPE REF TO i_oi_error,
+*        lv_title_dw_year TYPE char256,
+*        lv_title_qj      TYPE char256.
+*  IF gr_excel_writer IS INITIAL.
+*    CREATE OBJECT gr_excel_writer
+*      EXPORTING
+*        i_app_name       = ''
+*        i_classname      = gv_classname
+*        i_classtype      = gv_classtype
+*        i_object_key     = gv_object_key
+*        i_container_name = gc_container
+*        i_docname        = ''.
+*
+*    IF sy-subrc NE 0.
+*      MESSAGE '对象错误！' TYPE 'E'.
+*      RETURN.
+*    ENDIF.
+*
+*    CALL METHOD gr_excel_writer->select_sheet
+*      EXPORTING
+*        i_sheet_name = gc_active_sheet
+*      IMPORTING
+*        e_error      = lr_error.
+*
+*  ENDIF.
+*
+*  IF gr_excel_writer IS NOT INITIAL.
+*    PERFORM output_to_excel.
+*  ENDIF.
+*
+*ENDFORM.
+*
+**&---------------------------------------------------------------------*
+**&      Form  OUTPUT_TO_EXCEL
+**&---------------------------------------------------------------------*
+**       text
+**----------------------------------------------------------------------*
+**  -->  p1        text
+**  <--  p2        text
+**----------------------------------------------------------------------*
+*FORM output_to_excel .
+*  DATA: lv_lines    TYPE i,
+*        lv_brow     TYPE i,
+*        lv_bcol     TYPE i,
+*        lv_rowcount TYPE i,
+*        lv_colcount TYPE i.
+*  DATA: lv_col TYPE char4,
+*        lv_row TYPE char4.
+*  "从第四行开始
+*  lv_brow = 6.
+*  lv_bcol = 1.
+*  lv_rowcount = 2."3行
+*  lv_colcount = 24."2列
+*
+*  PERFORM fm_fill_cells USING lv_brow lv_bcol lv_rowcount lv_colcount gt_lines3.
+*
+*  MESSAGE '处理成功！' TYPE 'S'.
+*ENDFORM.
+**&---------------------------------------------------------------------*
+**&      Form  FM_FILL_CELL
+**&---------------------------------------------------------------------*
+**       text
+**----------------------------------------------------------------------*
+**      -->P_0795   text
+**      -->P_0796   text
+**      -->P_0797   text
+**      -->P_GS_TITLE_BUTXT  text
+**----------------------------------------------------------------------*
+*FORM fm_fill_cell  USING    i
+*                            j
+*                            val.
+*  DATA: lr_error         TYPE REF TO i_oi_error.
+*  CALL METHOD gr_excel_writer->fill_cell
+*    EXPORTING
+*      i_sheet_name = gv_sheetname
+*      i_row        = i
+*      i_col        = j
+*      i_value      = val
+*    IMPORTING
+*      e_error      = lr_error.
+*
+*ENDFORM.
+**&---------------------------------------------------------------------*
+**&      Form  FM_INSERT_BODY_ROW
+**&---------------------------------------------------------------------*
+**       text
+**----------------------------------------------------------------------*
+**  -->  p1        text
+**  <--  p2        text
+**----------------------------------------------------------------------*
+*FORM fm_insert_body_row .
+*  DATA: lr_error         TYPE REF TO i_oi_error.
+*  CALL METHOD gr_excel_writer->execute_macro
+*    EXPORTING
+*      macro_string = '模块1.InsertRow'
+*    IMPORTING
+*      error        = lr_error.
+*ENDFORM.
+**&---------------------------------------------------------------------*
+**&      Form  ADD_TO_STRING
+**&---------------------------------------------------------------------*
+**       text  将金额类型取反
+**----------------------------------------------------------------------*
+**      -->P_GS_LINES_BREST  text
+**      -->P_GS_BSAK_DMBTR  text
+**      <--P_GS_LINES_BREST  text
+**      <--P_ENDIF  text
+**----------------------------------------------------------------------*
+*
+*FORM fm_fill_cells  USING    pv_brow
+*                             pv_bcol
+*                             pv_rowcount
+*                             pv_colcount
+*                             pt_lines.
+*  DATA: lr_error         TYPE REF TO i_oi_error.
+*  CALL METHOD gr_excel_writer->fill_items
+*    EXPORTING
+*      sheet_name = 'SHEET1'
+*      begin_row  = pv_brow
+*      begin_col  = pv_bcol
+*      row_count  = pv_rowcount
+*      col_count  = pv_colcount
+*      it_out     = pt_lines
+*    IMPORTING
+*      e_error    = lr_error.
+*
+*ENDFORM.
+
+FORM frm_output_data .
+********数据定义*******
+  DATA:lv_file   TYPE string,
+       lv_result TYPE c. "标识: 空表示文件不存在;否则,表示存在
+  DATA lv_answer TYPE c.
+  DATA:li_lines TYPE i.
+  DATA:ls_key   TYPE wwwdatatab,
+       lv_subrc TYPE sy-subrc.
+  DATA lv_file1 LIKE rlgrap-filename.
+*******初始化*******
+*******程序主体*******
+
+  CONCATENATE 'C:\FI\' sy-title '-'   sy-datum '.xls' INTO lv_file.
+
+  CALL METHOD cl_gui_frontend_services=>file_exist
+    EXPORTING
+      file                 = lv_file
+    RECEIVING
+      result               = lv_result
+    EXCEPTIONS
+      cntl_error           = 1
+      error_no_gui         = 2
+      wrong_parameter      = 3
+      not_supported_by_gui = 4
+      OTHERS               = 5.
+  IF lv_result IS NOT  INITIAL. "文件已经存在
+    CALL FUNCTION 'POPUP_TO_CONFIRM'
+      EXPORTING
+        titlebar              = '请确认'
+        text_question         = '文件已经存在，是否要覆盖?'
+        text_button_1         = '是'
+        text_button_2         = '否'
+        default_button        = '2' "缺省选中按钮: 1 是; 2 否
+        display_cancel_button = ''  "标识: 为空,不显示 取消按钮
+      IMPORTING
+        answer                = lv_answer "标识： 1 是;
+      EXCEPTIONS
+        text_not_found        = 1
+        OTHERS                = 2.
+    IF lv_answer NE '1'.
+      EXIT.
+    ENDIF.
+  ENDIF.
+
+  ls_key-relid = 'MI'.
+  ls_key-objid = gcst_excel_template.
+  lv_file1 = lv_file.
+  CALL FUNCTION 'DOWNLOAD_WEB_OBJECT'
+    EXPORTING
+      key         = ls_key
+      destination = lv_file1
+    IMPORTING
+      rc          = lv_subrc.
+  IF lv_subrc <> 0.
+    MESSAGE '下载模板出错，请检查，谢谢' TYPE 'E'.
+    EXIT.
+  ENDIF.
+
+***填充EXCEL数据
+  PERFORM frm_filldata_excel USING lv_file.
+ENDFORM.
+
+FORM frm_filldata_excel  USING  iv_file TYPE string.
+  DATA: comp_t(50) TYPE c.
+*******数据定义*******
+  DATA:lo_excel     TYPE ole2_object,
+       lo_workbooks TYPE ole2_object,
+       lo_workbook  TYPE ole2_object,
+       lo_sheet     TYPE ole2_object,
+       lo_range     TYPE ole2_object,
+       lo_cell      TYPE ole2_object,
+       lo_cell1     TYPE ole2_object.
+  DATA lv_file LIKE rlgrap-filename.
+  DATA:lt_excel_in                    "内表：从源文件中读取到的数据
+         TYPE STANDARD TABLE OF alsmex_tabline WITH HEADER LINE.
+  DATA lv_value TYPE char200.
+
+  DATA lv_row TYPE i.
+  DATA lv_col TYPE i.
+
+  DEFINE mac_fill_cell.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+      EXPORTING
+        #1 = &1
+        #2 = &2.
+    SET PROPERTY OF lo_cell 'VALUE' = &3.
+  END-OF-DEFINITION.
+
+*******程序主体*******
+*读取模板数据
+*  CLEAR:comp_t .
+*  SELECT SINGLE butxt INTO comp_t FROM t001 WHERE bukrs EQ p_bukrs.
+*  CONCATENATE '编制单位:'comp_t INTO comp_t .
+
+*填充excel
+  CREATE OBJECT lo_excel 'EXCEL.APPLICATION'.
+  CALL METHOD OF lo_excel 'WORKBOOKS' = lo_workbooks.
+  CALL METHOD OF lo_workbooks 'OPEN' = lo_workbook EXPORTING #1 = iv_file.
+  CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = 1.
+  mac_fill_cell 3 1 comp_t.
+  lv_row = 6.
+  "数值
+  LOOP AT gt_lines3 INTO gs_lines3.
+    mac_fill_cell lv_row 1 gs_lines3-znum1.
+    mac_fill_cell lv_row 2 gs_lines3-anln1.
+    mac_fill_cell lv_row 3 gs_lines3-ztxt1.
+    mac_fill_cell lv_row 4 gs_lines3-qdfs1.
+    mac_fill_cell lv_row 5 gs_lines3-qcs1.
+    mac_fill_cell lv_row 6 gs_lines3-bqzj1.
+    mac_fill_cell lv_row 7 gs_lines3-bqjs1.
+    mac_fill_cell lv_row 8 gs_lines3-qms1.
+    mac_fill_cell lv_row 9 gs_lines3-znum2.
+    mac_fill_cell lv_row 10 gs_lines3-anln2.
+    mac_fill_cell lv_row 11 gs_lines3-ztxt2.
+    mac_fill_cell lv_row 12 gs_lines3-qdfs2.
+    mac_fill_cell lv_row 13 gs_lines3-qcs2.
+    mac_fill_cell lv_row 14 gs_lines3-bqzj2.
+    mac_fill_cell lv_row 15 gs_lines3-bqjs2.
+    mac_fill_cell lv_row 16 gs_lines3-qms2.
+    mac_fill_cell lv_row 17 gs_lines3-znum3.
+    mac_fill_cell lv_row 18 gs_lines3-anln3.
+    mac_fill_cell lv_row 19 gs_lines3-ztxt3.
+    mac_fill_cell lv_row 20 gs_lines3-qdfs3.
+    mac_fill_cell lv_row 21 gs_lines3-qcs3.
+    mac_fill_cell lv_row 22 gs_lines3-bqzj3.
+    mac_fill_cell lv_row 23 gs_lines3-bqjs3.
+    mac_fill_cell lv_row 24 gs_lines3-qms3.
+    lv_row = lv_row + 1.
+  ENDLOOP.
+
+  CALL METHOD OF lo_sheet 'CELLS' = lo_cell EXPORTING #1 = 1 #2 = 1.
+  CALL METHOD OF lo_cell 'SELECT'.
+  SET PROPERTY OF lo_excel 'CutCopyMode' = 0.
+
+  CALL METHOD OF lo_workbook 'SAVE'.
+  SET PROPERTY OF lo_excel 'VISIBLE' = 1.
+  FREE OBJECT:lo_excel,lo_workbooks,lo_workbook,lo_sheet,lo_range,lo_cell.
+ENDFORM.

@@ -1,0 +1,840 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI038F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_ZYHZH_F4
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0059   text
+*----------------------------------------------------------------------*
+FORM frm_zyhzh_f4 USING u_fname TYPE help_info-dynprofld.
+  DATA:BEGIN OF lt_skb1 OCCURS 0,
+         bukrs LIKE skb1-bukrs,
+         saknr LIKE skb1-saknr,
+         txt50 LIKE skat-txt50,
+       END OF lt_skb1.
+
+  SELECT a~bukrs
+         a~saknr
+         b~txt50
+    INTO CORRESPONDING FIELDS OF TABLE lt_skb1
+    FROM skb1 AS a
+    LEFT JOIN skat AS b
+    ON a~saknr = b~saknr
+    AND b~spras = sy-langu
+    AND b~ktopl = '1000'
+    WHERE a~saknr LIKE '1002%'.
+
+  CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+    EXPORTING
+*     DDIC_STRUCTURE  = ' '
+      retfield        = 'SAKNR'
+*     PVALKEY         = ' '
+      dynpprog        = sy-repid
+      dynpnr          = sy-dynnr
+      dynprofield     = u_fname
+*     STEPL           = 0
+*     WINDOW_TITLE    =
+*     VALUE           = ' '
+      value_org       = 'S'
+*     MULTIPLE_CHOICE = ' '
+*     DISPLAY         = ' '
+*     CALLBACK_PROGRAM       = ' '
+*     CALLBACK_FORM   = ' '
+*     CALLBACK_METHOD =
+*     MARK_TAB        =
+*     IMPORTING
+*     USER_RESET      =
+    TABLES
+      value_tab       = lt_skb1
+*     FIELD_TAB       =
+*     RETURN_TAB      =
+*     DYNPFLD_MAPPING =
+    EXCEPTIONS
+      parameter_error = 1
+      no_values_found = 2
+      OTHERS          = 3.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_AUTH
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_auth .
+
+  CHECK sy-ucomm = 'ONLI'.
+
+  AUTHORITY-CHECK OBJECT 'F_BKPF_BUK'
+                ID 'BUKRS' FIELD p_bukrs
+                ID 'ACTVT' FIELD '03'.
+  IF sy-subrc NE 0.
+    MESSAGE '你没有公司代码的权限' TYPE 'E'.
+  ENDIF.
+
+  IF r1 = 'X' AND s_date[] IS INITIAL.
+    MESSAGE '请输入交易日期' TYPE 'E'.
+  ENDIF.
+  IF r2 = 'X' AND s_date1[] IS INITIAL.
+    MESSAGE '请输入对账日期' TYPE 'E'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data1 .
+  DATA:lt_ztfi003 LIKE ztfi003 OCCURS 0 WITH HEADER LINE.
+***抓取ztfi002中未对账的数据
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE gt_data1
+    FROM ztfi002
+    WHERE bukrs = p_bukrs
+      AND prctr IN s_prctr
+      AND zjyrq IN s_date
+      AND zyhzh = p_zyhzh
+      AND zsfdz EQ space.
+
+***抓取满足条件的BSEG数据
+  SELECT a~bukrs
+         a~belnr
+         a~gjahr
+         a~buzei
+         b~budat
+         a~wrbtr AS dmbtr
+         a~shkzg
+         a~zuonr
+         a~sgtxt
+         b~usnam
+    INTO CORRESPONDING FIELDS OF TABLE gt_data2
+    FROM bseg AS a
+    INNER JOIN bkpf AS b
+    ON a~bukrs = b~bukrs
+    AND a~belnr = b~belnr
+    AND a~gjahr = b~gjahr
+    WHERE a~bukrs = p_bukrs
+      AND a~prctr IN s_prctr
+      AND a~hkont = p_zyhzh
+      AND b~budat IN s_date
+      AND b~stblg EQ space.
+
+  IF gt_data2[] IS NOT INITIAL.
+***抓取已对账的数据
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_ztfi003
+      FROM ztfi003
+      FOR ALL ENTRIES IN gt_data2
+      WHERE bukrs = gt_data2-bukrs
+        AND belnr = gt_data2-belnr
+        AND gjahr = gt_data2-gjahr
+        AND buzei = gt_data2-buzei.
+  ENDIF.
+
+  SORT lt_ztfi003 BY bukrs belnr gjahr buzei.
+  LOOP AT gt_data2.
+    READ TABLE lt_ztfi003 WITH KEY bukrs = gt_data2-bukrs belnr = gt_data2-belnr gjahr = gt_data2-gjahr buzei = gt_data2-buzei.
+    IF sy-subrc = 0.
+      DELETE gt_data2.
+    ELSE.
+      IF gt_data2-shkzg = 'H'.
+        gt_data2-dmbtr = -1 * gt_data2-dmbtr.
+      ENDIF.
+      CALL FUNCTION 'Z_FMMM_001'
+        EXPORTING
+          i_usnam    = gt_data2-usnam
+        IMPORTING
+          ex_usrname = gt_data2-zname.
+      MODIFY gt_data2.
+    ENDIF.
+  ENDLOOP.
+
+  LOOP AT gt_data1.
+    READ TABLE gt_data2 WITH KEY budat = gt_data1-zjyrq dmbtr = gt_data1-zje.
+    IF sy-subrc = 0 AND gt_data2-check IS INITIAL.
+      gt_data2-check = 'X'.
+      MODIFY gt_data2 INDEX sy-tabix TRANSPORTING check.
+      gt_data1-check = 'X'.
+      MODIFY gt_data1.
+    ENDIF.
+  ENDLOOP.
+
+  gw_t001-bukrs = p_bukrs.
+  SELECT SINGLE butxt INTO gw_t001-butxt FROM t001 WHERE bukrs = p_bukrs.
+
+  SORT gt_data1 BY zjyrq zje .
+  SORT gt_data2 BY budat dmbtr .
+
+  CALL SCREEN 0100.
+ENDFORM.
+
+*----------------------------------------------------------------------*
+*   INCLUDE TABLECONTROL_FORMS                                         *
+*----------------------------------------------------------------------*
+
+*&---------------------------------------------------------------------*
+*&      Form  USER_OK_TC                                               *
+*&---------------------------------------------------------------------*
+FORM user_ok_tc USING    p_tc_name TYPE dynfnam
+                         p_table_name
+                         p_mark_name
+                CHANGING p_ok      LIKE sy-ucomm.
+
+*&SPWIZARD: BEGIN OF LOCAL DATA----------------------------------------*
+  DATA: l_ok     TYPE sy-ucomm,
+        l_offset TYPE i.
+*&SPWIZARD: END OF LOCAL DATA------------------------------------------*
+
+*&SPWIZARD: Table control specific operations                          *
+*&SPWIZARD: evaluate TC name and operations                            *
+  SEARCH p_ok FOR p_tc_name.
+  IF sy-subrc <> 0.
+    EXIT.
+  ENDIF.
+  l_offset = strlen( p_tc_name ) + 1.
+  l_ok = p_ok+l_offset.
+*&SPWIZARD: execute general and TC specific operations                 *
+  CASE l_ok.
+    WHEN 'INSR'.                      "insert row
+      PERFORM fcode_insert_row USING    p_tc_name
+                                        p_table_name.
+      CLEAR p_ok.
+
+    WHEN 'DELE'.                      "delete row
+      PERFORM fcode_delete_row USING    p_tc_name
+                                        p_table_name
+                                        p_mark_name.
+      CLEAR p_ok.
+
+    WHEN 'P--' OR                     "top of list
+         'P-'  OR                     "previous page
+         'P+'  OR                     "next page
+         'P++'.                       "bottom of list
+      PERFORM compute_scrolling_in_tc USING p_tc_name
+                                            l_ok.
+      CLEAR p_ok.
+*     WHEN 'L--'.                       "total left
+*       PERFORM FCODE_TOTAL_LEFT USING P_TC_NAME.
+*
+*     WHEN 'L-'.                        "column left
+*       PERFORM FCODE_COLUMN_LEFT USING P_TC_NAME.
+*
+*     WHEN 'R+'.                        "column right
+*       PERFORM FCODE_COLUMN_RIGHT USING P_TC_NAME.
+*
+*     WHEN 'R++'.                       "total right
+*       PERFORM FCODE_TOTAL_RIGHT USING P_TC_NAME.
+*
+    WHEN 'MARK'.                      "mark all filled lines
+      PERFORM fcode_tc_mark_lines USING p_tc_name
+                                        p_table_name
+                                        p_mark_name   .
+      CLEAR p_ok.
+
+    WHEN 'DMRK'.                      "demark all filled lines
+      PERFORM fcode_tc_demark_lines USING p_tc_name
+                                          p_table_name
+                                          p_mark_name .
+      CLEAR p_ok.
+
+*     WHEN 'SASCEND'   OR
+*          'SDESCEND'.                  "sort column
+*       PERFORM FCODE_SORT_TC USING P_TC_NAME
+*                                   l_ok.
+
+  ENDCASE.
+
+ENDFORM.                              " USER_OK_TC
+
+*&---------------------------------------------------------------------*
+*&      Form  FCODE_INSERT_ROW                                         *
+*&---------------------------------------------------------------------*
+FORM fcode_insert_row
+              USING    p_tc_name           TYPE dynfnam
+                       p_table_name             .
+
+*&SPWIZARD: BEGIN OF LOCAL DATA----------------------------------------*
+  DATA l_lines_name       LIKE feld-name.
+  DATA l_selline          LIKE sy-stepl.
+  DATA l_lastline         TYPE i.
+  DATA l_line             TYPE i.
+  DATA l_table_name       LIKE feld-name.
+  FIELD-SYMBOLS <tc>                 TYPE cxtab_control.
+  FIELD-SYMBOLS <table>              TYPE STANDARD TABLE.
+  FIELD-SYMBOLS <lines>              TYPE i.
+*&SPWIZARD: END OF LOCAL DATA------------------------------------------*
+
+  ASSIGN (p_tc_name) TO <tc>.
+
+*&SPWIZARD: get the table, which belongs to the tc                     *
+  CONCATENATE p_table_name '[]' INTO l_table_name. "table body
+  ASSIGN (l_table_name) TO <table>.                "not headerline
+
+*&SPWIZARD: get looplines of TableControl                              *
+  CONCATENATE 'G_' p_tc_name '_LINES' INTO l_lines_name.
+  ASSIGN (l_lines_name) TO <lines>.
+
+*&SPWIZARD: get current line                                           *
+  GET CURSOR LINE l_selline.
+  IF sy-subrc <> 0.                   " append line to table
+    l_selline = <tc>-lines + 1.
+*&SPWIZARD: set top line                                               *
+    IF l_selline > <lines>.
+      <tc>-top_line = l_selline - <lines> + 1 .
+    ELSE.
+      <tc>-top_line = 1.
+    ENDIF.
+  ELSE.                               " insert line into table
+    l_selline = <tc>-top_line + l_selline - 1.
+    l_lastline = <tc>-top_line + <lines> - 1.
+  ENDIF.
+*&SPWIZARD: set new cursor line                                        *
+  l_line = l_selline - <tc>-top_line + 1.
+
+*&SPWIZARD: insert initial line                                        *
+  INSERT INITIAL LINE INTO <table> INDEX l_selline.
+  <tc>-lines = <tc>-lines + 1.
+*&SPWIZARD: set cursor                                                 *
+  SET CURSOR LINE l_line.
+
+ENDFORM.                              " FCODE_INSERT_ROW
+
+*&---------------------------------------------------------------------*
+*&      Form  FCODE_DELETE_ROW                                         *
+*&---------------------------------------------------------------------*
+FORM fcode_delete_row
+              USING    p_tc_name           TYPE dynfnam
+                       p_table_name
+                       p_mark_name   .
+
+*&SPWIZARD: BEGIN OF LOCAL DATA----------------------------------------*
+  DATA l_table_name       LIKE feld-name.
+
+  FIELD-SYMBOLS <tc>         TYPE cxtab_control.
+  FIELD-SYMBOLS <table>      TYPE STANDARD TABLE.
+  FIELD-SYMBOLS <wa>.
+  FIELD-SYMBOLS <mark_field>.
+*&SPWIZARD: END OF LOCAL DATA------------------------------------------*
+
+  ASSIGN (p_tc_name) TO <tc>.
+
+*&SPWIZARD: get the table, which belongs to the tc                     *
+  CONCATENATE p_table_name '[]' INTO l_table_name. "table body
+  ASSIGN (l_table_name) TO <table>.                "not headerline
+
+*&SPWIZARD: delete marked lines                                        *
+  DESCRIBE TABLE <table> LINES <tc>-lines.
+
+  LOOP AT <table> ASSIGNING <wa>.
+
+*&SPWIZARD: access to the component 'FLAG' of the table header         *
+    ASSIGN COMPONENT p_mark_name OF STRUCTURE <wa> TO <mark_field>.
+
+    IF <mark_field> = 'X'.
+      DELETE <table> INDEX syst-tabix.
+      IF sy-subrc = 0.
+        <tc>-lines = <tc>-lines - 1.
+      ENDIF.
+    ENDIF.
+  ENDLOOP.
+
+ENDFORM.                              " FCODE_DELETE_ROW
+
+*&---------------------------------------------------------------------*
+*&      Form  COMPUTE_SCROLLING_IN_TC
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_TC_NAME  name of tablecontrol
+*      -->P_OK       ok code
+*----------------------------------------------------------------------*
+FORM compute_scrolling_in_tc USING    p_tc_name
+                                      p_ok.
+*&SPWIZARD: BEGIN OF LOCAL DATA----------------------------------------*
+  DATA l_tc_new_top_line     TYPE i.
+  DATA l_tc_name             LIKE feld-name.
+  DATA l_tc_lines_name       LIKE feld-name.
+  DATA l_tc_field_name       LIKE feld-name.
+
+  FIELD-SYMBOLS <tc>         TYPE cxtab_control.
+  FIELD-SYMBOLS <lines>      TYPE i.
+*&SPWIZARD: END OF LOCAL DATA------------------------------------------*
+
+  ASSIGN (p_tc_name) TO <tc>.
+*&SPWIZARD: get looplines of TableControl                              *
+  CONCATENATE 'G_' p_tc_name '_LINES' INTO l_tc_lines_name.
+  ASSIGN (l_tc_lines_name) TO <lines>.
+
+
+*&SPWIZARD: is no line filled?                                         *
+  IF <tc>-lines = 0.
+*&SPWIZARD: yes, ...                                                   *
+    l_tc_new_top_line = 1.
+  ELSE.
+*&SPWIZARD: no, ...                                                    *
+    CALL FUNCTION 'SCROLLING_IN_TABLE'
+      EXPORTING
+        entry_act      = <tc>-top_line
+        entry_from     = 1
+        entry_to       = <tc>-lines
+        last_page_full = 'X'
+        loops          = <lines>
+        ok_code        = p_ok
+        overlapping    = 'X'
+      IMPORTING
+        entry_new      = l_tc_new_top_line
+      EXCEPTIONS
+*       NO_ENTRY_OR_PAGE_ACT  = 01
+*       NO_ENTRY_TO    = 02
+*       NO_OK_CODE_OR_PAGE_GO = 03
+        OTHERS         = 0.
+  ENDIF.
+
+*&SPWIZARD: get actual tc and column                                   *
+  GET CURSOR FIELD l_tc_field_name
+             AREA  l_tc_name.
+
+  IF syst-subrc = 0.
+    IF l_tc_name = p_tc_name.
+*&SPWIZARD: et actual column                                           *
+      SET CURSOR FIELD l_tc_field_name LINE 1.
+    ENDIF.
+  ENDIF.
+
+*&SPWIZARD: set the new top line                                       *
+  <tc>-top_line = l_tc_new_top_line.
+
+
+ENDFORM.                              " COMPUTE_SCROLLING_IN_TC
+
+*&---------------------------------------------------------------------*
+*&      Form  FCODE_TC_MARK_LINES
+*&---------------------------------------------------------------------*
+*       marks all TableControl lines
+*----------------------------------------------------------------------*
+*      -->P_TC_NAME  name of tablecontrol
+*----------------------------------------------------------------------*
+FORM fcode_tc_mark_lines USING p_tc_name
+                               p_table_name
+                               p_mark_name.
+*&SPWIZARD: EGIN OF LOCAL DATA-----------------------------------------*
+  DATA l_table_name       LIKE feld-name.
+
+  FIELD-SYMBOLS <tc>         TYPE cxtab_control.
+  FIELD-SYMBOLS <table>      TYPE STANDARD TABLE.
+  FIELD-SYMBOLS <wa>.
+  FIELD-SYMBOLS <mark_field>.
+*&SPWIZARD: END OF LOCAL DATA------------------------------------------*
+
+  ASSIGN (p_tc_name) TO <tc>.
+
+*&SPWIZARD: get the table, which belongs to the tc                     *
+  CONCATENATE p_table_name '[]' INTO l_table_name. "table body
+  ASSIGN (l_table_name) TO <table>.                "not headerline
+
+*&SPWIZARD: mark all filled lines                                      *
+  LOOP AT <table> ASSIGNING <wa>.
+
+*&SPWIZARD: access to the component 'FLAG' of the table header         *
+    ASSIGN COMPONENT p_mark_name OF STRUCTURE <wa> TO <mark_field>.
+
+    <mark_field> = 'X'.
+  ENDLOOP.
+ENDFORM.                                          "fcode_tc_mark_lines
+
+*&---------------------------------------------------------------------*
+*&      Form  FCODE_TC_DEMARK_LINES
+*&---------------------------------------------------------------------*
+*       demarks all TableControl lines
+*----------------------------------------------------------------------*
+*      -->P_TC_NAME  name of tablecontrol
+*----------------------------------------------------------------------*
+FORM fcode_tc_demark_lines USING p_tc_name
+                                 p_table_name
+                                 p_mark_name .
+*&SPWIZARD: BEGIN OF LOCAL DATA----------------------------------------*
+  DATA l_table_name       LIKE feld-name.
+
+  FIELD-SYMBOLS <tc>         TYPE cxtab_control.
+  FIELD-SYMBOLS <table>      TYPE STANDARD TABLE.
+  FIELD-SYMBOLS <wa>.
+  FIELD-SYMBOLS <mark_field>.
+*&SPWIZARD: END OF LOCAL DATA------------------------------------------*
+
+  ASSIGN (p_tc_name) TO <tc>.
+
+*&SPWIZARD: get the table, which belongs to the tc                     *
+  CONCATENATE p_table_name '[]' INTO l_table_name. "table body
+  ASSIGN (l_table_name) TO <table>.                "not headerline
+
+*&SPWIZARD: demark all filled lines                                    *
+  LOOP AT <table> ASSIGNING <wa>.
+
+*&SPWIZARD: access to the component 'FLAG' of the table header         *
+    ASSIGN COMPONENT p_mark_name OF STRUCTURE <wa> TO <mark_field>.
+
+    <mark_field> = space.
+  ENDLOOP.
+ENDFORM.                                          "fcode_tc_mark_lines
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CREATE_DZ_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_create_dz_data .
+  DATA:lv_amount1 TYPE p DECIMALS 2,
+       lv_amount2 TYPE p DECIMALS 2.
+  DATA:lv_ok TYPE c.
+  DATA:lt_data1 LIKE ztfi002 OCCURS 0 WITH HEADER LINE,
+       lt_data2 LIKE ztfi003 OCCURS 0 WITH HEADER LINE.
+
+  READ TABLE gt_data1 WITH KEY check = 'X'.
+  IF sy-subrc NE 0.
+    MESSAGE '请选择左侧需要对账的数据' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  READ TABLE gt_data2 WITH KEY check = 'X'.
+  IF sy-subrc NE 0.
+    MESSAGE '请选择右侧需要对账的数据' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  CLEAR:lv_amount1,lv_amount2.
+  LOOP AT gt_data1 WHERE check EQ 'X'.
+    lv_amount1 = lv_amount1 + gt_data1-zje.
+  ENDLOOP.
+  LOOP AT gt_data2 WHERE check EQ 'X'.
+    lv_amount2 = lv_amount2 + gt_data2-dmbtr.
+  ENDLOOP.
+  IF lv_amount1 NE lv_amount2.
+    MESSAGE '两边选择的对账金额不相等，请检查' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  PERFORM frm_popup_confirm USING '确定要生成对账单？' CHANGING lv_ok.
+  CHECK lv_ok EQ '1'.
+
+  LOOP AT gt_data1 WHERE check = 'X'.
+    MOVE-CORRESPONDING gt_data1 TO lt_data1.
+    lt_data1-zsfdz = 'Y'.
+    lt_data1-zdzrq = sy-datum.
+    APPEND lt_data1.
+    CLEAR lt_data1.
+  ENDLOOP.
+
+  LOOP AT gt_data2 WHERE check = 'X'.
+    MOVE-CORRESPONDING gt_data2 TO lt_data2.
+    lt_data2-zdzrq = sy-datum.
+    APPEND lt_data2.
+    CLEAR lt_data2.
+  ENDLOOP.
+
+  DELETE gt_data1 WHERE check EQ 'X'.
+  DELETE gt_data2 WHERE check EQ 'X'.
+  MODIFY ztfi002 FROM TABLE lt_data1.
+  MODIFY ztfi003 FROM TABLE lt_data2.
+  COMMIT WORK AND WAIT.
+  MESSAGE '生成对账单成功' TYPE 'S'.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_POPUP_CONFIRM
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0922   text
+*      <--P_LV_OK  text
+*----------------------------------------------------------------------*
+FORM frm_popup_confirm  USING   u_text TYPE c
+                        CHANGING lv_ok TYPE c.
+  CALL FUNCTION 'POPUP_TO_CONFIRM'
+    EXPORTING
+*     TITLEBAR       = ' '
+*     DIAGNOSE_OBJECT             = ' '
+      text_question  = u_text
+      text_button_1  = '确定'
+*     ICON_BUTTON_1  = ' '
+      text_button_2  = '取消'
+*     ICON_BUTTON_2  = ' '
+      default_button = '1'
+*     DISPLAY_CANCEL_BUTTON       = 'X'
+*     USERDEFINED_F1_HELP         = ' '
+*     START_COLUMN   = 25
+*     START_ROW      = 6
+*     POPUP_TYPE     =
+*     IV_QUICKINFO_BUTTON_1       = ' '
+*     IV_QUICKINFO_BUTTON_2       = ' '
+    IMPORTING
+      answer         = lv_ok
+* TABLES
+*     PARAMETER      =
+    EXCEPTIONS
+      text_not_found = 1
+      OTHERS         = 2.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_MODIFY_SCREEN
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_modify_screen .
+  IF r1 = 'X'.
+    LOOP AT SCREEN.
+      IF screen-group1 = 'M2'.
+        screen-active = 0.
+        screen-invisible = 1.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+  ELSE.
+    LOOP AT SCREEN.
+      IF screen-group1 = 'M1'.
+        screen-active = 0.
+        screen-invisible = 1.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA2
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data2 .
+***抓取ztfi002中未对账的数据
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE gt_data1
+    FROM ztfi002
+    WHERE bukrs = p_bukrs
+      AND prctr IN s_prctr
+      AND zdzrq IN s_date1
+      AND zyhzh = p_zyhzh
+      AND zsfdz = 'Y'
+      AND zjyrq IN s_date.
+
+***抓取已对账的数据
+  SELECT a~bukrs
+         a~belnr
+         a~gjahr
+         a~buzei
+         a~budat
+         a~zdzrq
+         b~wrbtr AS dmbtr
+         b~shkzg
+         b~zuonr
+         b~sgtxt
+    INTO CORRESPONDING FIELDS OF TABLE gt_data2
+    FROM ztfi003 AS a
+    INNER JOIN bseg AS b
+    ON a~bukrs = b~bukrs
+    AND a~belnr = b~belnr
+    AND a~gjahr = b~gjahr
+    WHERE a~bukrs = p_bukrs
+      AND b~prctr IN s_prctr
+      AND a~zdzrq IN s_date1
+      AND b~hkont = p_zyhzh
+      AND a~zdzrq NE space
+      AND a~budat IN s_date.
+
+  LOOP AT gt_data2.
+    IF gt_data2-shkzg EQ 'H'.
+      gt_data2-dmbtr = -1 * gt_data2-dmbtr.
+    ENDIF.
+    SELECT SINGLE usnam INTO gt_data2-usnam FROM bkpf WHERE bukrs = gt_data2-bukrs AND belnr = gt_data2-belnr AND gjahr = gt_data2-gjahr.
+    CALL FUNCTION 'Z_FMMM_001'
+      EXPORTING
+        i_usnam    = gt_data2-usnam
+      IMPORTING
+        ex_usrname = gt_data2-zname.
+    MODIFY gt_data2.
+  ENDLOOP.
+
+  gw_t001-bukrs = p_bukrs.
+  SELECT SINGLE butxt INTO gw_t001-butxt FROM t001 WHERE bukrs = p_bukrs.
+
+  SORT gt_data1 BY zjyrq DESCENDING zje DESCENDING.
+  SORT gt_data2 BY budat DESCENDING dmbtr DESCENDING.
+
+  CALL SCREEN 0100.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CANCEL_DZ_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_cancel_dz_data .
+  DATA:lv_amount1 TYPE p DECIMALS 2,
+       lv_amount2 TYPE p DECIMALS 2.
+  DATA:lv_ok TYPE c.
+  DATA:lt_data1 LIKE ztfi002 OCCURS 0 WITH HEADER LINE,
+       lt_data2 LIKE ztfi003 OCCURS 0 WITH HEADER LINE.
+
+  READ TABLE gt_data1 WITH KEY check = 'X'.
+  IF sy-subrc NE 0.
+    MESSAGE '请选择左侧需要取消对账的数据' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  READ TABLE gt_data2 WITH KEY check = 'X'.
+  IF sy-subrc NE 0.
+    MESSAGE '请选择右侧需要取消对账的数据' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  CLEAR:lv_amount1,lv_amount2.
+  LOOP AT gt_data1 WHERE check EQ 'X'.
+    lv_amount1 = lv_amount1 + gt_data1-zje.
+  ENDLOOP.
+  LOOP AT gt_data2 WHERE check EQ 'X'.
+    lv_amount2 = lv_amount2 + gt_data2-dmbtr.
+  ENDLOOP.
+  IF lv_amount1 NE lv_amount2.
+    MESSAGE '两边选择的对账金额不相等，请检查' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  PERFORM frm_popup_confirm USING '确定要取消对账单？' CHANGING lv_ok.
+  CHECK lv_ok EQ '1'.
+
+  LOOP AT gt_data1 WHERE check = 'X'.
+    MOVE-CORRESPONDING gt_data1 TO lt_data1.
+    lt_data1-zsfdz = space.
+    lt_data1-zdzrq = space.
+    APPEND lt_data1.
+    CLEAR lt_data1.
+  ENDLOOP.
+
+  LOOP AT gt_data2 WHERE check = 'X'.
+    MOVE-CORRESPONDING gt_data2 TO lt_data2.
+    APPEND lt_data2.
+    CLEAR lt_data2.
+  ENDLOOP.
+
+  DELETE gt_data1 WHERE check EQ 'X'.
+  DELETE gt_data2 WHERE check EQ 'X'.
+  MODIFY ztfi002 FROM TABLE lt_data1.
+  DELETE ztfi003 FROM TABLE lt_data2.
+  COMMIT WORK AND WAIT.
+  MESSAGE '取消对账单成功' TYPE 'S'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SORT_DATA_UP
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_sort_data_up .
+  DATA ls_col LIKE LINE OF ztdata1-cols.
+  READ TABLE ztdata1-cols INTO ls_col WITH KEY selected = 'X'.
+  IF sy-subrc = 0.
+    SORT gt_data1 BY (ls_col-screen-name+9) ASCENDING.
+    ls_col-selected = ''.
+    MODIFY  ztdata1-cols FROM ls_col INDEX sy-tabix.
+  ELSE.
+    MESSAGE '请选择要排序的列' TYPE 'I'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SORT_DATA_DOWN
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_sort_data_down .
+  DATA ls_col LIKE LINE OF ztdata1-cols.
+  READ TABLE ztdata1-cols INTO ls_col WITH KEY selected = 'X'.
+  IF sy-subrc = 0.
+    SORT gt_data1 BY (ls_col-screen-name+9) DESCENDING.
+    ls_col-selected = ''.
+    MODIFY  ztdata1-cols FROM ls_col INDEX sy-tabix.
+  ELSE.
+    MESSAGE '请选择要排序的列' TYPE 'I'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SORT_DATA_UP1
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_sort_data_up1 .
+  DATA ls_col LIKE LINE OF ztdata2-cols.
+  READ TABLE ztdata2-cols INTO ls_col WITH KEY selected = 'X'.
+  IF sy-subrc = 0.
+    SORT gt_data2 BY (ls_col-screen-name+9) ASCENDING.
+    ls_col-selected = ''.
+    MODIFY  ztdata2-cols FROM ls_col INDEX sy-tabix.
+  ELSE.
+    MESSAGE '请选择要排序的列' TYPE 'I'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SORT_DATA_DOWN1
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_sort_data_down1 .
+  DATA ls_col LIKE LINE OF ztdata2-cols.
+  READ TABLE ztdata2-cols INTO ls_col WITH KEY selected = 'X'.
+  IF sy-subrc = 0.
+    SORT gt_data2 BY (ls_col-screen-name+9) DESCENDING.
+    ls_col-selected = ''.
+    MODIFY  ztdata2-cols FROM ls_col INDEX sy-tabix.
+  ELSE.
+    MESSAGE '请选择要排序的列' TYPE 'I'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DOUBLE_CLICK
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_double_click .
+  DATA:lv_field(30) TYPE c,
+       lv_line      TYPE i.
+  GET CURSOR FIELD lv_field.
+  CHECK lv_field EQ 'GT_DATA2-BELNR'.
+  GET CURSOR LINE lv_line.
+  lv_line = ztdata2-top_line + lv_line - 1.
+  READ TABLE gt_data2 INDEX lv_line.
+  IF sy-subrc = 0.
+    SET PARAMETER ID 'BLN' FIELD gt_data2-belnr.
+    SET PARAMETER ID 'BUK' FIELD gt_data2-bukrs.
+    SET PARAMETER ID 'GJR' FIELD gt_data2-gjahr.
+    CALL TRANSACTION 'FB03' AND SKIP FIRST SCREEN.
+  ENDIF.
+ENDFORM.

@@ -1,0 +1,111 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI038PAI
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0100  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_0100 INPUT.
+  gv_okcode = ok_code.
+  CLEAR:ok_code,sy-ucomm.
+
+  CASE gv_okcode.
+    WHEN 'BACK' OR 'EXIT' OR 'CANCEL'.
+      LEAVE TO SCREEN 0.
+    WHEN 'ZDZ'. "生成对账
+      PERFORM frm_create_dz_data.
+    WHEN 'ZQXDZ'."取消对账
+      PERFORM frm_cancel_dz_data.
+    WHEN 'ZTDATA1_UP'.
+      PERFORM FRM_SORT_DATA_UP.
+    WHEN 'ZTDATA1_DOWN'.
+      PERFORM FRM_SORT_DATA_DOWN.
+    WHEN 'ZTDATA2_UP'.
+      PERFORM FRM_SORT_DATA_UP1.
+    WHEN 'ZTDATA2_DOWN'.
+      PERFORM FRM_SORT_DATA_DOWN1.
+    WHEN 'ZCLICK'.
+      PERFORM FRM_DOUBLE_CLICK.
+    WHEN OTHERS.
+  ENDCASE.
+  CLEAR gv_okcode.
+ENDMODULE.
+
+*&SPWIZARD: INPUT MODULE FOR TC 'ZTDATA1'. DO NOT CHANGE THIS LINE!
+*&SPWIZARD: MODIFY TABLE
+MODULE ztdata1_modify INPUT.
+  MODIFY gt_data1
+    FROM gt_data1
+    INDEX ztdata1-current_line.
+ENDMODULE.
+
+*&SPWIZARD: INPUT MODUL FOR TC 'ZTDATA1'. DO NOT CHANGE THIS LINE!
+*&SPWIZARD: MARK TABLE
+MODULE ztdata1_mark INPUT.
+  DATA: g_ztdata1_wa2 LIKE LINE OF gt_data1.
+  IF ztdata1-line_sel_mode = 1
+  AND gt_data1-check = 'X'.
+    LOOP AT gt_data1 INTO g_ztdata1_wa2
+      WHERE check = 'X'.
+      g_ztdata1_wa2-check = ''.
+      MODIFY gt_data1
+        FROM g_ztdata1_wa2
+        TRANSPORTING check.
+    ENDLOOP.
+  ENDIF.
+  MODIFY gt_data1
+    FROM gt_data1
+    INDEX ztdata1-current_line
+    TRANSPORTING check.
+ENDMODULE.
+
+*&SPWIZARD: INPUT MODULE FOR TC 'ZTDATA1'. DO NOT CHANGE THIS LINE!
+*&SPWIZARD: PROCESS USER COMMAND
+MODULE ztdata1_user_command INPUT.
+  ok_code = sy-ucomm.
+  PERFORM user_ok_tc USING    'ZTDATA1'
+                              'GT_DATA1'
+                              'CHECK'
+                     CHANGING ok_code.
+  sy-ucomm = ok_code.
+ENDMODULE.
+
+*&SPWIZARD: INPUT MODULE FOR TC 'ZTDATA2'. DO NOT CHANGE THIS LINE!
+*&SPWIZARD: MODIFY TABLE
+MODULE ztdata2_modify INPUT.
+  MODIFY gt_data2
+    FROM gt_data2
+    INDEX ztdata2-current_line.
+ENDMODULE.
+
+*&SPWIZARD: INPUT MODUL FOR TC 'ZTDATA2'. DO NOT CHANGE THIS LINE!
+*&SPWIZARD: MARK TABLE
+MODULE ztdata2_mark INPUT.
+  DATA: g_ztdata2_wa2 LIKE LINE OF gt_data2.
+  IF ztdata2-line_sel_mode = 1
+  AND gt_data2-check = 'X'.
+    LOOP AT gt_data2 INTO g_ztdata2_wa2
+      WHERE check = 'X'.
+      g_ztdata2_wa2-check = ''.
+      MODIFY gt_data2
+        FROM g_ztdata2_wa2
+        TRANSPORTING check.
+    ENDLOOP.
+  ENDIF.
+  MODIFY gt_data2
+    FROM gt_data2
+    INDEX ztdata2-current_line
+    TRANSPORTING check.
+ENDMODULE.
+
+*&SPWIZARD: INPUT MODULE FOR TC 'ZTDATA2'. DO NOT CHANGE THIS LINE!
+*&SPWIZARD: PROCESS USER COMMAND
+MODULE ztdata2_user_command INPUT.
+  ok_code = sy-ucomm.
+  PERFORM user_ok_tc USING    'ZTDATA2'
+                              'GT_DATA2'
+                              'CHECK'
+                     CHANGING ok_code.
+  sy-ucomm = ok_code.
+ENDMODULE.

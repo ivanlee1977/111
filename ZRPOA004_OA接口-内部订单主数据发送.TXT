@@ -1,0 +1,116 @@
+*&---------------------------------------------------------------------*
+*& 程序名： ZRPOA004
+*& 创建者(公司)/日期： LIJS/20170731
+*& 程序描述:OA主数据发送接口
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    LIJS           20170731      创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpoa004.
+TABLES:aufk.
+
+DATA:BEGIN OF gt_data OCCURS 0,
+       bukrs LIKE aufk-bukrs, "公司
+       aufnr LIKE aufk-aufnr, "订单号
+       ktext LIKE aufk-ktext, "描述
+       phas2 LIKE aufk-phas2, "冻结标识
+       phas3 LIKE aufk-phas3,
+       loekz TYPE char1,
+       auart LIKE aufk-auart, "订单类型
+     END OF gt_data.
+
+***selection screen define
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_aufnr FOR aufk-aufnr.
+SELECTION-SCREEN END OF BLOCK blc.
+
+START-OF-SELECTION.
+
+  PERFORM frm_get_data.
+  PERFORM frm_send_data.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  SELECT
+         a~bukrs
+         a~aufnr
+         a~ktext
+         a~bukrs
+         a~loekz
+         a~phas2
+         a~phas3
+         a~auart
+    INTO CORRESPONDING FIELDS OF TABLE gt_data
+    FROM aufk AS a
+    WHERE a~bukrs = '1000'
+      AND a~auart EQ 'CPR1'
+      AND a~aufnr IN s_aufnr.
+
+  LOOP AT gt_data.
+    "phas2 phas3满足其一即可
+    IF  gt_data-phas2 EQ 'X' OR gt_data-phas3 EQ 'X'.
+      gt_data-loekz = 'X'.
+    ENDIF.
+    MODIFY gt_data.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SEND_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_send_data .
+
+  DATA:cl_si_inorder_out TYPE REF TO zco_si_inorder_out."成本中心 name
+  DATA:cl_cx_ai_system_fault      TYPE REF TO cx_ai_system_fault,
+       cl_cx_ai_application_fault TYPE REF TO cx_ai_application_fault.
+  DATA:ls_output       TYPE zmt_inorder_out,
+       lt_inorder_data TYPE zdt_inorder_tab,
+       ls_inorder_data TYPE LINE OF zdt_inorder_tab.
+  DATA:lv_msg TYPE string.
+
+  TRY.
+      CREATE OBJECT cl_si_inorder_out.
+    CATCH cx_ai_system_fault INTO cl_cx_ai_system_fault.
+      lv_msg = cl_cx_ai_system_fault->get_text( ).
+      WRITE:/ lv_msg.
+      EXIT.
+  ENDTRY.
+
+  LOOP AT gt_data.
+    ls_inorder_data-bukrs = gt_data-bukrs.
+    ls_inorder_data-aufnr = gt_data-aufnr.
+    ls_inorder_data-ktext = gt_data-ktext.
+    ls_inorder_data-xspeb = gt_data-loekz.
+    ls_inorder_data-auart = gt_data-auart.
+
+    APPEND ls_inorder_data TO lt_inorder_data.
+    CLEAR ls_inorder_data.
+  ENDLOOP.
+
+  ls_output-mt_inorder_out-row = lt_inorder_data.
+
+  TRY.
+      CALL METHOD cl_si_inorder_out->si_inorder_out
+        EXPORTING
+          output = ls_output.
+    CATCH cx_ai_system_fault INTO cl_cx_ai_system_fault.
+      lv_msg =  cl_cx_ai_system_fault->get_text( ).
+      WRITE:/ lv_msg.
+      EXIT.
+    CATCH cx_ai_application_fault INTO cl_cx_ai_application_fault.
+      lv_msg = cl_cx_ai_application_fault->get_text( ).
+      WRITE:/ lv_msg.
+      EXIT.
+  ENDTRY.
+  COMMIT WORK AND WAIT.
+ENDFORM.

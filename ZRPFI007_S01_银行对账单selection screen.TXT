@@ -1,0 +1,17 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPFI007_S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_bukrs FOR bkpf-bukrs,
+               s_prctr FOR bseg-prctr.
+PARAMETERS:p_year LIKE sy-datum(4) OBLIGATORY DEFAULT sy-datum(4).
+SELECT-OPTIONS:s_month FOR sy-datum+4(2) OBLIGATORY,
+               s_zyhzh FOR ztfi002-zyhzh OBLIGATORY.
+SELECTION-SCREEN END OF BLOCK blc.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_zyhzh-low.
+  PERFORM frm_zyhzh_f4 USING 'S_ZYHZH-LOW'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_zyhzh-high.
+  PERFORM frm_zyhzh_f4 USING 'S_ZYHZH-HIGH'.

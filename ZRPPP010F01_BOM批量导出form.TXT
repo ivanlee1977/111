@@ -1,0 +1,361 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP010F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FILENAME_FIND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      <--P_P_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_filename_find  CHANGING p_file TYPE string.
+  DATA:lv_path     TYPE string,
+       lv_filename TYPE string.
+  CALL METHOD cl_gui_frontend_services=>file_save_dialog
+    EXPORTING
+      window_title              = '请选择文件'
+      default_extension         = 'XLS'
+      default_file_name         = 'ZPP010.XLS'
+*     with_encoding             =
+      file_filter               = cl_gui_frontend_services=>filetype_excel
+*     initial_directory         =
+*     prompt_on_overwrite       = 'X'
+    CHANGING
+      filename                  = lv_filename
+      path                      = lv_path
+      fullpath                  = p_file
+*     user_action               =
+*     file_encoding             =
+    EXCEPTIONS
+      cntl_error                = 1
+      error_no_gui              = 2
+      not_supported_by_gui      = 3
+      invalid_default_file_name = 4
+      OTHERS                    = 5.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:lt_mast LIKE mast OCCURS 0 WITH HEADER LINE.
+  DATA:ls_cstmat       LIKE cstmat,
+       lt_stpo         LIKE stpox OCCURS 0 WITH HEADER LINE,
+       lt_matcat       LIKE cscmat OCCURS 0 WITH HEADER LINE,
+       lt_matcat_total LIKE cscmat OCCURS 0 WITH HEADER LINE,
+       lt_stpu         LIKE stpu OCCURS 0 WITH HEADER LINE.
+
+  DATA:BEGIN OF lt_aeoi OCCURS 0,
+         aennr LIKE aeoi-aennr,
+         aetyp LIKE aeoi-aetyp,
+         objkt LIKE aeoi-objkt,
+         revlv LIKE aeoi-revlv,
+         oitxt LIKE aeoi-oitxt,
+         datuv LIKE aenr-datuv,
+       END OF lt_aeoi.
+
+***抓取满足条件的BOM数据
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE lt_mast
+    FROM mast AS a
+    INNER JOIN stko AS b
+    ON a~stlnr = b~stlnr
+    AND a~stlal = b~stlal
+    WHERE a~matnr IN s_matnr
+      AND a~werks IN s_werks
+      AND b~stlty = 'M'.
+***如果输入了物料，需要展到底层，如果没有输入物料，则导出工厂所有BOM
+  IF s_matnr[] IS NOT INITIAL.
+    LOOP AT lt_mast.
+      PERFORM frm_explo_bom TABLES lt_stpo lt_matcat USING lt_mast-matnr lt_mast-werks 'X' lt_mast-stlal CHANGING ls_cstmat.
+      APPEND LINES OF lt_matcat TO lt_matcat_total.
+    ENDLOOP.
+    SORT lt_matcat_total.
+    DELETE ADJACENT DUPLICATES FROM lt_matcat_total COMPARING ALL FIELDS.
+    IF lt_matcat_total[] IS NOT INITIAL.
+      SELECT *
+        APPENDING CORRESPONDING FIELDS OF TABLE lt_mast
+        FROM mast AS a
+       INNER JOIN stko AS b
+          ON a~stlnr = b~stlnr
+         AND a~stlal = b~stlal
+        FOR ALL ENTRIES IN lt_matcat_total
+       WHERE a~matnr = lt_matcat_total-matnr
+         AND a~werks IN s_werks
+         AND b~stlty = 'M'.
+    ENDIF.
+  ENDIF.
+
+  SORT lt_mast.
+  DELETE ADJACENT DUPLICATES FROM lt_mast COMPARING ALL FIELDS.
+
+***调用函数 展开BOM
+  LOOP AT lt_mast.
+    READ TABLE gt_out WITH KEY matnr = lt_mast-matnr werks = lt_mast-werks stlan = lt_mast-stlan stlal = lt_mast-stlal.
+    CHECK sy-subrc NE 0. "如果已经存在不需要再展BOM
+    REFRESH:lt_stpu.
+    PERFORM frm_explo_bom TABLES lt_stpo lt_matcat USING lt_mast-matnr lt_mast-werks ''  lt_mast-stlal CHANGING ls_cstmat.
+***抓取位号
+    IF lt_stpo[] IS NOT INITIAL.
+      SELECT * INTO TABLE lt_stpu
+        FROM stpu
+         FOR ALL ENTRIES IN lt_stpo
+       WHERE stlty = lt_stpo-stlty
+         AND stlnr = lt_stpo-stlnr
+         AND stlkn = lt_stpo-stlkn
+         AND stpoz = lt_stpo-stpoz.
+    ENDIF.
+***取ECN及版本
+    REFRESH:lt_aeoi.
+    SELECT   a~aennr
+             a~aetyp
+             a~objkt
+             a~revlv
+             a~oitxt
+             b~datuv
+         INTO CORRESPONDING FIELDS OF TABLE lt_aeoi
+         FROM aeoi AS a
+         INNER JOIN aenr AS b
+         ON a~aennr = b~aennr
+         WHERE a~objkt = lt_mast-matnr
+           AND a~aetyp = '41'.
+    SORT lt_aeoi BY datuv DESCENDING.
+    DELETE lt_aeoi WHERE datuv > p_datum.
+
+   SORT lt_stpu.
+
+    LOOP AT lt_stpo.
+      gt_out-matnr = lt_mast-matnr.
+      SELECT SINGLE maktx INTO gt_out-maktx_f FROM makt WHERE matnr = gt_out-matnr AND spras = sy-langu.
+      gt_out-posnr = lt_stpo-posnr.
+      IF lt_stpo-postp EQ 'D'.
+        gt_out-idnrk = lt_stpo-doknr.
+*        SELECT SINGLE dktxt INTO gt_out-maktx_z FROM drat WHERE dokar = 'ZCD' AND doknr = gt_out-idnrk AND langu = sy-langu.
+        gt_out-maktx_z = LT_STPO-OJTXP.
+      ELSE.
+        gt_out-idnrk = lt_stpo-idnrk.
+        SELECT SINGLE maktx INTO gt_out-maktx_z FROM makt WHERE matnr = gt_out-idnrk AND spras = sy-langu.
+      ENDIF.
+      gt_out-menge = lt_stpo-menge.
+      gt_out-meins = lt_stpo-meins.
+      CALL FUNCTION 'CONVERSION_EXIT_CUNIT_OUTPUT'
+        EXPORTING
+          input          = gt_out-meins
+          language       = sy-langu
+        IMPORTING
+          output         = gt_out-meins
+        EXCEPTIONS
+          unit_not_found = 1
+          OTHERS         = 2.
+      gt_out-postp = lt_stpo-postp.
+      gt_out-potx1 = lt_stpo-potx1.
+      gt_out-potx2 = lt_stpo-potx2.
+      gt_out-sortf = lt_stpo-sortf.
+      gt_out-werks = lt_mast-werks.
+      gt_out-stlan = lt_mast-stlan.
+      gt_out-stlal = lt_mast-stlal.
+      gt_out-bmeng = ls_cstmat-bmeng.
+      gt_out-stlst = ls_cstmat-stlst.
+      READ TABLE lt_aeoi INDEX 1.
+      IF sy-subrc = 0.
+        gt_out-aennr = lt_aeoi-aennr.
+        gt_out-oitxt = lt_aeoi-oitxt.
+      ENDIF.
+      gt_out-nfeag = lt_stpo-nfeag.
+      gt_out-nfgrp = lt_stpo-nfgrp.
+      gt_out-alpgr = lt_stpo-alpgr.
+      gt_out-alprf = lt_stpo-alprf.
+      gt_out-alpst = lt_stpo-alpst.
+      gt_out-ewahr = lt_stpo-ewahr.
+      LOOP AT lt_stpu WHERE stlnr = lt_stpo-stlnr AND stlkn = lt_stpo-stlkn AND stpoz = lt_stpo-stpoz.
+        IF gt_out-zwh IS INITIAL.
+          gt_out-zwh = lt_stpu-ebort.
+        ELSE.
+          CONCATENATE gt_out-zwh lt_stpu-ebort INTO gt_out-zwh SEPARATED BY ','.
+        ENDIF.
+        CONDENSE gt_out-zwh NO-GAPS.
+      ENDLOOP.
+      APPEND gt_out.
+      CLEAR gt_out.
+    ENDLOOP.
+  ENDLOOP.
+
+  SORT gt_out.
+  DELETE ADJACENT DUPLICATES FROM gt_out COMPARING ALL FIELDS.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  DATA:lt_mapping   TYPE zsexcel_mapping_t WITH HEADER LINE.
+  DATA:lv_ok TYPE c.
+
+  lt_mapping-headertext = '变更编号'.
+  lt_mapping-fieldname  = 'AENNR'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '对象管理记录描述'.
+  lt_mapping-fieldname  = 'OITXT'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '父项物料号'.
+  lt_mapping-fieldname  = 'MATNR'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '父项物料描述'.
+  lt_mapping-fieldname  = 'MAKTX_F'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '子行项目'.
+  lt_mapping-fieldname  = 'POSNR'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '子项物料号'.
+  lt_mapping-fieldname  = 'IDNRK'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '子项物料描述'.
+  lt_mapping-fieldname  = 'MAKTX_Z'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '用量'.
+  lt_mapping-fieldname  = 'MENGE'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '子项物料单位'.
+  lt_mapping-fieldname  = 'MEINS'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '位号'.
+  lt_mapping-fieldname  = 'ZWH'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '项目类别'.
+  lt_mapping-fieldname  = 'POSTP'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '文本1'.
+  lt_mapping-fieldname  = 'POTX1'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '文本2'.
+  lt_mapping-fieldname  = 'POTX2'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '备注（排序字符串）'.
+  lt_mapping-fieldname  = 'SORTF'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '工厂'.
+  lt_mapping-fieldname  = 'WERKS'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = 'BOM用途'.
+  lt_mapping-fieldname  = 'STLAN'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '可选的BOM'.
+  lt_mapping-fieldname  = 'STLAL'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '基本数量'.
+  lt_mapping-fieldname  = 'BMENG'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = 'BOM状态'.
+  lt_mapping-fieldname  = 'STLST'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '中止组'.
+  lt_mapping-fieldname  = 'NFEAG'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '后继组'.
+  lt_mapping-fieldname  = 'NFGRP'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '替代群组'.
+  lt_mapping-fieldname  = 'ALPGR'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '优先级'.
+  lt_mapping-fieldname  = 'ALPRF'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '替代策略'.
+  lt_mapping-fieldname  = 'ALPST'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '百分比'.
+  lt_mapping-fieldname  = 'EWAHR'.
+  APPEND lt_mapping.
+
+  CALL METHOD zcl_ole_excel=>generate_excel_data
+    EXPORTING
+      it_data          = gt_out[]
+      iv_filename      = p_file
+      it_mapping_table = lt_mapping[]
+    RECEIVING
+      rv_save_ok       = lv_ok.
+  IF lv_ok IS NOT INITIAL.
+    MESSAGE '导出数据成功' TYPE 'S'.
+  ELSE.
+    MESSAGE '导出数据失败' TYPE 'E'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_EXPLO_BOM
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LT_STPO  text
+*      -->P_LT_MAST_MATNR  text
+*      -->P_LT_MAST_WERKS  text
+*      -->P_0152   text
+*      <--P_LS_CSTMAT  text
+*----------------------------------------------------------------------*
+FORM frm_explo_bom  TABLES   lt_stpo STRUCTURE stpox
+                             lt_matcat STRUCTURE cscmat
+                     USING    u_matnr LIKE mara-matnr
+                              u_werks LIKE marc-werks
+                              u_mehrs TYPE c
+                              u_stlal LIKE mast-stlal
+                    CHANGING ls_cstmat LIKE cstmat.
+  REFRESH:lt_stpo,lt_matcat.
+  CLEAR:ls_cstmat.
+  CALL FUNCTION 'CS_BOM_EXPL_MAT_V2'
+    EXPORTING
+      capid                 = 'PP01'
+      datuv                 = p_datum
+      mehrs                 = u_mehrs
+      mtnrv                 = u_matnr
+      werks                 = u_werks
+      stlal                 = u_stlal
+    IMPORTING
+      topmat                = ls_cstmat
+    TABLES
+      matcat                = lt_matcat
+      stb                   = lt_stpo
+    EXCEPTIONS
+      alt_not_found         = 1
+      call_invalid          = 2
+      material_not_found    = 3
+      missing_authorization = 4
+      no_bom_found          = 5
+      no_plant_data         = 6
+      no_suitable_bom_found = 7
+      conversion_error      = 8
+      OTHERS                = 9.
+ENDFORM.

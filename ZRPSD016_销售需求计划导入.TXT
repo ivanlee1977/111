@@ -1,0 +1,67 @@
+*&---------------------------------------------------------------------*
+*& 程序名： ZRPSD016
+*& 创建者(公司)/日期： PFT/20170915
+*& 程序描述:年度计划导入
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    PFT           20170915      创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpsd016.
+
+INCLUDE zrpsd016t01.
+INCLUDE zrpsd016s01.
+INCLUDE zrpsd016f01.
+
+************************************************************************
+*INITIALIZATION.
+************************************************************************
+INITIALIZATION.
+  PERFORM frm_initial_data.
+
+************************************************************************
+*AT SELECTION-SCREEN ON VALUE-REQUEST
+************************************************************************
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_file.
+  PERFORM frm_filename_find CHANGING p_file.
+************************************************************************
+* AT SELECTION-SCREEN OUTPUT
+************************************************************************
+AT SELECTION-SCREEN OUTPUT.
+  PERFORM frm_modify_screen.
+************************************************************************
+* AT SELECTION-SCREEN
+************************************************************************
+AT SELECTION-SCREEN.
+  CLEAR sy-ucomm.
+  CASE sscrfields-ucomm.
+    WHEN 'FC01'.  "开启文件
+      CASE 'X'.
+        WHEN r1.
+          PERFORM frm_download_template USING 'ZSD016' CHANGING p_file.
+          AUTHORITY-CHECK OBJECT 'ZSD016'
+                   ID 'ACTVT' FIELD '01'.
+          IF sy-subrc <> 0.
+            MESSAGE e398(00) WITH '您没有权限' DISPLAY LIKE 'E'.
+          ENDIF.
+        WHEN OTHERS.
+      ENDCASE.
+    WHEN OTHERS.
+  ENDCASE.
+
+************************************************************************
+* START-OF-SELECTION
+************************************************************************
+START-OF-SELECTION.
+
+  IF r1 = 'X'.
+    IF p_month+4(2) NE '06' AND p_month+4(2) NE '12'.
+      MESSAGE e398(00) WITH '只允许输入6月或12月' DISPLAY LIKE 'E'.
+      EXIT.
+    ENDIF.
+
+    PERFORM frm_upload_data.
+  ELSEIF r2 = 'X'.
+    PERFORM frm_select_data.
+  ENDIF.
+  PERFORM frm_get_fieldcat.
+  PERFORM frm_output_data.

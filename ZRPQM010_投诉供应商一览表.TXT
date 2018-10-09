@@ -1,0 +1,39 @@
+*&---------------------------------------------------------------------*
+*& 程序名： ZRPQM010
+*& 创建者(公司)/日期： leimt/20171019
+*& 程序描述：投诉供应商一览表
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    LEIMT           20171019      创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpqm010.
+
+INCLUDE ZRPQM010_TOP.
+
+INCLUDE ZRPQM010_S01.
+
+INCLUDE ZRPQM010_F01.
+
+
+
+INITIALIZATION.
+*  DATA date TYPE sy-datum.
+*
+*  CALL FUNCTION 'BKK_GET_MONTH_LASTDAY'
+*    EXPORTING
+*      i_date = sy-datum   "输入日期
+*    IMPORTING
+*      e_date = date.
+*  s_pdatub-low = sy-datum.
+*  s_pdatub-high = date.
+*  APPEND s_pdatub.
+AT SELECTION-SCREEN.
+
+START-OF-SELECTION.
+
+
+  PERFORM get_data."取数据
+  PERFORM process_data."处理数据
+
+END-OF-SELECTION.
+  PERFORM get_alv."ALV显示界面

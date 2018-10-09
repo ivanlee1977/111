@@ -1,0 +1,452 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP012_F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GETDATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_getdata .
+  SELECT
+        b~aufnr
+        b~rsnum
+        b~fevor
+        b~aplzt
+        b~aufpl
+        b~gstrp
+        b~gltrp
+        d~matnr
+        d~charg
+        d~dauat
+        d~psmng
+        d~wemng
+        a~mgvrg
+        a~lmnga
+*        a~rmnga
+        c~vornr
+     INTO CORRESPONDING FIELDS OF TABLE gt_pp
+    FROM afvv AS a
+    INNER JOIN afko AS b ON a~aufpl = b~aufpl
+    INNER JOIN afvc AS c ON a~aplzl = c~aplzl AND a~aufpl = c~aufpl
+    INNER JOIN afpo AS d ON b~aufnr = d~aufnr
+
+    WHERE b~aufnr IN s_aufnr
+      AND d~dauat IN s_dauat
+      AND d~matnr IN s_matnr
+      AND b~fevor IN s_fevor
+      AND c~steus = 'Z001'
+      AND a~mgvrg > 0
+
+    .
+  DATA: BEGIN OF lt_resb OCCURS 0 ,
+          rsnum LIKE resb-rsnum,
+          aufnr LIKE resb-aufnr,
+          enmng LIKE resb-enmng,
+          rgekz LIKE resb-rgekz,
+        END OF lt_resb.
+  DATA: lt_status LIKE TABLE  OF jstat  WITH HEADER LINE,
+        lv_arbpl  LIKE crhd-arbpl,
+        lv_tabix  LIKE sy-tabix,
+        lv_arbid  LIKE afvc-arbid,
+        lv        TYPE int4,
+        lv1       TYPE int4,
+        lv2       TYPE int4,
+        lv_objnr  TYPE char22.
+  CHECK gt_pp[] IS NOT INITIAL.
+
+  SORT gt_pp BY  rsnum.
+
+
+  SELECT rsnum aufnr enmng rgekz INTO CORRESPONDING FIELDS OF TABLE lt_resb FROM resb
+    FOR ALL ENTRIES IN gt_pp
+    WHERE  rsnum = gt_pp-rsnum .
+  SORT lt_resb BY rsnum.
+  lv = 0.
+  DATA lt_lines LIKE TABLE  OF tline WITH HEADER LINE.
+  DATA lv_object TYPE char70.
+  LOOP AT gt_pp.
+    lv_tabix = sy-tabix.
+*********************************** werks过滤
+    IF s_werks IS NOT INITIAL.
+      SELECT SINGLE arbpl INTO gt_pp-arbpl FROM crhd WHERE  werks IN s_werks.
+      IF  sy-subrc <> 0.
+        DELETE gt_pp INDEX lv_tabix.
+        CONTINUE.
+      ENDIF.
+    ENDIF.
+
+***********************************系统状态 REL
+    SELECT SINGLE objnr INTO lv_objnr   FROM aufk WHERE aufnr = gt_pp-aufnr.
+    CALL FUNCTION 'STATUS_READ'
+      EXPORTING
+        client           = sy-mandt
+        objnr            = lv_objnr
+        only_active      = 'X'
+      TABLES
+        status           = lt_status
+      EXCEPTIONS
+        object_not_found = 1
+        OTHERS           = 2.
+    IF sy-subrc <> 0.
+* Implement suitable error handling here
+    ENDIF.
+    READ TABLE lt_status WITH  KEY stat = 'I0002'.
+    IF sy-subrc <> 0.
+      DELETE gt_pp INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+***********************************反冲标记 发货数不为0
+*DESCRIBE TABLE lt_resb lines rgekz = ' ' AND enmng > 0 and rsnum = gt_pp-rsnum.
+    LOOP AT lt_resb WHERE rgekz = ' ' AND enmng > 0 AND rsnum = gt_pp-rsnum AND aufnr = gt_pp-aufnr.
+
+    ENDLOOP.
+    IF sy-subrc <> 0 .
+      DELETE gt_pp INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+***********************************更新数据
+    CONCATENATE sy-mandt gt_pp-aufnr INTO lv_object .
+    gt_pp-zjys = gt_pp-psmng - gt_pp-wemng.
+    CALL FUNCTION 'READ_TEXT'
+      EXPORTING
+*       client                  = sy-mandt
+        id                      = 'KOPF'
+        language                = '1'
+        name                    = lv_object
+        object                  = 'AUFK'
+      TABLES
+        lines                   = lt_lines
+      EXCEPTIONS
+        id                      = 1
+        language                = 2
+        name                    = 3
+        not_found               = 4
+        object                  = 5
+        reference_check         = 6
+        wrong_access_to_archive = 7
+        OTHERS                  = 8.
+    IF sy-subrc EQ 0 AND  lt_lines[] IS NOT INITIAL .
+      READ TABLE lt_lines INDEX 1.
+      gt_pp-zstr = lt_lines-tdline.
+    ENDIF.
+
+
+    SELECT SINGLE maktx INTO gt_pp-maktx FROM makt WHERE matnr = gt_pp-matnr AND spras = 1.
+    MODIFY gt_pp INDEX lv_tabix.
+
+  ENDLOOP.
+
+*  ***********************************"工序横排
+  DATA: lv_aufnr LIKE afko-aufnr, tmp2 TYPE char11,tmp1 TYPE char11, lv_num TYPE char1,tmp TYPE char10, lv_zjy LIKE afvv-lmnga,
+        lv_2     LIKE afvv-lmnga,
+        lv_3     LIKE afvv-lmnga,
+        lv_4     LIKE afvv-lmnga,
+        lv_5     LIKE afvv-lmnga,
+        lv_6     LIKE afvv-lmnga,
+        lv_7     LIKE afvv-lmnga,
+        lv_8     LIKE afvv-lmnga.
+  FIELD-SYMBOLS: <f> TYPE any .
+  FIELD-SYMBOLS: <f1> TYPE any .
+  FIELD-SYMBOLS: <f2> TYPE any .
+  lv = 1.
+  SORT gt_pp BY aufnr vornr.
+  READ TABLE gt_pp INDEX 1.
+  lv_aufnr = gt_pp-aufnr.
+  LOOP AT gt_pp INTO gs_pp.
+    IF gs_pp-zjys  <> 0.
+
+
+      IF lv_aufnr = gs_pp-aufnr.
+        IF lv = 1.
+*          gs_pp-zlp1 = .
+          gs_pp-zlp1 =   gs_pp-lmnga.
+*          gs_pp-zjy1 = gs_pp-zlp1 - gs_pp-lmnga.
+          gs_pp-zjy1 = gs_pp-mgvrg - gs_pp-lmnga.
+          lv_tabix = sy-tabix.
+*        lv_zjy = gs_pp-zjy1.
+          lv_zjy = gs_pp-lmnga.
+          MODIFY gt_pp FROM gs_pp INDEX lv_tabix.
+
+        ELSE.
+          READ TABLE gt_pp INTO gs_pp1 INDEX lv_tabix.
+          lv_num = lv .
+          CONCATENATE 'GS_PP1-ZLP' lv_num INTO tmp1.
+          CONCATENATE 'GS_PP1-ZJY' lv_num INTO tmp2.
+          ASSIGN (tmp1) TO <f1>.
+          ASSIGN (tmp2) TO <f2>.
+          <f1> = gs_pp-lmnga.
+*        <f1> = lv_zjy.
+          IF lv_num = 2.
+            <f2> = lv_zjy - gs_pp-lmnga.
+          ELSE.
+            <f2> = lv_2 - gs_pp-lmnga.
+          ENDIF.
+
+          lv_2 = <f1>.
+*        lv = lv + 1.
+          MODIFY gt_pp FROM gs_pp1 INDEX lv_tabix.
+        ENDIF.
+
+      ELSE.
+*        gs_pp-zlp1 = gs_pp-mgvrg.
+        gs_pp-zlp1 = gs_pp-lmnga.
+*        gs_pp-zjy1 = gs_pp-zlp1 - gs_pp-lmnga.
+        gs_pp-zjy1 = gs_pp-mgvrg - gs_pp-lmnga.
+        lv_tabix = sy-tabix.
+*      lv_zjy = gs_pp-zjy1.
+        lv_zjy = gs_pp-lmnga.
+        MODIFY gt_pp FROM gs_pp INDEX lv_tabix.
+        lv = 1.
+*      lv_zjy = 0.
+        lv_aufnr = gs_pp-aufnr.
+        CLEAR gs_pp.
+*      CONTINUE.
+      ENDIF.
+      lv = lv + 1.
+      CLEAR: tmp1,tmp2,gs_pp,gs_pp1.
+    ENDIF.
+  ENDLOOP.
+  DELETE gt_pp WHERE vornr NE '0010'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GETFACT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_getfact .
+  g_fieldfcat:
+    'FEVOR' '生产管理员（线别）' 'FEVOR' 'AFKO' ,
+    'AUFNR' '生产订单' 'AUFNR' 'AFKO' ,
+    'DAUAT' '订单类型' 'DAUAT' 'AFPO' ,
+    'MATNR' '料号' 'MATNR' 'AFPO' ,
+    'MAKTX' '物料描述' 'MAKTX' 'MAKT' ,
+    'CHARG' '版本' 'FEVOR' 'AFPO' ,
+    'GSTRP' '计划开始日期' 'GSTRP' 'AFKO' ,
+    'GLTRP' '计划结束日期' 'GLTRP' 'afko' ,
+    'PSMNG' '计划数' 'PSMNG' 'AFPO' ,
+    'WEMNG' '入库数' 'WEMNG' 'AFPO' ,
+   'ZJYS' '订单结余数' 'FEVOR' 'AFVV' ,
+
+    'ZLP1' '工序报工良品数10' 'FEVOR' 'AFVV' ,
+    'ZJY1' '工序结余数10' 'FEVOR' 'AFVV' ,
+    'ZLP2' '工序报工良品数20' 'FEVOR' 'AFVV' ,
+    'ZJY2' '工序结余数20' 'FEVOR' 'AFVV' ,
+    'ZLP3' '工序报工良品数30' 'FEVOR' 'AFVV' ,
+    'ZJY3' '工序结余数30' 'FEVOR' 'AFVV' ,
+    'ZLP4' '工序报工良品数40' 'FEVOR' 'AFVV' ,
+    'ZJY4' '工序结余数40' 'FEVOR' 'AFVV' ,
+    'ZLP5' '工序报工良品数50' 'FEVOR' 'AFVV' ,
+    'ZJY5' '工序结余数50' 'FEVOR' 'AFVV' ,
+    'ZLP6' '工序报工良品数60' 'FEVOR' 'AFVV' ,
+    'ZJY6' '工序结余数60' 'FEVOR' 'AFVV' ,
+    'ZLP7' '工序报工良品数70' 'FEVOR' 'AFVV' ,
+    'ZJY7' '工序结余数70' 'FEVOR' 'AFVV' ,
+    'ZLP8' '工序报工良品数80' 'FEVOR' 'AFVV' ,
+    'ZJY8' '工序结余数80' 'FEVOR' 'AFVV',
+        'ZSTR' '工单备注' '' ''  .
+*    'VORNR' '工序号' 'VORNR' 'AFVC' .
+
+*    'MGVRG' '计划数' 'FEVOR' 'AFVV' ,
+*    'LMNGA' '报工良品数' 'FEVOR' 'AFVV' ,
+*    'RMNGA' '不良数' 'FEVOR' 'AFVV' .
+
+  gs_layout-colwidth_optimize = 'X'.
+  gs_layout-zebra = 'X'.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SHOW
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_show .
+  SORT gt_pp BY aufnr.
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'SET_PF_STATUS'
+      i_callback_user_command  = 'ALV_USER_COMMAND'
+      is_layout                = gs_layout
+      it_fieldcat              = gt_fcat[]
+    TABLES
+      t_outtab                 = gt_pp[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+           WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+ENDFORM.
+
+FORM set_pf_status USING rt_extab TYPE slis_t_extab.
+
+  DATA: wa_extab TYPE slis_extab.
+
+  SET PF-STATUS '0100' EXCLUDING rt_extab.
+
+ENDFORM.
+
+FORM alv_user_command USING r_ucomm LIKE sy-ucomm  rs_selfield TYPE slis_selfield.
+  r_ucomm = sy-ucomm.
+  save_ok =  r_ucomm .
+  CASE r_ucomm.
+
+    WHEN 'ZPRINT'.
+      PERFORM frm_toexcel.
+  ENDCASE.
+
+ENDFORM.                    "alv_user_command
+*&---------------------------------------------------------------------*
+*&      Form  FRM_TOEXCEL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_toexcel .
+
+  DATA:ls_key   TYPE wwwdatatab,
+       lv_subrc TYPE sy-subrc.
+  DATA lv_file LIKE rlgrap-filename.
+
+*  DATA: fullpath    TYPE string,
+*        filename    TYPE string,
+*        path        TYPE string,
+*        user_action TYPE i,
+*        encoding    TYPE abap_encoding.
+*
+*  CALL METHOD cl_gui_frontend_services=>file_save_dialog
+*    EXPORTING
+*      window_title      = '下载到本地文件'
+*      default_extension = 'XLS'           "缺省文件类型
+*      default_file_name = '物料申购计划表.XLS'
+*      file_filter       = 'Excel 文件 (*.XLS)|*.XLS;*.XLSX|'
+*      with_encoding     = 'X'
+*      initial_directory = 'D:\'
+*    CHANGING
+*      filename          = filename    "获得用户输入文件名
+*      path              = path        "获得用户所选路径
+*      fullpath          = fullpath    "路径加文件名
+*      user_action       = user_action
+*      file_encoding     = encoding.
+
+  CONCATENATE 'C:\PP\' sy-title '-'   sy-datum '.xls' INTO lv_file.
+*  MOVE fullpath TO lv_file.
+
+  ls_key-relid = 'MI'.
+  ls_key-objid = gcst_excel_template.
+  CALL FUNCTION 'DOWNLOAD_WEB_OBJECT'
+    EXPORTING
+      key         = ls_key
+      destination = lv_file
+    IMPORTING
+      rc          = lv_subrc.
+  IF lv_subrc <> 0.
+    MESSAGE '下载模板出错，请检查，谢谢' TYPE 'E'.
+    EXIT.
+  ENDIF.
+
+
+***填充EXCEL数据
+  PERFORM frm_filldata_excel USING lv_file.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FILLDATA_EXCEL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LV_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_filldata_excel  USING iv_file TYPE rlgrap-filename.
+*******数据定义*******
+  DATA:lo_excel     TYPE ole2_object,
+       lo_workbooks TYPE ole2_object,
+       lo_workbook  TYPE ole2_object,
+       rows         TYPE ole2_object,
+       lo_sheet     TYPE ole2_object,
+       lo_range     TYPE ole2_object,
+       lo_cell      TYPE ole2_object,
+       lo_cell1     TYPE ole2_object.
+  DATA lv_file LIKE rlgrap-filename.
+
+  DATA lv_row TYPE i.
+  DATA lv_col TYPE i.
+
+  DEFINE mac_fill_cell.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+      EXPORTING
+        #1 = &1
+        #2 = &2.
+    SET PROPERTY OF lo_cell 'VALUE' = &3.
+  END-OF-DEFINITION.
+
+  DATA:lv_srzb  TYPE p DECIMALS 2,
+       lv_ml    TYPE p DECIMALS 2,
+       lv_ml_hj TYPE p DECIMALS 2,
+       lv_mlzb  TYPE p DECIMALS 2.
+  DATA:ls_data LIKE LINE OF gt_pp.
+
+  DATA:lv_text_ny TYPE string,
+       lv_text_dw TYPE string.
+  DATA:lv_butxt LIKE t001-butxt.
+*******程序主体*******
+
+*填充excel
+  CREATE OBJECT lo_excel 'EXCEL.APPLICATION'.
+  CALL METHOD OF lo_excel 'WORKBOOKS' = lo_workbooks.
+  CALL METHOD OF lo_workbooks 'OPEN' = lo_workbook EXPORTING #1 = iv_file.
+  CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = 1.
+
+  lv_row = 2.
+  LOOP AT gt_pp.
+    mac_fill_cell lv_row 1  gt_pp-fevor.
+    mac_fill_cell lv_row 2  gt_pp-aufnr.
+    mac_fill_cell lv_row 3  gt_pp-matnr.
+    mac_fill_cell lv_row 4  gt_pp-maktx.
+    mac_fill_cell lv_row 5  gt_pp-charg.
+    mac_fill_cell lv_row 6  gt_pp-gstrp.
+    mac_fill_cell lv_row 7  gt_pp-gltrp.
+    mac_fill_cell lv_row 8  gt_pp-psmng.
+    mac_fill_cell lv_row 9  gt_pp-wemng.
+    mac_fill_cell lv_row 10  gt_pp-zjys.
+    mac_fill_cell lv_row 11  gt_pp-zlp1.
+    mac_fill_cell lv_row 12  gt_pp-zjy1.
+    mac_fill_cell lv_row 13  gt_pp-zlp2.
+    mac_fill_cell lv_row 14  gt_pp-zjy2.
+    mac_fill_cell lv_row 15  gt_pp-zlp3.
+    mac_fill_cell lv_row 16  gt_pp-zjy3.
+    mac_fill_cell lv_row 17  gt_pp-zlp4.
+    mac_fill_cell lv_row 18  gt_pp-zjy4.
+    mac_fill_cell lv_row 19  gt_pp-zlp5.
+    mac_fill_cell lv_row 20  gt_pp-zjy5.
+    mac_fill_cell lv_row 21  gt_pp-zlp6.
+    mac_fill_cell lv_row 22  gt_pp-zjy6.
+    mac_fill_cell lv_row 23  gt_pp-zlp7.
+    mac_fill_cell lv_row 24  gt_pp-zjy7.
+    mac_fill_cell lv_row 25  gt_pp-zlp8.
+    mac_fill_cell lv_row 26  gt_pp-zjy8.
+    mac_fill_cell lv_row 27  gt_pp-zstr.
+    lv_row = lv_row + 1.
+
+  ENDLOOP.
+
+  CALL METHOD OF lo_sheet 'CELLS' = lo_cell EXPORTING #1 = 1 #2 = 1.
+  CALL METHOD OF lo_cell 'SELECT'.
+  SET PROPERTY OF lo_excel 'CutCopyMode' = 0.
+
+  CALL METHOD OF lo_workbook 'SAVE'.
+  SET PROPERTY OF lo_excel 'VISIBLE' = 1.
+  FREE OBJECT:lo_excel,lo_workbooks,lo_workbook,lo_sheet,lo_range,lo_cell.
+ENDFORM.

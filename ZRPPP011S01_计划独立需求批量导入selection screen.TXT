@@ -1,0 +1,6 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPPP001S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+PARAMETERS:p_month LIKE ztsd001c-zmonth OBLIGATORY DEFAULT sy-datum+0(6).
+SELECTION-SCREEN END OF BLOCK blc.

@@ -1,0 +1,24 @@
+*& 程序名： ZRPMM012
+*& 创建者(公司)/日期： 雷鸣涛/20170824
+*& 程序描述：新物料统计报表
+*&---------------------------------------------------------------------*
+
+*&---------------------------------------------------------------------*
+REPORT zrpmm012.
+
+INCLUDE ZRPMM012_T01.
+
+INCLUDE ZRPMM012_S01.
+
+INCLUDE ZRPMM012_F01.
+
+
+INITIALIZATION.
+
+AT SELECTION-SCREEN .
+
+START-OF-SELECTION.
+
+  PERFORM frm_getdata.
+  PERFORM frm_getfact.
+  PERFORM frm_show.

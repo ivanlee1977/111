@@ -1,0 +1,20 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM013S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_pastr FOR qals-pastrterm OBLIGATORY DEFAULT sy-datum,"开始日期
+               s_paend FOR qals-paendterm ,"结束日期
+               s_lifnr FOR qals-sellifnr,"供应商
+               s_matkl FOR mara-matkl."物料组
+PARAMETERS:    p_werk  LIKE qals-werk OBLIGATORY DEFAULT '1000'."工厂
+SELECT-OPTIONS:s_matnr FOR qals-selmatnr,"物料
+               s_charg FOR qals-charg,"批次
+               s_pruef FOR qals-prueflos."检验批
+SELECTION-SCREEN END OF BLOCK blc.
+
+SELECTION-SCREEN BEGIN OF BLOCK blc1 WITH FRAME TITLE TEXT-002.
+PARAMETERS: p_r1 RADIOBUTTON GROUP r0 USER-COMMAND r0, "按物料分类汇总
+            p_r2 RADIOBUTTON GROUP r0 , "按供应商汇总
+            p_r3 RADIOBUTTON GROUP r0, "物料检验明细表
+            p_c1 AS CHECKBOX . "只显示不良记录
+SELECTION-SCREEN END OF BLOCK blc1.

@@ -1,0 +1,9 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPSD009S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_kunag FOR ztsd003zxdb-kunag,
+               s_erdat FOR ztsd003zxdb-erdat,
+               s_zzxno FOR ztsd003zxdb-zzxno.
+PARAMETERS:p_chk AS CHECKBOX DEFAULT space.
+SELECTION-SCREEN END OF BLOCK blc.

@@ -1,0 +1,10 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPFI041S01
+*&---------------------------------------------------------------------*
+
+SELECT-OPTIONS:
+s_uname FOR usr21-bname,
+s_zdate FOR sy-datum,
+s_ebeln FOR ztfi005-ebeln,
+s_ekgrp FOR ekko-ekgrp,
+s_budat FOR ztfi005-budat_mkpf.

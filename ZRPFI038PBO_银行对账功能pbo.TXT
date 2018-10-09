@@ -1,0 +1,41 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPFI038PBO
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Module  STATUS_0100  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE status_0100 OUTPUT.
+  IF r1 = 'X'.
+    SET PF-STATUS 'PF_0100' EXCLUDING 'ZQXDZ'.
+    SET TITLEBAR 'T_0100'.
+  ELSE.
+    SET PF-STATUS 'PF_0100' EXCLUDING 'ZDZ'.
+    SET TITLEBAR 'T_0200'.
+  ENDIF.
+ENDMODULE.
+
+*&SPWIZARD: OUTPUT MODULE FOR TC 'ZTDATA1'. DO NOT CHANGE THIS LINE!
+*&SPWIZARD: UPDATE LINES FOR EQUIVALENT SCROLLBAR
+MODULE ztdata1_change_tc_attr OUTPUT.
+  DESCRIBE TABLE gt_data1 LINES ztdata1-lines.
+ENDMODULE.
+
+*&SPWIZARD: OUTPUT MODULE FOR TC 'ZTDATA1'. DO NOT CHANGE THIS LINE!
+*&SPWIZARD: GET LINES OF TABLECONTROL
+MODULE ztdata1_get_lines OUTPUT.
+  g_ztdata1_lines = sy-loopc.
+ENDMODULE.
+
+*&SPWIZARD: OUTPUT MODULE FOR TC 'ZTDATA2'. DO NOT CHANGE THIS LINE!
+*&SPWIZARD: UPDATE LINES FOR EQUIVALENT SCROLLBAR
+MODULE ztdata2_change_tc_attr OUTPUT.
+  DESCRIBE TABLE gt_data2 LINES ztdata2-lines.
+ENDMODULE.
+
+*&SPWIZARD: OUTPUT MODULE FOR TC 'ZTDATA2'. DO NOT CHANGE THIS LINE!
+*&SPWIZARD: GET LINES OF TABLECONTROL
+MODULE ztdata2_get_lines OUTPUT.
+  g_ztdata2_lines = sy-loopc.
+ENDMODULE.

@@ -1,0 +1,11 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPMM023_S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS: s_werks FOR mseg-werks OBLIGATORY DEFAULT '1000',
+                s_matnr FOR mseg-matnr,
+                s_lgort FOR mseg-lgort,
+                s_matkl FOR mara-matkl,
+                s_spart FOR mara-spart.
+PARAMETERS: p_date1  TYPE idcn_segm DEFAULT '0030' MODIF ID old."like rfpdo1-allgrogr DEFAULT '010'.
+SELECTION-SCREEN END OF BLOCK b1.

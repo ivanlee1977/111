@@ -1,0 +1,14 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZX60EU01
+*&---------------------------------------------------------------------*
+
+IF sy-tcode = 'MD61' OR sy-tcode = 'MD62'.
+  READ TABLE fxpbpt INDEX 1.
+  IF sy-subrc = 0.
+    AUTHORITY-CHECK OBJECT 'ZVERSB'
+             ID 'VERSB' FIELD fxpbpt-versb.
+    IF sy-subrc <> 0.
+      MESSAGE '你没有分配对应的权限' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+ENDIF.

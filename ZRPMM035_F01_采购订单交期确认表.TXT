@@ -1,0 +1,243 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM001_F01
+*&---------------------------------------------------------------------*
+
+
+FORM frm_show."ALV显示界面
+
+
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'SET_PF_STATUS'
+      i_callback_user_command  = 'ALV_USER_COMMAND'
+      is_layout                = gs_layout
+      it_fieldcat              = gt_fcat[]
+    TABLES
+      t_outtab                 = gt_item1[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+           WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+ENDFORM.
+
+FORM set_pf_status USING rt_extab TYPE slis_t_extab.
+
+  DATA: wa_extab TYPE slis_extab.
+
+  SET PF-STATUS 'ZRPMM001_STATUS' EXCLUDING rt_extab.
+
+ENDFORM.                    "set_pf_status1
+
+FORM alv_user_command USING r_ucomm LIKE sy-ucomm  rs_selfield TYPE slis_selfield.
+*   获取ALV中的鼠标勾选记录
+  DATA: lv_grid TYPE REF TO cl_gui_alv_grid.
+
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = lv_grid.
+
+  CALL METHOD lv_grid->check_changed_data( ).
+
+  CASE r_ucomm.
+    WHEN 'ZCLICK'.
+*      PERFORM frm_print.
+    WHEN '&IC1'.
+*      IF rs_selfield-fieldname EQ 'VGBEL' AND rs_selfield-value IS NOT INITIAL.
+*        SET PARAMETER ID 'BES' FIELD rs_selfield-value.
+*        CALL TRANSACTION 'ME23N' AND SKIP FIRST SCREEN.
+*      ENDIF.
+*      IF rs_selfield-fieldname EQ 'EBELN' AND rs_selfield-value IS NOT INITIAL.
+*        SET PARAMETER ID 'BES' FIELD rs_selfield-value.
+*        CALL TRANSACTION 'ME22N' AND SKIP FIRST SCREEN.
+*      ENDIF.
+*      IF rs_selfield-fieldname EQ 'MBLNR' AND rs_selfield-value IS NOT INITIAL.
+*        SET PARAMETER ID 'MBN' FIELD rs_selfield-value.
+*        CALL TRANSACTION 'MB03' AND SKIP FIRST SCREEN.
+*      ENDIF.
+  ENDCASE.
+
+
+ENDFORM.                    "alv_user_command
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GETDATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_getdata .
+  DATA: calc_date TYPE p0001-begda.
+  DATA: date TYPE vtbbewe-dvalut,
+        flag TYPE trff_flg,
+        days TYPE vtbbewe-atage.
+  DATA:BEGIN OF lt_ekes OCCURS 0,
+         menge TYPE ekes-menge,
+         eindt TYPE ekes-eindt,
+         etens TYPE ekes-etens,
+         vbeln TYPE ekes-vbeln,
+         ebeln TYPE ekes-ebeln,
+         ebelp TYPE ekes-ebelp,
+       END OF lt_ekes.
+  CLEAR:gt_item[].
+  SELECT
+       b~ernam
+       b~ekgrp
+       b~lifnr
+       b~aedat
+       c~ebeln
+       c~ebelp
+       c~matnr
+       c~txz01
+       c~menge
+       c~meins
+       c~plifz
+       c~matkl
+       c~elikz
+       c~loekz
+       c~banfn
+*      d~eindt
+*      d~etens
+*      d~menge AS ekes_menge
+    a~wemng
+    a~eindt AS zdate
+       INTO CORRESPONDING FIELDS OF TABLE gt_item
+        FROM eket AS a
+        INNER JOIN ekko AS b ON a~ebeln EQ b~ebeln
+        INNER JOIN ekpo AS c ON a~ebeln EQ c~ebeln AND a~ebelp EQ c~ebelp
+*        INNER JOIN ekes AS d ON a~ebeln EQ d~ebeln AND a~ebelp EQ d~ebelp
+        WHERE  b~aedat IN s_aedat
+         AND  c~bednr IN s_bednr
+         AND  c~matkl IN s_matkl
+         AND  b~lifnr IN s_lifnr
+         AND c~matnr IN s_matnr
+        AND c~ebeln IN s_ebeln
+.
+
+  DATA lt_mard LIKE TABLE OF mard WITH HEADER LINE.
+  DATA ls_item LIKE LINE OF gt_item.
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_mard FROM mard
+    FOR ALL ENTRIES IN gt_item
+    WHERE matnr = gt_item-matnr AND werks = '1000'.
+
+  CHECK gt_item[] IS NOT INITIAL.
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_ekes FROM ekes
+    FOR ALL ENTRIES IN gt_item
+    WHERE ebeln = gt_item-ebeln AND ebelp = gt_item-ebelp .
+  LOOP AT gt_item .
+    IF p_ekgrp <> '' AND gt_item-ekgrp <> p_ekgrp.
+      DELETE gt_item.
+      CONTINUE.
+    ENDIF.
+    IF p_elikz = 'X'  AND gt_item-elikz = 'X'.
+      DELETE gt_item.
+      CONTINUE.
+    ENDIF.
+    SELECT SINGLE name1 INTO gt_item-name1 FROM lfa1 WHERE lifnr = gt_item-lifnr.
+    gt_item-zmenge = gt_item-menge - gt_item-wemng.
+
+    LOOP AT lt_mard WHERE matnr = gt_item-matnr AND werks = '1000'.
+      gt_item-labst = gt_item-labst +  lt_mard-labst.
+      gt_item-insme = gt_item-insme +  lt_mard-insme.
+    ENDLOOP.
+    MODIFY gt_item .
+    LOOP AT  lt_ekes WHERE ebeln = gt_item-ebeln AND ebelp = gt_item-ebelp .
+      gt_item-ekes_menge = lt_ekes-menge.
+      gt_item-eindt = lt_ekes-eindt.
+      gt_item-etens = lt_ekes-etens.
+      gt_item-vbeln = lt_ekes-vbeln.
+      MOVE-CORRESPONDING gt_item TO ls_item.
+      APPEND ls_item TO gt_item1.
+    ENDLOOP.
+    IF sy-subrc <> 0.
+      MOVE-CORRESPONDING gt_item TO ls_item.
+      APPEND ls_item TO gt_item1.
+    ENDIF.
+
+  ENDLOOP.
+
+ENDFORM.
+
+FORM frm_getfact .
+  g_fieldfcat:
+    'LIFNR' '供应商代码' 'LIFNR' 'EKKO' '',
+    'NAME1' '供应商名称' 'NAME1' 'LFA1' '',
+    'EBELN' '采购订单号' 'EBELN' 'EKPO' '',
+    'EBELP' '采购行项目' 'EBELP' 'EKPO' '',
+    'ETENS' '确认编号' 'ETENS' 'EKES' '',
+
+    'MATNR' '物料' 'MATNR' 'EKPO' '',
+    'TXZ01' '描述' 'TXZ01' 'EKPO' '',
+    'MATKL' '物料组' 'MATKL' 'EKPO' '',
+    'MENGE' '订单数量' 'MENGE' 'MSEG' '0',
+    'MEINS' '订单单位' 'MEINS' 'EKPO' '',
+
+*    'PLIFZ' '计划交货时间' 'PLIFZ' 'EKPO' '',
+    'VBELN' '内向交货单号' 'VBELN' 'EKES' '',
+    'ZDATE' '计划交货时间' 'EINDT' 'EKES' '',
+    'EINDT' '确认交货时间' 'EINDT' 'EKES' '',
+    'EKES_MENGE' '确认交货数量' 'MENGE' 'EKES' '',
+    'WEMNG' '已交货数量' 'WEMNG' 'EKET' '',
+    'ZMENGE' '未交货数量' 'WEMNG' 'EKET' '',
+    'LABST' '非限制库存' 'LABST' 'MARD' '',
+    'INSME' '质检中库存' 'INSME' 'MARD' '',
+    'ERNAM' '采购员' 'ERNAM' 'EKKO' '',
+    'EKGRP' '采购组' 'EKGRP' 'EKKO' '',
+    'LOEKZ' '删除标记' 'LOEKZ' 'EKPO' '',
+    'BANFN' '采购申请单' 'BANFN' 'EKPO' ''
+    .
+
+
+
+  gs_layout-colwidth_optimize = 'X'.
+*  gs_layout-box_fieldname = 'CHK'.
+*  gs_layout-box_tabname = 'gt_item'.
+*  gs_layout-edit = 'X'.
+  gs_layout-zebra = 'X'.
+
+
+  gt_fcat-no_zero = 'X'.
+  MODIFY gt_fcat FROM gt_fcat TRANSPORTING no_zero  WHERE fieldname EQ 'EKES_MENGE' or fieldname EQ 'WEMNG'.
+
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_AUTH
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_auth .
+  REFRESH:gt_t024.
+
+  SELECT * INTO TABLE gt_t024
+    FROM t024
+    WHERE ekgrp = p_ekgrp.
+
+  LOOP AT gt_t024.
+    AUTHORITY-CHECK OBJECT 'M_BEST_EKG'
+             ID 'ACTVT' FIELD '03'
+             ID 'EKGRP' FIELD gt_t024-ekgrp.
+    IF sy-subrc <> 0.
+      DELETE gt_t024.
+    ENDIF.
+  ENDLOOP.
+
+  IF sy-subrc <> 0.
+    MESSAGE '没有采购组的权限' TYPE 'E'.
+  ENDIF.
+ENDFORM.

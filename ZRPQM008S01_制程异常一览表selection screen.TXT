@@ -1,0 +1,10 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPQM008S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_erdat FOR QMEL-erdat OBLIGATORY,
+               s_qmnum FOR qmel-qmnum,
+               s_dauat FOR afpo-dauat,
+               s_matnr FOR qmel-matnr.
+SELECTION-SCREEN END OF BLOCK blc.

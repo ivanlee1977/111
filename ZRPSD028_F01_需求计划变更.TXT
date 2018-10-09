@@ -1,0 +1,499 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPQM001_F01
+*&---------------------------------------------------------------------*
+
+FORM get_data."取数据
+  DATA: g_errorstr(250) TYPE c.
+  EXEC SQL.
+    CONNECT TO :CNS_BPM
+  ENDEXEC.
+  if sy-subrc = 0.
+    MESSAGE '数据库连接成功' TYPE 'S'.
+**  **获取表数据
+    TRY.
+        exec sql.
+          open dbcursor for
+              SELECT
+              ZLSPT_PLM_XQBG.BUSSNO,
+              ZLSPT_PLM_XQBG.PROCNUM,
+              ZLSPT_PLM_XQBG.BUSSSTAT,
+              ZLSPT_PLM_XQBG.REQUSERNAME,
+              ZLSPT_PLM_XQBG.REQDEPTNAME,
+              ZLSPT_PLM_XQBG.REQDATE,
+              ZLSPT_PLM_XQBG.JHBRESDATE,
+              ZLSPT_PLM_XQBG.HFRNAME,
+              ZLSPT_PLM_XQBG.SWQRDATE,
+              ZLSPT_PLM_XQBG.SWQRPNA,
+              ZLSPT_PLM_XQBG.HTPSDATE,
+              ZLSPT_PLM_XQBG.HTPSPNA,
+              ZLSPT_PLM_XQBG.SQBMAPPR,
+              ZLSPT_PLM_XQBG.SQBMPNA,
+              ZLSPT_PLM_XQBG.SWBQR,
+              ZLSPT_PLM_XQBG.SWBBZ,
+              ZLSPT_PLM_XQBG.JHBBZ,
+              ZLSPT_PLM_XQBG.HTPSBZ,
+              ZLSPT_PLM_XQBG.SQBSHDATE,
+              ZLSPT_PLM_XQBG.SWQSHNA,
+              ZLSPT_PLM_XQBG.IS_SWBSH,
+              ZLSPT_PLM_XQBG.YFZJPNA,
+              ZLSPT_PLM_XQBG.YFZJAPPR,
+              ZLSPT_PLM_XQBG.SJRKPNA,
+              ZLSPT_PLM_XQBG.SJRKPTIME,
+              ZLSPT_PLM_XQBG.PROCCOMTIME,
+              ZLSPT_PLM_XQBG.REQQRDATE,
+              ZLSPT_PLM_XQBG.PMCPNA,
+              ZLSPT_PLM_XQBG.CPPNA,
+              ZLSPT_PLM_XQBG_ITEM.CUSPNO,
+              ZLSPT_PLM_XQBG_ITEM.CUSPNA,
+              ZLSPT_PLM_XQBG_ITEM.MATRN,
+              ZLSPT_PLM_XQBG_ITEM.PROCTYPE,
+              ZLSPT_PLM_XQBG_ITEM.CHANGENUM,
+              ZLSPT_PLM_XQBG_ITEM.CHANGEWAY,
+              ZLSPT_PLM_XQBG_ITEM.CHANGEREASON,
+              ZLSPT_PLM_XQBG_ITEM.EXPECTDATE,
+              ZLSPT_PLM_XQBG_ITEM.PRIORITYORDER,
+              ZLSPT_PLM_XQBG_ITEM.FIRSTJHDATE,
+              ZLSPT_PLM_XQBG_ITEM.FIRSTJHNUM,
+              ZLSPT_PLM_XQBG_ITEM.ENDJHDATE,
+              ZLSPT_PLM_XQBG_ITEM.ENDJHNUM,
+              ZLSPT_PLM_XQBG_ITEM.NYBZ,
+              ZLSPT_PLM_XQBG_ITEM.SWJHDATE,
+              ZLSPT_PLM_XQBG_ITEM.SWYJ,
+              ZLSPT_PLM_XQBG_ITEM.HTPSNUM,
+              ZLSPT_PLM_XQBG_ITEM.HTPSNEWJQ,
+              ZLSPT_PLM_XQBG_ITEM.MATYPE,
+              ZLSPT_PLM_XQBG_ITEM.FRKDATE,
+              ZLSPT_PLM_XQBG_ITEM.FRKNUM,
+              ZLSPT_PLM_XQBG_ITEM.FRKNO,
+              ZLSPT_PLM_XQBG_ITEM.WRKDATE,
+              ZLSPT_PLM_XQBG_ITEM.WRKNUM,
+              ZLSPT_PLM_XQBG_ITEM.WRKNO,
+              ZLSPT_PLM_XQBG_ITEM.IS_JIEXIANG,
+              ZLSPT_PLM_XQBG_ITEM.REQJQDATE,
+              ZLSPT_PLM_XQBG_ITEM.REQ_YJ,
+              ZLSPT_PLM_XQBG_ITEM.HTPSENDNUM,
+              ZLSPT_PLM_XQBG_ITEM.HTPSENDTIME
+              FROM ZLSPT_PLM_XQBG  INNER JOIN ZLSPT_PLM_XQBG_ITEM ON ZLSPT_PLM_XQBG.BUSSNO = ZLSPT_PLM_XQBG_ITEM.BUSSNO
+        ENDEXEC.
+      CATCH cx_sy_native_sql_error INTO exec_ref.
+        g_errorstr = exec_ref->get_text( ).
+        CONCATENATE '读取数据出错,'  g_errorstr INTO g_errorstr.
+        MESSAGE g_errorstr TYPE 'E'.
+    ENDTRY.
+    DO.
+      TRY.
+          EXEC SQL.
+            FETCH NEXT dbcursor INTO
+               :GW_ITEM-BUSSNO,
+               :GW_ITEM-PROCNUM,
+               :GW_ITEM-BUSSSTAT,
+               :GW_ITEM-REQUSERNAME,
+               :GW_ITEM-REQDEPTNAME,
+               :GW_ITEM-REQDATE,
+               :GW_ITEM-JHBRESDATE,
+               :GW_ITEM-HFRNAME,
+               :GW_ITEM-SWQRDATE,
+               :GW_ITEM-SWQRPNA,
+               :GW_ITEM-HTPSDATE,
+               :GW_ITEM-HTPSPNA,
+               :GW_ITEM-SQBMAPPR,
+               :GW_ITEM-SQBMPNA,
+               :GW_ITEM-SWBQR,
+               :GW_ITEM-SWBBZ,
+               :GW_ITEM-JHBBZ,
+               :GW_ITEM-HTPSBZ,
+               :GW_ITEM-SQBSHDATE,
+               :GW_ITEM-SWQSHNA,
+               :GW_ITEM-IS_SWBSH,
+               :GW_ITEM-YFZJPNA,
+               :GW_ITEM-YFZJAPPR,
+               :GW_ITEM-SJRKPNA,
+               :GW_ITEM-SJRKPTIME,
+               :GW_ITEM-PROCCOMTIME,
+               :GW_ITEM-REQQRDATE,
+               :GW_ITEM-PMCPNA,
+               :GW_ITEM-CPPNA,
+               :GW_ITEM-CUSPNO,
+               :GW_ITEM-CUSPNA,
+               :GW_ITEM-MATRN,
+               :GW_ITEM-PROCTYPE,
+               :GW_ITEM-CHANGENUM,
+               :GW_ITEM-CHANGEWAY,
+               :GW_ITEM-CHANGEREASON,
+               :GW_ITEM-EXPECTDATE,
+               :GW_ITEM-PRIORITYORDER,
+               :GW_ITEM-FIRSTJHDATE,
+               :GW_ITEM-FIRSTJHNUM,
+               :GW_ITEM-ENDJHDATE,
+               :GW_ITEM-ENDJHNUM,
+               :GW_ITEM-NYBZ,
+               :GW_ITEM-SWJHDATE,
+               :GW_ITEM-SWYJ,
+               :GW_ITEM-HTPSNUM,
+               :GW_ITEM-HTPSNEWJQ,
+               :GW_ITEM-MATYPE,
+               :GW_ITEM-FRKDATE,
+               :GW_ITEM-FRKNUM,
+               :GW_ITEM-FRKNO,
+               :GW_ITEM-WRKDATE,
+               :GW_ITEM-WRKNUM,
+               :GW_ITEM-WRKNO,
+               :GW_ITEM-IS_JIEXIANG,
+               :GW_ITEM-REQJQDATE,
+               :GW_ITEM-REQ_YJ,
+               :GW_ITEM-HTPSENDNUM,
+               :GW_ITEM-HTPSENDTIME
+          ENDEXEC.
+          IF sy-subrc EQ 0.
+            CASE gw_item-changeway.
+              WHEN '01'.
+                gw_item-changeway = '增加'.
+              WHEN '02'.
+                gw_item-changeway = '调整'.
+              WHEN '03'.
+                gw_item-changeway = '减少'.
+              WHEN OTHERS.
+            ENDCASE.
+            CASE gw_item-bussstat.
+              WHEN '01'.
+                gw_item-bussstat = '已保存'.
+              WHEN '02'.
+                gw_item-bussstat = '审批中'.
+              WHEN '03'.
+                gw_item-bussstat = '已审批'.
+              WHEN '04'.
+                gw_item-bussstat = '已取消'.
+              WHEN '05'.
+                gw_item-bussstat = '已退回'.
+              WHEN OTHERS.
+            ENDCASE.
+            APPEND gw_item TO gt_item.
+          ELSE.
+            EXIT.
+          ENDIF.
+
+        CATCH cx_sy_native_sql_error INTO exec_ref.
+          g_errorstr = exec_ref->get_text( ).
+          CONCATENATE '读取数据出错,'  g_errorstr INTO g_errorstr.
+*            WRITE:/ g_errorstr.
+          MESSAGE g_errorstr TYPE 'E'.
+      ENDTRY.
+    ENDDO.
+
+    EXEC SQL.
+      CLOSE dbcursor
+    ENDEXEC.
+*    BREAK-POINT.
+**关闭连接
+    EXEC SQL.
+      DISCONNECT :CNS_BPM
+    ENDEXEC.
+
+  else.
+    MESSAGE '数据库连接失败' TYPE 'S'.
+  endif.
+*
+  CHECK gt_item[] IS NOT INITIAL .
+
+ENDFORM.
+
+FORM process_data."处理数据
+  DATA: g_errorstr(250) TYPE c,lv_matnr type mara-matnr.
+  DATA: date  TYPE sy-datum,date1 TYPE sy-datum,date2 TYPE sy-datum.
+  DATA lv_PROCNUM type char50.
+*  EXEC SQL.
+*    CONNECT TO :CNS_BPM
+*  ENDEXEC.
+  LOOP AT gt_item.
+    clear: date,date1,date2.
+    IF s_kunnr[] IS NOT INITIAL and  gt_item-CUSPNO not in s_kunnr.
+      DELETE gt_item.
+      CONTINUE.
+    ENDIF.
+    IF s_sqr[] IS NOT INITIAL and  gt_item-REQUSERNAME not in s_sqr.
+      DELETE gt_item.
+      CONTINUE.
+    ENDIF.
+
+    CALL FUNCTION 'CONVERT_DATE_TO_INTERNAL'
+      EXPORTING
+        date_external            = gt_item-REQDATE "当前用户日期格式：YYYY.MM.DD
+        accept_initial_date      = ' '
+      IMPORTING
+        date_internal            = date
+      EXCEPTIONS
+        date_external_is_invalid = 1
+        OTHERS                   = 2.
+    IF s_sqrq[] IS NOT INITIAL and date  not in s_sqrq.
+      DELETE gt_item.
+      CONTINUE.
+    ENDIF.
+    CALL FUNCTION 'CONVERT_DATE_TO_INTERNAL'
+      EXPORTING
+        date_external            = gt_item-SWQRDATE "当前用户日期格式：YYYY.MM.DD
+        accept_initial_date      = ' '
+      IMPORTING
+        date_internal            = date1
+      EXCEPTIONS
+        date_external_is_invalid = 1
+        OTHERS                   = 2.
+
+    IF s_qrrq[] IS NOT INITIAL and date1  not in s_qrrq.
+      DELETE gt_item.
+      CONTINUE.
+    ENDIF.
+    IF s_pmc[] IS NOT INITIAL and  gt_item-PMCPNA not in s_pmc.
+      DELETE gt_item.
+      CONTINUE.
+    ENDIF.
+    CALL FUNCTION 'CONVERT_DATE_TO_INTERNAL'
+      EXPORTING
+        date_external            = gt_item-JHBRESDATE "当前用户日期格式：YYYY.MM.DD
+        accept_initial_date      = ' '
+      IMPORTING
+        date_internal            = date2
+      EXCEPTIONS
+        date_external_is_invalid = 1
+        OTHERS                   = 2.
+    IF s_pmcrq[] IS NOT INITIAL and date2  not in s_pmcrq.
+      DELETE gt_item.
+      CONTINUE.
+    ENDIF.
+    IF s_matnr[] IS NOT INITIAL and  gt_item-matrn not in s_matnr.
+      DELETE gt_item.
+      CONTINUE.
+    ENDIF.
+    IF gt_item-CHANGEWAY = '减少'..
+      gt_item-CHANGENUM = gt_item-CHANGENUM * -1 .
+    ENDIF.
+    SELECT SINGLE dispo INTO gt_item-mrp FROM marc WHERE matnr = gt_item-matrn and werks = '1000'.
+    IF s_dispo[] IS NOT INITIAL and  gt_item-mrp not in s_dispo.
+      DELETE gt_item.
+      CONTINUE.
+    ENDIF.
+*    IF gt_item-mrp =  'M05'.
+*      gt_item-mrp = '商务'.
+*    else.
+*      gt_item-mrp = '计划'.
+*    ENDIF.
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+      EXPORTING
+        input  = gt_item-matrn
+      IMPORTING
+        OUTPUT = lv_matnr.
+
+    SELECT SINGLE MATKL INTO gt_item-MATKL FROM mara WHERE matnr = lv_matnr.
+    IF s_matkl[] IS NOT INITIAL and  gt_item-matkl not in s_matkl.
+      DELETE gt_item.
+      CONTINUE.
+    ENDIF.
+    SELECT SINGLE WGBEZ INTO gt_item-WGBEZ FROM t023t WHERE matkl = gt_item-matkl.
+
+    MODIFY gt_item.
+  ENDLOOP.
+**************************************************************读取另一个BPM表里的信息
+
+
+*    if sy-subrc = 0.
+*      MESSAGE '数据库连接成功' TYPE 'S'.
+**  **获取表数据
+*    lv_PROCNUM = gt_item-PROCNUM.
+*    TRY.
+*        exec sql.
+*          open dbcursor for
+*              SELECT TOP 1
+*              ZLSPT_PROCHIS.APPRTIME,
+*              ZLSPT_PROCHIS.APPRUSERNAME
+*              FROM ZLSPT_PROCHIS WHERE ZLSPT_PROCHIS.APPRSTEPNO = '030' AND ZLSPT_PROCHIS.PROCNUM = :LV_PROCNUM
+*              ORDER BY APPRTIME DESC
+*        ENDEXEC.
+*      CATCH cx_sy_native_sql_error INTO exec_ref.
+*        g_errorstr = exec_ref->get_text( ).
+*        CONCATENATE '读取数据出错,'  g_errorstr INTO g_errorstr.
+*        MESSAGE g_errorstr TYPE 'E'.
+*    ENDTRY.
+*    DO.
+*      TRY.
+*          EXEC SQL.
+*            FETCH NEXT dbcursor INTO
+*               :GW_ITEM-APPRTIME,
+*               :GW_ITEM-APPRUSERNAME
+*          ENDEXEC.
+*          IF sy-subrc EQ 0.
+*            gw_item-swbqr = gw_item-apprtime.
+*            gw_item-swqshna = gw_item-apprusername.
+*          ENDIF.
+*
+*        CATCH cx_sy_native_sql_error INTO exec_ref.
+*          g_errorstr = exec_ref->get_text( ).
+*          CONCATENATE '读取数据出错,'  g_errorstr INTO g_errorstr.
+*          MESSAGE g_errorstr TYPE 'E'.
+*      ENDTRY.
+*    ENDDO.
+*    EXEC SQL.
+*      CLOSE dbcursor
+*    ENDEXEC.
+**    ENDIF.
+*    MODIFY gt_item.
+*  ENDLOOP.
+
+*    BREAK-POINT.
+**关闭连接
+*  EXEC SQL.
+*    DISCONNECT :CNS_BPM
+*  ENDEXEC.
+
+
+ENDFORM.
+
+
+FORM get_alv."ALV显示界面
+  DATA : col_pos TYPE i VALUE 1.
+
+  CLEAR:it_fieldcat,wa_fieldcat.
+
+  gs_layout-zebra = 'X'.
+  gs_layout-cwidth_opt = 'X'."
+*  gs_layout-stylefname = 'FIELD_STYLE'. " 将内表中的字段名存入显示格式
+  gs_layout-box_fname        = 'SEL'.
+
+  PERFORM fieldcat_int USING col_pos  'BUSSNO' '申请单号'    '' .
+  PERFORM fieldcat_int USING col_pos  'BUSSSTAT'   '申请单状态 '  ''  .
+  PERFORM fieldcat_int USING col_pos  'REQUSERNAME' '申请人姓名'  ''    .
+  PERFORM fieldcat_int USING col_pos  'REQDEPTNAME'   '申请人部门名称'  ''  .
+  PERFORM fieldcat_int USING col_pos  'REQDATE'   '申请日期'  ''  .
+  PERFORM fieldcat_int USING col_pos  'JHBRESDATE'   '计划部/采购部回复日期'  ''  .   "20180313 修改描述
+  PERFORM fieldcat_int USING col_pos  'HFRNAME'   '回复人名称'  ''  .
+  PERFORM fieldcat_int USING col_pos  'SWQRDATE'   '商务确认日期'  ''  .
+  PERFORM fieldcat_int USING col_pos  'SWQRPNA'   '商务确认人名称'  ''  .
+  PERFORM fieldcat_int USING col_pos  'HTPSDATE'   '合同评审日期'  ''  .
+  PERFORM fieldcat_int USING col_pos  'HTPSPNA'   '合同评审人名称'  ''  .
+  PERFORM fieldcat_int USING col_pos  'SQBMAPPR'   '申请部门审核意见'  ''  .
+  PERFORM fieldcat_int USING col_pos  'SQBMPNA'   '申请部门审核人名称'  ''  .
+  PERFORM fieldcat_int USING col_pos  'SWBQR'   '商务部确认'  ''  .
+  PERFORM fieldcat_int USING col_pos  'SWBBZ'   '商务部备注'  ''  .
+  PERFORM fieldcat_int USING col_pos  'JHBBZ'   '计划部备注'  ''  .
+  PERFORM fieldcat_int USING col_pos  'HTPSBZ'   '合同评审备注'  ''  .
+  PERFORM fieldcat_int USING col_pos  'SQBSHDATE'   '申请部门审核时间'  ''  .
+  PERFORM fieldcat_int USING col_pos  'SWQSHNA'   '商务部审核人名称'  ''  .
+  PERFORM fieldcat_int USING col_pos  'IS_SWBSH'   '商务部审核'  ''  .
+  PERFORM fieldcat_int USING col_pos  'YFZJPNA'   '研发总监审核人名称'  ''  .
+  PERFORM fieldcat_int USING col_pos  'YFZJAPPR'   '研发总监审核意见'  ''  .
+  PERFORM fieldcat_int USING col_pos  'SJRKPNA'   '实际入库填写人名称'  ''  .
+  PERFORM fieldcat_int USING col_pos  'SJRKPTIME'   '实际入库填写处理时间'  ''  .
+  PERFORM fieldcat_int USING col_pos  'PROCCOMTIME'   '整张单据关闭时间'  ''  .
+  PERFORM fieldcat_int USING col_pos  'REQQRDATE'   '申请人确认时间'  ''  .
+  PERFORM fieldcat_int USING col_pos  'PMCPNA'   'PMC处理人名称'  ''  .
+  PERFORM fieldcat_int USING col_pos  'CPPNA'   '产品经理名称'  ''  .
+  PERFORM fieldcat_int USING col_pos  'CUSPNO'   '客户代码'  ''  .
+  PERFORM fieldcat_int USING col_pos  'CUSPNA'   '客户名称'  ''  .
+  PERFORM fieldcat_int USING col_pos  'MATRN'   '物料代码'  ''  .
+  PERFORM fieldcat_int USING col_pos  'PROCTYPE'   '产品描述'  ''  .
+  PERFORM fieldcat_int USING col_pos  'CHANGENUM'   '变更数量'  ''  .
+  PERFORM fieldcat_int USING col_pos  'CHANGEWAY'   '变更形式'  ''  .
+  PERFORM fieldcat_int USING col_pos  'CHANGEREASON'   '变更理由'  ''  .
+  PERFORM fieldcat_int USING col_pos  'EXPECTDATE'   '期望交期'  ''  .
+  PERFORM fieldcat_int USING col_pos  'PRIORITYORDER'   '优先顺序'  ''  .
+  PERFORM fieldcat_int USING col_pos  'FIRSTJHDATE'   '首次交货日期'  ''  .
+  PERFORM fieldcat_int USING col_pos  'FIRSTJHNUM'   '首次交货数量'  ''  .
+  PERFORM fieldcat_int USING col_pos  'ENDJHDATE'   '尾数交货日期'  ''  .
+  PERFORM fieldcat_int USING col_pos  'ENDJHNUM'   '尾数交货数量'  ''  .
+  PERFORM fieldcat_int USING col_pos  'NYBZ'   '挪用物料满足此次变更的影响/备注'  ''  .
+  PERFORM fieldcat_int USING col_pos  'SWJHDATE'   '商务确认交期'  ''  .
+  PERFORM fieldcat_int USING col_pos  'SWYJ'   '商务意见'  ''  .
+  PERFORM fieldcat_int USING col_pos  'HTPSNUM'   '合同评审数量'  ''  .
+  PERFORM fieldcat_int USING col_pos  'HTPSNEWJQ'   '合同评审最新交期'  ''  .
+  PERFORM fieldcat_int USING col_pos  'MATYPE'   '物料类型'  ''  .
+  PERFORM fieldcat_int USING col_pos  'FRKDATE'   '首批入货日期'  ''  .
+  PERFORM fieldcat_int USING col_pos  'FRKNUM'   '首批入库数量'  ''  .
+  PERFORM fieldcat_int USING col_pos  'FRKNO'   '首批入库单号'  ''  .
+  PERFORM fieldcat_int USING col_pos  'WRKDATE'   '尾数入库日期'  ''  .
+  PERFORM fieldcat_int USING col_pos  'WRKNUM'   '尾数入库数量'  ''  .
+  PERFORM fieldcat_int USING col_pos  'WRKNO'   '尾数入库单号'  ''  .
+  PERFORM fieldcat_int USING col_pos  'IS_JIEXIANG'   '是否结项'  ''  .
+  PERFORM fieldcat_int USING col_pos  'REQJQDATE'   '申请人确认交期'  ''  .
+  PERFORM fieldcat_int USING col_pos  'REQ_YJ'   '申请人意见'  ''  .
+  PERFORM fieldcat_int USING col_pos  'HTPSENDNUM'   '合同评审尾数数量'  ''  .
+  PERFORM fieldcat_int USING col_pos  'HTPSENDTIME'   '合同评审尾数交货日期'  ''  .
+  PERFORM fieldcat_int USING col_pos  'MATKL'   '物料组'  'MARA'  .
+  PERFORM fieldcat_int USING col_pos  'WGBEZ'   '物料组描述'  'T023T'  .
+  PERFORM fieldcat_int USING col_pos  'MRP'   '计划负责人'  ''  .
+
+
+
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program       = sy-repid
+      is_layout_lvc            = gs_layout
+      it_fieldcat_lvc          = it_fieldcat
+      it_events                = it_events
+      i_save                   = 'A'
+      i_callback_pf_status_set = 'SET_PF_STATUS'
+      i_callback_user_command  = 'ALV_USER_COMMAND'
+*     i_grid_settings          = i_grid_settings
+    TABLES
+      t_outtab                 = gt_item[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+            WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ELSE.
+    MESSAGE 'BPM数据库查询完成' TYPE 'S'.
+  ENDIF.
+
+
+
+ENDFORM.
+
+
+FORM set_pf_status USING rt_extab TYPE slis_t_extab.
+
+  DATA: wa_extab TYPE slis_extab.
+
+  SET PF-STATUS '0100' EXCLUDING rt_extab.
+
+ENDFORM.                    "set_pf_status1
+
+FORM alv_user_command USING r_ucomm LIKE sy-ucomm  rs_selfield TYPE slis_selfield.
+*   获取ALV中的鼠标勾选记录
+  DATA: l_grid TYPE REF TO cl_gui_alv_grid.
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = l_grid.
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  r_ucomm = sy-ucomm.
+  save_ok =  r_ucomm .
+  CASE r_ucomm.
+      "打印
+    WHEN 'C_PRINT'.
+*      PERFORM print_report.
+  ENDCASE.
+
+
+ENDFORM.                    "alv_user_command
+
+FORM fieldcat_int  USING   p_col_pos         " 1
+                            p_fieldname       " 2
+                            p_seltext_l       " 4
+                           p_talbename
+                            .
+
+  wa_fieldcat-col_pos       = p_col_pos.
+  wa_fieldcat-fieldname     = p_fieldname.
+*  wa_fieldcat-key           = p_key.
+  wa_fieldcat-coltext     = p_seltext_l.
+*  wa_fieldcat-no_zero        = p_zero.
+*  wa_fieldcat-ref_field   = p_fieldname.
+  wa_fieldcat-ref_table    = p_talbename.
+  wa_fieldcat-tipddictxt       = 'L'.
+*  wa_fieldcat-edit           = p_edit  .
+  APPEND wa_fieldcat TO it_fieldcat.
+  p_col_pos = p_col_pos + 1.
+  CLEAR: wa_fieldcat.
+ENDFORM.                    " FIELDCAT_INT

@@ -1,0 +1,499 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM010F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_INITIAL_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_initial_data .
+*******数据定义*******
+  INCLUDE <icon>.
+  DATA ls_functxt TYPE smp_dyntxt.
+  DATA:gt_exbut TYPE TABLE OF sy-ucomm.
+*******初始化*******
+*******程序主体*******
+  "屏幕工具栏中按饼
+  "启用自定义工具
+  CLEAR ls_functxt.
+  ls_functxt-icon_text = '模板下载'."'Download Template'.
+  ls_functxt-icon_id   = '@49@'.
+  ls_functxt-quickinfo =  '模板下载'.
+  sscrfields-functxt_01 = ls_functxt.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FILENAME_FIND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      <--P_P_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_filename_find   CHANGING xc_file.
+  CALL FUNCTION 'WS_FILENAME_GET'
+    EXPORTING
+      def_filename     = xc_file
+      def_path         = 'C:\'
+      mask             = ',*.XLS.'
+      mode             = 'O'
+      title            = '文件名'
+    IMPORTING
+      filename         = xc_file
+    EXCEPTIONS
+      inv_winsys       = 1
+      no_batch         = 2
+      selection_cancel = 3
+      selection_error  = 4
+      OTHERS           = 5.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DOWNLOAD_TEMPLATE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0036   text
+*      <--P_P_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_download_template  USING u_objid LIKE wwwdatatab-objid CHANGING ic_file.
+  DATA:l_path   TYPE string.
+
+  CALL METHOD zcl_ole_excel=>download_templet
+    EXPORTING
+      iv_objid        = u_objid
+      iv_win_title    = '请指定下载路径'
+      iv_df_extension = 'XLS'
+    IMPORTING
+      ev_fullpath     = l_path.
+
+  CALL METHOD cl_gui_frontend_services=>execute
+    EXPORTING
+      document = l_path
+    EXCEPTIONS
+      OTHERS   = 10.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_upload_data .
+  CONSTANTS lc_frnum TYPE i VALUE 2.
+  REFRESH: itab.
+
+  CALL FUNCTION 'TEXT_CONVERT_XLS_TO_SAP'
+    EXPORTING
+      i_line_header        = ''
+      i_tab_raw_data       = it_raw
+      i_filename           = p_file
+    TABLES
+      i_tab_converted_data = itab[]
+    EXCEPTIONS
+      conversion_failed    = 1
+      OTHERS               = 2.
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+    WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4 DISPLAY LIKE 'E'.
+  ENDIF.
+
+  REFRESH:gt_alv.
+  LOOP AT itab FROM lc_frnum.
+    CLEAR: gt_alv.
+    gt_alv-matnr = itab-col01."物料编码
+    gt_alv-werks = itab-col02."工厂
+    gt_alv-vdatu = itab-col03."生效时间从
+    gt_alv-bdatu = itab-col04."生效时间到
+    gt_alv-scmng = itab-col05."拆分配额的最小数量
+    gt_alv-beskz = itab-col06."采购类型
+    gt_alv-sobes = itab-col07."特殊采购类型
+    gt_alv-lifnr = itab-col08."供应商
+    gt_alv-quote = itab-col09."配额
+    gt_alv-maxmg = itab-col10."最大配额数量
+    gt_alv-qubmg = itab-col11."配额基本数量
+    gt_alv-maxls = itab-col12."配额最大批次数量
+    gt_alv-minls = itab-col13."配额最小批次数量
+    gt_alv-kzein = itab-col14."仅一次采购标识
+    gt_alv-ematn = itab-col15."MPN
+    CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+      EXPORTING
+        input  = gt_alv-matnr
+      IMPORTING
+        output = gt_alv-matnr.
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+      EXPORTING
+        input  = gt_alv-lifnr
+      IMPORTING
+        output = gt_alv-lifnr.
+    APPEND gt_alv.
+    CLEAR: itab.
+  ENDLOOP.
+
+*  根据批量导入的数据，从MARA MARC LFA1 EINA取数，做校验
+  IF gt_alv[] IS NOT INITIAL.
+    SELECT * INTO TABLE gt_mara FROM mara FOR ALL ENTRIES IN gt_alv WHERE matnr = gt_alv-matnr.
+    SELECT * INTO TABLE gt_marc FROM marc FOR ALL ENTRIES IN gt_alv WHERE matnr = gt_alv-matnr AND werks = gt_alv-werks.
+    SELECT * INTO TABLE gt_lfa1 FROM lfa1 FOR ALL ENTRIES IN gt_alv WHERE lifnr = gt_alv-lifnr.
+    SELECT * INTO TABLE gt_eina FROM eina FOR ALL ENTRIES IN gt_alv WHERE matnr = gt_alv-matnr AND lifnr = gt_alv-lifnr.
+    SELECT * INTO TABLE gt_equk FROM equk FOR ALL ENTRIES IN gt_alv WHERE matnr = gt_alv-matnr AND werks = gt_alv-werks.
+
+    SORT gt_mara BY matnr.
+    SORT gt_marc BY matnr werks.
+    SORT gt_lfa1 BY lifnr.
+    SORT gt_eina BY matnr lifnr.
+    SORT gt_equk BY matnr werks.
+  ENDIF.
+
+  IF gt_equk[] IS NOT INITIAL.
+    SELECT * INTO TABLE gt_equp FROM equp FOR ALL ENTRIES IN gt_equk
+      WHERE qunum = gt_equk-qunum.
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_data .
+  DATA: lv_bmatn LIKE mara-bmatn,
+        lt_mara  TYPE mara OCCURS 0 WITH HEADER LINE,
+        lt_eina  TYPE eina OCCURS 0 WITH HEADER LINE.
+  LOOP AT gt_alv.
+*  检查物料是否存在,如果存在，检查是否有维护工厂
+    CLEAR: lv_bmatn. REFRESH: lt_mara,lt_eina.
+    READ TABLE gt_mara WITH KEY matnr = gt_alv-matnr BINARY SEARCH.
+    IF sy-subrc <> 0.
+      gt_alv-text = '物料不存在;'.
+    ELSE.
+      IF gt_mara-mprof IS NOT INITIAL.
+        gt_alv-flag = 'X'.
+        SELECT * INTO TABLE lt_mara FROM mara WHERE bmatn = gt_alv-matnr.
+      ENDIF.
+      READ TABLE gt_marc WITH KEY matnr = gt_alv-matnr werks = gt_alv-werks BINARY SEARCH.
+      IF sy-subrc <> 0.
+        CONCATENATE gt_alv-text '物料未维护工厂;' INTO gt_alv-text.
+      ENDIF.
+    ENDIF.
+    IF lt_mara[] IS NOT INITIAL.
+      SELECT * INTO TABLE lt_eina FROM eina
+        FOR ALL ENTRIES IN lt_mara
+        WHERE matnr = lt_mara-matnr
+          AND lifnr = gt_alv-lifnr.
+    ENDIF.
+*  检查供应商是否存在，如果存在，检查物料+供应商是否有维护采购信息记录
+    IF gt_alv-lifnr IS NOT INITIAL.
+      READ TABLE gt_lfa1 WITH KEY lifnr = gt_alv-lifnr BINARY SEARCH.
+      IF sy-subrc <> 0.
+        CONCATENATE gt_alv-text '供应商不存在;' INTO gt_alv-text.
+      ELSE.
+        IF gt_mara-mprof IS INITIAL.
+          READ TABLE gt_eina WITH KEY matnr = gt_alv-matnr lifnr = gt_alv-lifnr BINARY SEARCH.
+          IF sy-subrc <> 0.
+            CONCATENATE gt_alv-text '采购信息记录不存在;' INTO gt_alv-text.
+          ENDIF.
+        ELSE.
+          IF lt_eina[] IS INITIAL.
+            CONCATENATE gt_alv-text '采购信息记录不存在;' INTO gt_alv-text.
+          ENDIF.
+
+        ENDIF.
+      ENDIF.
+    ENDIF.
+    IF gt_alv-text IS NOT INITIAL.
+      gt_alv-zicon = icon_led_red.
+    ENDIF.
+    MODIFY gt_alv .
+    MOVE-CORRESPONDING gt_alv TO gt_head.
+    APPEND gt_head.
+    CLEAR: gt_alv,gt_head.
+  ENDLOOP.
+
+  SORT gt_head BY werks matnr.
+  DELETE ADJACENT DUPLICATES FROM gt_head COMPARING ALL FIELDS.
+
+  SORT gt_alv BY werks matnr vdatu bdatu.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SUB_BUILD_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM sub_build_fieldcat .
+  REFRESH:g_it_fieldcat.
+  PERFORM sub_set_fieldcat USING 'X' 'ZICON'  '状态'                 'X'  '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING 'X' 'MATNR'  '物料编码'             'X'  '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING 'X' 'WERKS'  '工厂'                 'X'  '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING 'X' 'VDATU'  '生效时间从'           'X'  '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING 'X' 'BDATU'  '生效时间到'           'X'  '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING 'X' 'SCMNG'  '拆分配额的最小数量'   'X'  '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING 'X' 'BESKZ'  '采购类型'             'X'  '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING 'X' 'SOBES'  '特殊采购类型'         'X'  '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING 'X' 'LIFNR'  '供应商'               'X'  '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING 'X' 'QUOTE'  '配额'                 'X'  '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING 'X' 'MAXMG'  '最大配额数量'         'X'  '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING 'X' 'QUBMG'  '配额的基本数量'       'X'  '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING 'X' 'MAXLS'  '配额最大批次数量'     'X'  '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING 'X' 'MINLS'  '配额最小批次数量'     'X'  '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING 'X' 'KZEIN'  '仅一次采购标识'       'X'  '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING 'X' 'EMATN'  'MPN'                  'X'  '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING 'X' 'TEXT'   '消息'                  'X'  '' ''  ''  '50'  ''  '' '' .
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  pf_status_set
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->RT_EXTAB   text
+*----------------------------------------------------------------------*
+FORM pf_status_set USING rt_extab TYPE slis_t_extab.
+  DATA:fcode           TYPE TABLE OF sy-ucomm.
+  REFRESH: fcode.
+  SET PF-STATUS 'ZSTANDARD' EXCLUDING fcode.
+ENDFORM. "pf_status_set
+*&---------------------------------------------------------------------*
+*&      Form  alv_user_command
+*&---------------------------------------------------------------------*
+*----------------------------------------------------------------------*
+*      -->UCOMM      text
+*      -->SELFIELD   text
+*----------------------------------------------------------------------*
+FORM alv_user_command USING ucomm LIKE sy-ucomm
+      selfield TYPE slis_selfield.
+  PERFORM sub_check_changed_data.
+
+  CASE ucomm.
+    WHEN 'UPDATE'.
+      READ TABLE gt_alv WITH KEY zicon = icon_led_red.
+      IF sy-subrc = 0.
+        MESSAGE e398(00) WITH '数据仍有错误，请修正后再创建' DISPLAY LIKE 'E'.
+      ENDIF.
+      IF lv_flag = 'X'.
+        MESSAGE e398(00) WITH '数据已经导入，请勿重复导入' DISPLAY LIKE 'E'.
+      ENDIF.
+      PERFORM frm_update_data.
+      lv_flag = 'X'.
+    WHEN OTHERS.
+  ENDCASE.
+  PERFORM sub_refresh_data.
+ENDFORM. "alv_user_command
+*&---------------------------------------------------------------------*
+*&      Form  FRM_UPDATE_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_update_data .
+  DATA: l_text    TYPE bdcdata-fval,
+        lv_tabix  LIKE sy-tabix,
+        lv_tabix1 LIKE sy-tabix.
+  DATA:lv_msg TYPE string."BDC消息
+
+  DATA: gt_alv_col LIKE gt_alv OCCURS 0 WITH HEADER LINE.
+  gt_alv_col[] = gt_alv[].
+  SORT gt_alv_col BY werks matnr vdatu bdatu.
+  DELETE ADJACENT DUPLICATES FROM gt_alv_col COMPARING werks matnr vdatu bdatu.
+**    先判断抬头，
+*  READ TABLE gt_equk WITH KEY matnr = gt_alv-matnr werks = gt_alv-werks BINARY SEARCH.
+*  IF sy-subrc = 0.
+*    gt_alv-flag_h = 'X'.
+*    READ TABLE gt_equp WITH KEY qunum = gt_equk-qunum beskz = gt_alv-beskz
+*    sobes = gt_alv-sobes lifnr = gt_alv-lifnr.
+*    IF sy-subrc = 0.
+*      gt_alv-flag_i = 'X'.
+*    ENDIF.
+*  ENDIF.
+
+  LOOP AT gt_head.
+*  创建抬头
+    PERFORM bdc_dynpro      USING 'SAPDM06Q' '0200'.
+    PERFORM bdc_field       USING 'BDC_OKCODE' '/00'.
+    PERFORM bdc_field       USING 'EQUK-MATNR' gt_head-matnr.
+    PERFORM bdc_field       USING 'EQUK-WERKS' gt_head-werks.
+    PERFORM bdc_dynpro      USING 'SAPDM06Q' '0205'.
+    PERFORM bdc_field       USING 'BDC_OKCODE' '/00'.
+    CLEAR: lv_tabix1.
+    LOOP AT gt_alv_col WHERE matnr = gt_head-matnr AND werks = gt_head-werks.
+      lv_tabix1 = lv_tabix1 + 1.
+      IF lv_tabix1 EQ 1.
+        PERFORM bdc_field       USING 'EQUK-BDATU(01)' gt_alv-bdatu.
+        PERFORM frm_zhzf_data USING gt_alv-scmng CHANGING l_text.
+        PERFORM bdc_field       USING 'EQUK-SCMNG(01)' l_text.
+        PERFORM bdc_dynpro      USING 'SAPDM06Q' '0205'.
+        PERFORM bdc_field       USING 'BDC_OKCODE' '=POSI'.
+        PERFORM bdc_dynpro      USING 'SAPDM06Q' '0215'.
+        PERFORM bdc_field       USING 'BDC_OKCODE' '/00'.
+      ELSE.
+        PERFORM bdc_dynpro      USING 'SAPDM06Q' '0205'.
+        PERFORM bdc_field       USING 'BDC_OKCODE' '=ZEIT'.
+        PERFORM bdc_dynpro      USING 'SAPDM06Q' '0501'.
+        PERFORM bdc_field       USING 'BDC_OKCODE' '=ENTE'.
+        PERFORM bdc_field       USING 'RM06Q-VDATU' gt_alv-vdatu.
+        PERFORM bdc_field       USING 'RM06Q-BDATU' gt_alv-bdatu.
+        PERFORM bdc_dynpro      USING 'SAPDM06Q' '0215'.
+        PERFORM bdc_field       USING 'BDC_OKCODE' '/00'.
+      ENDIF.
+      CLEAR: lv_tabix.
+      LOOP AT gt_alv WHERE matnr = gt_alv_col-matnr AND werks = gt_alv_col-werks
+                       AND vdatu = gt_alv_col-vdatu AND bdatu = gt_alv_col-bdatu.
+        lv_tabix = lv_tabix + 1.
+        IF lv_tabix = 1.
+          PERFORM bdc_field       USING 'EQUP-BESKZ(01)'  gt_alv-beskz.
+          PERFORM bdc_field       USING 'EQUP-LIFNR(01)'  gt_alv-lifnr.
+          CLEAR: l_text.
+          l_text = gt_alv-quote. CONDENSE l_text.
+          PERFORM bdc_field       USING 'EQUP-QUOTE(01)'  l_text.
+          PERFORM frm_zhzf_data USING gt_alv-maxmg CHANGING l_text.
+          PERFORM bdc_field       USING 'EQUP-MAXMG(01)'  l_text.
+          PERFORM frm_zhzf_data USING gt_alv-qubmg CHANGING l_text.
+          PERFORM bdc_field       USING 'EQUP-QUBMG(01)'  l_text.
+          PERFORM frm_zhzf_data USING gt_alv-maxls CHANGING l_text.
+          PERFORM bdc_field       USING 'EQUP-MAXLS(01)'  l_text.
+          PERFORM frm_zhzf_data USING gt_alv-minls CHANGING l_text.
+          PERFORM bdc_field       USING 'EQUP-MINLS(01)'  l_text.
+          PERFORM bdc_field       USING 'EQUP-KZEIN(01)'  gt_alv-kzein.
+          IF gt_alv-flag = 'X'.
+            PERFORM bdc_field       USING 'EQUP-EMATN(01)'  gt_alv-ematn.
+          ENDIF.
+        ELSE.
+          PERFORM bdc_dynpro      USING 'SAPDM06Q' '0215'.
+          PERFORM bdc_field       USING 'BDC_OKCODE'  '=NL'.
+          PERFORM bdc_dynpro      USING 'SAPDM06Q' '0215'.
+          PERFORM bdc_field       USING 'BDC_OKCODE'   '/00'.
+          PERFORM bdc_field       USING 'EQUP-BESKZ(02)'  gt_alv-beskz.
+          PERFORM bdc_field       USING 'EQUP-LIFNR(02)'  gt_alv-lifnr.
+          CLEAR: l_text.
+          l_text = gt_alv-quote. CONDENSE l_text.
+          PERFORM bdc_field       USING 'EQUP-QUOTE(02)'  l_text.
+          CLEAR: l_text.
+          PERFORM frm_zhzf_data USING gt_alv-maxmg CHANGING l_text.
+          PERFORM bdc_field       USING 'EQUP-MAXMG(02)'  l_text.
+          CLEAR: l_text.
+          PERFORM frm_zhzf_data USING gt_alv-qubmg CHANGING l_text.
+          PERFORM bdc_field       USING 'EQUP-QUBMG(02)'  l_text.
+          CLEAR: l_text.
+          PERFORM frm_zhzf_data USING gt_alv-maxls CHANGING l_text.
+          PERFORM bdc_field       USING 'EQUP-MAXLS(02)'  l_text.
+          CLEAR: l_text.
+          PERFORM frm_zhzf_data USING gt_alv-minls CHANGING l_text.
+          PERFORM bdc_field       USING 'EQUP-MINLS(02)'  l_text.
+          PERFORM bdc_field       USING 'EQUP-KZEIN(02)'  gt_alv-kzein.
+          IF gt_alv-flag = 'X'.
+            PERFORM bdc_field       USING 'EQUP-EMATN(02)'  gt_alv-ematn.
+          ENDIF.
+        ENDIF.
+      ENDLOOP.
+      PERFORM bdc_dynpro      USING 'SAPDM06Q' '0215'.
+      PERFORM bdc_field       USING 'BDC_OKCODE'  '=EN'.
+      IF lv_tabix1 > 1.
+        PERFORM bdc_dynpro      USING 'SAPDM06Q' '0205'.
+        PERFORM bdc_field       USING 'BDC_OKCODE'  '=POSS'.
+        PERFORM bdc_dynpro      USING 'SAPDM06Q' '0511'.
+        PERFORM bdc_field       USING 'BDC_OKCODE'  '=ENTE'.
+        PERFORM bdc_field       USING 'RM06Q-VDATU' gt_alv-vdatu.
+        PERFORM bdc_dynpro      USING 'SAPDM06Q' '0205'.
+        PERFORM bdc_field       USING 'BDC_OKCODE'  '/00'.
+        CLEAR: l_text.
+        PERFORM frm_zhzf_data USING gt_alv-scmng CHANGING l_text.
+        PERFORM bdc_field       USING 'EQUK-SCMNG(01)' l_text.
+      ENDIF.
+    ENDLOOP.
+    PERFORM bdc_dynpro      USING 'SAPDM06Q' '0205'.
+    PERFORM bdc_field       USING 'BDC_OKCODE'  '=BU'.
+    CALL TRANSACTION 'MEQ1' USING bdcdata_itab MODE 'N' UPDATE 'L' MESSAGES INTO messtab.
+    LOOP AT messtab WHERE msgtyp = 'E' OR msgtyp = 'A'.
+      EXIT.
+    ENDLOOP.
+    IF sy-subrc = 0.
+      gt_alv-zicon = icon_led_red.
+      LOOP AT messtab WHERE msgtyp = 'E' OR msgtyp = 'A'.
+        CLEAR lv_msg.
+        CALL FUNCTION 'MESSAGE_TEXT_BUILD'
+          EXPORTING
+            msgid               = messtab-msgid
+            msgnr               = messtab-msgnr
+            msgv1               = messtab-msgv1
+            msgv2               = messtab-msgv2
+            msgv3               = messtab-msgv3
+            msgv4               = messtab-msgv4
+          IMPORTING
+            message_text_output = lv_msg.
+        IF gt_head-text IS INITIAL.
+          gt_head-text =  lv_msg.
+        ELSE.
+          CONCATENATE gt_head-text  lv_msg INTO gt_head-text .
+        ENDIF.
+      ENDLOOP.
+    ELSE.
+      gt_head-zicon = icon_led_green.
+      gt_head-text = '导入成功'.
+    ENDIF.
+    MODIFY gt_head.
+    REFRESH:bdcdata_itab,messtab.
+  ENDLOOP.
+
+  LOOP AT gt_alv.
+    READ TABLE gt_head WITH KEY matnr = gt_alv-matnr werks = gt_alv-werks.
+    IF sy-subrc = 0.
+      gt_alv-zicon = gt_head-zicon.
+      gt_alv-text = gt_head-text.
+    ENDIF.
+    MODIFY gt_alv TRANSPORTING zicon text.
+    CLEAR: gt_alv.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  BDC_DYNPRO
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_1152   text
+*      -->P_1153   text
+*----------------------------------------------------------------------*
+FORM bdc_dynpro USING program dynpro.
+  CLEAR bdcdata_itab.
+  bdcdata_itab-program  = program.
+  bdcdata_itab-dynpro   = dynpro.
+  bdcdata_itab-dynbegin = 'X'.
+  APPEND bdcdata_itab.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  BDC_FIELD
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_1317   text
+*      -->P_1318   text
+*----------------------------------------------------------------------*
+FORM bdc_field USING fnam fval.
+  CLEAR bdcdata_itab.
+  bdcdata_itab-fnam = fnam.
+  bdcdata_itab-fval = fval.
+  APPEND bdcdata_itab.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_ZHZF_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_GT_ALV_MAXMG  text
+*      <--P_L_TEXT  text
+*----------------------------------------------------------------------*
+FORM frm_zhzf_data  USING   pv_value
+                    CHANGING l_text.
+  l_text = pv_value.
+  CONDENSE l_text.
+ENDFORM.

@@ -1,0 +1,14 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPMM019S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_matnr FOR mara-matnr,
+               s_werks FOR mard-werks DEFAULT '1000',
+               s_mtart FOR mara-mtart,
+               s_matkl FOR mara-matkl,
+               s_lifnr FOR mslbh-lifnr.
+PARAMETERS: p_lfgja TYPE mslbh-lfgja OBLIGATORY DEFAULT sy-datum(4),
+            p_lfmon TYPE mslbh-lfmon OBLIGATORY DEFAULT sy-datum+4(2),
+            p_lifnr type mslbh-lifnr OBLIGATORY.
+PARAMETERS p1 AS CHECKBOX DEFAULT 'X'.
+SELECTION-SCREEN END OF BLOCK blc.

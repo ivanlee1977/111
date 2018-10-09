@@ -1,0 +1,25 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI014T01
+*&---------------------------------------------------------------------*
+TABLES:faglflext.
+
+TYPES:BEGIN OF tps_item,
+        zexno(2)   TYPE c,
+        kunnr      LIKE kna1-kunnr,
+        name1      LIKE kna1-name1, "关联方名称
+        text1(200) TYPE c,
+        zamount_bq TYPE tslvt12, "本期
+        zratio_bq  TYPE string, "本期占总销售比例
+        zamount_tq TYPE tslvt12, "上年同期
+        zratio_tq  TYPE string, "上年同期占总销售比例
+      END OF tps_item.
+DATA gt_item TYPE tps_item OCCURS 0 WITH HEADER LINE .
+
+DATA:lv_rpmax    TYPE monat,
+     lv_rpmin    TYPE monat,
+     lv_index(2) TYPE n.
+  DATA:lv_vv001_bq TYPE rke2_vv001, "所有客户的销售收入（不含税）同期
+       lv_vv001_tq TYPE rke2_vv001. "所有客户的销售收入（不含税）上期
+CONSTANTS:gcst_excel_template TYPE w3objid VALUE 'ZFI014'.
+
+ranges:r_bukrs FOR t001-bukrs.

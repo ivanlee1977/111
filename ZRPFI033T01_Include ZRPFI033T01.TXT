@@ -1,0 +1,28 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI033T01
+*&---------------------------------------------------------------------*
+TABLES:faglflext,bseg,bkpf.
+
+TYPES:BEGIN OF tps_item,
+        zexno(5)  TYPE c, "EXCEL序号
+        zpro(200) TYPE c, "项目
+        zamount   TYPE tslvt12, "金额
+      END OF tps_item.
+DATA gt_item TYPE tps_item OCCURS 0 WITH HEADER LINE .
+
+DATA:gt_main TYPE tps_item OCCURS 0 WITH HEADER LINE .
+
+
+DATA:BEGIN OF gt_racct OCCURS 0,
+       racct LIKE faglflext-racct,
+       kokrs LIKE faglflext-kokrs,
+       zhsl  TYPE tslvt12, "金额
+     END OF gt_racct.
+
+DATA:lv_rpmax    TYPE monat,
+     lv_rpmin    TYPE monat,
+     lv_index(2) TYPE n.
+
+DATA:gt_t001 LIKE t001 OCCURS 0 WITH HEADER LINE.
+
+CONSTANTS:gcst_excel_template TYPE w3objid VALUE 'ZFI033'.

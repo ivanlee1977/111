@@ -1,0 +1,46 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI021T01
+*&---------------------------------------------------------------------*
+
+TYPE-POOLS:slis.
+
+TABLES:bsik ,bsak,t001.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       lifnr        LIKE bsik-lifnr,
+       name1        LIKE lfa1-name1,
+       waers        LIKE bkpf-waers,
+       zlb(10)      TYPE c,
+       zyfzk1       TYPE p DECIMALS 2, "应付账款1
+       zyfzg1       TYPE p DECIMALS 2, "应付暂估1
+       amount1      TYPE p DECIMALS 2, "余额
+       percent1(20) TYPE c,            "占比
+       zyfzk2       TYPE p DECIMALS 2, "应付账款2
+       zyfzg2       TYPE p DECIMALS 2, "应付暂估2
+       amount2      TYPE p DECIMALS 2, "上年余额
+       percent2(20) TYPE c,            "上年占比
+       amount3      TYPE p DECIMALS 2, "增减余额
+       percent3(20) TYPE c,            "占比
+     END OF gt_out.
+
+DATA: gt_t001 LIKE t001 OCCURS 0 WITH HEADER LINE.
+
+***alv data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  gt_fcat-inttype = &5.
+  gt_fcat-intlen = &6.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

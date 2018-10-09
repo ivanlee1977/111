@@ -1,0 +1,31 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPFI007_TOP
+*&---------------------------------------------------------------------*
+TABLES:bkpf,bseg,ztfi002.
+DATA:BEGIN OF gt_out OCCURS 0.
+    INCLUDE STRUCTURE ztfi002.
+DATA:zstat(30)  TYPE c,
+     belnr(100) TYPE c,
+     sgtxt(500) TYPE c,
+     dmbtr      TYPE p DECIMALS 2,
+     END OF gt_out.
+
+***alv data define
+DATA:gs_layout TYPE slis_layout_alv,
+     gt_fcat   TYPE slis_t_fieldcat_alv WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-seltext_l = &2.
+  gt_fcat-seltext_m = &2.
+  gt_fcat-seltext_s = &2.
+  gt_fcat-ddictxt   = 'L'.
+  gt_fcat-ref_fieldname = &3.
+  gt_fcat-ref_tabname = &4.
+  gt_fcat-inttype = &5.
+  gt_fcat-intlen = &6.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.
+
+ranges:r_bukrs FOR t001-bukrs.

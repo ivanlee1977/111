@@ -1,0 +1,14 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPMM004_S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:
+                s_matnr FOR lips-matnr,
+                s_werks FOR lips-werks OBLIGATORY DEFAULT '1000',
+                s_lifnr  FOR lfa1-lifnr,
+                s_vbeln FOR lips-vbeln,
+                s_lfdat FOR likp-lfdat.
+
+
+SELECTION-SCREEN END OF BLOCK b1.

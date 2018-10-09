@@ -1,0 +1,54 @@
+*&---------------------------------------------------------------------*
+*& Report ZRPSD015
+*& 创建者(公司)/日期： PFT/20170911
+*& 程序描述:客户信用状况表
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    PFT           20170911     创建程序
+*&注意：客户信用状况与CRM接口
+*&      如果有修改内表GT_ALV（增加、删除、修改字段属性）以及选择屏幕条件
+*&      请更新函数：ZF_CRM_CUSTOMERCREDIT（此函数直接SUBMIT该程序,取GT_ALV的结果）
+*&---------------------------------------------------------------------*
+REPORT zrpsd015 MESSAGE-ID z001.
+
+INCLUDE zalv.
+
+INCLUDE zrpsd015t01.
+
+INCLUDE zrpsd015s01.
+
+INCLUDE zrpsd015f01.
+
+************************************************************************
+*INITIALIZATION.
+************************************************************************
+INITIALIZATION.
+************************************************************************
+* AT SELECTION-SCREEN OUTPUT
+************************************************************************
+AT SELECTION-SCREEN OUTPUT.
+************************************************************************
+* AT SELECTION-SCREEN
+************************************************************************
+AT SELECTION-SCREEN.
+**  提示客户与交货单是否匹配
+  IF p_vbeln IS NOT INITIAL.
+    SELECT SINGLE kunag INTO lv_kunag FROM likp WHERE vbeln = p_vbeln .
+    IF lv_kunag NOT IN s_kunnr .
+      MESSAGE e398(00) WITH '当前选择客户与交货单不匹配' DISPLAY LIKE 'E'.
+    ENDIF.
+  ENDIF.
+************************************************************************
+* START-OF-SELECTION
+************************************************************************
+START-OF-SELECTION.
+
+  PERFORM frm_get_data."取数
+  IF p_mx EQ 'X'.
+    PERFORM frm_get_mx."取明细数据
+  ENDIF.
+  PERFORM frm_process_data."对取出的数据进行处理
+  PERFORM sub_build_fieldcat.
+  PERFORM sub_build_layout.
+  PERFORM sub_display_alv TABLES gt_alv USING '' ''.
+  PERFORM frm_export_data ."将数据加载到缓存

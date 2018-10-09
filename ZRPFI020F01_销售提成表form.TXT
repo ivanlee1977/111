@@ -1,0 +1,262 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI020F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:lt_ce11000 LIKE ce11000 OCCURS 0 WITH HEADER LINE.
+  DATA:lt_bsid LIKE bsid OCCURS 0 WITH HEADER LINE.
+  DATA:lv_kvgr1 LIKE knvv-kvgr1.
+  DATA:lt_tvkot LIKE tvkot OCCURS 0 WITH HEADER LINE,
+       lt_t171t LIKE t171t OCCURS 0 WITH HEADER LINE,
+       lt_tvkbt LIKE tvkbt OCCURS 0 WITH HEADER LINE.
+  DATA:lv_ktokd LIKE kna1-ktokd,
+       lv_belnr LIKE bsid-belnr.
+  DATA:ls_out  LIKE LINE OF gt_out.
+
+***获取CE11000的数据
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE lt_ce11000
+    FROM ce11000
+    FOR ALL ENTRIES IN gt_t001
+    WHERE bukrs EQ gt_t001-bukrs
+      AND prctr IN s_prctr
+      AND gjahr = p_gjahr
+      AND perde IN s_perde
+      AND paledger = '02'
+      AND kndnr IN s_kndnr
+      AND vkorg IN s_vkorg.
+
+  DELETE lt_ce11000 WHERE kndnr IS INITIAL AND vv002 IS INITIAL.
+***抓取收款数据
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE lt_bsid
+    FROM bsid
+    FOR ALL ENTRIES IN gt_t001
+    WHERE bukrs EQ gt_t001-bukrs
+      AND prctr IN s_prctr
+      AND kkber IN s_vkorg
+      AND kunnr IN s_kndnr
+      AND hkont = '1122000000'
+      AND gjahr = p_gjahr
+      AND monat IN s_perde
+      AND blart IN ('Z1','Z2','Z3').
+
+  SELECT *
+    APPENDING CORRESPONDING FIELDS OF TABLE lt_bsid
+    FROM bsad
+    FOR ALL ENTRIES IN gt_t001
+    WHERE bukrs EQ gt_t001-bukrs
+      AND prctr IN s_prctr
+      AND kkber IN s_vkorg
+      AND kunnr IN s_kndnr
+      AND hkont = '1122000000'
+      AND gjahr = p_gjahr
+      AND monat IN s_perde
+      AND blart IN ('Z1','Z2','Z3').
+
+***抓取销售组织描述
+  SELECT * INTO TABLE lt_tvkot FROM tvkot WHERE spras = sy-langu.
+***抓取销售区域描述
+  SELECT * INTO TABLE lt_t171t FROM t171t WHERE spras = sy-langu.
+***抓取销售行办描述
+  SELECT * INTO TABLE lt_tvkbt FROM tvkbt WHERE spras = sy-langu.
+
+  SORT lt_tvkot BY vkorg.
+  SORT lt_t171t BY bzirk.
+  SORT lt_tvkbt BY vkbur.
+
+  LOOP AT lt_ce11000.
+    gt_out-kndnr = lt_ce11000-kndnr.
+    CLEAR:lv_ktokd.
+    SELECT SINGLE name1 ktokd INTO (gt_out-name1,lv_ktokd) FROM kna1 WHERE kunnr = gt_out-kndnr.
+***销售组织及描述
+    gt_out-vkorg = lt_ce11000-vkorg.
+    READ TABLE lt_tvkot WITH KEY vkorg  = lt_ce11000-vkorg BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-vkorg_txt = lt_tvkot-vtext.
+    ENDIF.
+
+    IF lv_ktokd EQ  'ZCPD'. "一次性客户
+      SELECT SINGLE bezei INTO gt_out-bezei FROM tvv1t WHERE spras = sy-langu AND kvgr1 = lt_ce11000-ww018.
+      gt_out-bzirk = lt_ce11000-ww016.
+      gt_out-vkbur = lt_ce11000-ww015.
+    ELSE.
+      IF lt_ce11000-ww018 IS NOT INITIAL.
+        SELECT SINGLE bezei INTO gt_out-bezei FROM tvv1t WHERE spras = sy-langu AND kvgr1 = lt_ce11000-ww018.
+      ELSE.
+        SELECT SINGLE bezei INTO gt_out-bezei FROM tvv1t WHERE spras = sy-langu AND kvgr1 = lt_ce11000-kvgr1.
+      ENDIF.
+***销售区域及描述
+      gt_out-bzirk = lt_ce11000-bzirk.
+***销售行办描述
+      gt_out-vkbur = lt_ce11000-vkbur.
+    ENDIF.
+
+***销售区域描述
+    READ TABLE lt_t171t WITH KEY bzirk = gt_out-bzirk BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-bzirk_txt = lt_t171t-bztxt.
+    ENDIF.
+***销售行办描述
+    READ TABLE lt_tvkbt WITH KEY vkbur = gt_out-vkbur BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-vkbur_txt = lt_tvkbt-bezei.
+    ENDIF.
+
+    gt_out-zjshj = lt_ce11000-vv002.
+    COLLECT gt_out.
+    CLEAR gt_out.
+  ENDLOOP.
+
+  LOOP AT lt_bsid.
+    IF lt_bsid-shkzg = 'S'.
+      lt_bsid-dmbtr = -1 * lt_bsid-dmbtr.
+    ENDIF.
+    gt_out-kndnr = lt_bsid-kunnr.
+    CLEAR:lv_ktokd.
+    SELECT SINGLE name1 ktokd INTO (gt_out-name1,lv_ktokd) FROM kna1 WHERE kunnr = gt_out-kndnr.
+
+    SELECT SINGLE kvgr1 vkorg bzirk vkbur
+      INTO (lv_kvgr1,gt_out-vkorg,gt_out-bzirk,gt_out-vkbur)
+      FROM knvv
+     WHERE kunnr = gt_out-kndnr.
+*    IF lv_kvgr1 IS NOT INITIAL.
+*      SELECT SINGLE bezei INTO gt_out-bezei FROM tvv1t WHERE spras = sy-langu AND kvgr1 = lv_kvgr1.
+*    ENDIF.
+
+    IF lv_ktokd EQ 'ZCPD'.
+      SELECT SINGLE ort01 INTO gt_out-bezei FROM bsec WHERE bukrs = lt_bsid-bukrs AND belnr = lt_bsid-belnr AND gjahr = lt_bsid-gjahr AND buzei = lt_bsid-buzei.
+      "一次性客户和CE1000的销售组织、大区、行办保持一致
+      READ TABLE gt_out INTO ls_out WITH KEY kndnr = lt_bsid-kunnr BEZEI = gt_out-bezei.
+      IF sy-subrc = 0.
+        gt_out-vkorg = ls_out-vkorg.
+        gt_out-bzirk = ls_out-bzirk.
+        gt_out-vkbur = ls_out-vkbur.
+      ENDIF.
+    ELSE.
+      CLEAR lv_belnr.
+      CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+        EXPORTING
+          input  = lt_bsid-belnr
+        IMPORTING
+          output = lv_belnr.
+      SELECT SINGLE zywy INTO gt_out-bezei FROM zficotskt WHERE ( zkjpzbh = lt_bsid-belnr OR zkjpzbh = lv_belnr ) AND zgsdm = lt_bsid-bukrs AND zkjnd = lt_bsid-gjahr.
+    ENDIF.
+
+***销售组织及描述
+    READ TABLE lt_tvkot WITH KEY vkorg  = gt_out-vkorg BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-vkorg_txt = lt_tvkot-vtext.
+    ENDIF.
+***销售区域及描述
+    READ TABLE lt_t171t WITH KEY bzirk = gt_out-bzirk BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-bzirk_txt = lt_t171t-bztxt.
+    ENDIF.
+***销售行办描述
+    READ TABLE lt_tvkbt WITH KEY vkbur = gt_out-vkbur BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-vkbur_txt = lt_tvkbt-bezei.
+    ENDIF.
+
+    gt_out-zhk   = lt_bsid-dmbtr.
+    COLLECT gt_out.
+    CLEAR gt_out.
+  ENDLOOP.
+
+  DELETE gt_out WHERE zjshj EQ 0 AND zhk EQ 0.
+
+  SORT gt_out BY kndnr bezei.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  mcr_build_fieldcat: 'KNDNR'       '客户号码'       'KNDNR'  'CE11000'   ''    '',
+                      'NAME1'       '客户名称'       'NAME1'  'KNA1'      ''    '',
+                      'VKORG'       '销售组织'       'VKORG'  'CE11000'   ''    '',
+                      'VKORG_TXT'   '销售组织描述'   'VTEXT'  'TVKOT'     ''    '',
+                      'BZIRK'       '销售大区'       'BZIRK'  'CE11000'   ''    '',
+                      'BZIRK_TXT'   '销售大区描述'   'BZTXT'  'T171T'     ''    '',
+                      'VKBUR'       '销售行办'       'VKBUR'  'CE11000'   ''    '',
+                      'VKBUR_TXT'   '销售行办描述'   'BEZEI'  'TVKBT'     ''    '',
+                      'BEZEI'       '业务员描述'      'BEZEI'  'TVV1T'     ''    '',
+                      'ZJSHJ'       '价税合计'        ''       ''          'P'   '15',
+                      'ZHK'         '回款'            ''       ''          'P'   '15'.
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA_ALV
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data_alv .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK  = ' '
+*     I_BYPASSING_BUFFER =
+*     I_BUFFER_ACTIVE    =
+      i_callback_program = sy-repid
+*     I_CALLBACK_PF_STATUS_SET          = ' '
+*     I_CALLBACK_USER_COMMAND           = ' '
+*     I_CALLBACK_TOP_OF_PAGE            = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME   =
+*     I_BACKGROUND_ID    = ' '
+*     I_GRID_TITLE       =
+*     I_GRID_SETTINGS    =
+      is_layout_lvc      = gs_layout
+      it_fieldcat_lvc    = gt_fcat[]
+*     IT_EXCLUDING       =
+*     IT_SPECIAL_GROUPS_LVC             =
+*     IT_SORT_LVC        =
+*     IT_FILTER_LVC      =
+*     IT_HYPERLINK       =
+*     IS_SEL_HIDE        =
+      i_default          = 'X'
+      i_save             = 'A'
+*     IS_VARIANT         =
+*     IT_EVENTS          =
+*     IT_EVENT_EXIT      =
+*     IS_PRINT_LVC       =
+*     IS_REPREP_ID_LVC   =
+*     I_SCREEN_START_COLUMN             = 0
+*     I_SCREEN_START_LINE               = 0
+*     I_SCREEN_END_COLUMN               = 0
+*     I_SCREEN_END_LINE  = 0
+*     I_HTML_HEIGHT_TOP  =
+*     I_HTML_HEIGHT_END  =
+*     IT_ALV_GRAPHICS    =
+*     IT_EXCEPT_QINFO_LVC               =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER           =
+*     ES_EXIT_CAUSED_BY_USER            =
+    TABLES
+      t_outtab           = gt_out[]
+    EXCEPTIONS
+      program_error      = 1
+      OTHERS             = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.

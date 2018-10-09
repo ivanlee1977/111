@@ -1,0 +1,425 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP013F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:BEGIN OF lt_mast OCCURS 0.
+      INCLUDE STRUCTURE mast.
+  DATA:aennr LIKE aeoi-aennr,
+       oitxt LIKE aeoi-oitxt,
+       revlv LIKE aeoi-revlv,
+       END OF lt_mast.
+  DATA:lv_datuv LIKE aenr-datuv.
+  DATA:lt_stb    LIKE stpox OCCURS 0 WITH HEADER LINE,
+       lt_stb1   LIKE stpox OCCURS 0 WITH HEADER LINE,
+       lt_matcat LIKE cscmat OCCURS 0 WITH HEADER LINE.
+
+  DATA:BEGIN OF lt_makt OCCURS 0,
+         matnr LIKE makt-matnr,
+         maktx LIKE makt-maktx,
+       END OF lt_makt.
+
+  DATA:BEGIN OF lt_marc OCCURS 0,
+         matnr LIKE marc-matnr,
+         werks LIKE marc-werks,
+         dispo LIKE marc-dispo,
+       END OF lt_marc.
+
+  DATA:BEGIN OF lt_mard OCCURS 0,
+         matnr LIKE mard-matnr,
+         werks LIKE mard-werks,
+         lgort LIKE mard-lgort,
+         labst LIKE mard-labst,
+       END OF lt_mard.
+  DATA:BEGIN OF lt_mard_sum  OCCURS 0,
+         matnr LIKE mard-matnr,
+         werks LIKE mard-werks,
+         labst LIKE mard-labst,
+       END OF lt_mard_sum.
+  DATA:lv_meins LIKE mara-meins.
+
+  DATA: BEGIN OF lt_xtab OCCURS 10,
+          werks LIKE ekpo-werks,
+          lgort LIKE ekpo-lgort,
+          matnr LIKE ekpo-matnr,
+          menge LIKE ekpo-menge,
+          mengk LIKE ekpo-menge,
+        END OF lt_xtab.
+  DATA:BEGIN OF lt_afpo OCCURS 0,
+         aufnr LIKE afpo-aufnr,
+         matnr LIKE afpo-matnr,
+         dwerk LIKE afpo-dwerk,
+         psmng LIKE afpo-psmng,
+         psamg LIKE afpo-psamg,
+         wemng LIKE afpo-wemng,
+         zmeng LIKE afpo-psmng,
+       END OF lt_afpo.
+  DATA:BEGIN OF lt_product_data OCCURS 0,
+         matnr LIKE afpo-matnr,
+         dwerk LIKE afpo-dwerk,
+         zmeng LIKE afpo-psmng,
+       END OF lt_product_data.
+
+* ADD BY PFT 20171026
+  DATA: BEGIN OF lt_aeoi OCCURS 0,
+          aennr LIKE aeoi-aennr,
+          objkt LIKE aeoi-objkt,
+          oitxt LIKE aeoi-oitxt,
+          revlv LIKE aeoi-revlv,
+          datuv LIKE aenr-datuv,
+        END OF lt_aeoi.
+  DATA: BEGIN OF lt_mara OCCURS 0 ,
+          matnr LIKE mara-matnr,
+          mtart LIKE mara-mtart,
+        END OF lt_mara.
+  DATA: lv_tabix LIKE sy-tabix.
+* END BY PFT 20171026
+***抓取BOM数据
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE lt_mast
+    FROM mast AS a
+    INNER JOIN aeoi AS b
+    ON a~matnr = b~objkt
+    WHERE a~matnr IN s_matnr
+      AND a~werks IN s_werks
+      AND b~aetyp = '41'.
+
+  SORT lt_mast BY matnr werks revlv DESCENDING.
+***changed by quyantao 20171225,成品先按照ECN生效日期展一层BOM，下面的半成品按照当前日期展多层
+  LOOP AT lt_mast.
+    REFRESH:lt_stb,lt_matcat.
+    SELECT SINGLE datuv INTO lv_datuv FROM aenr WHERE aennr = lt_mast-aennr.
+    CALL FUNCTION 'CS_BOM_EXPL_MAT_V2'
+      EXPORTING
+        capid                 = 'PP01'
+        datuv                 = lv_datuv
+        mtnrv                 = lt_mast-matnr
+        werks                 = lt_mast-werks
+*       mehrs                 = 'X'
+*       mdmps                 = ''
+      TABLES
+        stb                   = lt_stb[]
+        matcat                = lt_matcat[]
+      EXCEPTIONS
+        alt_not_found         = 1
+        call_invalid          = 2
+        material_not_found    = 3
+        missing_authorization = 4
+        no_bom_found          = 5
+        no_plant_data         = 6
+        no_suitable_bom_found = 7
+        conversion_error      = 8
+        OTHERS                = 9.
+    LOOP AT lt_stb WHERE mtart = 'Z002'." matnr NE lt_mast-matnr.
+      gt_out-werks = lt_mast-werks.
+      gt_out-matnr = lt_mast-matnr.
+      gt_out-revlv = lt_mast-revlv.
+      gt_out-oitxt = lt_mast-oitxt.
+***半成品展多层BOM
+      READ TABLE gt_out WITH KEY idnrk = lt_stb-idnrk.  "共用件不重复出现
+      IF sy-subrc <> 0.
+        gt_out-idnrk = lt_stb-idnrk.
+        gt_out-objkt = lt_mast-matnr.  "ADD BY PFT 20171026
+        COLLECT gt_out.
+      ENDIF.
+      CLEAR gt_out.
+***按照当前日期展多层BOM
+      REFRESH lt_stb1.
+      CALL FUNCTION 'CS_BOM_EXPL_MAT_V2'
+        EXPORTING
+          capid                 = 'PP01'
+          datuv                 = sy-datum
+          mtnrv                 = lt_stb-idnrk
+          werks                 = lt_mast-werks
+          mehrs                 = 'X'
+        TABLES
+          stb                   = lt_stb1[]
+        EXCEPTIONS
+          alt_not_found         = 1
+          call_invalid          = 2
+          material_not_found    = 3
+          missing_authorization = 4
+          no_bom_found          = 5
+          no_plant_data         = 6
+          no_suitable_bom_found = 7
+          conversion_error      = 8
+          OTHERS                = 9.
+      LOOP AT lt_stb1 WHERE mtart = 'Z002'.
+        gt_out-werks = lt_mast-werks.
+        gt_out-matnr = lt_mast-matnr.
+        gt_out-revlv = lt_mast-revlv.
+        gt_out-oitxt = lt_mast-oitxt.
+***半成品展多层BOM
+        READ TABLE gt_out WITH KEY idnrk = lt_stb1-idnrk.  "共用件不重复出现
+        IF sy-subrc <> 0.
+          gt_out-idnrk = lt_stb1-idnrk.
+          gt_out-objkt = lt_mast-matnr.  "ADD BY PFT 20171026
+          COLLECT gt_out.
+        ENDIF.
+        CLEAR gt_out.
+      ENDLOOP.
+    ENDLOOP.
+  ENDLOOP.
+
+  SORT gt_out.
+  DELETE  ADJACENT DUPLICATES FROM gt_out COMPARING ALL FIELDS.
+
+  CHECK gt_out[] IS NOT INITIAL.
+***抓取物料描述
+  SELECT matnr maktx
+    INTO CORRESPONDING FIELDS OF TABLE lt_makt
+    FROM makt
+    FOR ALL ENTRIES IN gt_out
+    WHERE ( matnr = gt_out-matnr OR matnr = gt_out-idnrk )
+      AND spras = sy-langu.
+
+***获取MARC数据
+  SELECT matnr werks dispo
+    INTO CORRESPONDING FIELDS OF TABLE lt_marc
+    FROM marc
+    FOR ALL ENTRIES IN gt_out
+    WHERE matnr = gt_out-idnrk
+      AND werks = gt_out-werks.
+
+***获取库存数据
+  SELECT matnr werks lgort labst
+    INTO CORRESPONDING FIELDS OF TABLE lt_mard
+    FROM mard
+    FOR ALL ENTRIES IN gt_out
+    WHERE werks = gt_out-werks
+      AND matnr = gt_out-idnrk
+      AND lgort IN ('1010','1100','1120','1170').
+*  LOOP AT lt_mard.
+*    MOVE-CORRESPONDING lt_mard TO lt_mard_sum.
+*    COLLECT lt_mard_sum.
+*    CLEAR lt_mard_sum.
+*  ENDLOOP.
+
+***生成订单数量
+  SELECT a~aufnr
+         a~matnr
+         a~dwerk
+         a~psmng
+         a~psamg
+         a~wemng
+    INTO CORRESPONDING FIELDS OF TABLE lt_afpo
+    FROM afpo AS a
+    INNER JOIN aufk AS b
+    ON a~aufnr = b~aufnr
+    INNER JOIN jest AS c
+    ON b~objnr = c~objnr
+    FOR ALL ENTRIES IN gt_out
+    WHERE a~matnr = gt_out-idnrk
+      AND a~dwerk = gt_out-werks
+      AND a~xloek EQ space
+      AND c~stat = 'I0002'
+      AND c~inact EQ space.
+  LOOP AT lt_afpo.
+    lt_afpo-zmeng = lt_afpo-psmng - lt_afpo-psamg - lt_afpo-wemng.
+    IF lt_afpo-zmeng > 0.
+      MOVE-CORRESPONDING lt_afpo TO lt_product_data.
+      COLLECT lt_product_data.
+      CLEAR lt_product_data.
+    ENDIF.
+  ENDLOOP.
+
+*  取版次，判断是否为最新版次
+  REFRESH: lt_aeoi.
+  SELECT a~aennr a~objkt a~oitxt a~revlv b~datuv
+    INTO CORRESPONDING FIELDS OF TABLE lt_aeoi
+    FROM aeoi AS a INNER JOIN aenr AS b ON a~aennr = b~aennr
+     FOR ALL ENTRIES IN gt_out
+   WHERE a~objkt = gt_out-objkt.
+  SORT lt_aeoi BY objkt datuv DESCENDING.
+
+***  取半成品物料类型，如果为Z003删除
+  REFRESH:lt_mara.
+  SELECT matnr mtart
+    INTO CORRESPONDING FIELDS OF TABLE lt_mara
+    FROM mara
+    FOR ALL ENTRIES IN gt_out
+    WHERE matnr = gt_out-idnrk
+      AND mtart = 'Z002'.
+  SORT lt_mara BY matnr.
+
+  SORT lt_makt BY matnr.
+  SORT lt_marc BY matnr werks.
+  SORT lt_mard BY matnr werks lgort.
+  SORT lt_mard_sum BY matnr werks.
+  SORT lt_product_data BY matnr dwerk.
+
+  LOOP AT gt_out.
+*   ADD BY PFT 20171026
+    READ TABLE lt_mara WITH KEY matnr = gt_out-idnrk BINARY SEARCH.
+    IF sy-subrc <> 0.
+      DELETE gt_out .
+      CONTINUE.
+    ENDIF.
+*   END BY PFT 20171026
+    READ TABLE lt_makt WITH KEY matnr = gt_out-matnr BINARY SEARCH.
+    IF sy-subrc = 0 .
+      gt_out-maktx  = lt_makt-maktx.
+    ENDIF.
+    READ TABLE lt_makt WITH KEY matnr = gt_out-idnrk BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-idnrk_txt = lt_makt-maktx.
+    ENDIF.
+***MRP控制者
+    READ TABLE lt_marc WITH KEY matnr = gt_out-idnrk werks = gt_out-werks BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-dispo = lt_marc-dispo.
+    ENDIF.
+***1010原材料仓 非限制库存
+    READ TABLE lt_mard WITH KEY matnr = gt_out-idnrk werks = gt_out-werks lgort = '1010' BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-fxzkc_1 = lt_mard-labst.
+    ENDIF.
+***1100更改仓 非限制库存
+    READ TABLE lt_mard WITH KEY matnr = gt_out-idnrk werks = gt_out-werks lgort = '1100' BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-fxzkc_2 = lt_mard-labst.
+    ENDIF.
+***1120PCBA维修仓非限制库存
+    READ TABLE lt_mard WITH KEY matnr = gt_out-idnrk werks = gt_out-werks lgort = '1120' BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-fxzkc_3 = lt_mard-labst.
+    ENDIF.
+***1170维嘉意仓非限制库存
+    READ TABLE lt_mard WITH KEY matnr = gt_out-idnrk werks = gt_out-werks lgort = '1170' BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-fxzkc_4 = lt_mard-labst.
+    ENDIF.
+
+    SELECT SINGLE meins INTO gt_out-meins FROM mara WHERE matnr = gt_out-matnr.
+***获取未清PO数量
+    REFRESH :lt_xtab.
+    CALL FUNCTION 'MB_ADD_PURCHASE_ORDER_QUANTITY'
+      EXPORTING
+        x_elikz = ' '
+        x_loekz = ' '
+        x_matnr = gt_out-idnrk
+        x_meins = gt_out-meins
+      TABLES
+        xtab    = lt_xtab
+        xwerks  = s_werks.
+    LOOP AT lt_xtab.
+      gt_out-ztkcs_2 = gt_out-ztkcs_2 + lt_xtab-menge + lt_xtab-mengk.
+    ENDLOOP.
+***车间在制
+    READ TABLE lt_product_data WITH KEY matnr = gt_out-idnrk dwerk = gt_out-werks BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-ztkcs_1 = gt_out-ztkcs_1 + lt_product_data-zmeng.
+    ENDIF.
+***总库存
+    gt_out-total = gt_out-fxzkc_1 + gt_out-fxzkc_2 + gt_out-fxzkc_3  + gt_out-fxzkc_4 + gt_out-ztkcs_1 + gt_out-ztkcs_2.
+***判断是否为最新版次
+    READ TABLE lt_aeoi WITH KEY objkt = gt_out-objkt .
+    IF sy-subrc = 0 AND gt_out-revlv = lt_aeoi-revlv.
+      gt_out-zflag = 'Y'.
+    ENDIF.
+    MODIFY gt_out.
+  ENDLOOP.
+* ADD BY PFT 20171026
+  DELETE gt_out WHERE total EQ 0.
+  SORT gt_out BY matnr revlv.
+  DELETE ADJACENT DUPLICATES FROM gt_out COMPARING ALL FIELDS.
+* END BY PFT 20171026
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  mcr_build_fieldcat:'WERKS'         '工厂'           'WERKS'   'MAST',
+                     'MATNR'         '成品料号'       'MATNR'   'MAST',
+                     'MAKTX'         '成品描述'       'MAKTX'   'MAKT',
+                     'REVLV'         '版次'           'REVLV'   'AEOI',
+                     'ZFLAG'         '是否最新版'     ''        '',
+                     'OITXT'         '成品版本'       'OITXT'   'AEOI',
+                     'IDNRK'         '半成品料号'     'IDNRK'   'STPO',
+                     'IDNRK_TXT'     '半成品描述'     'MAKTX'   'MAKT',
+                     'DISPO'         'MRP控制者'      'DISPO'   'MARC',
+                     'FXZKC_1'       '1010原材料仓非限制库存'   'LABST'   'MARD',
+                     'FXZKC_2'       '1100更改仓非限制库存'     'LABST'   'MARD',
+                     'FXZKC_3'       '1120PCBA维修仓非限制库存'   'LABST'   'MARD',
+                     'FXZKC_4'       '1170维嘉意仓非限制库存'   'LABST'   'MARD',
+                     'ZTKCS_1'         '车间在制'         'LABST'   'MARD',
+                     'ZTKCS_2'         '外协未返回'         'LABST'   'MARD',
+                     'TOTAL'         '总数量'         'LABST'   'MARD'.
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK  = ' '
+*     I_BYPASSING_BUFFER =
+*     I_BUFFER_ACTIVE    =
+      i_callback_program = sy-repid
+*     I_CALLBACK_PF_STATUS_SET          = ' '
+*     I_CALLBACK_USER_COMMAND           = ' '
+*     I_CALLBACK_TOP_OF_PAGE            = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME   =
+*     I_BACKGROUND_ID    = ' '
+*     I_GRID_TITLE       =
+*     I_GRID_SETTINGS    =
+      is_layout_lvc      = gs_layout
+      it_fieldcat_lvc    = gt_fcat[]
+*     IT_EXCLUDING       =
+*     IT_SPECIAL_GROUPS_LVC             =
+*     IT_SORT_LVC        =
+*     IT_FILTER_LVC      =
+*     IT_HYPERLINK       =
+*     IS_SEL_HIDE        =
+*     I_DEFAULT          = 'X'
+      i_save             = 'A'
+*     IS_VARIANT         =
+*     IT_EVENTS          =
+*     IT_EVENT_EXIT      =
+*     IS_PRINT_LVC       =
+*     IS_REPREP_ID_LVC   =
+*     I_SCREEN_START_COLUMN             = 0
+*     I_SCREEN_START_LINE               = 0
+*     I_SCREEN_END_COLUMN               = 0
+*     I_SCREEN_END_LINE  = 0
+*     I_HTML_HEIGHT_TOP  =
+*     I_HTML_HEIGHT_END  =
+*     IT_ALV_GRAPHICS    =
+*     IT_EXCEPT_QINFO_LVC               =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER           =
+*     ES_EXIT_CAUSED_BY_USER            =
+    TABLES
+      t_outtab           = gt_out[]
+    EXCEPTIONS
+      program_error      = 1
+      OTHERS             = 2.
+  IF sy-subrc <> 0.
+*    implement suitable error handling here
+  ENDIF.
+
+ENDFORM.

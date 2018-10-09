@@ -1,0 +1,880 @@
+*&---------------------------------------------------------------------*
+*& Report ZRPMM042
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT zrpmm042.
+
+TABLES:ekko,eban, ekpo.
+
+***alv data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.
+***SELECTION SCREEN DEFINE
+
+
+DATA:BEGIN OF gt_ekpo OCCURS 0 ,
+       ebeln LIKE ekko-ebeln,
+       bukrs LIKE ekko-bukrs,
+       bstyp LIKE ekko-bstyp,
+       bsart LIKE ekko-bsart,
+       aedat LIKE ekko-aedat,
+       lifnr LIKE ekko-lifnr,
+       ebelp LIKE ekpo-ebelp,
+       matnr LIKE ekpo-matnr,
+       werks LIKE ekpo-werks,
+       meins LIKE ekpo-meins,
+       menge LIKE ekpo-menge,
+       netpr LIKE ekpo-netpr,
+       peinh LIKE ekpo-peinh,
+       pein1 LIKE ekpo-infnr,
+       infnr LIKE ekpo-infnr,
+       mwskz LIKE ekpo-mwskz, "原税码
+       mwsk1 LIKE ekpo-mwskz, "最新税码
+       kbetr LIKE t007v-kbetr,
+       frggr LIKE ekko-frggr,
+       frgsx LIKE ekko-frgsx,
+       frgke LIKE ekko-frgke,
+       frgzu LIKE ekko-frgzu,
+       frgrl LIKE ekko-frgrl,
+       pstyp LIKE ekpo-pstyp,
+     END OF gt_ekpo.
+
+DATA:gt_t007a LIKE t007a OCCURS 0 WITH HEADER LINE.
+DATA:gt_t007v LIKE t007v OCCURS 0 WITH HEADER LINE.
+DATA:gt_t16fs LIKE t16fs OCCURS 0 WITH HEADER LINE.
+DATA:BEGIN OF gt_ftaxp OCCURS 0 .
+    INCLUDE STRUCTURE ftaxp .
+DATA:mwskz LIKE    ekpo-mwskz,
+     END OF gt_ftaxp.
+
+DATA:BEGIN OF gt_out OCCURS 0 ,
+       ebeln    LIKE    ekko-ebeln,
+       ebelp    LIKE    ekpo-ebelp,
+       lifnr    LIKE    ekko-lifnr,
+       name1    LIKE    lfa1-name1,
+       matnr    LIKE    ekpo-matnr,
+       maktx    LIKE    makt-maktx,
+       meins    LIKE    ekpo-meins,
+       aedat    LIKE    ekko-aedat,
+       menge    LIKE    ekpo-menge,
+       netpr    LIKE    ekpo-netpr,
+       peinh    LIKE    ekpo-peinh,
+       amout    TYPE    p DECIMALS 3,
+       pein1    LIKE    ekpo-infnr,
+       mwskz    LIKE    ekpo-mwskz,
+       mwsk1    LIKE    ekpo-mwskz,
+       frggr    LIKE    ekko-frggr,
+       frgsx    LIKE    ekko-frgsx,
+       frgke    LIKE    ekko-frgke,
+       frgzu    LIKE    ekko-frgzu,
+       frgrl    LIKE    ekko-frgrl,
+       netp1    LIKE    ekpo-netpr, "新净价
+       bstyp    LIKE ekko-bstyp,
+       bsart    LIKE ekko-bsart,
+       sel,
+       box,
+       type,
+       msg(100),
+
+***add 20180502 变更
+       infnr    LIKE ekpo-infnr,
+       konwa    LIKE konp-konwa,
+       kbetr    LIKE konp-kbetr,
+       datbi    LIKE a017-datbi,
+       datab    LIKE a017-datab,
+       flag,
+       knumh    LIKE a017-knumh,
+       pstyp    LIKE ekpo-pstyp,
+       kbet1    LIKE konp-kbetr,
+       "menge    LIKE ekpo-menge,
+       bprme    LIKE eine-bprme,
+       prdat    LIKE eine-prdat,
+       bpumz    LIKE eine-bpumz,
+       bpumn    LIKE eine-bpumn,
+     END OF gt_out.
+
+DATA:BEGIN OF gt_eina OCCURS 0 ,
+       lifnr TYPE lifnr, "供应商代码
+       matnr TYPE matnr , "物料编码
+       ekorg TYPE ekorg, "采购组织
+       werks TYPE werks_d, "工厂
+       infnr TYPE infnr,
+       esokz TYPE esokz,
+       mwskz TYPE mwskz,
+       bprme LIKE eine-bprme,
+       prdat LIKE eine-prdat,
+       bpumz LIKE eine-bpumz,
+       bpumn LIKE eine-bpumn,
+     END OF gt_eina.
+
+DATA:gt_a017 LIKE a017 OCCURS 0 WITH HEADER LINE.
+DATA:gt_konp LIKE konp OCCURS 0 WITH HEADER LINE.
+DATA:gt_konm LIKE konm OCCURS 0 WITH HEADER LINE.
+DATA:lv_menge LIKE gt_out-menge.
+
+***SELECTION SCREEN DEFINE
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_matnr FOR ekpo-matnr ,
+               s_bukrs FOR ekko-bukrs NO INTERVALS NO-EXTENSION,
+               s_ebeln FOR ekko-ebeln ,
+               s_aedat FOR ekko-aedat ,
+               s_ekgrp FOR ekko-ekgrp ,
+               s_lifnr FOR ekko-lifnr ,
+               s_bsart FOR ekko-bsart NO INTERVALS NO-EXTENSION.
+SELECTION-SCREEN END OF BLOCK blc.
+
+
+
+START-OF-SELECTION.
+
+
+  PERFORM frm_get_data.
+  PERFORM frm_get_fieldcat.
+  PERFORM frm_output_data.
+
+
+
+
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+
+  DATA:BEGIN OF lt_ekbe OCCURS 0 ,
+         ebeln LIKE ekbe-ebeln,
+         ebelp LIKE ekbe-ebelp,
+         menge TYPE ekbe-menge,
+         bwart TYPE ekbe-bwart,
+       END OF lt_ekbe.
+  DATA lv_menge  TYPE ekbe-menge.
+
+
+  SELECT
+    ekko~ebeln
+    ekko~bukrs
+    ekko~bstyp
+    ekko~bsart
+    ekko~aedat
+    ekko~lifnr
+    ekpo~ebelp
+    ekpo~matnr
+    ekpo~werks
+    ekpo~meins
+    ekpo~menge
+    ekpo~netpr
+    ekpo~peinh
+    ekpo~infnr
+    ekpo~mwskz
+    frggr
+    frgsx
+    frgke
+    frgzu
+    frgrl
+    pstyp
+    INTO CORRESPONDING FIELDS OF TABLE gt_ekpo
+    FROM ekko
+    INNER JOIN ekpo
+    ON ekko~ebeln = ekpo~ebeln
+    WHERE ekpo~matnr IN s_matnr
+      AND ekko~bukrs IN s_bukrs
+      AND ekko~ebeln IN s_ebeln
+      AND ekko~aedat IN s_aedat
+      AND ekko~ekgrp IN s_ekgrp
+      AND ekko~lifnr IN s_lifnr
+      AND ekko~loekz = ''
+      AND ekpo~loekz = ''
+      AND ekpo~elikz = ''
+      AND ekko~bsart IN s_bsart.
+
+  IF sy-subrc = 0.
+    SELECT ebeln ebelp bwart menge INTO CORRESPONDING FIELDS OF TABLE  lt_ekbe FROM ekbe
+      FOR ALL ENTRIES IN gt_ekpo
+      WHERE ebeln = gt_ekpo-ebeln AND ebelp = gt_ekpo-ebelp.
+    SORT lt_ekbe BY ebeln ebelp.
+*    DELETE ADJACENT DUPLICATES FROM lt_ekbe COMPARING ebeln ebelp.
+    SORT gt_ekpo BY ebeln ebelp.
+
+    LOOP AT gt_ekpo.
+      CLEAR: lt_ekbe,lv_menge.
+*      READ TABLE lt_ekbe WITH KEY ebeln = gt_ekpo-ebeln
+*                                  ebelp = gt_ekpo-ebelp
+*                                  BINARY SEARCH.
+*      IF sy-subrc = 0.
+*        DELETE gt_ekpo.
+*      ENDIF.
+*add by leimt 20180507 采购历史数据进行汇总，如果数量为零仍然保留
+      LOOP AT lt_ekbe WHERE ebeln = gt_ekpo-ebeln AND ebelp = gt_ekpo-ebelp.
+        IF lt_ekbe-bwart = '101'.
+          lv_menge = lv_menge + lt_ekbe-menge.
+        ELSEif lt_ekbe-bwart = '102' or lt_ekbe-bwart = '122'.
+          lv_menge = lv_menge - lt_ekbe-menge.
+        ENDIF.
+      ENDLOOP.
+      IF lv_menge <> 0 AND sy-subrc = 0.
+        DELETE gt_ekpo.
+      ENDIF.
+    ENDLOOP.
+
+
+
+
+
+    IF gt_ekpo[] IS NOT INITIAL.
+**税码
+*      SELECT * FROM t007a INTO TABLE gt_t007a WHERE kalsm = 'TAXCN' .
+*      IF sy-subrc = 0.
+*        DATA:lt_ftaxp LIKE ftaxp OCCURS 0 WITH HEADER LINE.
+*
+*        LOOP AT gt_t007a WHERE mwskz IS NOT INITIAL.
+*          CLEAR:lt_ftaxp.
+*          REFRESH:lt_ftaxp.
+*          CALL FUNCTION 'GET_TAX_PERCENTAGE'
+*            EXPORTING
+*              aland   = 'CN'
+*              datab   = sy-datum
+*              mwskz   = gt_t007a-mwskz
+*              txjcd   = 'J1'
+**             EXPORT  = ' '
+*            TABLES
+*              t_ftaxp = lt_ftaxp.
+*
+*          APPEND LINES OF lt_ftaxp TO gt_ftaxp.
+*          gt_ftaxp-mwskz = gt_t007a-mwskz.
+*          MODIFY gt_ftaxp TRANSPORTING mwskz WHERE mwskz IS INITIAL.
+*
+*        ENDLOOP.
+
+      SORT gt_t007v BY mwskz datam DESCENDING .
+
+      SELECT
+       eina~lifnr
+       eina~matnr
+       eine~ekorg
+       eine~werks
+       eina~infnr
+       eine~esokz
+       eine~mwskz
+       bprme
+       prdat
+       bpumz
+       bpumn
+   INTO TABLE gt_eina
+  FROM eina INNER JOIN eine
+   ON eina~infnr = eine~infnr
+        FOR ALL ENTRIES IN gt_ekpo
+  WHERE eina~infnr = gt_ekpo-infnr.
+      IF sy-subrc = 0.
+        SELECT *
+            FROM a017
+            INTO TABLE gt_a017
+             FOR ALL ENTRIES IN gt_eina
+            WHERE lifnr = gt_eina-lifnr
+            AND matnr = gt_eina-matnr
+            AND ekorg = gt_eina-ekorg
+            AND werks = gt_eina-werks
+            AND kschl = 'PB00'.
+
+        IF sy-subrc = 0.
+          SORT gt_a017 DESCENDING BY kschl lifnr matnr ekorg werks esokz datbi.
+          DELETE ADJACENT DUPLICATES FROM gt_a017 COMPARING kschl lifnr matnr ekorg werks esokz.
+          SELECT *
+              FROM konp
+              INTO TABLE gt_konp
+              FOR ALL ENTRIES IN gt_a017
+              WHERE knumh  = gt_a017-knumh.
+          SELECT *
+              FROM konm
+              INTO TABLE gt_konm
+              FOR ALL ENTRIES IN gt_a017
+              WHERE knumh  = gt_a017-knumh.
+        ENDIF.
+      ENDIF.
+      CLEAR gt_out.
+      REFRESH gt_out.
+      LOOP AT gt_ekpo.
+        CLEAR gt_t007v.
+*          READ TABLE gt_ftaxp WITH KEY mwskz = gt_ekpo-mwskz .
+*          IF sy-subrc = 0.
+*            gt_ekpo-kbetr = gt_ftaxp-kbetr - 10 ."找到原
+*            gt_ekpo-pein1 = gt_ekpo-peinh - 1.
+*            CLEAR gt_t007v.
+*            READ TABLE gt_ftaxp WITH KEY kbetr = gt_ekpo-kbetr .
+*            IF sy-subrc = 0.
+*              gt_ekpo-mwsk1 = gt_ftaxp-mwskz.
+*            ELSE.
+*
+*
+*            ENDIF.
+*
+*
+*
+*
+*          ENDIF.
+        CLEAR gt_out.
+        MOVE-CORRESPONDING gt_ekpo TO gt_out.
+        CLEAR gt_eina.
+
+
+        IF gt_ekpo-pstyp = '3'.
+          READ TABLE gt_eina WITH KEY infnr = gt_ekpo-infnr  esokz = '3'.
+        ELSEIF gt_ekpo-pstyp = '' OR gt_ekpo-pstyp = '0'.
+          READ TABLE gt_eina WITH KEY infnr = gt_ekpo-infnr  esokz = '0'.
+        ELSE.
+          LOOP AT gt_eina WHERE infnr = gt_ekpo-infnr AND esokz <> '3' AND esokz <> '0'.
+            EXIT.
+          ENDLOOP.
+        ENDIF.
+
+
+
+        IF sy-subrc = 0.
+
+          gt_out-mwsk1 = gt_eina-mwskz.
+          gt_out-bprme = gt_eina-bprme.
+          gt_out-prdat = gt_eina-prdat.
+          gt_out-bpumz = gt_eina-bpumz.
+          gt_out-bpumn = gt_eina-bpumn.
+
+          READ TABLE gt_a017 WITH KEY  lifnr = gt_eina-lifnr
+                                        matnr = gt_eina-matnr
+                                        ekorg = gt_eina-ekorg
+                                        werks = gt_eina-werks
+                                        esokz = gt_eina-esokz .
+
+          IF sy-subrc = 0.
+            gt_out-datbi = gt_a017-datbi.
+            gt_out-datab = gt_a017-datab.
+            gt_out-knumh = gt_a017-knumh.
+            READ TABLE gt_konp WITH KEY knumh  = gt_a017-knumh kschl = 'PB00'.
+            IF sy-subrc = 0.
+              gt_out-kbetr  = gt_konp-kbetr.
+              gt_out-konwa  = gt_konp-konwa.
+              gt_out-pein1 = gt_konp-kpein.
+              gt_out-kbet1 = gt_out-kbetr.
+            ENDIF.
+            SORT gt_konm DESCENDING BY knumh kstbm.
+            LOOP AT gt_konm WHERE knumh  = gt_a017-knumh.
+              gt_out-flag = 'X'.
+              CLEAR lv_menge.
+              lv_menge = gt_out-menge.
+              IF gt_out-bprme <> gt_out-meins.
+                IF gt_out-bpumn <> 0.
+                  lv_menge = lv_menge * gt_out-bpumz / gt_out-bpumn.
+                ENDIF.
+              ENDIF.
+              IF lv_menge >= gt_konm-kstbm.
+                gt_out-kbet1 = gt_konm-kbetr.
+                EXIT.
+              ENDIF.
+            ENDLOOP.
+
+          ENDIF.
+
+        ENDIF.
+
+        SELECT SINGLE name1 FROM lfa1 INTO gt_out-name1 WHERE lifnr = gt_out-lifnr.
+        SELECT  SINGLE maktx FROM makt INTO gt_out-maktx WHERE matnr = gt_out-matnr AND spras = 1.
+        gt_out-amout = gt_out-menge * gt_out-netpr / gt_out-peinh.
+        IF gt_out-pein1 <> 0.
+          gt_out-netp1 = gt_out-kbetr / gt_out-pein1. "新净价 = 旧净价 / 旧条件单位 * 新条件单位
+        ENDIF.
+        CALL FUNCTION 'CONVERSION_EXIT_CUNIT_OUTPUT'
+          EXPORTING
+            input    = gt_out-meins
+            language = sy-langu
+          IMPORTING
+*           LONG_TEXT            =
+            output   = gt_out-meins
+*           SHORT_TEXT           =
+*           EXCEPTIONS
+*           UNIT_NOT_FOUND       = 1
+*           OTHERS   = 2
+          .
+        IF sy-subrc <> 0.
+* Implement suitable error handling here
+        ENDIF.
+
+*          IF gt_out-mwsk1 IS INITIAL.
+*            gt_out-type = 'E'.
+*            gt_out-msg = '未找到税码'.
+*            CLEAR gt_ekpo-pein1.
+*          ENDIF.
+        APPEND gt_out.
+        MODIFY gt_ekpo.
+        CLEAR gt_ekpo.
+        CLEAR gt_out.
+      ENDLOOP.
+
+      "    ENDIF.
+
+      SELECT * FROM t16fs INTO TABLE gt_t16fs.
+    ELSE.
+      RETURN.
+    ENDIF.
+
+
+
+  ELSE.
+    MESSAGE '没有找到对应的数据' TYPE 'S' DISPLAY LIKE 'E'.
+    STOP.
+  ENDIF.
+
+
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  REFRESH gt_fcat.
+  gt_fcat-fieldname = 'BOX'.
+  gt_fcat-coltext = '选择列'.
+  gt_fcat-checkbox = 'X'.
+  gt_fcat-edit = 'X'.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+
+
+  mcr_build_fieldcat:
+'EBELN' '采购凭证' '' '' ,
+'EBELP' '行项目' '' '' ,
+'BSTYP' '类别' '' '' ,
+'BSART' '类型' '' '' ,
+'LIFNR' '供应商' '' '' ,
+'NAME1' '供应商名称' '' '' ,
+'MATNR' '物料' '' '' ,
+'MAKTX' '物料描述' '' '' ,
+'MEINS' '订单单位' '' '' ,
+'AEDAT' '创建日期' '' '' ,
+'MENGE' '数量' '' '' ,
+'NETPR' '原净价' '' '' ,
+'PEINH' '原价格单位' '' '' ,
+'AMOUT' '金额' '' '' ,
+'KBETR' '最新价格' '' '' ,
+'PEIN1' '最新价格单位' '' '' ,
+'KONWA' '币别' '' '' ,
+'MWSKZ' '原税码' '' '' ,
+'MWSK1' '最新税码' '' '' ,
+'DATAB' '有效起始日' '' '' ,
+'DATBI' '有效截止日期' '' '' ,
+'INFNR' '采购信息记录' '' '' ,
+'FLAG' '阶梯的标识' '' '',
+'TYPE' '信息类型' '' '' ,
+'MSG' '成功信息' '' ''
+            .
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'SET_PF_STATUS'
+      i_callback_user_command  = 'ALV_USER_COMMAND'
+      is_layout_lvc            = gs_layout
+      it_fieldcat_lvc          = gt_fcat[]
+      i_default                = 'X'
+      i_save                   = 'A'
+    TABLES
+      t_outtab                 = gt_out[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+ENDFORM.
+
+
+
+FORM set_pf_status USING rt_extab TYPE slis_t_extab.
+
+  SET PF-STATUS 'STANDARD' EXCLUDING rt_extab.
+ENDFORM.
+
+FORM alv_user_command USING r_ucomm LIKE sy-ucomm rs_selfield TYPE slis_selfield.
+*  获取ALV中的鼠标勾选记录
+  DATA: l_valid TYPE c.
+  DATA: l_grid TYPE REF TO cl_gui_alv_grid.
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = l_grid.
+
+  CALL METHOD l_grid->check_changed_data
+    IMPORTING
+      e_valid = l_valid.
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+  r_ucomm = sy-ucomm.
+  CASE r_ucomm.
+    WHEN 'CHANGE'.
+
+
+
+      READ TABLE gt_out WITH KEY box = 'X'.
+      IF sy-subrc = 0.
+        LOOP AT gt_out WHERE box = 'X' AND type IS NOT INITIAL.
+          CASE gt_out-type.
+            WHEN 'E'.
+              MESSAGE '选择行中存在错误' TYPE 'S' DISPLAY LIKE 'E'.
+              RETURN.
+            WHEN 'S'.
+              MESSAGE '选择行中存在已处理行项目' TYPE 'S' DISPLAY LIKE 'E'.
+              RETURN.
+          ENDCASE.
+
+        ENDLOOP.
+        PERFORM data_process.
+      ELSE.
+        MESSAGE '请选择行项目' TYPE 'S' DISPLAY LIKE 'E'.
+        RETURN.
+      ENDIF.
+    WHEN 'ALL_C'.
+      gt_out-box = 'X'.
+      MODIFY gt_out TRANSPORTING box WHERE box = ''.
+    WHEN 'ALL_Q'.
+      gt_out-box = ''.
+      MODIFY gt_out TRANSPORTING box WHERE box = 'X'.
+    WHEN OTHERS.
+
+  ENDCASE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  DATA_PROCESS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM data_process .
+  DATA: l_last_char TYPE n,  l_level TYPE i.
+  FIELD-SYMBOLS: <fs_field> TYPE t16fs-frgc1.      "当前审批组值
+  FIELD-SYMBOLS: <fs_t16fs> TYPE t16fs.
+  DATA:l_fieldname(5).
+
+  LOOP AT gt_out WHERE box = 'X' AND type IS INITIAL.
+    IF gt_out-pein1 IS INITIAL  OR gt_out-pein1 = 0.
+      gt_out-type = 'E'.
+      gt_out-msg = '更新条件价格单位为空'.
+      MESSAGE '价格更新数据中 存在错误' TYPE  'S' DISPLAY LIKE 'E'.
+      MODIFY gt_out.
+      CLEAR gt_out.
+      CONTINUE.
+    ENDIF.
+    CLEAR  l_level.
+****取消评审
+
+
+    "根据采购订单的审批组、审批策略取对应的审批组
+    READ TABLE gt_t16fs ASSIGNING <fs_t16fs> WITH KEY frggr = gt_out-frggr frgsx = gt_out-frgsx.
+    IF sy-subrc = 0.
+      "计算审批通过级数
+      l_level = strlen( gt_out-frgzu ).
+      "p_frgco = gt_t16fs-frgc1.
+      IF gt_out-frgzu IS NOT INITIAL.
+        "组成字段名
+        CONCATENATE 'FRGC' '1' INTO l_fieldname.
+        "通过指针获取批准代码
+        ASSIGN COMPONENT l_fieldname OF STRUCTURE <fs_t16fs> TO <fs_field>.
+        PERFORM approve_po USING gt_out-ebeln 'N' <fs_field>.
+        WAIT UP TO '1' SECONDS.
+
+      ENDIF.
+    ENDIF.
+    IF gt_out-type = 'E'.
+      MODIFY gt_out.
+      CLEAR gt_out.
+      CONTINUE.
+    ELSE.
+****修改订单
+      PERFORM change_po_item .
+      IF gt_out-type = 'E'.
+        MODIFY gt_out.
+        CLEAR gt_out.
+        MESSAGE '价格更新数据中 存在错误' TYPE  'S' DISPLAY LIKE 'E'.
+        CONTINUE.
+      ENDIF.
+
+      IF l_level = 0.
+        DO 8 TIMES.
+          IF <fs_t16fs>-frgc8 IS NOT INITIAL.
+            l_level = 8. EXIT.
+          ELSEIF <fs_t16fs>-frgc7 IS NOT INITIAL.
+            l_level = 7. EXIT.
+          ELSEIF <fs_t16fs>-frgc6 IS NOT INITIAL.
+            l_level = 6. EXIT.
+          ELSEIF <fs_t16fs>-frgc5 IS NOT INITIAL.
+            l_level = 5. EXIT.
+          ELSEIF <fs_t16fs>-frgc4 IS NOT INITIAL.
+            l_level = 4. EXIT.
+          ELSEIF <fs_t16fs>-frgc3 IS NOT INITIAL.
+            l_level = 3. EXIT.
+          ELSEIF <fs_t16fs>-frgc2 IS NOT INITIAL.
+            l_level = 2. EXIT.
+          ELSEIF <fs_t16fs>-frgc1 IS NOT INITIAL.
+            l_level = 1. EXIT.
+          ENDIF.
+
+        ENDDO.
+
+
+      ENDIF.
+
+      DO l_level TIMES.
+        l_last_char = sy-index.
+        CONCATENATE 'FRGC' l_last_char INTO l_fieldname.
+        ASSIGN COMPONENT l_fieldname OF STRUCTURE <fs_t16fs> TO <fs_field>.
+        PERFORM approve_po USING gt_out-ebeln 'Y' <fs_field>.
+        WAIT UP TO '1' SECONDS.
+
+      ENDDO.
+
+****审批订单
+
+
+      IF gt_out-type = 'S' OR gt_out-type  IS INITIAL.
+        gt_out-type = 'S'.
+        gt_out-msg = '价格更新成功'.
+        MESSAGE '价格更新成功' TYPE  'S' .
+      ENDIF.
+
+      CALL FUNCTION 'DEQUEUE_EMEKKOE'
+        EXPORTING
+          mandt = sy-mandt
+          ebeln = gt_out-ebeln.
+
+    ENDIF.
+
+
+    MODIFY gt_out.
+    CLEAR gt_out.
+
+  ENDLOOP.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  APPROVE_PO
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_GT_OUT_EBELN  text
+*      -->P_0970   text
+*      -->P_<FS_FIELD>  text
+*----------------------------------------------------------------------*
+FORM approve_po  USING    purchaseorder LIKE gt_out-ebeln
+                          p_type   TYPE char1
+                          rel_cod  TYPE  t16fs-frgc1.
+  DATA:return LIKE bapireturn OCCURS 0 WITH HEADER LINE.
+  REFRESH return.
+  CASE p_type.
+    WHEN 'Y'. "审批
+      CALL FUNCTION 'BAPI_PO_RELEASE'
+        EXPORTING
+          purchaseorder          = purchaseorder
+          po_rel_code            = rel_cod
+*         USE_EXCEPTIONS         = 'X'
+*         NO_COMMIT              = ' '
+*   IMPORTING
+*         REL_STATUS_NEW         =
+*         REL_INDICATOR_NEW      =
+*         RET_CODE               =
+        TABLES
+          return                 = return
+        EXCEPTIONS
+          authority_check_fail   = 1
+          document_not_found     = 2
+          enqueue_fail           = 3
+          prerequisite_fail      = 4
+          release_already_posted = 5
+          responsibility_fail    = 6
+          OTHERS                 = 7.
+
+      IF return[] IS NOT INITIAL.
+
+        READ TABLE return WITH KEY type = 'E'.
+        IF sy-subrc = 0.
+          gt_out-type = 'E'.
+          gt_out-msg = return-message.
+        ENDIF.
+
+      ENDIF.
+
+    WHEN 'N'. "取消 审批  反审
+      CALL FUNCTION 'BAPI_PO_RESET_RELEASE'
+        EXPORTING
+          purchaseorder            = purchaseorder
+          po_rel_code              = rel_cod
+*         USE_EXCEPTIONS           = 'X'
+*   IMPORTING
+*         REL_STATUS_NEW           =
+*         REL_INDICATOR_NEW        =
+        TABLES
+          return                   = return
+        EXCEPTIONS
+          authority_check_fail     = 1
+          document_not_found       = 2
+          enqueue_fail             = 3
+          prerequisite_fail        = 4
+          release_already_posted   = 5
+          responsibility_fail      = 6
+          no_release_already       = 7
+          no_new_release_indicator = 8
+          OTHERS                   = 9.
+      IF return[] IS NOT INITIAL.
+
+        READ TABLE return WITH KEY type = 'E'.
+        IF sy-subrc = 0.
+          gt_out-type = 'E'.
+          gt_out-msg = return-message.
+        ENDIF.
+
+      ENDIF.
+
+    WHEN OTHERS.
+  ENDCASE.
+
+
+
+
+  CALL FUNCTION 'DEQUEUE_EMEKKOE'
+    EXPORTING
+      mandt = sy-mandt
+      ebeln = purchaseorder.
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  CHANGE_PO_ITEM
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM change_po_item .
+  DATA:po_number LIKE ekko-ebeln.
+
+  DATA:t_poitem LIKE bapimepoitem OCCURS 0 WITH HEADER LINE.
+  DATA:t_poitemx LIKE bapimepoitemx OCCURS 0 WITH HEADER LINE.
+  DATA:t_pocond LIKE bapimepocond OCCURS 0 WITH HEADER LINE.
+  DATA:t_pocondx LIKE bapimepocondx OCCURS 0 WITH HEADER LINE.
+  DATA:t_return LIKE bapiret2 OCCURS 0 WITH HEADER LINE.
+
+
+  po_number = gt_out-ebeln.
+*
+  t_poitem-po_item = gt_out-ebelp.
+  t_poitem-price_unit = gt_out-pein1.
+  t_poitem-net_price = gt_out-kbet1.
+  t_poitem-tax_code = gt_out-mwsk1.
+  APPEND t_poitem.
+  CLEAR t_poitem.
+
+  t_poitemx-po_item = gt_out-ebelp.
+  t_poitemx-po_itemx = 'X'.
+  t_poitemx-price_unit = 'X'.
+  t_poitemx-net_price = 'X'.
+  t_poitemx-tax_code = 'X'.
+
+  APPEND t_poitemx.
+  CLEAR t_poitemx.
+
+*  LOOP AT gt_konp WHERE knumh = gt_out-knumh.
+*
+*    t_pocond-itm_number = gt_out-ebelp.
+*    t_pocond-cond_type = gt_konp-kschl.
+*    t_pocond-cond_value = gt_konp-kbetr.   "价格
+*    t_pocond-cond_unit  = gt_konp-kmein.   "条件单位
+*    t_pocond-cond_p_unt = gt_konp-kpein."GS_EXCEL_RAW0-PEINH.   "价格单位
+*    t_pocond-currency =  gt_konp-KONWA.
+*    t_pocond-change_id    = 'U'.
+*    APPEND t_pocond.
+*
+*    t_pocondx-itm_number = gt_out-ebelp.
+*    t_pocondx-cond_type = 'X'.
+*    t_pocondx-cond_value = 'X'.
+*    t_pocondx-cond_unit = 'X'.    "条件单位
+*    t_pocondx-cond_p_unt = 'X'.   "价格单位
+*    t_pocondx-currency = 'X'.
+*    t_pocondx-change_id    = 'X'.
+*    APPEND t_pocondx.
+*
+*  ENDLOOP.
+
+
+
+  CALL FUNCTION 'BAPI_PO_CHANGE'
+    EXPORTING
+      purchaseorder = po_number
+    TABLES
+      return        = t_return
+      poitem        = t_poitem
+      poitemx       = t_poitemx
+      pocond        = t_pocond
+      pocondx       = t_pocondx.
+  READ TABLE t_return WITH KEY type = 'E'.
+  IF sy-subrc EQ 0.
+    gt_out-type = 'E'.
+    gt_out-msg = t_return-message.
+    ROLLBACK WORK.
+  ELSE.
+    READ TABLE t_return WITH KEY type = 'I' id = 'ME' number = '664'.
+    IF sy-subrc = 0.
+      gt_out-type = 'E'.
+      gt_out-msg = '不能影响更改 价格单位'.
+      ROLLBACK WORK.
+    ELSE.
+
+      gt_out-type = 'S'.
+      gt_out-msg = '价格更新完成！'.
+      CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+        EXPORTING
+          wait = 'X'.
+    ENDIF.
+  ENDIF.
+
+  CALL FUNCTION 'DEQUEUE_EMEKKOE'
+    EXPORTING
+      mandt = sy-mandt
+      ebeln = gt_out-ebeln.
+
+  WAIT UP TO '1' SECONDS.
+
+ENDFORM.

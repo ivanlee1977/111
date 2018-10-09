@@ -1,0 +1,79 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP006_TOP
+*&---------------------------------------------------------------------*
+TYPE-POOLS:truxs,slis.
+DATA:xlstab TYPE truxs_t_text_data.
+TABLES:marc,mara.
+********************ALV 事件****************
+DATA:
+  it_fieldcat TYPE lvc_t_fcat,
+  wa_fieldcat LIKE LINE OF it_fieldcat,
+  gs_layout   TYPE lvc_s_layo,
+  it_events   TYPE slis_t_event, ""事件属性
+  wa_events   TYPE slis_alv_event.
+
+
+DATA:BEGIN OF gw_item,"展示内表
+       sel(1)      TYPE c,
+       matnr       LIKE marc-matnr, "物料号
+       maktx       LIKE makt-maktx, "MAKTX物料描述
+       meins       LIKE mara-meins, "基本计量单位
+       werks       LIKE marc-werks, "工厂
+       disgr       LIKE marc-disgr, "MRP组
+       maabc       LIKE marc-maabc, "ABC标识
+       dismm       LIKE marc-dismm, "MRP类型
+       dispo       LIKE marc-dispo, "MRP控制者
+       disls       LIKE marc-disls, "批量大小
+       bstmi       LIKE marc-bstmi, "最小批量
+       bstrf       LIKE marc-bstrf, "舍入值
+       beskz       LIKE marc-beskz, "采购类型
+       sobsl       LIKE marc-sobsl, "特殊采购类
+       dzeit       LIKE marc-dzeit, "自制生产天数
+       fhori       LIKE marc-fhori, "计划边际码
+       rgekz       LIKE marc-rgekz, "反冲
+       plifz       LIKE marc-plifz, "计划交货时间
+       eisbe       LIKE marc-eisbe, "安全库存
+       rwpro       LIKE marc-rwpro, "供货天数参数文件
+       lgpro       LIKE marc-lgpro, "生产仓储地点
+       lgfsb       LIKE marc-lgfsb, "外部采购仓储地点
+       mtvfp       LIKE marc-mtvfp, "可用性检查
+       altsl       LIKE marc-altsl, "选择方法
+       kausf       LIKE marc-kausf, "部件废品(%)
+       kzaus       LIKE marc-kzaus, "非连续标识
+       ausdt       LIKE marc-ausdt, "生效期
+       nfmat       LIKE marc-nfmat, "后继的物料
+       sfcpf       LIKE marc-sfcpf, "生产计划参数文件
+       mtart       LIKE mara-mtart, "物料类型
+       qmatv       LIKE marc-qmatv,
+       qmpur       LIKE mara-qmpur,
+       ssqss       LIKE marc-ssqss,
+       xchpf       LIKE mara-xchpf,
+       field_style TYPE lvc_t_styl, " 为内表添加设置编辑状态所需的字段
+     END OF gw_item.
+DATA:gt_item LIKE gw_item OCCURS 0.
+
+DATA: i_grid_settings TYPE lvc_s_glay.
+
+DATA:ok_code   TYPE sy-ucomm,
+     save_ok   TYPE sy-ucomm,
+     errorcode TYPE i.
+DATA: l_grid TYPE REF TO cl_gui_alv_grid,
+      stbl   TYPE lvc_s_stbl. ""稳定刷新
+
+CONSTANTS:gcst_excel_template TYPE w3objid VALUE 'ZPP006'.
+
+
+*******数据定义*******
+DATA:lo_excel     TYPE ole2_object,
+     lo_workbooks TYPE ole2_object,
+     lo_workbook  TYPE ole2_object,
+     lo_sheet     TYPE ole2_object,
+     tmp_sheet    TYPE ole2_object, "EMPTY SHEET
+     lo_cell      TYPE ole2_object,
+     borders_obj  TYPE ole2_object,
+     lo_range     TYPE ole2_object,
+     row_obj      TYPE ole2_object,
+     lo_cell1     TYPE ole2_object.
+DATA lv_file LIKE rlgrap-filename.
+DATA:lt_excel_in                    "内表：从源文件中读取到的数据
+       TYPE STANDARD TABLE OF alsmex_tabline WITH HEADER LINE.

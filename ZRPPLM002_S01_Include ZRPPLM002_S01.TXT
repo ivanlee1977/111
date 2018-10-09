@@ -1,0 +1,10 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPPLM002_S01
+*&---------------------------------------------------------------------*
+
+
+PARAMETERS : p_begin TYPE ztcs001-erdat OBLIGATORY.
+PARAMETERS : p_end TYPE ztcs001-erdat OBLIGATORY.
+PARAMETERS : p_atwrt TYPE ausp-atwrt .
+
+SELECT-OPTIONS: s_matnr FOR ztcs001-matnr.

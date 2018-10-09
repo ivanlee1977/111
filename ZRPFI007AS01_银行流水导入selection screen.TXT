@@ -1,0 +1,23 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI007AS01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN: FUNCTION KEY 1. "工具栏启用标准铵1=>导入数据
+
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+PARAMETERS:r1 RADIOBUTTON GROUP ra DEFAULT 'X' USER-COMMAND com,
+           r2 RADIOBUTTON GROUP ra.
+PARAMETERS:p_file TYPE rlgrap-filename MODIF ID m1.
+SELECT-OPTIONS:s_zyhzh FOR ztfi002-zyhzh MODIF ID m2,
+               s_yhlsh FOR ztfi002-zyhlsh MODIF ID m2,
+               s_bukrs FOR ztfi002-bukrs MODIF ID m2,
+               s_prctr FOR ztfi002-prctr MODIF ID m2,
+               s_zjyrq FOR ztfi002-zjyrq MODIF ID m2,
+               s_zsfdz FOR ztfi002-zsfdz MODIF ID m2.
+SELECTION-SCREEN END OF BLOCK blc.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_zyhzh-low.
+  PERFORM frm_zyhzh_f4 USING 'S_ZYHZH-LOW'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_zyhzh-high.
+  PERFORM frm_zyhzh_f4 USING 'S_ZYHZH-HIGH'.

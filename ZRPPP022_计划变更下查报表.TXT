@@ -1,0 +1,29 @@
+*& 程序名： ZRPPP022
+*& 创建者(公司)/日期： 雷鸣涛/20171219
+*& 程序描述：计划变更下查报表
+*&---------------------------------------------------------------------*
+
+*&---------------------------------------------------------------------*
+REPORT zrppp022.
+
+INCLUDE ZRPPP022_T01.
+INCLUDE ZRPPP022_S01.
+INCLUDE ZRPPP022_F01.
+INCLUDE ZRPPP022_M01.
+
+
+INITIALIZATION.
+*PERFORM frm_createdate.
+
+AT SELECTION-SCREEN .
+
+START-OF-SELECTION.
+*  IF  s_ebeln[] IS INITIAL AND s_ekgrp[] IS INITIAL
+*  AND   s_bedat[] IS INITIAL AND s_lifnr[] IS INITIAL .
+*    MESSAGE '请输入相应查找条件！' TYPE 'E'.
+*    RETURN.
+*  ENDIF.
+
+  PERFORM frm_getdata.
+  PERFORM frm_getfact.
+  PERFORM frm_show.

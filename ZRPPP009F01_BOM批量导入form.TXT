@@ -1,0 +1,831 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP009F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_INITIAL_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_initial_data .
+*******数据定义*******
+  INCLUDE <icon>.
+  DATA ls_functxt TYPE smp_dyntxt.
+  DATA:gt_exbut TYPE TABLE OF sy-ucomm.
+*******初始化*******
+*******程序主体*******
+  "屏幕工具栏中按饼
+  "启用自定义工具
+  CLEAR ls_functxt.
+  ls_functxt-icon_text = '模板下载'."'Download Template'.
+  ls_functxt-icon_id   = '@49@'.
+  ls_functxt-quickinfo =  '模板下载'.
+  sscrfields-functxt_01 = ls_functxt.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FILENAME_FIND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      <--P_P_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_filename_find  CHANGING xc_file.
+  CALL FUNCTION 'WS_FILENAME_GET'
+    EXPORTING
+      def_filename     = xc_file
+      def_path         = 'C:\'
+      mask             = ',*.XLS.'
+      mode             = 'O'
+      title            = '文件名'
+    IMPORTING
+      filename         = xc_file
+    EXCEPTIONS
+      inv_winsys       = 1
+      no_batch         = 2
+      selection_cancel = 3
+      selection_error  = 4
+      OTHERS           = 5.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DOWNLOAD_TEMPLATE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0040   text
+*      <--P_P_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_download_template  USING u_objid LIKE wwwdatatab-objid CHANGING ic_file.
+  DATA:l_path   TYPE string.
+
+  CALL METHOD zcl_ole_excel=>download_templet
+    EXPORTING
+      iv_objid        = u_objid
+      iv_win_title    = '请指定下载路径'
+      iv_df_extension = 'XLS'
+    IMPORTING
+      ev_fullpath     = l_path.
+
+  CALL METHOD cl_gui_frontend_services=>execute
+    EXPORTING
+      document = l_path
+    EXCEPTIONS
+      OTHERS   = 10.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_UPLOAD_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_upload_data .
+  DATA:ls_header LIKE LINE OF gt_header.
+  DATA:ls_table_field LIKE  tabfield,
+       lv_string      TYPE string.
+  FIELD-SYMBOLS:<fs_field>    TYPE any..
+
+  CALL FUNCTION 'ZALSM_EXCEL_TO_INTERNAL_TABLE'
+    EXPORTING
+      filename                = p_file
+      i_begin_col             = 1
+      i_begin_row             = 4
+      i_end_col               = 100
+      i_end_row               = 39999
+    TABLES
+      intern                  = gt_upload
+    EXCEPTIONS
+      inconsistent_parameters = 1
+      upload_ole              = 2
+      OTHERS                  = 3.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+  gv_structure = 'ZSPP_BOM_DATA'.
+  ASSIGN gt_bom_data TO <fs_tab_line>.
+  ASSIGN gt_bom_data[] TO <fs_tab>.
+
+***将数据整理到内表中
+  LOOP AT gt_upload ASSIGNING <fs_data>.
+    IF <fs_data>-row EQ 1.
+      MOVE-CORRESPONDING <fs_data> TO gt_header.
+      APPEND gt_header.
+      CONTINUE.
+    ENDIF.
+    CLEAR ls_header.
+    READ TABLE gt_header INTO ls_header WITH KEY col = <fs_data>-col.
+    IF <fs_data>-value NE '/' AND ls_header-value IS NOT INITIAL.
+      ls_table_field-tabname = gv_structure.
+      ls_table_field-fieldname  = ls_header-value.
+*& 字段校验
+      CALL FUNCTION 'RS_CHECK_CONV_EX_2_IN'
+        EXPORTING
+          input_external               = <fs_data>-value
+          table_field                  = ls_table_field
+        EXCEPTIONS
+          input_not_numerical          = 1
+          too_many_decimals            = 2
+          more_than_one_sign           = 3
+          ill_thousand_separator_dist  = 4
+          too_many_digits              = 5
+          sign_for_unsigned            = 6
+          too_large                    = 7
+          too_small                    = 8
+          invalid_date_format          = 9
+          invalid_date                 = 10
+          invalid_time_format          = 11
+          invalid_time                 = 12
+          invalid_hex_digit            = 13
+          unexpected_error             = 14
+          invalid_fieldname            = 15
+          field_and_descr_incompatible = 16
+          input_too_long               = 17
+          no_decimals                  = 18
+          invalid_float                = 19
+          conversion_exit_error        = 20
+          OTHERS                       = 21.
+      IF sy-subrc <> 0.
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4 INTO lv_string.
+        MESSAGE e001(00) WITH |ROW,COL{ <fs_data>-row } { <fs_data>-col }{ lv_string } |.
+      ENDIF.
+    ENDIF.
+    CONDENSE <fs_data>-value.
+    ASSIGN COMPONENT ls_header-value OF STRUCTURE <fs_tab_line> TO <fs_field>.
+    IF sy-subrc = 0.
+      <fs_field> = <fs_data>-value.
+    ENDIF.
+    AT END OF row.              "新的一行EXCEL数据_结束
+      PERFORM frm_check_data.
+      APPEND <fs_tab_line> TO <fs_tab>.     "收集一行EXCEL数据
+      CLEAR <fs_tab_line>.
+    ENDAT.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_data .
+  IF gt_bom_data-werks IS INITIAL .
+    mcr_add_msg:gt_bom_data  '请输入工厂'.
+  ELSE.
+    SELECT SINGLE * FROM t001w WHERE werks = gt_bom_data-werks.
+    IF sy-subrc NE 0.
+      mcr_add_msg:gt_bom_data  '工厂不存在'.
+    ENDIF.
+  ENDIF.
+
+  IF  gt_bom_data-stlan IS INITIAL.
+    mcr_add_msg:gt_bom_data  '请输入BOM用途'.
+  ENDIF.
+
+  IF gt_bom_data-matnr IS INITIAL .
+    mcr_add_msg:gt_bom_data  '请输入父项物料号'.
+  ELSE.
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+      EXPORTING
+        input  = gt_bom_data-matnr
+      IMPORTING
+        output = gt_bom_data-matnr.
+    SELECT SINGLE * FROM mara WHERE matnr = gt_bom_data-matnr.
+    IF sy-subrc NE 0.
+      mcr_add_msg:gt_bom_data  '父项物料号不存在'.
+    ENDIF.
+  ENDIF.
+
+  IF gt_bom_data-idnrk IS INITIAL .
+    mcr_add_msg:gt_bom_data  '请输入子项物料号'.
+  ELSE.
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+      EXPORTING
+        input  = gt_bom_data-idnrk
+      IMPORTING
+        output = gt_bom_data-idnrk.
+    IF gt_bom_data-postp EQ 'L'.
+      SELECT SINGLE * FROM mara WHERE matnr = gt_bom_data-idnrk.
+      IF sy-subrc NE 0.
+        mcr_add_msg:gt_bom_data  '子项物料号不存在'.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+
+  IF gt_bom_data-aennr IS NOT INITIAL.
+    CALL FUNCTION 'CONVERSION_EXIT_AENNR_INPUT'
+      EXPORTING
+        input        = gt_bom_data-aennr
+      IMPORTING
+        output       = gt_bom_data-aennr
+      EXCEPTIONS
+        length_error = 1
+        OTHERS       = 2.
+    SELECT SINGLE * FROM aenr WHERE aennr = gt_bom_data-aennr.
+    IF sy-subrc NE 0.
+      mcr_add_msg:gt_bom_data  '变更号不存在'.
+    ENDIF.
+  ENDIF.
+  IF gt_bom_data-zmsg IS NOT INITIAL.
+    gt_bom_data-zicon = icon_led_red.
+    gt_bom_data-msgty = 'E'.
+  ENDIF.
+
+  IF gt_bom_data-stlal IS NOT INITIAL.
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+      EXPORTING
+        input  = gt_bom_data-stlal
+      IMPORTING
+        output = gt_bom_data-stlal.
+  ENDIF.
+
+  IF gt_bom_data-posnr IS NOT INITIAL.
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+      EXPORTING
+        input  = gt_bom_data-posnr
+      IMPORTING
+        output = gt_bom_data-posnr.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
+    EXPORTING
+*     I_BUFFER_ACTIVE        =
+      i_structure_name       = gv_structure
+*     I_CLIENT_NEVER_DISPLAY = 'X'
+*     I_BYPASSING_BUFFER     =
+*     I_INTERNAL_TABNAME     =
+    CHANGING
+      ct_fieldcat            = gt_fcat[]
+    EXCEPTIONS
+      inconsistent_interface = 1
+      program_error          = 2
+      OTHERS                 = 3.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+  gt_fcat-fieldname = 'ZICON'.
+  gt_fcat-coltext  = '状态'.
+  gt_fcat-scrtext_l = '状态'.
+  gt_fcat-scrtext_m = '状态'.
+  gt_fcat-scrtext_s = '状态'.
+  gt_fcat-inttype = 'C'.
+  gt_fcat-intlen = '30'.
+  INSERT gt_fcat INDEX 1.
+  CLEAR gt_fcat.
+
+  gt_fcat-fieldname = 'ZMSG'.
+  gt_fcat-coltext  = '消息'.
+  gt_fcat-scrtext_l = '消息'.
+  gt_fcat-scrtext_m = '消息'.
+  gt_fcat-scrtext_s = '消息'.
+  gt_fcat-inttype = 'C'.
+  gt_fcat-intlen = '200'.
+  APPEND gt_fcat..
+  CLEAR gt_fcat.
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+  gs_layout-no_toolbar = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK        = ' '
+*     I_BYPASSING_BUFFER       =
+*     I_BUFFER_ACTIVE          =
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'FRM_SET_PF_STATUS'
+      i_callback_user_command  = 'FRM_USER_COMMAND'
+*     I_CALLBACK_TOP_OF_PAGE   = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME         =
+*     I_BACKGROUND_ID          = ' '
+*     I_GRID_TITLE             =
+*     I_GRID_SETTINGS          =
+      is_layout_lvc            = gs_layout
+      it_fieldcat_lvc          = gt_fcat[]
+*     IT_EXCLUDING             =
+*     IT_SPECIAL_GROUPS_LVC    =
+*     IT_SORT_LVC              =
+*     IT_FILTER_LVC            =
+*     IT_HYPERLINK             =
+*     IS_SEL_HIDE              =
+      i_default                = 'X'
+      i_save                   = 'A'
+*     IS_VARIANT               =
+*     IT_EVENTS                =
+*     IT_EVENT_EXIT            =
+*     IS_PRINT_LVC             =
+*     IS_REPREP_ID_LVC         =
+*     I_SCREEN_START_COLUMN    = 0
+*     I_SCREEN_START_LINE      = 0
+*     I_SCREEN_END_COLUMN      = 0
+*     I_SCREEN_END_LINE        = 0
+*     I_HTML_HEIGHT_TOP        =
+*     I_HTML_HEIGHT_END        =
+*     IT_ALV_GRAPHICS          =
+*     IT_EXCEPT_QINFO_LVC      =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER  =
+*     ES_EXIT_CAUSED_BY_USER   =
+    TABLES
+      t_outtab                 = <fs_tab>
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PF_STATUS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_set_pf_status USING rt_extab TYPE slis_t_extab.
+  SET PF-STATUS 'PF_1000'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_USER_COMMAND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_user_command USING r_ucomm LIKE sy-ucomm
+                            rs_selfield TYPE slis_selfield..
+
+  DATA:lv_grid TYPE REF TO cl_gui_alv_grid.
+
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = lv_grid.
+
+  CASE r_ucomm.
+    WHEN 'ZUPLOAD'.  "导入数据
+      PERFORM frm_create_bom.
+      CALL METHOD lv_grid->set_frontend_layout
+        EXPORTING
+          is_layout = gs_layout.
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CREATE_BOM
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_create_bom .
+  DATA:lt_data LIKE gt_bom_data OCCURS 0 WITH HEADER LINE.
+  DATA:lv_error TYPE c.
+
+  IF gv_flag IS INITIAL.
+    gv_flag = 'X'.
+  ELSE.
+    MESSAGE '请不要重复导入数据' TYPE 'E'.
+  ENDIF.
+
+  READ TABLE gt_bom_data WITH KEY msgty = 'E'.
+  IF sy-subrc = 0.
+    MESSAGE '上载数据存在错误，请先修正' TYPE 'E'.
+  ENDIF.
+
+  LOOP AT gt_bom_data ASSIGNING <gt_bom_data>.
+    AT NEW matnr.
+      REFRESH lt_data.
+      CLEAR:lv_error.
+      IF <gt_bom_data>-aennr IS NOT INITIAL.
+        PERFORM frm_create_mat_version CHANGING lv_error.
+      ENDIF.
+    ENDAT.
+    CHECK lv_error IS INITIAL.
+    MOVE-CORRESPONDING <gt_bom_data> TO lt_data.
+    APPEND lt_data.
+    CLEAR lt_data.
+
+    AT END OF matnr.
+      PERFORM frm_function_create_bom TABLES lt_data.
+    ENDAT.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FUNCTION_CREATE_BOM
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LT_DATA  text
+*----------------------------------------------------------------------*
+FORM frm_function_create_bom  TABLES  t_data STRUCTURE gt_bom_data.
+  DATA: BEGIN OF ls_stko.
+      INCLUDE STRUCTURE stko_api01.
+  DATA: END OF ls_stko.
+
+  DATA: BEGIN OF lt_stpo OCCURS 0.
+      INCLUDE STRUCTURE stpo_api03.
+  DATA: END OF lt_stpo.
+
+  DATA:BEGIN OF lt_stpu OCCURS 0.
+      INCLUDE STRUCTURE stpu_api01.
+  DATA:END OF lt_stpu.
+
+  DATA: lv_identifier(10) TYPE n,
+        lv_dep_extern     TYPE knnam_ext,
+        lv_uposz(4)       TYPE n.
+
+  DATA:ls_change_header LIKE aenr_api01.
+  DATA:BEGIN OF lt_zwh OCCURS 0,
+         zwh(20) TYPE c,
+       END OF lt_zwh.
+  DATA:lv_date  LIKE csap_mbom-datuv,
+       lv_datuv LIKE aenr-datuv.
+
+  DATA:lv_menge TYPE p DECIMALS 3,
+       lv_num   TYPE i.
+
+  DATA:lt_stpo_read LIKE stpo_api02 OCCURS 0 WITH HEADER LINE.
+
+***读取BOM
+  IF <gt_bom_data>-aennr IS INITIAL.
+    lv_datuv = sy-datum.
+  ELSE.
+    SELECT SINGLE datuv INTO lv_datuv FROM aenr WHERE aennr = <gt_bom_data>-aennr.
+  ENDIF.
+  CALL FUNCTION 'CONVERT_DATE_TO_EXTERNAL'
+    EXPORTING
+      date_internal            = lv_datuv
+    IMPORTING
+      date_external            = lv_date
+    EXCEPTIONS
+      date_internal_is_invalid = 1
+      OTHERS                   = 2.
+
+  SELECT SINGLE * FROM mast WHERE matnr = <gt_bom_data>-matnr AND werks = <gt_bom_data>-werks
+                              AND stlan = <gt_bom_data>-stlan AND stlal = <gt_bom_data>-stlal.
+  IF sy-subrc = 0.
+***删除以有的行数据
+    CALL FUNCTION 'CSAP_MAT_BOM_READ'
+      EXPORTING
+        material    = <gt_bom_data>-matnr
+        plant       = <gt_bom_data>-werks
+        bom_usage   = <gt_bom_data>-stlan
+        alternative = <gt_bom_data>-stlal
+        valid_from  = lv_date
+      TABLES
+        t_stpo      = lt_stpo_read
+      EXCEPTIONS
+        error       = 1
+        OTHERS      = 2.
+    LOOP AT lt_stpo_read.
+      lt_stpo-bom_no     = lt_stpo_read-bom_no.
+      lt_stpo-item_node  = lt_stpo_read-item_node.
+      lt_stpo-item_count = lt_stpo_read-item_count.
+      lt_stpo-id_itm_ctg = lt_stpo_read-item_categ.
+      lt_stpo-id_item_no = lt_stpo_read-item_no.
+      lt_stpo-id_comp    = lt_stpo_read-component.
+      lt_stpo-fldelete   = 'X'.
+      APPEND lt_stpo.
+      CLEAR lt_stpo.
+    ENDLOOP.
+  ENDIF.
+
+***新增数据
+  LOOP AT t_data.
+    IF sy-tabix = 1.
+      ls_stko-base_quan = t_data-bmeng.
+      ls_stko-bom_status = t_data-stlst.
+    ENDIF.
+
+    lt_stpo-item_no    = t_data-posnr.
+    lt_stpo-item_categ = t_data-postp.
+    IF t_data-postp EQ 'D'.
+      lt_stpo-document = t_data-idnrk.
+      CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+        EXPORTING
+          input  = lt_stpo-document
+        IMPORTING
+          output = lt_stpo-document.
+      select SINGLE DOKAR into lt_stpo-doc_type from draw where DOKNR = lt_stpo-document.
+*      lt_stpo-doc_type = 'ZCD'. 20171116 change by hegui
+    ELSE.
+      lt_stpo-component  = t_data-idnrk.
+    ENDIF.
+    lt_stpo-comp_qty   = t_data-menge.
+    lt_stpo-comp_unit  = t_data-meins.
+    lt_stpo-ai_prio    = t_data-alprf.
+    lt_stpo-usage_prob = t_data-ewahr.
+    lt_stpo-item_text1 = t_data-potx1.
+    lt_stpo-item_text2 = t_data-potx2.
+    lt_stpo-sortstring = t_data-sortf.
+    lt_stpo-discon_grp = t_data-nfeag.
+    lt_stpo-follow_grp = t_data-nfgrp.
+    lt_stpo-ai_group   = t_data-alpgr.
+    lt_stpo-ai_prio    = t_data-alprf.
+    lt_stpo-ai_strateg = t_data-alpst.
+    lt_stpo-usage_prob = t_data-ewahr.
+    lv_identifier = lv_identifier + 10.
+    lt_stpo-identifier = lv_identifier.
+    APPEND lt_stpo.
+
+***安装位置
+    REFRESH lt_zwh.
+    SPLIT t_data-zwh AT ',' INTO TABLE lt_zwh.
+    CLEAR:lv_uposz,lv_num,lv_menge.
+    DESCRIBE TABLE lt_zwh LINES lv_num.
+    IF lv_num NE 0.
+      lv_menge = t_data-menge / lv_num.
+    ENDIF.
+    LOOP AT lt_zwh.
+      lt_stpu-pointer = lv_identifier.
+      lt_stpu-ebort = lt_zwh-zwh.
+      lv_uposz = lv_uposz + 1.
+      lt_stpu-uposz = lv_uposz.
+      lt_stpu-upmng = lv_menge.
+      AT LAST.
+        IF lv_num > 1.
+          lv_num = lv_num - 1.
+          lt_stpu-upmng = t_data-menge - lv_menge * lv_num.
+        ENDIF.
+      ENDAT.
+      lt_stpu-vbkz = 'I'.
+      APPEND lt_stpu.
+      CLEAR lt_stpu.
+    ENDLOOP.
+  ENDLOOP.
+
+  PERFORM frm_create_change_bom TABLES lt_stpo lt_stpu USING ls_stko.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CREATE_MAT_VERSION
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_create_mat_version CHANGING c_error.
+  DATA:BEGIN OF lt_aeoi OCCURS 0,
+         aennr LIKE aeoi-aennr,
+         aetyp LIKE aeoi-aetyp,
+         objkt LIKE aeoi-objkt,
+         datuv LIKE aenr-datuv,
+       END OF lt_aeoi.
+  DATA:lv_ok        TYPE c,
+       lv_datuv_max LIKE sy-datum,
+       lv_datuv     LIKE sy-datum.
+
+  REFRESH:bdcdata,messtab,lt_aeoi.
+  CLEAR:c_error,lv_datuv_max,lv_datuv..
+
+***查询物料的所有版次
+  SELECT a~aennr
+         a~aetyp
+         a~objkt
+         b~datuv
+    INTO CORRESPONDING FIELDS OF TABLE lt_aeoi
+    FROM aeoi AS a
+    INNER JOIN aenr AS b
+    ON a~aennr = b~aennr
+   WHERE a~aetyp = '41'
+     AND a~objkt =  <gt_bom_data>-matnr.
+
+  IF lines( lt_aeoi ) > 0.
+    SORT lt_aeoi BY datuv DESCENDING.
+    READ TABLE lt_aeoi INDEX 1.
+    IF sy-subrc = 0.
+      IF lt_aeoi-aennr = <gt_bom_data>-aennr.
+        lv_ok = 'Y'.
+      ELSE.
+        lv_datuv_max = lt_aeoi-datuv.
+        SELECT SINGLE datuv INTO lv_datuv FROM aenr WHERE aennr = <gt_bom_data>-aennr.
+        IF sy-subrc = 0.
+          IF lv_datuv > lv_datuv_max.
+            lv_ok = 'Y'.
+          ELSE.
+            lv_ok = 'N'.
+          ENDIF.
+        ELSE.
+          lv_ok = 'N'.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+  ELSE.
+    lv_ok = 'Y'.
+  ENDIF.
+  IF lv_ok = 'Y'.
+    READ TABLE lt_aeoi WITH KEY aennr =  <gt_bom_data>-aennr.
+    IF sy-subrc NE 0.        "创建新版次升级料号
+      PERFORM bdc_dynpro      USING 'SAPLMGMM' '0060'.
+      PERFORM bdc_field       USING 'BDC_OKCODE'
+                                    '=ENTR'.
+      PERFORM bdc_field       USING 'RMMG1-MATNR'
+                                    <gt_bom_data>-matnr.
+      PERFORM bdc_dynpro      USING 'SAPLMGMM' '0070'.
+      PERFORM bdc_field       USING 'BDC_OKCODE'
+                                    '=ENTR'.
+      PERFORM bdc_field       USING 'MSICHTAUSW-KZSEL(01)'
+                                    'X'.
+      PERFORM bdc_dynpro      USING 'SAPLMGMM' '4004'.
+      PERFORM bdc_field       USING 'BDC_OKCODE'
+                                    '=RLVP'.
+      PERFORM bdc_dynpro      USING 'SAPLCCRL' '0600'.
+      PERFORM bdc_field       USING 'BDC_OKCODE'
+                                    '=WEIT'.
+      PERFORM bdc_field       USING 'RC29A-AENNR'
+                                    <gt_bom_data>-aennr.
+      PERFORM bdc_dynpro      USING 'SAPLMGMM' '4004'.
+      PERFORM bdc_field       USING 'BDC_OKCODE'
+                                    '=BU'.
+      CALL TRANSACTION 'MM02' USING bdcdata MODE gv_mode UPDATE 'L' MESSAGES INTO messtab.
+      LOOP AT messtab WHERE msgtyp = 'E' OR msgtyp = 'A'.
+        EXIT.
+      ENDLOOP.
+      IF sy-subrc NE 0.
+        UPDATE aeoi SET:oitxt = <gt_bom_data>-oitxt WHERE aennr = <gt_bom_data>-aennr AND aetyp = '41' AND objkt =  <gt_bom_data>-matnr.
+        COMMIT WORK AND WAIT.
+      ELSE.
+        c_error = 'X'.
+        LOOP AT gt_bom_data WHERE werks = <gt_bom_data>-werks AND stlan = <gt_bom_data>-stlan
+                              AND stlal = <gt_bom_data>-stlal AND aennr = <gt_bom_data>-aennr
+                              AND oitxt = <gt_bom_data>-oitxt AND matnr = <gt_bom_data>-matnr.
+          gt_bom_data-zicon = icon_led_red.
+          gt_bom_data-msgty = 'E'.
+          gt_bom_data-zmsg  = '创建物料版次出错'.
+          MODIFY gt_bom_data.
+        ENDLOOP.
+      ENDIF.
+    ENDIF.
+  ELSE.
+    c_error = 'X'.
+    LOOP AT gt_bom_data WHERE werks = <gt_bom_data>-werks AND stlan = <gt_bom_data>-stlan
+                          AND stlal = <gt_bom_data>-stlal AND aennr = <gt_bom_data>-aennr
+                          AND oitxt = <gt_bom_data>-oitxt AND matnr = <gt_bom_data>-matnr.
+      gt_bom_data-zicon = icon_led_red.
+      gt_bom_data-msgty = 'E'.
+      gt_bom_data-zmsg  = 'ECN的生效日期不是最新的'.
+      MODIFY gt_bom_data.
+    ENDLOOP.
+  ENDIF.
+ENDFORM.
+*----------------------------------------------------------------------*
+*        Start new screen                                              *
+*----------------------------------------------------------------------*
+FORM bdc_dynpro USING program dynpro.
+  CLEAR bdcdata.
+  bdcdata-program  = program.
+  bdcdata-dynpro   = dynpro.
+  bdcdata-dynbegin = 'X'.
+  APPEND bdcdata.
+ENDFORM.
+
+*----------------------------------------------------------------------*
+*        Insert field                                                  *
+*----------------------------------------------------------------------*
+FORM bdc_field USING fnam fval.
+*  IF fval <> nodata.
+  CLEAR bdcdata.
+  bdcdata-fnam = fnam.
+  bdcdata-fval = fval.
+  APPEND bdcdata.
+*  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DELETE_BOM
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LT_STPO  text
+*----------------------------------------------------------------------*
+FORM frm_create_change_bom  TABLES   lt_stpo STRUCTURE stpo_api03
+                                     lt_stpu STRUCTURE stpu_api01
+                             USING ls_stko STRUCTURE stko_api01.
+  DATA:lv_msg     TYPE string,
+       lv_msg_all TYPE string,
+       lv_msgty   TYPE c.
+  DATA:ls_stko_o LIKE stko_api02.
+  DATA:lv_flg_warning    LIKE capiflag-flwarning.
+  DATA:lt_message TYPE messages OCCURS 0 WITH HEADER LINE.
+
+  CALL FUNCTION 'CALO_INIT_API'
+    EXCEPTIONS
+      log_object_not_found     = 1
+      log_sub_object_not_found = 2
+      other_error              = 3
+      OTHERS                   = 4.
+
+  CALL FUNCTION 'CSAP_MAT_BOM_MAINTAIN'
+    EXPORTING
+      material           = <gt_bom_data>-matnr
+      plant              = <gt_bom_data>-werks
+      bom_usage          = <gt_bom_data>-stlan
+      alternative        = <gt_bom_data>-stlal
+*     VALID_FROM         =
+      change_no          = <gt_bom_data>-aennr
+*     REVISION_LEVEL     =
+      i_stko             = ls_stko
+*     FL_NO_CHANGE_DOC   = ' '
+      fl_commit_and_wait = 'X'
+*     FL_CAD             = ' '
+      fl_bom_create      = 'X'
+*     fl_new_item        = 'X'
+*     FL_COMPLETE        = ' '
+      fl_default_values  = 'X'
+    IMPORTING
+      fl_warning         = lv_flg_warning
+      o_stko             = ls_stko_o
+    TABLES
+      t_stpo             = lt_stpo
+      t_stpu             = lt_stpu
+    EXCEPTIONS
+      error              = 1
+      OTHERS             = 2.
+
+  IF sy-subrc <> 0 OR lv_flg_warning IS NOT INITIAL.
+    CALL FUNCTION 'CALO_LOG_READ_MESSAGES'
+      TABLES
+        messages_and_parameters = lt_message
+      EXCEPTIONS
+        warning                 = 1
+        error                   = 2
+        OTHERS                  = 3.
+    LOOP AT lt_message WHERE msg_type = 'E' OR msg_type = 'A' ."OR ( msg_id = '29' AND msg_no = '854').
+      CALL FUNCTION 'MESSAGE_TEXT_BUILD'
+        EXPORTING
+          msgid               = lt_message-msg_id
+          msgnr               = lt_message-msg_no
+          msgv1               = lt_message-msg_v1
+          msgv2               = lt_message-msg_v2
+          msgv3               = lt_message-msg_v3
+          msgv4               = lt_message-msg_v4
+        IMPORTING
+          message_text_output = lv_msg.
+      IF lv_msg_all IS INITIAL.
+        lv_msg_all = lv_msg.
+      ELSE.
+        CONCATENATE lv_msg_all lv_msg INTO lv_msg_all SEPARATED BY ','.
+        CONDENSE lv_msg_all NO-GAPS.
+      ENDIF.
+      IF lt_message-msg_type = 'E' OR lt_message-msg_type = 'A'.
+        EXIT.
+      ENDIF.
+    ENDLOOP.
+    IF sy-subrc = 0.
+      lv_msgty = 'E'.
+    ELSE.
+      lv_msgty = 'S'.
+      lv_msg_all = '创建或修改BOM成功'.
+    ENDIF.
+  ELSE.
+    lv_msgty = 'S'.
+    lv_msg_all = '创建或修改BOM成功'.
+  ENDIF.
+
+  LOOP AT gt_bom_data WHERE werks = <gt_bom_data>-werks AND stlan = <gt_bom_data>-stlan
+                        AND stlal = <gt_bom_data>-stlal AND aennr = <gt_bom_data>-aennr
+                        AND oitxt = <gt_bom_data>-oitxt AND matnr = <gt_bom_data>-matnr.
+    IF lv_msgty = 'E'.
+      gt_bom_data-zicon = icon_led_red.
+    ELSE.
+      gt_bom_data-zicon = icon_led_green.
+    ENDIF.
+    gt_bom_data-msgty = lv_msgty.
+    gt_bom_data-zmsg  = lv_msg_all.
+    MODIFY gt_bom_data.
+  ENDLOOP.
+ENDFORM.

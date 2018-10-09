@@ -1,0 +1,28 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM008T01
+*&---------------------------------------------------------------------*
+TABLES:sscrfields.
+
+DATA:gt_upload LIKE zalsmex_tabline OCCURS 0 WITH HEADER LINE.
+FIELD-SYMBOLS:<fs_data> LIKE LINE OF gt_upload.
+
+DATA:gt_header TYPE alsmex_tabline OCCURS 0 WITH HEADER LINE.
+
+DATA:BEGIN OF gt_customer_data OCCURS 0.
+    INCLUDE STRUCTURE zsd_customer_info.
+DATA:zicon(20) TYPE c,
+     msgty     LIKE sy-msgty,
+     zmsg      TYPE char200,
+     END OF gt_customer_data.
+
+DATA:gv_structure   TYPE dd02l-tabname,
+     gv_tabname(30) TYPE c.
+
+FIELD-SYMBOLS: <fs_tab_line> TYPE any,
+               <fs_tab>      TYPE STANDARD TABLE.
+
+DATA: lv_flag TYPE c ."点导入按钮后，不允许重复导入
+
+***alv data definr
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.

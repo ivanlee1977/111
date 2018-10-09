@@ -1,0 +1,228 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI010_TOP
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&  包含                ZFNB332_TOP
+*&---------------------------------------------------------------------*
+TYPE-POOLS: slis,truxs..
+
+TABLES:anla,anlc,anep,anlp,csks.
+********************ALV 事件****************
+DATA:
+  it_fieldcat TYPE lvc_t_fcat,
+  wa_fieldcat LIKE LINE OF it_fieldcat,
+  gs_layout   TYPE lvc_s_layo,
+  it_events   TYPE slis_t_event, ""事件属性
+  wa_events   TYPE slis_alv_event.
+
+
+
+*excel 行项目数据  && 期末值和期初值
+TYPES:
+  BEGIN OF gty_excel_lines,
+    bukrs   LIKE t001-bukrs, "公司
+    znum1   TYPE char256, "序号
+    anln1   TYPE anla-anln1, "资产编号
+    anln2   TYPE anla-anln2, "次资产编号
+    ztxt1   TYPE anla-txt50, "资产编号描述
+    qdfs1   TYPE char256, "取得方式
+    qcs1    TYPE char256, "年初数
+    bqzj1   TYPE char256, "本期增加
+    bqjs1   TYPE char256, "本期减少
+    qms1    TYPE char256, "期末数
+    znum2   TYPE char256, "序号
+    ztxt2   TYPE char256, "资产编号描述
+    qdfs2   TYPE char256, "取得方式
+    qcs2    TYPE char256, "年初数
+    bqzj2   TYPE char256, "本期增加
+    bqzj21  TYPE char256, "本期增加
+    bqzj22  TYPE char256, "本期增加
+    bqzj23  TYPE char256, "本期增加
+    bqjs2   TYPE char256, "本期减少
+    bqjs21  TYPE char256, "本期减少
+    bqjs22  TYPE char256, "本期减少
+    bqjs23  TYPE char256, "本期减少
+    qms2    TYPE char256, "期末数
+    znum3   TYPE char256, "序号
+    anln3   TYPE char256, "资产编号
+    ztxt3   TYPE char256, "资产编号描述
+    qdfs3   TYPE char256, "取得方式
+    qcs3    TYPE char256, "年初数
+    bqzj3   TYPE char256, "本期增加
+    bqjs3   TYPE char256, "本期减少
+    qms3    TYPE char256, "期末数
+
+    byzj    TYPE char256, "本月折旧
+    anlkl   TYPE anla-anlkl, "资产类别
+    txk20   TYPE ankt-txk20, "资产类别描述
+    txa50   TYPE anla-txa50, "规格型号
+    sernr   TYPE anla-sernr, "序列号
+    menge   TYPE anla-menge, "数量
+    meins   TYPE anla-meins, "单位
+    aktiv   TYPE anla-aktiv, "资本化日期
+    deakt   TYPE anla-deakt, "不活动日期
+    kostl   TYPE anlz-kostl, "成本中心
+    ktext   TYPE cskt-ktext, "成本中心描述
+    fkber   TYPE tfkbt-fkber, "功能范围
+    fkbtx   TYPE tfkbt-fkbtx, "功能范围名称
+    prctr   TYPE csks-prctr, "利润中心
+    ltext   TYPE cepct-ltext, "利润中心描述
+    kostlv  TYPE anlz-kostlv, "责任成本中心
+    ktext1  TYPE cskt-ktext, "责任成本中心描述?
+    caufn   TYPE anlz-caufn, "内部订单
+    ktext2  TYPE aufk-ktext, "内部订单描述？
+    raumn   TYPE anlz-raumn, "使用人
+    kfzkz   TYPE anlz-kfzkz, "存放位置
+    ord41   TYPE anla-ord41, "增加方式
+    ordtx41 TYPE t087t-ordtx, "增加方式描述
+    ord42   TYPE anla-ord42, "使用状况
+    ordtx42 TYPE t087t-ordtx, "使用状况描述
+    ndjar   TYPE anlb-ndjar, "使用年限
+    ndper   TYPE anlb-ndper, "使用期间
+    afabg   TYPE anlb-afabg, "折旧开始日期
+
+    invnr   TYPE anla-invnr, "存货号
+    ord43   TYPE anla-ord43, "专项资产
+    ord44   TYPE anla-ord44, "低值易耗品细类
+
+  END OF gty_excel_lines.
+
+
+TYPES: BEGIN OF gty_excel_lines1,
+         bukrs   LIKE t001-bukrs, "公司
+         znum1   TYPE char256, "序号
+         anln1   TYPE anla-anln1, "资产编号
+         anln2   TYPE anla-anln2, "次资产编号
+         ztxt1   TYPE anla-txt50, "资产编号描述
+         qdfs1   TYPE char256, "取得方式
+         qcs1    TYPE tslvt12, "年初数
+         bqzj1   TYPE tslvt12, "本期增加
+         bqjs1   TYPE tslvt12, "本期减少
+         qms1    TYPE tslvt12, "期末数
+         znum2   TYPE char256, "序号
+         ztxt2   TYPE char256, "资产编号描述
+         qdfs2   TYPE char256, "取得方式
+         qcs2    TYPE tslvt12, "年初数
+         bqzj2   TYPE tslvt12, "本期增加
+         bqzj21  TYPE tslvt12, "本期增加
+         bqzj22  TYPE tslvt12, "本期增加
+         bqzj23  TYPE tslvt12, "本期增加
+         bqjs2   TYPE tslvt12, "本期减少
+         bqjs21  TYPE tslvt12, "本期减少
+         bqjs22  TYPE tslvt12, "本期减少
+         bqjs23  TYPE tslvt12, "本期减少
+         qms2    TYPE tslvt12, "期末数
+         znum3   TYPE char256, "序号
+         anln3   TYPE char256, "资产编号
+         ztxt3   TYPE char256, "资产编号描述
+         qdfs3   TYPE char256, "取得方式
+         qcs3    TYPE tslvt12, "年初数
+         bqzj3   TYPE tslvt12, "本期增加
+         bqjs3   TYPE tslvt12, "本期减少
+         qms3    TYPE tslvt12, "期末数
+
+         byzj    TYPE tslvt12, "本月折旧
+         anlkl   TYPE anla-anlkl, "资产类别
+         txk20   TYPE ankt-txk20, "资产类别描述
+         txa50   TYPE anla-txa50, "规格型号
+         sernr   TYPE anla-sernr, "序列号
+         menge   TYPE anla-menge, "数量
+         meins   TYPE anla-meins, "单位
+         aktiv   TYPE anla-aktiv, "资本化日期
+         deakt   TYPE anla-deakt, "不活动日期
+         kostl   TYPE anlz-kostl, "成本中心
+         ktext   TYPE cskt-ktext, "成本中心描述
+         fkber   TYPE tfkbt-fkber, "功能范围
+         fkbtx   TYPE tfkbt-fkbtx, "功能范围名称
+         prctr   TYPE csks-prctr, "利润中心
+         ltext   TYPE cepct-ltext, "利润中心描述
+         kostlv  TYPE anlz-kostlv, "责任成本中心
+         ktext1  TYPE cskt-ktext, "责任成本中心描述?
+         caufn   TYPE anlz-caufn, "内部订单
+         ktext2  TYPE aufk-ktext, "内部订单描述？
+         raumn   TYPE anlz-raumn, "使用人
+         kfzkz   TYPE anlz-kfzkz, "存放位置
+         ord41   TYPE anla-ord41, "增加方式
+         ordtx41 TYPE t087t-ordtx, "增加方式描述
+         ord42   TYPE anla-ord42, "使用状况
+         ordtx42 TYPE t087t-ordtx, "使用状况描述
+         ndjar   TYPE anlb-ndjar, "使用年限
+         ndper   TYPE anlb-ndper, "使用期间
+         afabg   TYPE anlb-afabg, "折旧开始日期
+
+         invnr   TYPE anla-invnr, "存货号
+         ord43   TYPE anla-ord43, "专项资产
+         ord44   TYPE anla-ord44, "低值易耗品细类
+       END OF gty_excel_lines1.
+
+*&---------------------------------------------------------------------*
+DATA: gt_lines  TYPE TABLE OF gty_excel_lines,
+      gs_lines  TYPE gty_excel_lines,
+      gs_lines1 TYPE gty_excel_lines,
+      gs_lines2 TYPE gty_excel_lines,
+      gt_lines3 TYPE TABLE OF gty_excel_lines1,
+      gs_lines3 TYPE gty_excel_lines1.
+
+*
+TYPES:
+  BEGIN OF gty_item,
+    anln1   LIKE anla-anln1, "资产编号
+    txt50   LIKE anla-txt50, "资产描述
+    bukrs   LIKE anla-bukrs, "公司
+    kostl   LIKE anlz-kostl, "成本中心
+    prctr   LIKE csks-prctr, "利润中心
+    zujhr   LIKE anla-zujhr, "会计年度
+    zuper   LIKE anla-zuper, "会计期间
+
+
+    anln2   TYPE anla-anln2, "资产次级编号
+    anlkl   TYPE anla-anlkl, "资产类别
+    txk20   TYPE ankt-txk20, "资产类别描述
+    txa50   TYPE anla-txa50, "规格型号
+    sernr   TYPE anla-sernr, "序列号
+    menge   TYPE anla-menge, "数量
+    meins   TYPE anla-meins, "单位
+    aktiv   TYPE anla-aktiv, "资本化日期
+    deakt   TYPE anla-deakt, "不活动日期
+    ktext   TYPE cskt-ktext, "成本中心描述
+    ltext   TYPE cepct-ltext, "利润中心描述
+    kostlv  TYPE anlz-kostlv, "责任成本中心
+    ktext1  TYPE cskt-ktext, "责任成本中心描述?
+    caufn   TYPE anlz-caufn, "内部订单
+    ktext2  TYPE aufk-ktext, "内部订单描述？
+    raumn   TYPE anlz-raumn, "使用人
+    kfzkz   TYPE anlz-kfzkz, "存放位置
+    ord41   TYPE anla-ord41, "增加方式
+    ordtx41 TYPE t087t-ordtx, "增加方式描述
+    ord42   TYPE anla-ord42, "使用状况
+    ordtx42 TYPE t087t-ordtx, "使用状况描述
+    ndjar   TYPE anlb-ndjar, "使用年限
+    ndper   TYPE anlb-ndper, "使用期间
+    afabg   TYPE anlb-afabg, "折旧开始日期
+    kokrs   TYPE csks-kokrs,
+    datbi   TYPE csks-datbi,
+
+    invnr   TYPE anla-invnr, "存货号
+    ord43   TYPE anla-ord43, "专项资产
+    ord44   TYPE anla-ord44, "低值易耗品细类
+  END OF gty_item.
+
+DATA:
+  gt_item TYPE TABLE OF  gty_item,
+  gw_item TYPE gty_item.
+
+DATA: ok_code   TYPE sy-ucomm,
+      save_code TYPE sy-ucomm.
+
+CONSTANTS:gcst_excel_template TYPE w3objid VALUE 'ZFI010'.
+
+RANGES:r_bukrs FOR t001-bukrs.
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS: s_bukrs FOR anla-bukrs OBLIGATORY DEFAULT '1000',      " 公司
+                s_prctr FOR csks-prctr, " 利润中心
+                s_anlkl FOR anla-anlkl,"资产分类
+                s_anln1 FOR anla-anln1."资产号
+PARAMETERS: p_zujhr TYPE anla-zujhr DEFAULT sy-datum+0(4) OBLIGATORY,  " 会计年度
+            p_zuper TYPE anla-zuper DEFAULT sy-datum+4(2) OBLIGATORY.  " 期间
+SELECTION-SCREEN END OF BLOCK b1.

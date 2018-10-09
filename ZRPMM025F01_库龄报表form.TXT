@@ -1,0 +1,338 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM013F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*逻辑:(1)从MARD中取出符合条件的物料库存
+*        根据取出的物料从表MSEG中取出移动类型为101 102  201 202 Z01 Z02，根据创建日期列示
+*     (2)从表MCHB中取出批次数据，检查物料主数据是否有分配类Z_BATCH_ROH或Z_BATCH_FER
+*        如果有，就根据创建日期列示库龄，
+*        如果没有，就从表MSEG中取出101 102 201 202 Z01 Z02的凭证，根据创建日期列示
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA: BEGIN OF lt_mara OCCURS 0,
+          matnr LIKE mara-matnr, "物料号
+        END OF lt_mara.
+  DATA:lt_mchb LIKE gt_mchb OCCURS 0 WITH HEADER LINE.
+  DATA: lv_flag(1),
+        lv_tabix LIKE sy-tabix.
+  DATA: lv_budat LIKE mkpf-budat.
+
+  REFRESH:lt_mchb.
+*   根据选择屏幕条件从表MARA中筛选出物料
+  SELECT matnr INTO TABLE lt_mara
+    FROM mara
+    WHERE matnr IN s_matnr
+      AND matkl IN s_matkl
+      AND spart IN s_spart.
+
+  CHECK lt_mara[] IS NOT INITIAL.
+* 从表MARD中取出批次管理标识为空的数据
+  SELECT a~matnr a~werks a~lgort a~labst b~xchar
+    INTO CORRESPONDING FIELDS OF TABLE gt_alv
+    FROM mard AS a INNER JOIN marc AS b ON a~matnr = b~matnr
+                                       AND a~werks = b~werks
+    FOR ALL ENTRIES IN lt_mara
+    WHERE a~matnr = lt_mara-matnr
+      AND a~werks IN s_werks
+      AND a~lgort IN s_lgort.
+  SORT gt_alv BY matnr werks lgort.
+
+*  先从表MCHB中取出启用批次管理的料号
+  SELECT matnr werks lgort charg ersda clabs AS labst
+    INTO CORRESPONDING FIELDS OF TABLE gt_mchb
+    FROM mchb
+    FOR ALL ENTRIES IN lt_mara
+    WHERE matnr = lt_mara-matnr
+      AND werks IN s_werks
+      AND lgort IN s_lgort.
+
+  LOOP AT gt_mchb .
+    CLEAR: lt_mchb,gt_mchb-charg,gt_mchb-ersda.
+    MOVE-CORRESPONDING gt_mchb TO lt_mchb.
+    COLLECT lt_mchb.
+    CLEAR: gt_mchb.
+  ENDLOOP.
+  SORT lt_mchb BY matnr werks lgort.
+
+*  检查物料是否有分配类Z_BATCH_ROH或Z_BATCH_FER，如果没有分配，则检查GT_MARD中是否有此物料
+*  如果无此料号，将料号及其库存信息加到表GT_MARD中
+  LOOP AT gt_mchb.
+*  用BAPI：BAPI_OBJCL_GETCLASSES判断维护的分配类
+    CLEAR: lv_flag,lv_tabix.
+    lv_tabix = sy-tabix.
+    PERFORM frm_objcl_getclass USING gt_mchb-matnr CHANGING lv_flag.
+    CHECK lv_flag NE 'X'.
+    READ TABLE gt_alv WITH KEY matnr = gt_mchb-matnr werks = gt_mchb-werks lgort = gt_mchb-lgort BINARY SEARCH.
+    IF sy-subrc <> 0.
+      READ TABLE lt_mchb WITH KEY matnr = gt_mchb-matnr werks = gt_mchb-werks lgort = gt_mchb-lgort BINARY SEARCH.
+      IF sy-subrc = 0.
+        MOVE-CORRESPONDING lt_mchb TO gt_alv.
+        gt_alv-xchar = 'X'.
+        APPEND gt_alv.
+      ENDIF.
+    ELSE.
+      DELETE gt_mchb INDEX lv_tabix.
+    ENDIF.
+  ENDLOOP.
+
+* 根据表GT_MARD，从MSEG中取出移动类型为101 102 201 202 Z01 Z02的凭证
+
+  IF gt_alv[] IS NOT INITIAL.
+    SELECT mblnr mjahr zeile sjahr smbln smblp bwart matnr werks lgort menge budat_mkpf AS budat
+      INTO CORRESPONDING FIELDS OF TABLE gt_mseg
+      FROM mseg
+      FOR ALL ENTRIES IN gt_alv
+      WHERE matnr = gt_alv-matnr
+        AND werks = gt_alv-werks
+        AND lgort = gt_alv-lgort
+        AND bwart IN ('101','102','201','202','Z01','Z02').
+  ENDIF.
+
+*  处理冲销
+  PERFORM frm_process_cx TABLES gt_mseg.
+
+  DATA:lv_date  TYPE vtbbewe-atage,
+       lv_menge TYPE mseg-menge.
+  LOOP AT gt_alv.
+    CLEAR: lv_date,lv_menge.
+    IF gt_alv-xchar IS INITIAL.
+      LOOP AT gt_mseg WHERE matnr = gt_alv-matnr AND werks = gt_alv-werks AND lgort = gt_alv-lgort.
+        lv_date = sy-datum - gt_mseg-budat.
+        PERFORM frm_process_date USING lv_date gt_mseg-menge CHANGING gt_alv-value1
+                                                                      gt_alv-value2
+                                                                      gt_alv-value3
+                                                                      gt_alv-value4
+                                                                      gt_alv-value5
+                                                                      gt_alv-value6
+                                                                      gt_alv-value7
+                                                                      gt_alv-value8
+                                                                      gt_alv-value9
+                                                                      lv_menge.
+        CLEAR: gt_mseg.
+      ENDLOOP.
+    ELSEIF gt_alv-xchar EQ 'X'.
+      LOOP AT gt_mchb WHERE matnr = gt_alv-matnr AND werks = gt_alv-werks AND lgort = gt_alv-lgort.
+        lv_date = sy-datum - gt_mchb-ersda.
+        PERFORM frm_process_date USING lv_date gt_mchb-labst CHANGING gt_alv-value1
+                                                                      gt_alv-value2
+                                                                      gt_alv-value3
+                                                                      gt_alv-value4
+                                                                      gt_alv-value5
+                                                                      gt_alv-value6
+                                                                      gt_alv-value7
+                                                                      gt_alv-value8
+                                                                      gt_alv-value9
+                                                                      lv_menge.
+        CLEAR: gt_mchb.
+      ENDLOOP.
+    ENDIF.
+    gt_alv-value10 = gt_alv-labst - lv_menge.
+    MODIFY gt_alv.
+    CLEAR: gt_alv.
+  ENDLOOP.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SUB_BUILD_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM sub_build_fieldcat .
+  DATA:l_text1  TYPE string,
+       l_text2  TYPE string,
+       l_text3  TYPE string,
+       l_text4  TYPE string,
+       l_text5  TYPE string,
+       l_text6  TYPE string,
+       l_text7  TYPE string,
+       l_text8  TYPE string,
+       l_text9  TYPE string,
+       l_text10 TYPE string,
+       l_text11 TYPE string,
+       l_text12 TYPE string,
+       l_text13 TYPE string,
+       l_text14 TYPE string,
+       l_text15 TYPE string,
+       l_text16 TYPE string,
+       l_text17 TYPE string,
+       l_qujian TYPE string.
+
+  REFRESH:g_it_fieldcat.
+  PERFORM sub_set_fieldcat USING 'X'  'WERKS'   '工厂'            'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING 'X'  'MATNR'   '物料号'          'X' '' ''  ''  ''  'MATNR'  'MARA' '' .
+  PERFORM sub_set_fieldcat USING ''   'MAKTX'   '物料描述'        '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''   'LGORT'   '库存地点'        'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''   'LGOBE'   '库存地点描述'    'X' '' ''  ''  ''  ''  '' '' .
+  l_text1 = gv_q1date.
+  CONCATENATE '0-' l_text1 INTO l_text1. CONDENSE l_text1.
+  PERFORM sub_set_fieldcat USING ''   'VALUE1'   l_text1       'X' '' ''  ''  ''  ''  '' '' .
+
+  CLEAR: l_text1,l_qujian.
+  l_text1 = gv_q1date + 1.   l_qujian = gv_q2date.
+  CONCATENATE l_text1 l_qujian INTO l_text1. CONDENSE l_text1.
+  PERFORM sub_set_fieldcat USING ''   'VALUE2'   l_text1       'X' '' ''  ''  ''  ''  '' '' .
+
+  CLEAR: l_text1,l_qujian.
+  l_text1 = gv_q2date + 1.   l_qujian = gv_q3date.
+  CONCATENATE l_text1 l_qujian INTO l_text1. CONDENSE l_text1.
+  PERFORM sub_set_fieldcat USING ''   'VALUE3'   l_text1       'X' '' ''  ''  ''  ''  '' '' .
+
+  CLEAR: l_text1,l_qujian.
+  l_text1 = gv_q3date + 1.   l_qujian = gv_q4date.
+  CONCATENATE l_text1 l_qujian INTO l_text1. CONDENSE l_text1.
+  PERFORM sub_set_fieldcat USING ''   'VALUE4'   l_text1       'X' '' ''  ''  ''  ''  '' '' .
+
+  CLEAR: l_text1,l_qujian.
+  l_text1 = gv_q4date + 1.   l_qujian = gv_q5date.
+  CONCATENATE l_text1 l_qujian INTO l_text1. CONDENSE l_text1.
+  PERFORM sub_set_fieldcat USING ''   'VALUE5'   l_text1       'X' '' ''  ''  ''  ''  '' '' .
+
+  CLEAR: l_text1,l_qujian.
+  l_text1 = gv_q5date + 1.   l_qujian = gv_q6date.
+  CONCATENATE l_text1 l_qujian INTO l_text1. CONDENSE l_text1.
+  PERFORM sub_set_fieldcat USING ''   'VALUE6'   l_text1       'X' '' ''  ''  ''  ''  '' '' .
+
+  CLEAR: l_text1,l_qujian.
+  l_text1 = gv_q6date + 1.   l_qujian = gv_q7date.
+  CONCATENATE l_text1 l_qujian INTO l_text1. CONDENSE l_text1.
+  PERFORM sub_set_fieldcat USING ''   'VALUE7'   l_text1       'X' '' ''  ''  ''  ''  '' '' .
+
+  CLEAR: l_text1,l_qujian.
+  l_text1 = gv_q7date + 1.   l_qujian = gv_q8date.
+  CONCATENATE l_text1 l_qujian INTO l_text1. CONDENSE l_text1.
+  PERFORM sub_set_fieldcat USING ''   'VALUE8'   l_text1       'X' '' ''  ''  ''  ''  '' '' .
+
+  CLEAR: l_text1,l_qujian.
+  l_text1 = gv_q8date + 1.   l_qujian = gv_q9date.
+  CONCATENATE l_text1 l_qujian INTO l_text1. CONDENSE l_text1.
+  PERFORM sub_set_fieldcat USING ''   'VALUE9'   l_text1       'X' '' ''  ''  ''  ''  '' '' .
+
+  CLEAR: l_text1.
+  l_text1 = gv_q8date.
+  CONCATENATE '>' l_text1 INTO l_text1. CONDENSE l_text1.
+  PERFORM sub_set_fieldcat USING ''   'VALUE10'   l_text1       'X' '' ''  ''  ''  ''  '' '' .
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OBJCL_GETCLASS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_GT_MCHB_MATNR  text
+*      <--P_LV_FLAG  text
+*----------------------------------------------------------------------*
+FORM frm_objcl_getclass  USING    pv_matnr
+                         CHANGING pv_flag.
+
+  DATA: lv_objectkeyimp TYPE bapi1003_key-object,
+        lt_alloclist    LIKE bapi1003_alloc_list OCCURS 0 WITH HEADER LINE,
+        lt_return       LIKE bapiret2 OCCURS 0 WITH HEADER LINE.
+
+  lv_objectkeyimp = pv_matnr.
+  CALL FUNCTION 'BAPI_OBJCL_GETCLASSES'
+    EXPORTING
+      objectkey_imp   = lv_objectkeyimp
+      objecttable_imp = 'MARA'
+      classtype_imp   = '023'
+      language        = sy-langu
+    TABLES
+      alloclist       = lt_alloclist
+      return          = lt_return.
+
+  LOOP AT lt_alloclist WHERE classnum EQ 'Z_BATCH_ROH' OR classnum EQ 'Z_BATCH_FER'.
+  ENDLOOP.
+
+  IF sy-subrc = 0.
+    pv_flag = 'X'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PROCESS_CX
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_GT_MSEG  text
+*----------------------------------------------------------------------*
+FORM frm_process_cx  TABLES  pt_mseg STRUCTURE gt_mseg.
+  DATA: lt_mseg  LIKE gt_mseg OCCURS 0 WITH HEADER LINE,
+        lv_tabix LIKE sy-tabix.
+
+  lt_mseg[] = gt_mseg[].
+  DELETE gt_mseg WHERE sjahr IS INITIAL AND smbln IS INITIAL AND smblp IS INITIAL.
+
+  LOOP AT lt_mseg WHERE sjahr IS NOT INITIAL AND smbln IS NOT INITIAL AND smblp IS NOT INITIAL.
+    READ TABLE gt_mseg WITH KEY mjahr = lt_mseg-sjahr mblnr = lt_mseg-smbln zeile = lt_mseg-smblp BINARY SEARCH.
+    IF sy-subrc = 0.
+      CLEAR: lv_tabix .
+      lv_tabix = sy-tabix.
+      DELETE gt_mseg INDEX lv_tabix.
+    ENDIF.
+    CLEAR: lt_mseg.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PROCESS_DATE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LV_DATE  text
+*      <--P_GT_ALV_VALUE1  text
+*      <--P_GT_ALV_VALUE2  text
+*      <--P_GT_ALV_VALUE3  text
+*      <--P_GT_ALV_VALUE4  text
+*      <--P_GT_ALV_VALUE5  text
+*      <--P_GT_ALV_VALUE6  text
+*      <--P_GT_ALV_VALUE7  text
+*      <--P_GT_ALV_VALUE8  text
+*      <--P_GT_ALV_VALUE9  text
+*----------------------------------------------------------------------*
+FORM frm_process_date  USING    pv_date
+                                 pv_menge
+                       CHANGING pv_value1
+                                pv_value2
+                                pv_value3
+                                pv_value4
+                                pv_value5
+                                pv_value6
+                                pv_value7
+                                pv_value8
+                                pv_value9
+                                lv_menge.
+  gv_q1date = p_atage.
+  gv_q2date = gv_q1date + p_atage.
+  gv_q3date = gv_q2date + p_atage.
+  gv_q4date = gv_q3date + p_atage.
+  gv_q5date = gv_q4date + p_atage.
+  gv_q6date = gv_q5date + p_atage.
+  gv_q7date = gv_q6date + p_atage.
+  gv_q8date = gv_q7date + p_atage.
+  gv_q9date = gv_q8date + p_atage.
+
+  IF pv_date LE gv_q1date.
+    pv_value1 = pv_value1 + pv_menge.
+  ELSEIF pv_date GT gv_q1date AND pv_date LE gv_q2date.
+    pv_value2 = pv_value2 + pv_menge.
+  ELSEIF pv_date GT gv_q2date AND pv_date LE gv_q3date.
+    pv_value3 = pv_value3 + pv_menge.
+  ELSEIF pv_date GT gv_q3date AND pv_date LE gv_q4date.
+    pv_value4 = pv_value4 + pv_menge.
+  ELSEIF pv_date GT gv_q4date AND pv_date LE gv_q5date.
+    pv_value5 = pv_value5 + pv_menge.
+  ELSEIF pv_date GT gv_q5date AND pv_date LE gv_q6date.
+    pv_value6 = pv_value6 + pv_menge.
+  ELSEIF pv_date GT gv_q6date AND pv_date LE gv_q7date.
+    pv_value7 = pv_value7 + pv_menge.
+  ELSEIF pv_date GT gv_q7date AND pv_date LE gv_q8date.
+    pv_value8 = pv_value8 + pv_menge.
+  ELSEIF pv_date GT gv_q8date AND pv_date LE gv_q9date.
+    pv_value9 = pv_value9 + pv_menge.
+  ENDIF.
+  lv_menge = lv_menge + pv_menge.
+ENDFORM.

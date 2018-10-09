@@ -1,0 +1,37 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPPLM001_TOP
+*&---------------------------------------------------------------------*
+
+TABLES: ausp,mard,makt,marc,mast.
+
+DATA: BEGIN OF gt_plm OCCURS 0 ,
+        chk    TYPE char1,
+        objek  LIKE ausp-objek,
+        atinn  LIKE ausp-atinn,
+        matnr  LIKE marc-matnr,
+        maktx  LIKE makt-maktx,
+        werks  LIKE mard-werks,
+        zlabst LIKE mard-labst,
+        zflag  TYPE char1,
+        clr    TYPE char4,
+        wemng  LIKE afpo-wemng,
+        psmng  LIKE afpo-psmng,
+        zmenge TYPE p DECIMALS 3,
+        menge  LIKE s012-menge,
+        zpsmng LIKE  s012-menge,
+      END OF gt_plm.
+DATA gt_plm1 LIKE TABLE OF gt_plm WITH HEADER LINE.
+
+DATA: gt_fcat   TYPE slis_t_fieldcat_alv WITH HEADER LINE,
+      gs_layout TYPE slis_layout_alv.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-seltext_s = &2.
+  gt_fcat-ddictxt = 'S'.
+  gt_fcat-ref_fieldname = &3.
+  gt_fcat-ref_tabname = &4.
+
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

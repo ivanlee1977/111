@@ -1,0 +1,193 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZSDRP014T01
+*&---------------------------------------------------------------------*
+TABLES: knvv,vbrp,vbrk,ausp,mara.
+
+DATA: BEGIN OF gt_alv OCCURS 0 ,
+        box(1),
+        bzirk       LIKE knvv-bzirk, "销售大区代码
+        bztxt       LIKE t171t-bztxt, "销售大区
+        vkbur       LIKE knvv-vkbur, "行办代码
+        bezei_vkbur LIKE tvkbt-bezei, "行办
+        vkgrp       LIKE knvv-vkgrp, "销售组代码
+        bezei_vkgrp LIKE tvgrt-bezei, "销售组
+        kvgr1       LIKE knvv-kvgr1, "业务员代码
+        bezei_kvgr1 LIKE tvv1t-bezei, "业务员
+        kunnr       LIKE knkk-kunnr, "客户
+        name(100),                   "客户名称
+        zfer_xl     LIKE ausp-atwrt, "产品系列
+        zfer_zxh    LIKE ausp-atwrt, "主型号
+        zxsyf(6),"销售月份
+        fkimg       LIKE vbrp-fkimg, "销售数量
+        zxse_yb     TYPE dmbtr, "原币销售额
+        waerk       LIKE vbak-waerk, "原币币别
+        zxse_bb     TYPE dmbtr, "本币销售额
+      END OF gt_alv.
+
+
+DATA: BEGIN OF gt_alv_total OCCURS 0 ,
+        box(1),
+        bzirk       LIKE knvv-bzirk, "销售大区代码
+        bztxt       LIKE t171t-bztxt, "销售大区
+        vkbur       LIKE knvv-vkbur, "行办代码
+        bezei_vkbur LIKE tvkbt-bezei, "行办
+        vkgrp       LIKE knvv-vkgrp, "销售组代码
+        bezei_vkgrp LIKE tvgrt-bezei, "销售组
+*        kvgr1       LIKE knvv-kvgr1, "业务员代码
+*        bezei_kvgr1 LIKE tvv1t-bezei, "业务员
+*        kunnr       LIKE knkk-kunnr, "客户
+*        name(100),                   "客户名称
+*        zfer_xl     LIKE ausp-atwrt, "产品系列
+*        zfer_zxh    LIKE ausp-atwrt, "主型号
+        zxsyf(6),"销售月份
+        fkimg       LIKE vbrp-fkimg, "销售数量
+*        zxse_yb     TYPE dmbtr, "原币销售额
+*        waerk       LIKE vbak-waerk, "原币币别
+        zxse_bb     TYPE p DECIMALS 3, "本币销售额
+        zjhsl       TYPE p DECIMALS 3,
+        zjhje       TYPE p DECIMALS 3,
+*        vbeln       LIKE vbrp-vbeln, "交货单号
+*        posnr       LIKE vbrp-posnr, "交货单行项目
+*        aubel       LIKE vbrp-aubel, "销售订单号
+*        vgbel       LIKE vbrp-vgbel,
+*        vgpos       LIKE vbrp-vgpos,
+*        bukrs       LIKE vbrk-bukrs,
+      END OF gt_alv_total.
+
+
+*  取交货单信息
+DATA: BEGIN OF gt_vbrp OCCURS 0,
+        vbeln       LIKE vbrp-vbeln, "交货单号
+        posnr       LIKE vbrp-posnr, "交货单行项目
+        kunnr       LIKE vbrk-kunag, "客户
+        vkorg       LIKE vbrk-vkorg, "销售组织
+        vtweg       LIKE vbrk-vtweg, "销售渠道
+        spart       LIKE mara-spart, "产品组
+        fkdat       LIKE vbrk-fkdat, "交货日期
+        matnr       LIKE vbrp-matnr, "物料
+        arktx       LIKE vbrp-arktx, "物料描述
+        zfer_cpx    LIKE ausp-atwrt, "产品线
+        zfer_xl     LIKE ausp-atwrt, "系列
+        zfer_zxl    LIKE ausp-atwrt, "子系列
+        zfer_zxh    LIKE ausp-atwrt, "主型号
+        fkimg       LIKE vbrp-fkimg, "发货数量
+        vrkme       LIKE vbrp-vrkme, "单位
+        kzwi1       LIKE vbrp-kzwi1, "单价
+        zpric_yb    LIKE vbrp-kzwi1, "原币金额
+        waerk       LIKE vbrk-waerk, "原币币别
+        zpric_bb    LIKE vbrp-kzwi1, "本币金额
+        aubel       LIKE vbrp-aubel, "销售订单号
+        fkart       LIKE vbrk-fkart, "交货单类型
+        objek       LIKE ausp-objek,
+        bzirk       LIKE knvv-bzirk, "销售大区代码
+        bztxt       LIKE t171t-bztxt, "销售大区
+        vkbur       LIKE knvv-vkbur, "行办代码
+        bezei_vkbur LIKE tvkbt-bezei, "行办
+        vkgrp       LIKE knvv-vkgrp, "销售组代码
+        bezei_vkgrp LIKE tvgrt-bezei, "销售组
+        kvgr1       LIKE knvv-kvgr1, "业务员代码
+        bezei_kvgr1 LIKE tvv1t-bezei, "业务员
+        name(100),                   "客户名称
+        kursk       LIKE vbkd-kursk,
+        vgbel       LIKE vbrp-vgbel,
+        vgpos       LIKE vbrp-vgpos,
+        bukrs       LIKE vbrk-bukrs,
+      END OF gt_vbrp.
+
+DATA:BEGIN OF gt_sd001a OCCURS 0,
+       zxsyf    LIKE ztsd001a-zmonth,
+       kunnr    LIKE ztsd001a-kunnr,
+       zbyjh_sw LIKE ztsd001a-zbyjh_sw,
+       bzirk    LIKE knvv-bzirk, "             销售大区代码
+       vkbur    LIKE knvv-vkbur, "行办代码
+       vkgrp    LIKE knvv-vkgrp, "销售组代码
+     END OF gt_sd001a.
+
+*  取销售订单
+*DATA: BEGIN OF gt_vbap OCCURS 0,
+*        vbeln  LIKE vbrp-vbeln, "销售订单号
+*        posnr  LIKE vbrp-posnr, "订单项目
+*        kzwi1  LIKE vbrp-kzwi1, "价格
+*        FKIMG  LIKE vbrp-FKIMG, "数量
+*        waerk  LIKE vbrK-waerk, "原币币别
+*        knumv  LIKE vbak-knumv, "价格条件
+*        kkurs  LIKE konv-kkurs, "汇率
+*      END OF gt_vbap.
+
+*  取SO抬头汇率
+*DATA: gt_vbkd LIKE vbkd OCCURS 0 WITH HEADER LINE.
+
+*  系列内表
+DATA:BEGIN OF gt_xl OCCURS 0,
+       atwrt LIKE ausp-atwrt,
+     END OF gt_xl,
+     gt_zxl LIKE gt_xl OCCURS 0 WITH HEADER LINE. "子系列内表
+
+*  获取主型号、系列、产品线
+DATA: BEGIN OF gt_ausp OCCURS 0,
+        objek LIKE ausp-objek,
+        atinn LIKE ausp-atinn,
+        atwrt LIKE ausp-atwrt,
+        atnam LIKE cabn-atnam,
+      END OF gt_ausp.
+
+RANGES:r_year FOR vbrk-fkdat.
+
+DATA: BEGIN OF gt_last OCCURS 0 ,
+        box(1),
+        bzirk       LIKE knvv-bzirk, "销售大区代码
+        bztxt       LIKE t171t-bztxt, "销售大区
+        vkbur       LIKE knvv-vkbur, "行办代码
+        bezei_vkbur LIKE tvkbt-bezei, "行办
+        vkgrp       LIKE knvv-vkgrp, "销售组代码
+        bezei_vkgrp LIKE tvgrt-bezei, "销售组
+*        zxsyf(6),"销售月份
+        fkimg1      LIKE vbrp-fkimg, "销售数量
+        zbb1        TYPE p DECIMALS 3, "本币销售额
+        zjhsl1      TYPE p DECIMALS 3,
+        zjhje1      TYPE p DECIMALS 3,
+        fkimg2      LIKE vbrp-fkimg, "销售数量
+        zbb2        TYPE p DECIMALS 3, "本币销售额
+        zjhsl2      TYPE p DECIMALS 3,
+        zjhje2      TYPE p DECIMALS 3,
+        fkimg3      LIKE vbrp-fkimg, "销售数量
+        zbb3        TYPE p DECIMALS 3, "本币销售额
+        zjhsl3      TYPE p DECIMALS 3,
+        zjhje3      TYPE p DECIMALS 3,
+        fkimg4      LIKE vbrp-fkimg, "销售数量
+        zbb4        TYPE p DECIMALS 3, "本币销售额
+        zjhsl4      TYPE p DECIMALS 3,
+        zjhje4      TYPE p DECIMALS 3,
+        fkimg5      LIKE vbrp-fkimg, "销售数量
+        zbb5        TYPE p DECIMALS 3, "本币销售额
+        zjhsl5      TYPE p DECIMALS 3,
+        zjhje5      TYPE p DECIMALS 3,
+        fkimg6      LIKE vbrp-fkimg, "销售数量
+        zbb6        TYPE p DECIMALS 3, "本币销售额
+        zjhsl6      TYPE p DECIMALS 3,
+        zjhje6      TYPE p DECIMALS 3,
+        fkimg7      LIKE vbrp-fkimg, "销售数量
+        zbb7        TYPE p DECIMALS 3, "本币销售额
+        zjhsl7      TYPE p DECIMALS 3,
+        zjhje7      TYPE p DECIMALS 3,
+        fkimg8      LIKE vbrp-fkimg, "销售数量
+        zbb8        TYPE p DECIMALS 3, "本币销售额
+        zjhsl8      TYPE p DECIMALS 3,
+        zjhje8      TYPE p DECIMALS 3,
+        fkimg9      LIKE vbrp-fkimg, "销售数量
+        zbb9        TYPE p DECIMALS 3, "本币销售额
+        zjhsl9      TYPE p DECIMALS 3,
+        zjhje9      TYPE p DECIMALS 3,
+        fkimg10      LIKE vbrp-fkimg, "销售数量
+        zbb10        TYPE p DECIMALS 3, "本币销售额
+        zjhsl10      TYPE p DECIMALS 3,
+        zjhje10      TYPE p DECIMALS 3,
+        fkimg11      LIKE vbrp-fkimg, "销售数量
+        zbb11        TYPE p DECIMALS 3, "本币销售额
+        zjhsl11      TYPE p DECIMALS 3,
+        zjhje11      TYPE p DECIMALS 3,
+        fkimg12      LIKE vbrp-fkimg, "销售数量
+        zbb12        TYPE p DECIMALS 3, "本币销售额
+        zjhsl12      TYPE p DECIMALS 3,
+        zjhje12      TYPE p DECIMALS 3,
+      END OF gt_last.

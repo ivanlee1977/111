@@ -1,0 +1,551 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPQM001_F01
+*&---------------------------------------------------------------------*
+
+FORM get_data."取数据
+  REFRESH: gt_alv,gt_qmfel.
+***根据屏幕输入的查询条件从表QALS中取出检验批的信息
+  SELECT matnr AS selmatnr werk AS selwerk prueflos charg art pastrterm paendterm
+         lagortvorg AS lagortchrg lifnr AS sellifnr losmenge ebeln mblnr gesstichpr ktextlos ersteller
+    INTO CORRESPONDING FIELDS OF TABLE gt_alv
+    FROM qals
+   WHERE matnr IN  s_matnr "物料编码
+     AND werk  IN  s_werk  "工厂
+     AND prueflos IN  s_prue  "检验批
+     AND charg    IN  s_charg "批次
+     AND art      IN  s_art   "检验类型
+     AND pastrterm  IN s_pastr "检验开始日期
+     AND paendterm  IN s_paend  "检验结束日期
+     AND lagortvorg IN s_lagort "库存地点
+     AND lifnr   IN s_lifnr   "供应商
+     AND ebeln      IN s_ebeln   "采购订单
+     AND mblnr      IN s_mblnr."物料凭证
+
+*  根据检验批从表QAMV中取出检验项目、抽检标准
+*            从表QMFEL中取出样品不合格数
+  IF gt_alv[] IS NOT INITIAL.
+    SELECT prueflos vorglfnr merknr kurztext sollstpumf
+           steuerkz dummy40 toleranzob toleranzun
+      INTO CORRESPONDING FIELDS OF TABLE gt_qamv
+      FROM qamv
+      FOR ALL ENTRIES IN gt_alv
+      WHERE prueflos = gt_alv-prueflos.
+    SORT gt_qamv BY prueflos.
+
+    SELECT * INTO TABLE gt_qmfel
+      FROM qmfel
+      FOR ALL ENTRIES IN gt_alv
+      WHERE prueflos EQ gt_alv-prueflos
+        AND kzloesch EQ space.
+    SORT gt_qmfel BY prueflos.
+
+    SELECT * INTO TABLE gt_qamb
+      FROM qamb
+      FOR ALL ENTRIES IN gt_alv
+      WHERE prueflos = gt_alv-prueflos
+        AND typ = '3'.
+    SORT gt_qamb BY prueflos.
+
+    SELECT * INTO TABLE gt_qave
+      FROM qave
+      FOR ALL ENTRIES IN gt_alv
+      WHERE prueflos = gt_alv-prueflos.
+    SORT gt_qave BY prueflos.
+  ENDIF.
+
+* 根据检验项目中的检验批、特性编号从表QAMR中取出检验结果
+  IF gt_qamv[] IS NOT INITIAL.
+    SELECT * INTO TABLE gt_qamr
+      FROM qamr
+      FOR ALL ENTRIES IN gt_qamv
+      WHERE prueflos EQ gt_qamv-prueflos
+        AND vorglfnr EQ gt_qamv-vorglfnr
+        AND merknr EQ gt_qamv-merknr.
+    SORT gt_qamr BY prueflos vorglfnr merknr.
+  ENDIF.
+
+
+
+*  根据检验批与物料凭证的关联关系从表MSEG中取出入库数量
+  IF gt_qamb[] IS NOT INITIAL.
+    SELECT mblnr mjahr zeile bwart menge
+      INTO CORRESPONDING FIELDS OF TABLE gt_mseg
+      FROM mseg
+      FOR ALL ENTRIES IN gt_qamb
+      WHERE mblnr = gt_qamb-mblnr
+        AND mjahr = gt_qamb-mjahr
+        AND zeile = gt_qamb-zeile
+        AND bwart = '321'.
+  ENDIF.
+ENDFORM.
+
+FORM process_data."处理数据
+  DATA:it_lfa1      LIKE lfa1 OCCURS 0 WITH HEADER LINE,
+       it_t001l     LIKE t001l OCCURS 0 WITH HEADER LINE,
+       it_makt      LIKE makt OCCURS 0 WITH HEADER LINE,
+       it_ekko      LIKE ekko OCCURS 0 WITH HEADER LINE,
+       it_t024      LIKE t024 OCCURS 0 WITH HEADER LINE,
+       it_tq30t     LIKE tq30t OCCURS 0 WITH HEADER LINE,
+       it_zprintnum LIKE zprintnum OCCURS 0 WITH HEADER LINE.
+
+  DATA: lv_tabix LIKE sy-tabix.
+
+  IF gt_alv[] IS NOT INITIAL .
+    "供应商
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE it_lfa1
+      FROM lfa1
+      FOR ALL ENTRIES IN gt_alv
+      WHERE lifnr EQ gt_alv-sellifnr.
+    SORT it_lfa1 BY lifnr.
+
+    "库存地点描述
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE it_t001l
+      FROM t001l
+      FOR ALL ENTRIES IN gt_alv
+      WHERE lgort EQ gt_alv-lagortchrg.
+    SORT it_t001l BY lgort.
+
+    "物料描述
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE it_makt
+      FROM makt
+      FOR ALL ENTRIES IN gt_alv
+      WHERE matnr EQ gt_alv-selmatnr
+        AND spras EQ sy-langu.
+    SORT it_makt BY matnr.
+
+    "取采购订单信息
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE it_ekko
+      FROM ekko
+      FOR ALL ENTRIES IN gt_alv
+      WHERE ebeln EQ gt_alv-ebeln.
+    SORT it_ekko BY ebeln.
+
+    "取检验类型描述
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE it_tq30t
+      FROM tq30t
+      FOR ALL ENTRIES IN gt_alv
+      WHERE art  EQ gt_alv-art
+        AND sprache EQ sy-langu.
+    SORT it_tq30t BY art.
+
+*  取打印次数
+    SELECT * INTO TABLE it_zprintnum
+      FROM zprintnum
+      FOR ALL ENTRIES IN gt_alv
+      WHERE zprgname = 'ZQM002'
+        AND prueflos = gt_alv-prueflos.
+    SORT it_zprintnum BY prueflos.
+  ENDIF.
+*  取采购组描述
+  SELECT * INTO TABLE it_t024 FROM t024.
+  SORT it_t024 BY ekgrp.
+
+* 从表qpct中取出不良描述
+  SELECT * INTO TABLE gt_qpct FROM qpct WHERE sprache = sy-langu.
+  SORT gt_qpct BY katalogart codegruppe code.
+
+
+  LOOP AT gt_alv .
+    lv_tabix = sy-tabix.
+    READ TABLE gt_qmfel WITH KEY prueflos = gt_alv-prueflos BINARY SEARCH.
+    IF sy-subrc <> 0.
+      DELETE gt_alv INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+*  取打印次数
+    READ TABLE it_zprintnum WITH KEY prueflos = gt_alv-prueflos BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-zsum = it_zprintnum-zsum.
+      gt_alv-zdate = it_zprintnum-zdate.
+      gt_alv-ztime = it_zprintnum-ztime.
+    ENDIF.
+    CASE 'X'.
+      WHEN p2.
+        IF gt_alv-zsum NE 0.
+          DELETE gt_alv INDEX lv_tabix.
+          CONTINUE.
+        ENDIF.
+      WHEN p3.
+        IF gt_alv-zsum EQ 0.
+          DELETE gt_alv INDEX lv_tabix.
+          CONTINUE.
+        ENDIF.
+      WHEN OTHERS.
+    ENDCASE.
+    "供应商
+    READ TABLE it_lfa1 WITH KEY lifnr =  gt_alv-sellifnr BINARY SEARCH.
+    IF sy-subrc EQ 0.
+      gt_alv-sortl  = it_lfa1-sortl.
+    ENDIF.
+    "库位描述
+    READ TABLE it_t001l WITH  KEY lgort = gt_alv-lagortchrg BINARY SEARCH.
+    IF sy-subrc EQ 0.
+      gt_alv-lgobe = it_t001l-lgobe.
+    ENDIF.
+    "物料描述
+    READ TABLE it_makt WITH KEY matnr = gt_alv-selmatnr BINARY SEARCH.
+    IF sy-subrc EQ 0.
+      gt_alv-maktx = it_makt-maktx.
+    ENDIF.
+    "采购员
+    READ TABLE it_ekko WITH KEY ebeln = gt_alv-ebeln BINARY SEARCH.
+    IF sy-subrc EQ 0.
+      gt_alv-ekgrp = it_ekko-ekgrp.
+    ENDIF.
+    "采购员描述
+    READ TABLE it_t024 WITH KEY ekgrp = gt_alv-ekgrp BINARY SEARCH.
+    IF sy-subrc EQ 0.
+      gt_alv-eknam = it_t024-eknam.
+    ENDIF.
+    "检验类型
+    READ TABLE it_tq30t WITH KEY art = gt_alv-art BINARY SEARCH.
+    IF sy-subrc EQ 0.
+      gt_alv-kurztext = it_tq30t-kurztext.
+    ENDIF.
+** 取IQC
+    READ TABLE gt_qamr WITH KEY prueflos = gt_alv-prueflos.
+    IF sy-subrc = 0.
+      gt_alv-pruefer = gt_qamr-pruefer.
+    ENDIF.
+    MODIFY gt_alv.
+  ENDLOOP.
+
+
+  LOOP AT gt_qmfel .
+    lt_qmfel-prueflos = gt_qmfel-prueflos.
+    lt_qmfel-vorglfnr = gt_qmfel-vorglfnr.
+    lt_qmfel-merknr = gt_qmfel-merknr.
+    lt_qmfel-anzfehler = gt_qmfel-anzfehler.
+    COLLECT lt_qmfel.
+  ENDLOOP.
+
+  SORT gt_qamv BY prueflos vorglfnr merknr.
+  SORT gt_qamr BY prueflos vorglfnr merknr.
+  LOOP AT lt_qmfel.
+***  缺陷数和不良描述
+    LOOP AT gt_qmfel WHERE prueflos = lt_qmfel-prueflos AND vorglfnr = lt_qmfel-vorglfnr AND merknr = lt_qmfel-merknr.
+      READ TABLE gt_qpct WITH KEY katalogart = gt_qmfel-fekat codegruppe = gt_qmfel-fegrp code = gt_qmfel-fecod.
+      IF sy-subrc EQ  0.
+        IF lt_qmfel-kurztext2 IS INITIAL.
+          lt_qmfel-kurztext2 =  gt_qpct-kurztext.
+        ELSE.
+          CONCATENATE lt_qmfel-kurztext2 gt_qpct-kurztext INTO lt_qmfel-kurztext2 SEPARATED BY '/'.
+        ENDIF.
+      ENDIF.
+    ENDLOOP.
+
+    READ TABLE gt_qamv WITH KEY prueflos = lt_qmfel-prueflos vorglfnr = lt_qmfel-vorglfnr merknr = lt_qmfel-merknr.
+    IF sy-subrc = 0.
+*** 抽检标准,定量取上下限组合 ，定性取DUMMY40
+      PERFORM frm_fltp_char USING gt_qamv-toleranzob CHANGING gt_qamv-toleranzob_c.
+      PERFORM frm_fltp_char USING gt_qamv-toleranzun CHANGING gt_qamv-toleranzun_c.
+      IF gt_qamv-steuerkz+0(1) = 'X'."定量
+        CONCATENATE gt_qamv-toleranzun_c '~' gt_qamv-toleranzob_c INTO lt_qmfel-kurztext1 .
+        CONDENSE lt_qmfel-kurztext1.
+      ELSE."定性
+        lt_qmfel-kurztext1 = gt_qamv-dummy40.
+      ENDIF.
+***检验项目
+      lt_qmfel-kurztext = gt_qamv-kurztext.
+***取样数量
+      lt_qmfel-sollstpumf = gt_qamv-sollstpumf.
+    ENDIF.
+***  检验结果
+    READ TABLE gt_qamr WITH KEY prueflos = lt_qmfel-prueflos vorglfnr = lt_qmfel-vorglfnr merknr = lt_qmfel-merknr.
+    IF sy-subrc = 0.
+      CASE gt_qamr-mbewertg.
+        WHEN 'A'.
+          lt_qmfel-mbewertg_txt = '合格'.
+        WHEN 'R'.
+          lt_qmfel-mbewertg_txt = '不合格'.
+        WHEN OTHERS .
+          lt_qmfel-mbewertg_txt = '没有评估'.
+      ENDCASE.
+    ENDIF.
+    MODIFY lt_qmfel.
+    CLEAR: lt_qmfel.
+  ENDLOOP.
+  SORT lt_qmfel BY prueflos vorglfnr merknr.
+
+ENDFORM.
+
+
+FORM get_alv."ALV显示界面
+  DATA : col_pos TYPE i VALUE 1.
+
+  CLEAR:it_fieldcat,wa_fieldcat.
+
+  gs_layout-zebra = 'X'.
+  gs_layout-cwidth_opt = 'X'."
+  gs_layout-stylefname = 'FIELD_STYLE'. " 将内表中的字段名存入显示格式
+  gs_layout-box_fname        = 'SEL'.
+  i_grid_settings-edt_cll_cb = 'X'.
+*  wa_events-name = 'CALLER_EXIT'.
+*  wa_events-form = 'CALLER_EXIT'.
+*  APPEND wa_events TO it_events.
+
+  PERFORM fieldcat_int USING col_pos  'SELMATNR'    ' '   '物料编码'       ''  'MATNR' 'MARA' '' ''.
+  PERFORM fieldcat_int USING col_pos  'SELWERK'     ' '   '工厂'           ''  'WERKS' 'MSEG' '' ''.
+  PERFORM fieldcat_int USING col_pos  'PRUEFLOS'    ' '   '检验批'         ''  'PRUEFLOS' 'QALS' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'CHARG'       ' '   '批次'           ''  'CHARG' 'QALS' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'ART'         ' '   '检验类型'       ''  '' '' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'PASTRTERM'   ' '   '检验开始日期'   ''  '' '' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'PAENDTERM'   ' '   '检验结束日期'   ''  '' '' '' ''.
+  PERFORM fieldcat_int USING col_pos  'LAGORTCHRG'  ' '   '库存地点'       ''  '' '' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'SELLIFNR'    ' '   '供应商'         ''  'LIFNR' 'LFA1' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'EBELN'       ' '   '采购订单'       ''  '' '' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'MBLNR'       ' '   '物料凭证'       ''  '' '' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'ZSUM'        ' '   '打印次数'       ''  '' '' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'ZDATE'       ' '   '最后打印日期'   ''  '' '' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'ZTIME'       ' '   '最后打印时间'   ''  '' '' ''   ''.
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program       = sy-repid
+      is_layout_lvc            = gs_layout
+      it_fieldcat_lvc          = it_fieldcat
+      it_events                = it_events
+      i_save                   = 'U'
+      i_callback_pf_status_set = 'SET_PF_STATUS'
+      i_callback_user_command  = 'ALV_USER_COMMAND'
+      i_grid_settings          = i_grid_settings
+    TABLES
+      t_outtab                 = gt_alv[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+
+  IF sy-subrc <> 0.
+* MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+*         WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+  ENDIF.
+ENDFORM.
+
+
+FORM set_pf_status USING rt_extab TYPE slis_t_extab.
+
+  DATA: wa_extab TYPE slis_extab.
+
+  SET PF-STATUS 'ZRPQM001_STATUS' EXCLUDING rt_extab.
+
+ENDFORM.                    "set_pf_status1
+
+FORM alv_user_command USING r_ucomm LIKE sy-ucomm  rs_selfield TYPE slis_selfield.
+*   获取ALV中的鼠标勾选记录
+  DATA: l_grid TYPE REF TO cl_gui_alv_grid.
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = l_grid.
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  r_ucomm = sy-ucomm.
+  save_ok =  r_ucomm .
+  CASE r_ucomm.
+      "打印
+    WHEN 'C_PRINT'.
+      PERFORM print_report.
+  ENDCASE.
+
+
+ENDFORM.                    "alv_user_command
+
+FORM fieldcat_int  USING   p_col_pos         " 1
+                            p_fieldname       " 2
+                            p_key             " 3
+                            p_seltext_l       " 4
+                            p_zero
+                            p_filename
+                            p_talbename
+                            p_outputlen
+                            p_edit .
+
+  wa_fieldcat-col_pos       = p_col_pos.
+  wa_fieldcat-fieldname     = p_fieldname.
+  wa_fieldcat-key           = p_key.
+  wa_fieldcat-coltext     = p_seltext_l.
+  wa_fieldcat-no_zero        = p_zero.
+  wa_fieldcat-ref_field   = p_filename.
+  wa_fieldcat-ref_table    = p_talbename.
+  wa_fieldcat-tipddictxt       = 'L'.
+  wa_fieldcat-edit           = p_edit  .
+  APPEND wa_fieldcat TO it_fieldcat.
+  p_col_pos = p_col_pos + 1.
+  CLEAR: wa_fieldcat.
+ENDFORM.                    " FIELDCAT_INT
+
+FORM print_report.
+  DATA fm_name TYPE rs38l_fnam.
+  DATA:xssfctrlop LIKE ssfctrlop.
+  DATA: it_head LIKE zszqm001_head OCCURS 0 WITH HEADER LINE.
+  DATA: it_item LIKE zszqm001_item OCCURS 0 WITH HEADER LINE.
+
+  DATA:lv_sum LIKE qmfel-anzfehler.
+
+  DATA: option TYPE ssfcresop.""SF使用参数
+  DATA: l_tdsfname TYPE tdsfname.
+
+  l_tdsfname = 'ZSFZQM001'.
+
+  CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
+    EXPORTING
+      formname           = l_tdsfname
+    IMPORTING
+      fm_name            = fm_name
+    EXCEPTIONS
+      no_form            = 1
+      no_function_module = 2
+      OTHERS             = 3.
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+
+  CLEAR:it_head[].
+  "表头数据.
+  LOOP AT gt_alv WHERE sel EQ 'X'.
+    MOVE-CORRESPONDING gt_alv TO it_head.
+    APPEND it_head.
+  ENDLOOP.
+  SORT it_head BY prueflos.
+  DELETE ADJACENT DUPLICATES FROM it_head COMPARING prueflos.
+
+  LOOP AT it_head.
+    AT FIRST.
+      xssfctrlop-no_close = 'X'.
+    ENDAT.
+    AT LAST.
+      xssfctrlop-no_close = ''.
+    ENDAT.
+
+** 处理结果中的合格数
+    LOOP AT gt_qamb WHERE prueflos = it_head-prueflos.
+      LOOP AT gt_mseg WHERE mblnr = gt_qamb-mblnr AND mjahr = gt_qamb-mjahr AND zeile = gt_qamb-zeile.
+        it_head-hgs_cljg = it_head-hgs_cljg + gt_mseg-menge.
+      ENDLOOP.
+    ENDLOOP.
+
+***处理结果中的不合格数= 送检数量-合格数
+    it_head-bhgs_cljg = it_head-losmenge - it_head-hgs_cljg.
+
+** 取处理结果中的合格数的处理方式
+    LOOP AT gt_qave WHERE prueflos = it_head-prueflos.
+      READ TABLE gt_qpct WITH KEY katalogart = gt_qave-vkatart
+                                  codegruppe = gt_qave-vcodegrp
+                                  code = gt_qave-vcode.
+      IF sy-subrc = 0.
+        IF it_head-kurztext3 IS INITIAL.
+          it_head-kurztext3 =  gt_qpct-kurztext.
+        ELSE.
+          CONCATENATE it_head-kurztext3 gt_qpct-kurztext INTO it_head-kurztext3 SEPARATED BY '/'.
+        ENDIF.
+      ENDIF.
+    ENDLOOP.
+
+*  处理行项目数据
+    REFRESH:it_item.
+    LOOP AT lt_qmfel WHERE prueflos = it_head-prueflos.
+      CLEAR:it_item.
+*   检验项目
+      it_item-kurztex = lt_qmfel-kurztext.
+*   抽检标准
+      it_item-kurztext1 = lt_qmfel-kurztext1.
+*   取样数量
+      it_item-gesstichpr = lt_qmfel-sollstpumf.
+*  缺陷数和不良描述
+      it_item-anzfehler = lt_qmfel-anzfehler .
+      it_item-kurztext2 =  lt_qmfel-kurztext2.
+*  检验结果
+      it_item-mbewertg_txt = lt_qmfel-mbewertg_txt.
+      APPEND it_item.
+    ENDLOOP.
+
+
+    CALL FUNCTION fm_name
+      EXPORTING
+        control_parameters = xssfctrlop
+        wa_head            = it_head
+      IMPORTING
+        job_output_info    = w_job_output_info
+      TABLES
+        it_item            = it_item[]
+      EXCEPTIONS
+        formatting_error   = 1
+        internal_error     = 2
+        send_error         = 3
+        user_canceled      = 4.
+
+    xssfctrlop-no_open = 'X'.
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ELSE.
+      IF w_job_output_info-outputdone = 'X' .
+        LOOP AT it_head.
+          PERFORM frm_addprintsum  USING it_head-prueflos.
+        ENDLOOP.
+      ENDIF.
+    ENDIF.
+
+  ENDLOOP.
+  IF sy-subrc NE 0.
+    MESSAGE s000(oo) WITH '请先选择要打印的记录' DISPLAY LIKE 'E'.
+  ENDIF.
+
+  FREE: it_head[],it_item[].
+ENDFORM.
+
+FORM frm_addprintsum  USING lv_prueflos  LIKE qals-prueflos       .
+  DATA:wa_zprintnum LIKE TABLE OF zprintnum WITH HEADER LINE,
+       lv_zsum      LIKE zprintnum-zsum,
+       lv_tabix     LIKE sy-tabix.
+
+  wa_zprintnum-prueflos  = lv_prueflos .
+  wa_zprintnum-mandt = sy-mandt.
+  wa_zprintnum-zprgname = 'ZQM002'.
+  wa_zprintnum-zernam = sy-uname.
+  wa_zprintnum-zdate = sy-datum.
+  wa_zprintnum-ztime = sy-uzeit.
+
+  SELECT SINGLE zsum INTO lv_zsum FROM zprintnum WHERE prueflos = lv_prueflos AND zprgname = 'ZQM002' .
+  IF sy-subrc EQ 0.
+    wa_zprintnum-zsum = lv_zsum + 1.
+  ELSE.
+    wa_zprintnum-zsum = 1.
+  ENDIF.
+
+  MODIFY zprintnum FROM wa_zprintnum.
+  IF sy-subrc = 0.
+    COMMIT WORK AND WAIT.
+    READ TABLE gt_alv WITH KEY sel = 'X' prueflos = lv_prueflos .
+    IF sy-subrc = 0.
+      lv_tabix = sy-tabix.
+      gt_alv-zsum = wa_zprintnum-zsum.
+      gt_alv-zdate = wa_zprintnum-zdate.
+      gt_alv-ztime = wa_zprintnum-ztime.
+      MODIFY gt_alv INDEX lv_tabix TRANSPORTING zsum zdate ztime.
+    ENDIF.
+  ELSE.
+    ROLLBACK WORK.
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FLTP_CHAR
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_GT_QAMV_TOLERANZOB  text
+*      <--P_GT_QAMV_TOLERANZOB_C  text
+*----------------------------------------------------------------------*
+FORM frm_fltp_char USING pv_value
+                    CHANGING pv_char LIKE cha_class_view-sollwert .
+  CALL FUNCTION 'QSS0_FLTP_TO_CHAR_CONVERSION'
+    EXPORTING
+      i_number_of_digits       = 3
+      i_fltp_value             = pv_value
+      i_value_not_initial_flag = 'X'
+      i_screen_fieldlength     = 16
+    IMPORTING
+      e_char_field             = pv_char.
+  CONDENSE pv_char.
+ENDFORM.

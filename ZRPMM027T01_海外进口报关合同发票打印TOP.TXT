@@ -1,0 +1,32 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPMM027T01
+*&---------------------------------------------------------------------*
+
+TABLES : ekko,ekpo,ztsd003cpys.
+
+DATA: BEGIN OF gt_mm OCCURS 0 ,
+        chk   TYPE char1,
+        lifnr LIKE ekko-lifnr,
+        ebeln LIKE ekko-ebeln,
+        name1 LIKE lfa1-name1,
+        knumv LIKE ekko-knumv,
+      END OF gt_mm.
+
+
+CONSTANTS:gcst_excel_template TYPE w3objid VALUE 'ZMM027'.
+
+***alv data define
+*DATA:gs_layout TYPE lvc_s_layo,
+*     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+DATA: gt_fcat   TYPE slis_t_fieldcat_alv WITH HEADER LINE,
+      gs_layout TYPE slis_layout_alv.
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-seltext_s = &2.
+  gt_fcat-ddictxt = 'S'.
+  gt_fcat-ref_fieldname = &3.
+  gt_fcat-ref_tabname = &4.
+
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

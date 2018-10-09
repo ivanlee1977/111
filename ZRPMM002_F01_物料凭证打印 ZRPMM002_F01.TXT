@@ -1,0 +1,1879 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM002_F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM get_data .
+  DATA:lt_qamb LIKE qamb OCCURS 0 WITH HEADER LINE.
+  DATA:lt_mseg_col LIKE wa_mseg OCCURS 0 WITH HEADER LINE.
+
+  IF p_1 = 'X' .
+    SELECT a~matnr "物料号码
+               a~charg "批次
+               a~bwart "移动类型
+               a~menge "数量
+               a~meins "单位
+               a~werks "工厂代码
+               a~aufnr "生产订单
+               a~kostl "成本中心 or 调出仓库
+               a~lifnr "供应商代码
+               a~ebeln "采购订单
+               a~ebelp
+               a~sgtxt "备注
+               a~rsnum " 预留/相关需求的编号
+               a~mblnr "物料凭证
+               a~kzbew "移动标识
+               a~umlgo "调入仓库
+               a~xauto "项目自动创建
+               a~budat_mkpf "过账日期
+               a~lgort "库存地点
+               a~erfmg
+               a~erfme
+               a~zeile
+               a~mjahr
+*               b~ebeln "采购凭证号
+               b~ernam "采购员
+               b~bsart "采购凭证号
+               c~mblnr "物料凭证编号
+               c~usnam "制单人
+               c~budat "过账日期
+      a~sjahr "物料凭证,add by pft 20180122
+      a~smbln  "物料凭证add by pft 20180122
+      a~smblp   "物料凭证项目,,add by pft 20180122
+          INTO CORRESPONDING FIELDS OF TABLE it_mseg
+          FROM mseg AS a
+          INNER JOIN ekko AS b ON a~ebeln = b~ebeln
+          INNER JOIN mkpf AS c ON c~mblnr = a~mblnr AND a~mjahr = c~mjahr
+          WHERE a~bwart  = '101'
+          AND a~kzbew = 'B'
+          AND b~bsart <> 'UB'
+          AND a~matnr IN s_matnr "物料号码
+          AND a~werks IN s_werks "工厂
+          AND a~bwart IN s_bwart " 移动类型
+          AND a~lgort IN s_lgort "库存地点
+          AND a~lifnr IN s_lifnr "供应商
+          AND a~ebeln IN s_ebeln "采购订单
+          AND a~aufnr IN s_aufnr "生产/内部订单
+          AND a~mblnr IN s_mblnr "物料凭证
+          AND a~budat_mkpf IN s_budat. "过账日期
+
+*    LOOP AT it_mseg INTO wa_mseg.
+*      MOVE-CORRESPONDING wa_mseg TO lt_mseg_col.
+*      CLEAR: lt_mseg_col-zeile,lt_mseg_col-ebelp.
+*      COLLECT lt_mseg_col.
+*      CLEAR: wa_mseg.
+*    ENDLOOP.
+
+    IF it_mseg[] IS NOT INITIAL.
+      SELECT *
+        INTO CORRESPONDING FIELDS OF TABLE lt_qamb
+        FROM qamb
+        FOR ALL ENTRIES IN it_mseg
+        WHERE mblnr = it_mseg-mblnr
+          AND mjahr = it_mseg-mjahr
+          AND zeile = it_mseg-zeile.
+    ENDIF.
+
+    SORT lt_qamb BY mblnr mjahr zeile.
+    LOOP AT it_mseg INTO wa_mseg.
+      READ TABLE lt_qamb WITH KEY mblnr = wa_mseg-mblnr mjahr = wa_mseg-mjahr zeile = wa_mseg-zeile BINARY SEARCH.
+      IF sy-subrc = 0 .
+        SELECT SINGLE * FROM qamb WHERE prueflos = lt_qamb-prueflos AND typ = '3'.
+        IF sy-subrc NE 0.
+          DELETE it_mseg.
+          CONTINUE.
+        ELSE.
+          SELECT SUM( b~menge )            INTO wa_mseg-zmeng            FROM qamb AS a
+           INNER JOIN mseg AS b              ON a~mblnr = b~mblnr             AND a~mjahr = b~mjahr             AND a~zeile = b~zeile
+           WHERE a~prueflos = lt_qamb-prueflos
+             AND a~typ = '3'
+             AND b~bwart = '321'.
+          SELECT SINGLE b~budat_mkpf INTO  wa_mseg-budat1                       "add by leimt 20180320 增加入库日期
+            FROM qamb AS a INNER JOIN mseg AS b ON a~mblnr = b~mblnr AND a~mjahr = b~mjahr AND a~zeile = b~zeile
+            WHERE a~prueflos = lt_qamb-prueflos AND a~typ = '3' AND  b~bwart = '321'  .
+        ENDIF.
+
+      ELSE.
+        IF wa_mseg-menge NE 0.
+          wa_mseg-zmeng = wa_mseg-menge.
+        ELSEIF wa_mseg-erfmg NE 0.
+          wa_mseg-zmeng = wa_mseg-erfmg.
+        ENDIF.
+
+      ENDIF.
+
+      MOVE-CORRESPONDING wa_mseg TO lt_mseg_col.
+      IF wa_mseg-matnr IS NOT INITIAL.
+        CLEAR: lt_mseg_col-zeile,lt_mseg_col-ebelp.
+      ELSE.
+        CLEAR: lt_mseg_col-zeile.
+      ENDIF.
+      COLLECT lt_mseg_col.
+
+      MODIFY it_mseg FROM wa_mseg.
+    ENDLOOP.
+
+    LOOP AT lt_mseg_col .
+      READ TABLE it_mseg INTO wa_mseg WITH KEY   mblnr = lt_mseg_col-mblnr
+                                                 matnr = lt_mseg_col-matnr
+                                                 ebeln = lt_mseg_col-ebeln
+                                                 lgobe = lt_mseg_col-lgobe
+                                                 meins = lt_mseg_col-meins.
+      IF sy-subrc = 0.
+        READ TABLE lt_qamb WITH KEY mblnr = wa_mseg-mblnr mjahr = wa_mseg-mjahr zeile = wa_mseg-zeile BINARY SEARCH.
+        IF sy-subrc = 0 .
+          lt_mseg_col-zmeng = wa_mseg-zmeng.
+        ENDIF.
+      ENDIF.
+      MODIFY lt_mseg_col.
+    ENDLOOP.
+
+    REFRESH: it_mseg.
+    it_mseg = lt_mseg_col[] .
+
+  ELSEIF p_2 = 'X'.
+    SELECT a~matnr "物料号码
+         a~charg "批次
+         a~bwart "移动类型
+         a~menge "数量
+         a~meins "单位
+         a~werks "工厂代码
+         a~aufnr "生产订单
+         a~kostl "成本中心 or 调出仓库
+         a~lifnr "供应商代码
+         a~ebeln "采购订单
+      a~ebelp
+         a~zeile
+         a~sgtxt "备注
+         a~rsnum " 预留/相关需求的编号
+         a~mblnr "物料凭证
+         a~kzbew "移动标识
+         a~umlgo "调入仓库
+         a~xauto "项目自动创建
+         a~budat_mkpf "过账日期
+         a~lgort "库存地点
+         a~grund "退货原因
+         a~erfmg
+         a~erfme
+         a~mjahr
+*         b~ebeln "采购凭证号
+         b~ernam "采购员
+         b~bsart "采购凭证号
+
+         c~mblnr "物料凭证编号
+         c~usnam "制单人
+         c~budat "过账日期
+               a~sjahr "物料凭证,add by pft 20180122
+      a~smbln  "物料凭证add by pft 20180122
+      a~smblp   "物料凭证项目,,add by pft 20180122
+    INTO CORRESPONDING FIELDS OF TABLE it_mseg
+    FROM mseg AS a
+    INNER JOIN ekko AS b ON a~ebeln = b~ebeln
+    INNER JOIN mkpf AS c ON c~mblnr = a~mblnr AND a~mjahr = c~mjahr
+    WHERE a~bwart  IN ('102' , '161','122') AND
+          a~kzbew = 'B' AND
+        a~matnr IN s_matnr "物料号码
+    AND a~werks IN s_werks "工厂
+    AND a~bwart IN s_bwart " 移动类型
+    AND a~lgort IN s_lgort "库存地点
+    AND a~lifnr IN s_lifnr "供应商
+    AND a~ebeln IN s_ebeln "采购订单
+    AND a~aufnr IN s_aufnr "生产/内部订单
+    AND a~mblnr IN s_mblnr "物料凭证
+    AND a~budat_mkpf IN s_budat. "过账日期
+
+  ELSEIF  p_3 = 'X'.
+    SELECT a~matnr "物料号码
+      a~charg "批次
+      a~bwart "移动类型
+      a~menge "数量
+      a~meins "单位
+      a~werks "工厂代码
+      a~aufnr "生产订单
+      a~kostl "成本中心 or 调出仓库
+      a~lifnr "供应商代码
+*      a~ebeln "采购订单
+      a~sgtxt "备注
+      a~rsnum " 预留/相关需求的编号
+      a~mblnr "物料凭证
+      a~kzbew "移动标识
+      a~umlgo "调入仓库
+      a~xauto "项目自动创建
+      a~budat_mkpf "过账日期
+      a~lgort "库存地点
+      a~erfmg
+      a~erfme
+      a~zeile
+      a~mjahr
+      c~mblnr "物料凭证编号
+      c~usnam "制单人
+      c~budat "过账日期
+      c~bktxt  "ADD BY PFT 20171204
+      a~sjahr "物料凭证,add by pft 20180122
+      a~smbln  "物料凭证add by pft 20180122
+      a~smblp   "物料凭证项目,,add by pft 20180122
+      a~rspos
+ INTO CORRESPONDING FIELDS OF TABLE it_mseg
+ FROM mseg AS a
+ INNER JOIN mkpf AS c ON c~mblnr = a~mblnr AND a~mjahr = c~mjahr
+ WHERE a~bwart  IN ('261' , '262','Z61','Z62') AND
+           a~matnr IN s_matnr "物料号码
+           AND a~werks IN s_werks "工厂
+       AND a~bwart IN s_bwart " 移动类型
+       AND a~lgort IN s_lgort "库存地点
+       AND a~aufnr IN s_aufnr "生产/内部订单
+       AND a~mblnr IN s_mblnr "物料凭证
+       AND a~budat_mkpf IN s_budat. "过账日期
+
+
+  ELSEIF p_4 = 'X'.
+    SELECT a~matnr "物料号码
+  a~charg "批次
+  a~bwart "移动类型
+  a~menge "数量
+  a~meins "单位
+  a~werks "工厂代码
+  a~aufnr "生产订单
+  a~kostl "成本中心 or 调出仓库
+  a~lifnr "供应商代码
+  a~ebeln "采购订单
+      a~ebelp
+  a~sgtxt "备注
+  a~rsnum " 预留/相关需求的编号
+  a~mblnr "物料凭证
+  a~kzbew "移动标识
+  a~umlgo "调入仓库
+  a~xauto "项目自动创建
+  a~budat_mkpf "过账日期
+  a~lgort "库存地点
+ a~erfmg
+a~erfme
+a~zeile
+a~mjahr
+  c~mblnr "物料凭证编号
+  c~usnam "制单人
+  c~budat "过账日期
+      c~bktxt  "ADD BY PFT 20171204
+      a~sjahr "物料凭证,add by pft 20180122
+      a~smbln  "物料凭证add by pft 20180122
+      a~smblp   "物料凭证项目,,add by pft 20180122
+INTO CORRESPONDING FIELDS OF TABLE it_mseg
+FROM mseg AS a
+INNER JOIN mkpf AS c ON c~mblnr = a~mblnr AND a~mjahr = c~mjahr
+WHERE a~bwart  IN ('201' , 'Z01') AND
+ a~matnr IN s_matnr "物料号码
+ AND a~werks IN s_werks "工厂
+AND a~bwart IN s_bwart " 移动类型
+AND a~lgort IN s_lgort "库存地点
+AND a~mblnr IN s_mblnr "物料凭证
+AND a~budat_mkpf IN s_budat. "过账日期
+
+
+  ELSEIF p_5 = 'X'.
+    SELECT a~matnr "物料号码
+              a~charg "批次
+              a~bwart "移动类型
+              a~menge "数量
+              a~meins "单位
+              a~werks "工厂代码
+              a~aufnr "生产订单
+              a~kostl "成本中心 or 调出仓库
+              a~lifnr "供应商代码
+              a~ebeln "采购订单
+                    a~ebelp
+              a~sgtxt "备注
+              a~rsnum " 预留/相关需求的编号
+              a~mblnr "物料凭证
+              a~kzbew "移动标识
+              a~umlgo "调入仓库
+              a~xauto "项目自动创建
+              a~budat_mkpf "过账日期
+              a~lgort "库存地点
+              a~erfmg
+              a~erfme
+              a~zeile
+              a~mjahr
+              c~mblnr "物料凭证编号
+              c~usnam "制单人
+              c~budat "过账日期
+                    c~bktxt  "ADD BY PFT 20171204
+                          a~sjahr "物料凭证,add by pft 20180122
+                    a~smbln  "物料凭证add by pft 20180122
+                    a~smblp   "物料凭证项目,,add by pft 20180122
+              INTO CORRESPONDING FIELDS OF TABLE it_mseg
+              FROM mseg AS a
+              INNER JOIN mkpf AS c ON c~mblnr = a~mblnr AND a~mjahr = c~mjahr
+              WHERE a~bwart  IN ('202' , 'Z02') AND
+*                     a~kzbew = 'F' and
+               a~matnr IN s_matnr "物料号码
+               AND a~werks IN s_werks "工厂
+              AND a~bwart IN s_bwart " 移动类型
+              AND a~lgort IN s_lgort "库存地点
+              AND a~mblnr IN s_mblnr "物料凭证
+              AND a~budat_mkpf IN s_budat. "过账日期
+
+  ELSEIF p_6 = 'X'.
+    SELECT a~matnr "物料号码
+            a~charg "批次
+            a~bwart "移动类型
+            a~menge "数量
+            a~meins "单位
+            a~werks "工厂代码
+            a~aufnr "生产订单
+            a~kostl "成本中心 or 调出仓库
+            a~lifnr "供应商代码
+            a~ebeln "采购订单
+            a~ebelp
+            a~sgtxt "备注
+            a~rsnum " 预留/相关需求的编号
+            a~mblnr "物料凭证
+            a~kzbew "移动标识
+            a~umlgo "调入仓库
+            a~xauto "项目自动创建
+            a~budat_mkpf "过账日期
+            a~lgort "库存地点
+            a~erfmg
+            a~erfme
+            a~zeile
+            a~mjahr
+            c~mblnr "物料凭证编号
+            c~usnam "制单人
+            c~budat "过账日期
+                   c~bktxt  "ADD BY PFT 20171204
+                  a~sjahr "物料凭证,add by pft 20180122
+                  a~smbln  "物料凭证add by pft 20180122
+                  a~smblp   "物料凭证项目,,add by pft 20180122
+            INTO CORRESPONDING FIELDS OF TABLE it_mseg
+            FROM mseg AS a
+            INNER JOIN mkpf AS c ON c~mblnr = a~mblnr AND a~mjahr = c~mjahr
+            WHERE a~bwart = '311'
+                  AND a~xauto = ''
+                  AND a~matnr IN s_matnr "物料号码
+                  AND a~werks IN s_werks "工厂
+                  AND a~bwart IN s_bwart " 移动类型
+                  AND a~lgort IN s_lgort "库存地点
+                  AND a~mblnr IN s_mblnr "物料凭证
+                  AND a~budat_mkpf IN s_budat. "过账日期
+**********************************************************************add by 20180315 增加合格，退回数量
+    IF it_mseg[] IS NOT INITIAL.
+      SELECT *
+        INTO CORRESPONDING FIELDS OF TABLE lt_qamb
+        FROM qamb
+        FOR ALL ENTRIES IN it_mseg
+        WHERE mblnr = it_mseg-mblnr
+          AND mjahr = it_mseg-mjahr
+          AND zeile = it_mseg-zeile.
+    ENDIF.
+    SORT lt_qamb BY mblnr mjahr zeile.
+    LOOP AT it_mseg INTO wa_mseg.
+      READ TABLE lt_qamb WITH KEY mblnr = wa_mseg-mblnr mjahr = wa_mseg-mjahr zeile = wa_mseg-zeile BINARY SEARCH.
+      IF sy-subrc = 0 .
+        wa_mseg-prueflos = lt_qamb-prueflos.
+        SELECT SUM( b~menge )          INTO wa_mseg-hgmng          FROM qamb AS a
+         INNER JOIN mseg AS b            ON a~mblnr = b~mblnr           AND a~mjahr = b~mjahr           AND a~zeile = b~zeile
+         WHERE a~prueflos = lt_qamb-prueflos
+           AND a~typ = '3'
+           AND b~bwart = '321'.
+        SELECT SUM( b~menge )          INTO wa_mseg-thmng          FROM qamb AS a
+              INNER JOIN mseg AS b            ON a~mblnr = b~mblnr           AND a~mjahr = b~mjahr           AND a~zeile = b~zeile
+              WHERE a~prueflos = lt_qamb-prueflos
+               AND a~typ = '3'
+               AND b~bwart = '350'.
+      ENDIF.
+      MODIFY it_mseg FROM wa_mseg.
+    ENDLOOP.
+**********************************************************************end by 20180315
+  ELSEIF p_7 = 'X'.
+    SELECT a~matnr "物料号码
+            a~charg "批次
+            a~bwart "移动类型
+            a~menge "数量
+            a~meins "单位
+            a~werks "工厂代码
+            a~aufnr "生产订单
+            a~kostl "成本中心 or 调出仓库
+            a~lifnr "供应商代码
+            a~ebeln "采购订单
+            a~ebelp
+            a~sgtxt "备注
+            a~rsnum " 预留/相关需求的编号
+            a~mblnr "物料凭证
+            a~kzbew "移动标识
+            a~erfmg
+*                  a~umlgo "调入仓库
+            a~xauto "项目自动创建
+            a~budat_mkpf "过账日期
+            a~lgort "库存地点
+            a~parent_id
+            a~line_id
+            a~vbeln_im
+            a~erfme
+            a~zeile
+            a~mjahr
+            b~ebeln "采购凭证号
+            b~ernam "采购员
+            b~bsart "采购凭证号
+
+            c~mblnr "物料凭证编号
+            c~usnam "制单人
+            c~budat "过账日期
+             c~bktxt  "ADD BY PFT 20171204
+            a~sjahr "物料凭证,add by pft 20180122
+            a~smbln  "物料凭证add by pft 20180122
+            a~smblp   "物料凭证项目,,add by pft 20180122
+            INTO CORRESPONDING FIELDS OF TABLE it_mseg
+            FROM mseg AS a
+            INNER JOIN ekko AS b ON a~ebeln = b~ebeln
+            INNER JOIN mkpf AS c ON c~mblnr = a~mblnr AND a~mjahr = c~mjahr
+            WHERE a~bwart  = '641' AND
+            b~bsart = 'UB' AND
+            a~xauto = '' AND
+             a~matnr IN s_matnr "物料号码
+             AND a~werks IN s_werks "工厂
+            AND a~bwart IN s_bwart " 移动类型
+            AND a~lgort IN s_lgort "库存地点
+            AND a~mblnr IN s_mblnr "物料凭证
+            AND a~ebeln IN s_ebeln "采购订单
+            AND a~budat_mkpf IN s_budat. "过账日期
+
+*       SELECT umlgo  FROM mseg
+*              INTO wa_mseg-umlgo
+*              WHERE bwart  = '641' and xauto = '' and  PARENT_ID = wa_mseg-LINE_ID .
+*              ENDSELECT.
+
+
+
+
+  ELSEIF p_8 = 'X'.
+    SELECT a~matnr "物料号码
+            a~charg "批次
+            a~bwart "移动类型
+            a~menge "数量
+            a~meins "单位
+            a~werks "工厂代码
+            a~aufnr "生产订单
+            a~kostl "成本中心 or 调出仓库
+            a~lifnr "供应商代码
+            a~ebeln "采购订单
+                  a~ebelp
+            a~sgtxt "备注
+            a~rsnum " 预留/相关需求的编号
+            a~mblnr "物料凭证
+            a~kzbew "移动标识
+            a~umlgo "调入仓库
+            a~xauto "项目自动创建
+            a~budat_mkpf "过账日期
+            a~lgort "库存地点
+            a~erfmg
+            a~erfme
+            a~zeile
+            a~mjahr
+            b~ebeln "采购凭证号
+            b~ernam "采购员
+            b~bsart "采购凭证号
+
+            c~mblnr "物料凭证编号
+            c~usnam "制单人
+            c~budat "过账日期
+            c~bktxt  "ADD BY PFT 20171204
+            a~sjahr "物料凭证,add by pft 20180122
+            a~smbln  "物料凭证add by pft 20180122
+            a~smblp   "物料凭证项目,,add by pft 20180122
+            INTO CORRESPONDING FIELDS OF TABLE it_mseg
+            FROM mseg AS a
+            INNER JOIN ekko AS b ON a~ebeln = b~ebeln
+            INNER JOIN mkpf AS c ON c~mblnr = a~mblnr AND a~mjahr = c~mjahr
+            WHERE a~bwart  = '101' AND
+            b~bsart = 'UB' AND
+             a~matnr IN s_matnr "物料号码
+             AND a~werks IN s_werks "工厂
+            AND a~bwart IN s_bwart " 移动类型
+            AND a~lgort IN s_lgort "库存地点
+            AND a~mblnr IN s_mblnr "物料凭证
+            AND a~budat_mkpf IN s_budat. "过账日期
+**********************************************************************add by leimt 20180322 增加退回数，合格数
+    IF it_mseg[] IS NOT INITIAL.
+      SELECT *
+        INTO CORRESPONDING FIELDS OF TABLE lt_qamb
+        FROM qamb
+        FOR ALL ENTRIES IN it_mseg
+        WHERE mblnr = it_mseg-mblnr
+          AND mjahr = it_mseg-mjahr
+          AND zeile = it_mseg-zeile.
+    ENDIF.
+    SORT lt_qamb BY mblnr mjahr zeile.
+    LOOP AT it_mseg INTO wa_mseg.
+      READ TABLE lt_qamb WITH KEY mblnr = wa_mseg-mblnr mjahr = wa_mseg-mjahr zeile = wa_mseg-zeile BINARY SEARCH.
+      IF sy-subrc = 0 .
+        wa_mseg-prueflos = lt_qamb-prueflos.
+        SELECT SUM( b~menge )          INTO wa_mseg-hgmng          FROM qamb AS a
+               INNER JOIN mseg AS b            ON a~mblnr = b~mblnr           AND a~mjahr = b~mjahr           AND a~zeile = b~zeile
+               WHERE a~prueflos = lt_qamb-prueflos
+                 AND a~typ = '3'
+                 AND b~bwart = '321'.
+        SELECT SUM( b~menge )          INTO wa_mseg-thmng          FROM qamb AS a
+              INNER JOIN mseg AS b            ON a~mblnr = b~mblnr           AND a~mjahr = b~mjahr           AND a~zeile = b~zeile
+              WHERE a~prueflos = lt_qamb-prueflos
+               AND a~typ = '3'
+               AND b~bwart = '350'.
+        SELECT SINGLE c~lgobe           INTO wa_mseg-thlgobe          FROM qamb AS a
+              INNER JOIN mseg AS b            ON a~mblnr = b~mblnr           AND a~mjahr = b~mjahr           AND a~zeile = b~zeile
+              INNER JOIN t001l AS c ON b~lgort = c~lgort AND b~werks = c~werks
+              WHERE a~prueflos = lt_qamb-prueflos
+               AND a~typ = '3'
+               AND b~bwart = '350'.
+      ENDIF.
+      MODIFY it_mseg FROM wa_mseg.
+    ENDLOOP.
+
+**********************************************************************end by leimt
+
+  ELSEIF p_9 = 'X'.
+    SELECT a~matnr "物料号码
+             a~charg "批次
+             a~bwart "移动类型
+             a~menge "数量
+             a~meins "单位
+             a~werks "工厂代码
+             a~aufnr "生产订单
+             a~kostl "成本中心 or 调出仓库
+             a~lifnr "供应商代码
+             a~ebeln "采购订单
+      a~ebelp
+             a~sgtxt "备注
+             a~rsnum " 预留/相关需求的编号
+             a~mblnr "物料凭证
+             a~kzbew "移动标识
+             a~umlgo "调入仓库
+             a~xauto "项目自动创建
+             a~budat_mkpf "过账日期
+             a~erfmg
+             a~lgort "库存地点
+             a~erfme
+             a~zeile
+             a~mjahr
+
+             b~matnr
+             b~rgekz
+
+             c~mblnr "物料凭证编号
+             c~usnam "制单人
+             c~budat "过账日期
+             c~bktxt  "ADD BY PFT 20171204
+             a~sjahr "物料凭证,add by pft 20180122
+             a~smbln  "物料凭证add by pft 20180122
+             a~smblp   "物料凭证项目,,add by pft 20180122
+        INTO CORRESPONDING FIELDS OF TABLE it_mseg
+        FROM mseg AS a
+        INNER JOIN marc AS b ON a~matnr = b~matnr
+        INNER JOIN mkpf AS c ON c~mblnr = a~mblnr AND a~mjahr = c~mjahr
+        WHERE a~bwart  IN ('541' , '542','Z41','Z42')
+*          AND b~rgekz <> ''
+          AND a~vbeln_im EQ space
+          AND a~xauto = ''
+          AND a~matnr IN s_matnr "物料号码
+          AND a~werks IN s_werks "工厂
+          AND a~bwart IN s_bwart " 移动类型
+          AND a~lgort IN s_lgort "库存地点
+          AND a~mblnr IN s_mblnr "物料凭证
+          AND a~budat_mkpf IN s_budat. "过账日期
+
+
+
+  ELSEIF p_10 = 'X'.
+    SELECT a~matnr "物料号码
+      a~charg "批次
+      a~bwart "移动类型
+      a~menge "数量
+      a~meins "单位
+      a~werks "工厂代码
+      a~aufnr "生产订单
+      a~kostl "成本中心 or 调出仓库
+      a~lifnr "供应商代码
+      a~ebeln "采购订单
+      a~ebelp
+      a~sgtxt "备注
+      a~rsnum " 预留/相关需求的编号
+      a~mblnr "物料凭证
+      a~kzbew "移动标识
+      a~umlgo "调入仓库
+      a~xauto "项目自动创建
+      a~budat_mkpf "过账日期
+      a~lgort "库存地点
+      a~erfmg
+      a~erfme
+      a~zeile
+      a~mjahr
+
+      c~mblnr "物料凭证编号
+      c~usnam "制单人
+      c~budat "过账日期
+      c~bktxt  "ADD BY PFT 20171204
+      a~sjahr "物料凭证,add by pft 20180122
+      a~smbln  "物料凭证add by pft 20180122
+      a~smblp   "物料凭证项目,,add by pft 20180122
+      INTO CORRESPONDING FIELDS OF TABLE it_mseg
+      FROM mseg AS a
+      INNER JOIN mkpf AS c ON c~mblnr = a~mblnr AND a~mjahr = c~mjahr
+      WHERE a~bwart = '101' AND
+
+      a~kzbew = 'F' AND
+      a~matnr IN s_matnr "物料号码
+      AND a~werks IN s_werks "工厂
+      AND a~bwart IN s_bwart " 移动类型
+      AND a~lgort IN s_lgort "库存地点
+      AND a~aufnr IN s_aufnr "生产/内部订单
+      AND a~mblnr IN s_mblnr "物料凭证
+      AND a~budat_mkpf IN s_budat. "过账日期
+
+    IF it_mseg[] IS NOT INITIAL.
+      SELECT *
+        INTO CORRESPONDING FIELDS OF TABLE lt_qamb
+        FROM qamb
+        FOR ALL ENTRIES IN it_mseg
+        WHERE mblnr = it_mseg-mblnr
+          AND mjahr = it_mseg-mjahr
+          AND zeile = it_mseg-zeile.
+    ENDIF.
+    SORT lt_qamb BY mblnr mjahr zeile.
+    LOOP AT it_mseg INTO wa_mseg.
+      READ TABLE lt_qamb WITH KEY mblnr = wa_mseg-mblnr mjahr = wa_mseg-mjahr zeile = wa_mseg-zeile BINARY SEARCH.
+      IF sy-subrc = 0 .
+        SELECT SINGLE * FROM qamb WHERE prueflos = lt_qamb-prueflos AND typ = '3'.
+        IF sy-subrc NE 0.
+          DELETE it_mseg.
+          CONTINUE.
+        ELSE.
+          wa_mseg-prueflos = lt_qamb-prueflos.
+          SELECT SUM( b~menge )
+            INTO wa_mseg-zmeng
+            FROM qamb AS a
+           INNER JOIN mseg AS b
+              ON a~mblnr = b~mblnr
+             AND a~mjahr = b~mjahr
+             AND a~zeile = b~zeile
+           WHERE a~prueflos = lt_qamb-prueflos
+             AND a~typ = '3'
+             AND b~bwart = '321'.
+        ENDIF.
+      ELSE.
+        IF wa_mseg-menge NE 0.
+          wa_mseg-zmeng = wa_mseg-menge.
+        ELSEIF wa_mseg-erfmg NE 0.
+          wa_mseg-zmeng = wa_mseg-erfmg.
+        ENDIF.
+      ENDIF.
+
+      MODIFY it_mseg FROM wa_mseg.
+    ENDLOOP.
+  ENDIF.
+
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  PROCESS_IF
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM process_if ."取数条件
+  IF p_7 = 'X'  AND it_mseg[]  IS NOT INITIAL.
+*    SELECT a~ebeln
+*      a~ebelp
+*           a~umlgo
+*           a~xauto
+*           a~parent_id
+*           a~line_id
+*
+*           b~bsart
+*     INTO CORRESPONDING FIELDS OF TABLE it_ekko
+*  FROM mseg AS a
+*  INNER JOIN ekko AS b ON a~ebeln = b~ebeln
+*      FOR ALL ENTRIES IN it_mseg
+*      WHERE a~ebeln = it_mseg-ebeln
+*      AND a~bwart  = '641' AND
+*          b~bsart = 'UB' AND
+*          a~xauto = 'X' AND
+*          a~parent_id = it_mseg-line_id.
+    SELECT ebeln ebelp lgort AS umlgo
+      INTO CORRESPONDING FIELDS OF TABLE it_ekko
+      FROM ekpo
+      FOR ALL ENTRIES IN it_mseg
+      WHERE ebeln = it_mseg-ebeln
+        AND ebelp = it_mseg-ebelp.
+    SORT it_ekko BY ebeln ebelp.
+  ENDIF.
+
+  SORT it_ekko BY ebeln ebelp.
+  CLEAR it_mblnr[].
+
+  LOOP AT it_mseg INTO wa_mseg .
+    READ TABLE it_ekko INTO wa_ekko WITH  KEY  ebeln = wa_mseg-ebeln ebelp = wa_mseg-ebelp BINARY SEARCH.
+    IF sy-subrc EQ 0.
+      wa_mseg-umlgo = wa_ekko-umlgo.
+    ENDIF.
+    MODIFY it_mseg FROM wa_mseg.
+
+    it_mblnr-mblnr =  wa_mseg-mblnr.
+    it_mblnr-mjahr = wa_mseg-mjahr.
+    it_mblnr-zeile = wa_mseg-zeile.
+    APPEND it_mblnr.
+
+
+  ENDLOOP.
+
+ENDFORM.
+
+
+
+*&---------------------------------------------------------------------*
+*&      Form  PROCESS_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM process_data .
+  DATA:it_t157e LIKE t157e OCCURS 0 WITH HEADER LINE.
+  DATA:it_makt  LIKE makt  OCCURS 0 WITH HEADER LINE.
+  DATA:it_ekpo  LIKE ekpo  OCCURS 0 WITH HEADER LINE.
+  DATA:it_lfa1  LIKE lfa1  OCCURS 0 WITH HEADER LINE.
+  DATA:it_cskt  LIKE cskt  OCCURS 0 WITH HEADER LINE.
+  DATA:it_marc  LIKE marc  OCCURS 0 WITH HEADER LINE.
+  DATA:it_t003p LIKE t003p OCCURS 0 WITH HEADER LINE.
+  DATA:it_t001l LIKE t001l OCCURS 0 WITH HEADER LINE.
+  DATA:it_resb  LIKE resb  OCCURS 0 WITH HEADER LINE.
+  DATA:it_vbfa  LIKE vbfa  OCCURS 0 WITH HEADER LINE.
+  DATA:it_likp  LIKE likp  OCCURS 0 WITH HEADER LINE.
+  DATA:it_t173t LIKE t173t OCCURS 0 WITH HEADER LINE.
+  DATA: lv_bismt TYPE mara-bismt,lv_qmatv TYPE marc-qmatv.
+  DATA:BEGIN OF it_afpo OCCURS 0,
+         aufnr LIKE afpo-aufnr,
+         dauat LIKE afpo-dauat,
+         matnr LIKE afpo-matnr,
+         psmng LIKE afpo-psmng,
+         wemng LIKE afpo-wemng,
+         rsnum LIKE afko-rsnum,
+         gamng LIKE afko-gamng,
+       END OF it_afpo.
+
+
+  IF p_2 EQ 'X' AND it_mseg[] IS NOT INITIAL .
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE it_t157e
+      FROM t157e
+      FOR ALL ENTRIES IN it_mseg
+      WHERE grund EQ it_mseg-grund
+       AND  spras EQ sy-langu.
+  ENDIF  .
+
+  IF it_mseg[] IS NOT INITIAL.
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE it_makt
+      FROM makt
+      FOR ALL ENTRIES IN it_mseg
+      WHERE matnr EQ it_mseg-matnr
+        AND spras EQ sy-langu.
+
+    SELECT
+         a~aufnr
+         a~dauat
+         a~matnr
+         a~psmng
+         a~wemng
+         b~rsnum
+         b~gamng
+       INTO CORRESPONDING FIELDS OF TABLE it_afpo
+      FROM afpo AS a
+      JOIN afko AS b ON a~aufnr EQ b~aufnr
+      FOR ALL ENTRIES IN it_mseg
+      WHERE a~aufnr EQ it_mseg-aufnr.
+
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE it_ekpo
+      FROM ekpo
+      FOR ALL ENTRIES IN it_mseg
+      WHERE ebeln EQ it_mseg-ebeln
+        AND loekz EQ space.
+*      AND   ebelp EQ it_mseg-ebelp.
+
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE it_lfa1
+      FROM lfa1
+      FOR ALL ENTRIES IN it_mseg
+      WHERE lifnr EQ it_mseg-lifnr.
+
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE it_cskt
+      FROM cskt
+      FOR ALL ENTRIES IN it_mseg
+      WHERE kostl EQ it_mseg-kostl
+        AND spras EQ sy-langu.
+
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE it_marc
+      FROM marc
+      FOR ALL ENTRIES IN it_mseg
+      WHERE matnr EQ it_mseg-matnr
+       AND  werks EQ it_mseg-werks.
+
+
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE it_t001l
+      FROM t001l
+      FOR ALL ENTRIES IN it_mseg
+      WHERE lgort EQ it_mseg-lgort.
+
+    SELECT * APPENDING CORRESPONDING FIELDS OF TABLE it_t001l
+    FROM t001l
+    FOR ALL ENTRIES IN it_mseg
+    WHERE lgort EQ it_mseg-umlgo.
+
+    IF p_7 = 'X'.
+      SELECT * INTO CORRESPONDING FIELDS OF TABLE it_vbfa
+        FROM vbfa
+        FOR ALL ENTRIES IN it_mblnr
+        WHERE vbeln EQ it_mblnr-mblnr
+        AND   posnn EQ it_mblnr-zeile
+        AND   mjahr EQ it_mblnr-mjahr
+        AND   bwart EQ '641'.
+    ENDIF.
+  ENDIF.
+
+  IF it_vbfa[] IS NOT INITIAL AND p_7 = 'X'.
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE it_likp
+      FROM likp
+      FOR ALL ENTRIES IN it_vbfa
+      WHERE vbeln EQ it_vbfa-vbelv.
+
+  ENDIF.
+
+
+  IF it_likp[] IS NOT INITIAL .
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE it_t173t
+      FROM t173t
+      FOR ALL ENTRIES IN it_likp
+      WHERE vsart EQ it_likp-vsart
+       AND  spras EQ sy-langu.
+  ENDIF.
+
+
+  IF it_afpo[] IS NOT INITIAL .
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE it_t003p
+    FROM t003p
+    FOR ALL ENTRIES IN it_afpo
+    WHERE auart EQ it_afpo-dauat
+      AND spras EQ sy-langu.
+
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE it_resb
+     FROM resb
+      FOR ALL ENTRIES IN it_afpo
+      WHERE rsnum EQ it_afpo-rsnum.
+  ENDIF.
+
+  IF it_ekpo[] IS NOT INITIAL .
+    SELECT * APPENDING CORRESPONDING FIELDS OF TABLE it_t001l
+    FROM t001l
+    FOR ALL ENTRIES IN it_ekpo
+    WHERE lgort EQ it_ekpo-lgort.
+
+
+    SELECT * APPENDING CORRESPONDING FIELDS OF TABLE it_t001l
+    FROM t001l
+    FOR ALL ENTRIES IN it_ekpo
+    WHERE lgort EQ it_ekpo-reslo.
+  ENDIF.
+
+
+  SORT it_cskt BY kokrs kostl datbi.
+
+  LOOP AT it_mseg INTO wa_mseg.
+
+    "如果MSEG里MENGE为空 则取a~ERFMG数据
+    IF wa_mseg-menge EQ 0.
+      wa_mseg-menge = wa_mseg-erfmg.
+      wa_mseg-meins = wa_mseg-erfme.
+    ENDIF.
+
+
+    "取afpo数据
+*    SELECT SINGLE dauat matnr aufnr psmng wemng  INTO (wa_mseg-dauat , wa_mseg-matnr1 ,wa_mseg-aufnr1 , wa_mseg-psmng ,wa_mseg-wemng) FROM afpo WHERE aufnr = wa_mseg-aufnr.
+    READ TABLE it_afpo WITH KEY aufnr = wa_mseg-aufnr.
+    IF sy-subrc EQ 0.
+      wa_mseg-dauat = it_afpo-dauat.
+      wa_mseg-matnr1 = it_afpo-matnr.
+      SELECT SINGLE maktx INTO wa_mseg-maktx1 FROM makt WHERE matnr = wa_mseg-matnr1 AND spras = sy-langu.
+      wa_mseg-psmng = it_afpo-psmng.
+      wa_mseg-wemng = it_afpo-wemng.
+      wa_mseg-gamng = it_afpo-gamng.
+    ENDIF.
+    IF p_1 EQ 'X' OR p_2 EQ 'X'.
+      "取ekpo数据
+*    SELECT SINGLE reslo  lgort   INTO (wa_mseg-reslo ,wa_mseg-lgort1) FROM ekpo WHERE ebeln = wa_mseg-ebeln AND ebelp = wa_mseg-ebelp.
+      READ TABLE it_ekpo WITH KEY ebeln = wa_mseg-ebeln ebelp = wa_mseg-ebelp.
+      IF sy-subrc EQ 0.
+        wa_mseg-maktx = it_ekpo-txz01.
+      ELSE.
+        READ TABLE it_ekpo WITH KEY ebeln = wa_mseg-ebeln matnr = wa_mseg-matnr.
+        IF sy-subrc = 0.
+          wa_mseg-maktx = it_ekpo-txz01.
+        ENDIF.
+      ENDIF.
+    ELSE.
+*物料描述
+*      SELECT SINGLE txz01 AS  maktx FROM ekpo INTO wa_mseg-maktx WHERE matnr = wa_mseg-matnr .
+      READ TABLE it_makt WITH KEY matnr = wa_mseg-matnr.
+      IF sy-subrc EQ 0.
+        wa_mseg-maktx = it_makt-maktx.
+      ENDIF.
+    ENDIF.
+    IF  wa_mseg-matnr IS NOT INITIAL AND wa_mseg-maktx IS INITIAL.
+      SELECT SINGLE maktx INTO wa_mseg-maktx FROM makt WHERE matnr = wa_mseg-matnr AND spras = sy-langu.
+    ENDIF.
+    "取ekpo数据
+*    SELECT SINGLE reslo  lgort   INTO (wa_mseg-reslo ,wa_mseg-lgort1) FROM ekpo WHERE ebeln = wa_mseg-ebeln AND ebelp = wa_mseg-ebelp.
+    READ TABLE it_ekpo WITH KEY ebeln = wa_mseg-ebeln ebelp = wa_mseg-ebelp.
+    IF sy-subrc EQ 0.
+      wa_mseg-reslo  = it_ekpo-reslo.
+      wa_mseg-lgort1 = it_ekpo-lgort.
+    ENDIF.
+*** ADD BY PFT 20171207
+*   逻辑：当委外调拨单时，取EKPO中任意一行的物料号+物料描述+数量
+    IF p_9 EQ 'X'.
+      READ TABLE it_ekpo WITH KEY ebeln = wa_mseg-ebeln.
+      IF sy-subrc = 0.
+        wa_mseg-matnr1 = it_ekpo-matnr.
+        wa_mseg-maktx1 = it_ekpo-txz01.
+        wa_mseg-menge_ww = it_ekpo-menge.
+      ENDIF.
+    ENDIF.
+*** END BY PFT 20171207
+    "库存地点 relso
+    READ TABLE it_t001l WITH KEY lgort = wa_mseg-reslo.
+    IF sy-subrc EQ 0.
+      wa_mseg-reslo_txt = it_t001l-lgobe.
+    ENDIF.
+
+    READ TABLE it_vbfa WITH KEY vbeln = wa_mseg-mblnr posnn = wa_mseg-zeile mjahr = wa_mseg-mjahr.
+    IF sy-subrc EQ 0.
+      wa_mseg-vbeln_li = it_vbfa-vbelv.
+    ENDIF.
+
+    READ TABLE it_likp WITH KEY vbeln = wa_mseg-vbeln_li.
+    IF sy-subrc EQ 0.
+      wa_mseg-vsart = it_likp-vsart.
+    ENDIF.
+
+    PERFORM get_longtxt_dn_head  USING wa_mseg-vbeln_li CHANGING wa_mseg-head_txt."行项目文本
+
+    READ TABLE it_t173t WITH KEY vsart = wa_mseg-vsart.
+    IF sy-subrc EQ 0.
+      wa_mseg-vsart_txt = it_t173t-bezei.
+    ENDIF.
+
+    "库存地点
+    READ TABLE it_t001l WITH KEY lgort = wa_mseg-lgort1.
+    IF sy-subrc EQ 0.
+      wa_mseg-lgort1_txt = it_t001l-lgobe.
+    ENDIF.
+
+    "库存地点
+    READ TABLE it_t001l WITH KEY lgort = wa_mseg-umlgo.
+    IF sy-subrc EQ 0.
+      wa_mseg-umlgo_txt = it_t001l-lgobe.
+    ENDIF.
+
+
+    "供应商名称
+*    SELECT SINGLE name1 FROM lfa1 INTO wa_mseg-name1 WHERE lifnr = wa_mseg-lifnr.
+    READ TABLE it_lfa1 WITH KEY lifnr = wa_mseg-lifnr.
+    IF sy-subrc EQ 0.
+      wa_mseg-name1 = it_lfa1-name1.
+    ENDIF.
+
+    "部门描述
+*    SELECT SINGLE ktext FROM cskt INTO wa_mseg-ktext WHERE kostl  = wa_mseg-kostl AND spras = 1.
+    READ TABLE it_cskt WITH KEY kostl = wa_mseg-kostl.
+    IF sy-subrc EQ 0.
+      wa_mseg-ktext = it_cskt-ktext.
+    ENDIF.
+
+    "标识
+*    SELECT SINGLE rgekz FROM marc INTO wa_mseg-rgekz WHERE matnr = wa_mseg-matnr AND werks = wa_mseg-werks.
+    READ TABLE it_marc WITH KEY matnr = wa_mseg-matnr werks = wa_mseg-werks.
+    IF sy-subrc EQ 0.
+      wa_mseg-rgekz = it_marc-rgekz.
+    ENDIF.
+
+    "订单类型描述
+*    SELECT SINGLE txt FROM t003p INTO wa_mseg-auart_txt WHERE auart = wa_mseg-dauat AND spras = 1.
+    READ TABLE it_t003p WITH KEY auart = wa_mseg-dauat .
+    IF sy-subrc EQ 0.
+      wa_mseg-auart_txt = it_t003p-txt.
+    ENDIF.
+
+    "库存地点
+    READ TABLE it_t001l WITH KEY lgort = wa_mseg-lgort.
+    IF sy-subrc EQ 0.
+      wa_mseg-lgobe = it_t001l-lgobe.
+    ENDIF.
+    IF p_3 <> 'X'.
+      READ TABLE it_resb WITH KEY aufnr = wa_mseg-aufnr matnr = wa_mseg-matnr.    "退货时出现相同物料，不同数量的多条记录。
+      IF sy-subrc EQ 0.
+        wa_mseg-bdmng = it_resb-bdmng .
+        IF p_3 = 'X' AND ( wa_mseg-bwart = '261' OR wa_mseg-bwart = 'Z61' ).
+          wa_mseg-sgtxt = it_resb-sortf.  "修改备注 取值
+        ENDIF.
+      ENDIF.
+    ELSE.
+      READ TABLE it_resb WITH KEY aufnr = wa_mseg-aufnr matnr = wa_mseg-matnr rspos = wa_mseg-rspos.    "退货时出现相同物料，不同数量的多条记录。
+      IF sy-subrc EQ 0.
+        wa_mseg-bdmng = it_resb-bdmng .
+        IF p_3 = 'X' AND ( wa_mseg-bwart = '261' OR wa_mseg-bwart = 'Z61' ).
+          wa_mseg-sgtxt = it_resb-sortf.  "修改备注 取值
+        ENDIF.
+      ENDIF.
+
+    ENDIF.
+*    SELECT SINGLE bdmng FROM resb INTO wa_mseg-bdmng WHERE aufnr = wa_mseg-aufnr.
+
+
+    CALL FUNCTION 'Z_FMMM_001'
+      EXPORTING
+        i_ernam    = wa_mseg-ernam
+        i_usnam    = wa_mseg-usnam
+      IMPORTING
+        ex_usrname = wa_mseg-lv_usrname
+        ex_ernam   = wa_mseg-lv_ernam.
+
+    READ TABLE it_t157e WITH KEY grund = wa_mseg-grund bwart = wa_mseg-bwart.
+    IF sy-subrc EQ 0.
+      wa_mseg-grtxt = it_t157e-grtxt.
+    ENDIF.
+
+    IF p_1 EQ 'X'.
+*      SELECT SINGLE zsum INTO wa_mseg-zsum FROM zprintnum WHERE zpo = wa_mseg-mblnr AND zprgname = 'ZMM002' AND zeile = wa_mseg-zeile.
+    ELSE.
+      SELECT SINGLE zsum INTO wa_mseg-zsum FROM zprintnum WHERE zpo = wa_mseg-mblnr AND zprgname = 'ZMM002'.
+    ENDIF.
+
+    SELECT SINGLE bismt INTO lv_bismt FROM mara WHERE matnr = wa_mseg-matnr.
+    IF lv_bismt <> ''.
+      CONCATENATE wa_mseg-maktx lv_bismt INTO wa_mseg-maktx SEPARATED BY '/'.
+    ENDIF.
+    MODIFY it_mseg FROM wa_mseg.
+    CLEAR wa_mseg1.
+  ENDLOOP.
+
+  CLEAR gt_main[].
+  APPEND  LINES OF it_mseg TO gt_main.
+
+  SORT it_mseg BY mblnr matnr ebeln lgort .
+  IF p_1 EQ 'X'.
+    DELETE ADJACENT DUPLICATES FROM it_mseg COMPARING mblnr matnr ebeln lgort.
+    LOOP AT it_mseg INTO wa_mseg .
+      SELECT SINGLE zsum INTO wa_mseg-zsum FROM zprintnum
+        WHERE zpo = wa_mseg-mblnr
+          AND zprgname = 'ZMM002'
+          AND matnr = wa_mseg-matnr
+          AND ebeln = wa_mseg-ebeln
+          AND lgort = wa_mseg-lgort.
+      MODIFY it_mseg FROM wa_mseg.
+      CLEAR: wa_mseg.
+    ENDLOOP.
+  ELSE.
+    IF p_10 NE 'X'.
+      DELETE ADJACENT DUPLICATES FROM it_mseg COMPARING mblnr.
+    ENDIF.
+  ENDIF.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_AUTHORITY_CHECK
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_authority_check .
+
+  RANGES r_werks FOR mseg-werks.
+  DATA: lt_werks LIKE t001w OCCURS 0 WITH HEADER LINE.
+  REFRESH: r_werks, lt_werks.
+  SELECT * INTO TABLE lt_werks FROM t001w WHERE werks IN s_werks.
+  LOOP AT lt_werks.
+    AUTHORITY-CHECK OBJECT 'M_MSEG_WMB'
+             ID 'ACTVT' FIELD '03'
+             ID 'WERKS' FIELD lt_werks-werks.
+    IF sy-subrc EQ 0.
+      CLEAR: r_werks.
+      r_werks-sign = 'I'.
+      r_werks-option = 'EQ'.
+      r_werks-low = lt_werks-werks.
+      APPEND r_werks.
+    ENDIF.
+  ENDLOOP.
+  FREE: lt_werks.
+
+  IF lines( r_werks ) EQ 0.
+    MESSAGE '没有任何工厂的权限' TYPE 'S' DISPLAY LIKE 'E'.
+    EXIT.
+  ENDIF.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  GET_ALV
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM get_alv .
+
+*设置并显示alv结果
+  gd_layout-zebra = 'X'.
+*  gd_layout-box_fname = 'FUXUAN'.
+  DATA ls_filt TYPE LINE OF lvc_t_filt.
+  DATA lt_filt TYPE lvc_t_filt.
+*  IF p_6 = 'X'.
+*    ls_filt-fieldname = 'BWART' .
+*    ls_filt-sign = 'I' .
+*    ls_filt-option = 'EQ' .
+*    ls_filt-low = '311' .
+*    APPEND ls_filt TO lt_filt .
+*  ENDIF.
+*设置输出列
+  PERFORM fields_build.
+
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK        = ' '
+*     I_BYPASSING_BUFFER       =
+*     I_BUFFER_ACTIVE          =
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'PF_STATUS_SET'
+      i_callback_user_command  = 'USER_COMMAND'
+*     I_CALLBACK_TOP_OF_PAGE   = ' '
+*     i_callback_html_top_of_page       =
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME         =
+*     I_BACKGROUND_ID          = ' '
+*     I_GRID_TITLE             =
+*     I_GRID_SETTINGS          =
+      is_layout_lvc            = gd_layout
+      it_fieldcat_lvc          = it_fieldcat[]
+*     IT_EXCLUDING             =
+*     IT_SPECIAL_GROUPS_LVC    =
+*     IT_SORT_LVC              =
+      it_filter_lvc            = lt_filt[]
+*     IT_HYPERLINK             =
+*     IS_SEL_HIDE              =
+*     I_DEFAULT                = 'X'
+      i_save                   = 'A'
+*     IS_VARIANT               =
+*     it_events                =
+*     IT_EVENT_EXIT            =
+*     IS_PRINT_LVC             =
+*     IS_REPREP_ID_LVC         =
+*     I_SCREEN_START_COLUMN    = 0
+*     I_SCREEN_START_LINE      = 0
+*     I_SCREEN_END_COLUMN      = 0
+*     I_SCREEN_END_LINE        = 0
+*     I_HTML_HEIGHT_TOP        =
+*     I_HTML_HEIGHT_END        =
+*     IT_ALV_GRAPHICS          =
+*     IT_EXCEPT_QINFO_LVC      =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER  =
+*     ES_EXIT_CAUSED_BY_USER   =
+    TABLES
+      t_outtab                 = it_mseg[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+ENDFORM.
+
+FORM fields_build .
+  wa_fieldcat-fieldname   = 'FUXUAN'.
+  wa_fieldcat-scrtext_l = '选择'.
+  wa_fieldcat-checkbox = 'X'.
+  wa_fieldcat-edit = 'X'.
+  APPEND wa_fieldcat TO it_fieldcat.
+  CLEAR  wa_fieldcat.
+
+  wa_fieldcat-fieldname   = 'MBLNR'.
+  wa_fieldcat-scrtext_l   = '物料凭证'.
+  wa_fieldcat-outputlen   = '10'.
+  APPEND wa_fieldcat TO it_fieldcat.
+  CLEAR  wa_fieldcat.
+
+  IF p_1 EQ 'X'.
+*    wa_fieldcat-fieldname   = 'ZEILE'.
+*    wa_fieldcat-scrtext_l   = '行项目'.
+*    wa_fieldcat-outputlen   = '10'.
+*    APPEND wa_fieldcat TO it_fieldcat.
+*    CLEAR  wa_fieldcat.
+
+    wa_fieldcat-fieldname   = 'MATNR'.
+    wa_fieldcat-scrtext_l   = '物料编码'.
+    wa_fieldcat-outputlen   = '18'.
+    wa_fieldcat-ref_field = 'MATNR'.
+    wa_fieldcat-ref_table = 'MARA'.
+    APPEND wa_fieldcat TO it_fieldcat.
+    CLEAR  wa_fieldcat.
+
+    wa_fieldcat-fieldname   = 'MAKTX'.
+    wa_fieldcat-scrtext_l   = '物料描述'.
+    wa_fieldcat-outputlen   = '40'.
+    APPEND wa_fieldcat TO it_fieldcat.
+    CLEAR  wa_fieldcat.
+
+    wa_fieldcat-fieldname   = 'MENGE'.
+    wa_fieldcat-scrtext_l   = '数量'.
+    wa_fieldcat-outputlen   = '15'.
+    APPEND wa_fieldcat TO it_fieldcat.
+    CLEAR  wa_fieldcat.
+  ENDIF.
+
+  wa_fieldcat-fieldname   = 'WERKS'.
+  wa_fieldcat-scrtext_l   = '工厂代码'.
+  wa_fieldcat-outputlen   = '10'.
+  APPEND wa_fieldcat TO it_fieldcat.
+  CLEAR  wa_fieldcat.
+
+  wa_fieldcat-fieldname   = 'LGORT'.
+  wa_fieldcat-scrtext_l   = '仓库代码'.
+  wa_fieldcat-outputlen   = '10'.
+  APPEND wa_fieldcat TO it_fieldcat.
+  CLEAR  wa_fieldcat.
+  IF p_4 NE 'X' AND p_5 NE 'X' AND p_6 NE 'X'.
+    wa_fieldcat-fieldname   ='NAME1'.
+    wa_fieldcat-scrtext_l   ='供应商名称'.
+    wa_fieldcat-outputlen   = '10'.
+    APPEND wa_fieldcat TO it_fieldcat.
+    CLEAR  wa_fieldcat.
+
+
+    wa_fieldcat-fieldname   ='LIFNR'.
+    wa_fieldcat-scrtext_l   ='供应商代码'.
+    wa_fieldcat-outputlen   = '10'.
+    APPEND wa_fieldcat TO it_fieldcat.
+    CLEAR  wa_fieldcat.
+
+  ENDIF.
+  wa_fieldcat-fieldname   = 'EBELN'.
+  wa_fieldcat-scrtext_l   = '采购订单号码'.
+  wa_fieldcat-outputlen   = '12'.
+  APPEND wa_fieldcat TO it_fieldcat.
+  CLEAR  wa_fieldcat.
+
+  wa_fieldcat-fieldname   = 'AUFNR'.
+  wa_fieldcat-scrtext_l   = '生产/研发订单号码'.
+  wa_fieldcat-outputlen   = '20'.
+  APPEND wa_fieldcat TO it_fieldcat.
+  CLEAR  wa_fieldcat.
+
+  wa_fieldcat-fieldname   = 'RSNUM'.
+  wa_fieldcat-scrtext_l   = '预留单号码'.
+  wa_fieldcat-outputlen   = '10'.
+  APPEND wa_fieldcat TO it_fieldcat.
+  CLEAR  wa_fieldcat.
+
+  IF p_4 EQ 'X' OR p_5 EQ 'X'.
+    wa_fieldcat-fieldname   = 'KOSTL'.
+    wa_fieldcat-scrtext_l   = '部门'.
+    wa_fieldcat-outputlen   = '20'.
+    APPEND wa_fieldcat TO it_fieldcat.
+    CLEAR  wa_fieldcat.
+
+    wa_fieldcat-fieldname   = 'KTEXT'.
+    wa_fieldcat-scrtext_l   = '部门描述'.
+    wa_fieldcat-outputlen   = '10'.
+    APPEND wa_fieldcat TO it_fieldcat.
+    CLEAR  wa_fieldcat.
+  ENDIF.
+
+  IF p_10 EQ 'X'.
+    wa_fieldcat-fieldname   = 'MATNR1'.
+    wa_fieldcat-scrtext_l   = '生产型号'.
+    wa_fieldcat-outputlen   = '18'.
+    APPEND wa_fieldcat TO it_fieldcat.
+    CLEAR  wa_fieldcat.
+    wa_fieldcat-fieldname   = 'MAKTX1'.
+    wa_fieldcat-scrtext_l   = '生产型号描述'.
+    wa_fieldcat-outputlen   = '40'.
+    APPEND wa_fieldcat TO it_fieldcat.
+    CLEAR  wa_fieldcat.
+  ENDIF.
+
+  wa_fieldcat-fieldname   = 'BWART '.
+  wa_fieldcat-scrtext_l   = '移动类型'.
+  wa_fieldcat-outputlen   = '10'.
+  APPEND wa_fieldcat TO it_fieldcat.
+  CLEAR  wa_fieldcat.
+
+  wa_fieldcat-fieldname   ='BUDAT'.
+  wa_fieldcat-scrtext_l   ='过账日期'.
+  wa_fieldcat-outputlen   = '10'.
+  APPEND wa_fieldcat TO it_fieldcat.
+  CLEAR  wa_fieldcat.
+
+  IF p_1 = 'X'.
+    wa_fieldcat-fieldname   ='BUDAT1'.
+    wa_fieldcat-scrtext_l   ='入库日期'.
+    wa_fieldcat-outputlen   = '10'.
+    APPEND wa_fieldcat TO it_fieldcat.
+    CLEAR  wa_fieldcat.
+  ENDIF.
+  IF p_10 EQ 'X'.
+    wa_fieldcat-fieldname   ='PRUEFLOS'.
+    wa_fieldcat-scrtext_l   ='检验批'.
+    wa_fieldcat-outputlen   = '12'.
+    APPEND wa_fieldcat TO it_fieldcat.
+    CLEAR  wa_fieldcat.
+    wa_fieldcat-fieldname   ='ZMENG'.
+    wa_fieldcat-scrtext_l   ='检验批数量'.
+    wa_fieldcat-outputlen   = '15'.
+    APPEND wa_fieldcat TO it_fieldcat.
+    CLEAR  wa_fieldcat.
+  ENDIF.
+
+  IF p_7 EQ 'X'.
+    wa_fieldcat-fieldname   = 'VBELN_IM'.
+    wa_fieldcat-scrtext_l   = '交货单号'.
+    wa_fieldcat-outputlen   = '10'.
+    wa_fieldcat-ref_field = 'VBELN_IM'.
+    wa_fieldcat-ref_table = 'MSEG'.
+    APPEND wa_fieldcat TO it_fieldcat.
+    CLEAR  wa_fieldcat.
+  ENDIF.
+
+********************************************打印次数
+  wa_fieldcat-fieldname   ='ZSUM'.
+  wa_fieldcat-scrtext_l   ='打印次数'.
+  wa_fieldcat-outputlen   = '5'.
+  APPEND wa_fieldcat TO it_fieldcat.
+  CLEAR  wa_fieldcat.
+
+ENDFORM.                    "fields_build
+
+
+
+*&---------------------------------------------------------------------*
+*&      Form  layout_build 设置alv显示格式和属性
+*&---------------------------------------------------------------------*
+*---------------------------------
+FORM pf_status_set USING rt_extab TYPE slis_t_extab.
+  SET PF-STATUS 'STATUS'.
+ENDFORM.                    "PF_STATUS_SET
+
+
+
+*&--------------------------------------------------------------------*
+*&      Form user_command
+*&--------------------------------------------------------------------*
+FORM user_command USING i_ucomm LIKE sy-ucomm
+                        is_selfield TYPE slis_selfield.
+  DATA: l_grid TYPE REF TO cl_gui_alv_grid.
+  DATA : et_filtered    TYPE lvc_t_fidx.
+  DATA:lv_tabix           TYPE sy-tabix.
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = l_grid.
+  CALL METHOD l_grid->check_changed_data.
+  is_selfield-col_stable = 'X'.
+  is_selfield-row_stable = 'X'.
+  is_selfield-refresh = 'X'."这个值可以让alv自动刷新
+  CLEAR:m_ucomm.
+  m_ucomm = i_ucomm.
+
+  CLEAR : et_filtered.
+  CALL METHOD l_grid->get_filtered_entries
+    IMPORTING
+      et_filtered_entries = et_filtered.
+
+**
+  CASE i_ucomm.
+    WHEN 'SELECT'.
+      CLEAR wa_mseg.
+      LOOP AT it_mseg INTO wa_mseg.
+        lv_tabix = sy-tabix.
+        READ TABLE et_filtered WITH KEY table_line = lv_tabix TRANSPORTING NO FIELDS.
+        IF sy-subrc NE 0.
+          wa_mseg-fuxuan = 'X'.
+          MODIFY it_mseg FROM wa_mseg.
+          CLEAR wa_mseg.
+        ENDIF.
+      ENDLOOP.
+      is_selfield-refresh = 'X'.
+    WHEN 'DESELECT'.
+      CLEAR wa_mseg.
+      LOOP AT it_mseg  INTO wa_mseg.
+        wa_mseg-fuxuan = ' '.
+        MODIFY it_mseg FROM wa_mseg.
+      ENDLOOP.
+      is_selfield-refresh = 'X'.
+    WHEN 'C_PRINT'.
+      gv_print = 'C_PRINT'.
+      PERFORM frm_print.
+
+      LOOP AT it_mseg INTO wa_mseg.
+        CLEAR wa_mseg-fuxuan.
+        MODIFY it_mseg FROM wa_mseg.
+      ENDLOOP.
+
+      IF p_1 EQ 'X'.
+        LOOP AT gt_main INTO gw_main WHERE fuxuan = 'X'.
+          CLEAR gw_main-fuxuan.
+          MODIFY gt_main FROM gw_main.
+        ENDLOOP.
+      ENDIF.
+      is_selfield-refresh = 'X'."这个值可以让alv自动刷新
+    WHEN 'A_PRINT'.
+      gv_print = 'A_PRINT'.
+      PERFORM frm_print.
+
+      LOOP AT it_mseg INTO wa_mseg.
+        CLEAR wa_mseg-fuxuan.
+        MODIFY it_mseg FROM wa_mseg.
+      ENDLOOP.
+
+      IF p_1 EQ 'X'.
+        LOOP AT gt_main INTO gw_main WHERE fuxuan = 'X'.
+          CLEAR gw_main-fuxuan.
+          MODIFY gt_main FROM gw_main.
+        ENDLOOP.
+      ENDIF.
+      is_selfield-refresh = 'X'."这个值可以让alv自动刷新
+  ENDCASE.
+
+ENDFORM.                    "user_command
+
+FORM frm_print .
+
+  PERFORM frm_chkprint.
+
+  PERFORM frm_open_print.
+
+  PERFORM frm_loopprint.
+
+  PERFORM frm_ssf_close.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHKPRINT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_chkprint .
+  READ TABLE it_mseg WITH KEY fuxuan = 'X' TRANSPORTING NO FIELDS.
+  IF sy-subrc NE 0.
+    MESSAGE '请至少选择一行进行打印' TYPE 'E'.
+    EXIT.
+  ENDIF.
+  SORT it_mseg BY mblnr .
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OPEN_PRINT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_open_print .
+*  l_wa_ssfctrlop-no_close  = 'X'.          "关闭假脱机请求
+*  l_wa_ssfctrlop-no_open   = 'X'.          "调用smartform
+*
+*  CALL FUNCTION 'SSF_OPEN'
+*    EXPORTING
+**     ARCHIVE_PARAMETERS =
+**     USER_SETTINGS      = 'X'
+**     MAIL_SENDER        =
+**     MAIL_RECIPIENT     =
+**     MAIL_APPL_OBJ      =
+**     OUTPUT_OPTIONS     =
+*      control_parameters = l_wa_ssfctrlop
+*    IMPORTING
+*      job_output_options = job_output_options
+*    EXCEPTIONS
+*      formatting_error   = 1
+*      internal_error     = 2
+*      send_error         = 3
+*      user_canceled      = 4
+*      OTHERS             = 5.
+*  .
+*  IF sy-subrc <> 0.
+** Implement suitable error handling here
+*  ENDIF.
+
+  IF gv_print = 'A_PRINT'. "A4(大纸)
+    IF p_1 EQ 'X'.
+      l_tdsfname = 'ZSFMM_001A'. "采购入库单
+    ELSEIF p_2 EQ 'X'.
+      l_tdsfname = 'ZSFMM_002A'."采购退货单
+    ELSEIF p_3 EQ 'X'.
+      l_tdsfname = 'ZSFMM_003A'."生产发/退料单
+    ELSEIF p_4 EQ 'X'.
+      l_tdsfname = 'ZSFMM_004A'."其他出库单
+    ELSEIF p_5 EQ 'X'.
+      l_tdsfname = 'ZSFMM_005A'."其他入库单
+    ELSEIF p_6 EQ 'X'.
+      l_tdsfname = 'ZSFMM_006A'."库存调拨单(厂内)
+    ELSEIF p_7 EQ 'X'.
+      l_tdsfname = 'ZSFMM_006A'."异地库存调拨单(调出)
+    ELSEIF p_8 EQ 'X'.
+      l_tdsfname = 'ZSFMM_007A'."异地库存调拨单(调入)
+    ELSEIF p_9 EQ 'X'.
+      l_tdsfname = 'ZSFMM_008A'."委外调拨单
+    ELSEIF p_10 EQ 'X'.
+      l_tdsfname = 'ZSFMM_009A'."生产入库单
+    ENDIF.
+
+  ELSE.  "A5（小纸）
+
+    IF p_1 EQ 'X'.
+      l_tdsfname = 'ZSFMM_001'. "采购入库单
+    ELSEIF p_2 EQ 'X'.
+      l_tdsfname = 'ZSFMM_002'."采购退货单
+    ELSEIF p_3 EQ 'X'.
+      l_tdsfname = 'ZSFMM_003'."生产发/退料单
+    ELSEIF p_4 EQ 'X'.
+      l_tdsfname = 'ZSFMM_004'."其他出库单
+    ELSEIF p_5 EQ 'X'.
+      l_tdsfname = 'ZSFMM_005'."其他入库单
+    ELSEIF p_6 EQ 'X'.
+      l_tdsfname = 'ZSFMM_006'."库存调拨单(厂内)
+    ELSEIF p_7 EQ 'X'.
+      l_tdsfname = 'ZSFMM_006'."异地库存调拨单(调出)
+    ELSEIF p_8 EQ 'X'.
+      l_tdsfname = 'ZSFMM_007'."异地库存调拨单(调入)
+    ELSEIF p_9 EQ 'X'.
+      l_tdsfname = 'ZSFMM_008'."委外调拨单
+    ELSEIF p_10 EQ 'X'.
+      l_tdsfname = 'ZSFMM_009'."生产入库单
+    ENDIF.
+  ENDIF.
+
+
+
+
+  CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
+    EXPORTING
+      formname           = l_tdsfname
+    IMPORTING
+      fm_name            = funname
+    EXCEPTIONS
+      no_form            = 1
+      no_function_module = 2
+      OTHERS             = 3.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_LOOPPRINT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_loopprint .
+  DATA: lv_vbeln LIKE lips-vbeln,
+        lv_matnr LIKE mseg-matnr,
+        lv_lgort LIKE mseg-lgort.
+  DATA lv_bismt TYPE mara-bismt.
+  DATA: BEGIN OF lt_stpo OCCURS 0,
+          doknr TYPE stpo-doknr,
+          maktx TYPE makt-maktx,
+        END OF lt_stpo    .
+
+  LOOP AT it_mseg INTO wa_mseg WHERE fuxuan EQ 'X'.
+    MOVE-CORRESPONDING wa_mseg TO it_head.
+    IF p_9 NE 'X'.
+      CLEAR: it_head-ebeln,it_head-menge_ww.
+    ENDIF.
+    APPEND it_head.
+    IF p_1 EQ 'X'.
+      LOOP AT gt_main INTO gw_main WHERE mblnr = wa_mseg-mblnr AND matnr = wa_mseg-matnr
+                                      AND ebeln = wa_mseg-ebeln AND lgort = wa_mseg-lgort .
+        gw_main-fuxuan = 'X'.
+        MODIFY gt_main FROM gw_main.
+        CLEAR:gw_main.
+      ENDLOOP.
+    ENDIF.
+  ENDLOOP.
+
+  SORT it_head BY mblnr.
+  DELETE ADJACENT DUPLICATES FROM it_head COMPARING ALL FIELDS.
+
+  CLEAR:l_wa_ssfctrlop,w_job_output_info.
+  LOOP AT it_head.
+    AT  FIRST .
+      l_wa_ssfctrlop-no_close = 'X'.
+    ENDAT.
+    AT LAST.
+      l_wa_ssfctrlop-no_close = ''.
+    ENDAT.
+    REFRESH:it_item.
+    IF p_1 NE 'X'.
+      LOOP AT gt_main INTO gw_main WHERE mblnr EQ it_head-mblnr .
+        MOVE-CORRESPONDING gw_main TO it_item.
+        APPEND it_item.
+      ENDLOOP.
+*    根据物料+采购订单+库存地点+单位进行汇总，合格数量随便取一条
+*      LOOP AT it_item.
+*        READ TABLE gt_main INTO gw_main WITH KEY matnr = it_item-matnr
+*                                                 ebeln = it_item-ebeln
+*                                                 lgobe = it_item-lgobe
+*                                                 meins = it_item-meins .
+*        IF sy-subrc = 0.
+*          it_item-zmeng = gw_main-zmeng.
+*        ENDIF.
+*        MODIFY it_item.
+*      ENDLOOP.
+    ELSE.
+      LOOP AT gt_main INTO gw_main WHERE mblnr EQ it_head-mblnr AND fuxuan EQ 'X'.
+        MOVE-CORRESPONDING gw_main TO it_item.
+        APPEND it_item.
+      ENDLOOP.
+    ENDIF.
+*    ********************************p_3 3开关订单类型 根据物料抓取D类文档及描述 add by leimt 20180524
+
+    IF p_3 = 'X' AND it_head-aufnr+6(1) = '3'.
+      SELECT b~doknr  dktxt AS maktx INTO CORRESPONDING FIELDS OF TABLE lt_stpo FROM mast AS a INNER JOIN stpo AS b ON a~stlnr = b~stlnr
+        INNER JOIN drat AS c ON b~dokar = c~dokar AND b~doknr = c~doknr
+        WHERE a~matnr = it_head-matnr1 AND b~stlty = 'M' AND b~postp = 'D' AND c~langu = sy-langu.
+      CLEAR it_item.
+      LOOP AT lt_stpo.
+        CLEAR it_item.
+        it_item-matnr = lt_stpo-doknr+7(18).
+        it_item-maktx = lt_stpo-maktx.
+        it_item-menge = '0'.
+        it_item-bdmng = '0'.
+        APPEND it_item.
+      ENDLOOP.
+
+    ENDIF.
+
+********************************end
+*    LOOP AT it_item.
+*      SELECT SINGLE bismt INTO lv_bismt FROM mara WHERE matnr = it_item-matnr.
+*      IF lv_bismt <> ''.
+*        CONCATENATE it_item-maktx lv_bismt INTO it_item-zmaktx SEPARATED BY '/'.
+*      ENDIF.
+*    ENDLOOP.
+
+*** CHANGE BY PFT 20171207 18:46
+*  取消这段逻辑，需要将交货单号放在ALV上显示，直接perform get_data时，将交货单号取出，不需要再次取MSEG表
+    IF p_7 = 'X'.
+      SELECT SINGLE vbeln_im  INTO it_head-vbeln_im FROM mseg WHERE mblnr = it_head-mblnr AND xauto = ''.
+      MODIFY it_head.
+    ENDIF.
+*** END BY PFT 20171207 18:46
+
+    CALL FUNCTION funname
+      EXPORTING
+        control_parameters = l_wa_ssfctrlop
+        i_head             = it_head
+      IMPORTING
+*       DOCUMENT_OUTPUT_INFO       =
+        job_output_info    = w_job_output_info
+      TABLES
+        it_item            = it_item[]
+      EXCEPTIONS
+        formatting_error   = 1
+        internal_error     = 2
+        send_error         = 3
+        user_canceled      = 4
+        OTHERS             = 5.
+
+    l_wa_ssfctrlop-no_open = 'X'.
+
+    IF sy-subrc <> 0.
+* Implement suitable error handling here
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+       WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ELSE.
+*  注释：如果是采购入库，按行项目更新打印次数，其它，按凭证更新次数
+      IF  w_job_output_info-outputdone = 'X' .
+        LOOP AT it_head .
+          CLEAR:lv_vbeln,lv_matnr,lv_lgort.
+          IF p_1 NE 'X' AND p_10 NE 'X'.
+            lv_vbeln = it_head-mblnr.
+            PERFORM frm_addprintsum USING lv_vbeln lv_matnr it_head-ebeln lv_lgort  '0000'.
+          ENDIF.
+          LOOP AT it_mseg INTO wa_mseg WHERE mblnr = it_head-mblnr AND fuxuan EQ 'X'.
+            CLEAR:lv_vbeln,lv_matnr,lv_lgort.
+            IF p_1 EQ 'X'.
+              lv_vbeln = wa_mseg-mblnr.
+*              lv_zeile = wa_mseg-zeile.
+              PERFORM frm_addprintsum USING lv_vbeln wa_mseg-matnr wa_mseg-ebeln wa_mseg-lgort '0000'.
+            ELSEIF p_10 EQ 'X'.
+              lv_vbeln = wa_mseg-mblnr.
+              PERFORM frm_addprintsum USING lv_vbeln  ''  ''  '' wa_mseg-zeile.
+            ENDIF.
+            wa_mseg-zsum = wa_mseg-zsum + 1.
+            MODIFY it_mseg FROM wa_mseg.
+            CLEAR: wa_mseg.
+          ENDLOOP.
+        ENDLOOP.
+      ENDIF.
+    ENDIF.
+*    CLEAR: it_head,it_item,wa_mseg.
+*    REFRESH: it_head[],it_item[].
+  ENDLOOP.
+
+  CLEAR: it_head,it_item,wa_mseg.
+  REFRESH: it_head[],it_item[].
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SSF_CLOSE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_ssf_close .
+*  CALL FUNCTION 'SSF_CLOSE'
+*    IMPORTING
+*      job_output_info  = w_job_output_info
+*    EXCEPTIONS
+*      formatting_error = 1
+*      internal_error   = 2
+*      send_error       = 3
+*      OTHERS           = 4.
+*  .
+*  IF sy-subrc <> 0.
+** Implement suitable error handling here
+*  ELSE.
+*
+*  ENDIF.
+ENDFORM.
+
+FORM get_longtxt_dn_head  USING pvbeln CHANGING pztext2.
+  CLEAR:pztext2.
+  DATA: gt_tline TYPE STANDARD TABLE OF tline WITH HEADER LINE.
+  DATA: tdname TYPE thead-tdname.
+  CONCATENATE  pvbeln '' INTO tdname.
+  CALL FUNCTION 'READ_TEXT'
+    EXPORTING
+      client                  = sy-mandt
+      id                      = 'Z001'
+      language                = sy-langu
+      name                    = tdname
+      object                  = 'VBBK'
+    TABLES
+      lines                   = gt_tline
+    EXCEPTIONS
+      id                      = 1
+      language                = 2
+      name                    = 3
+      not_found               = 4
+      object                  = 5
+      reference_check         = 6
+      wrong_access_to_archive = 7
+      OTHERS                  = 8.
+  IF sy-subrc EQ 0 AND  gt_tline[] IS NOT INITIAL .
+    LOOP AT gt_tline.
+      CONCATENATE pztext2 gt_tline-tdline INTO pztext2.
+    ENDLOOP.
+  ENDIF.
+ENDFORM.                    " GET_LONGTXT_FRM
+
+FORM frm_addprintsum  USING lv_vbeln LIKE mseg-mblnr
+                             lv_matnr LIKE mseg-matnr
+                             lv_ebeln LIKE mseg-ebeln
+                             lv_lgort LIKE mseg-lgort
+                             lv_zeile LIKE mseg-zeile.
+*  PERFORM frm_addprintsum USING lv_vbeln wa_mseg-matnr wa_mseg-ebeln wa_mseg-lgort.
+  DATA wa LIKE TABLE OF zprintnum WITH HEADER LINE.
+
+  wa-mandt = sy-mandt.
+  wa-zprgname = 'ZMM002'.
+  wa-zpo = lv_vbeln.
+  IF p_1 EQ 'X'.
+    wa-ebeln = lv_ebeln.
+    wa-matnr = lv_matnr.
+    wa-lgort = lv_lgort.
+  ENDIF.
+  IF p_10 EQ 'X'.
+    wa-zeile = lv_zeile.
+  ENDIF.
+  wa-zernam = sy-uname.
+  wa-zdate = sy-datum.
+  wa-ztime = sy-uzeit.
+
+  SELECT SINGLE * FROM zprintnum WHERE zpo = wa-zpo AND zprgname = 'ZMM002'
+                                   AND ebeln = wa-ebeln
+                                   AND matnr = wa-matnr
+                                   AND lgort = wa-lgort
+                                   AND zeile = wa-zeile.
+  IF sy-subrc EQ 0.
+    UPDATE zprintnum SET
+     zernam = @sy-uname,
+     zdate = @sy-datum,
+     ztime = @sy-uzeit,
+     zsum = zsum + 1
+     WHERE zprgname = 'ZMM002'
+       AND zpo = @wa-zpo
+       AND ebeln = @wa-ebeln
+       AND matnr = @wa-matnr
+       AND lgort = @wa-lgort
+       AND zeile = @wa-zeile.
+
+  ELSE.
+    wa-zsum = 1.
+    INSERT INTO zprintnum VALUES @wa.
+
+  ENDIF.
+
+  IF sy-subrc = 0.
+    COMMIT WORK AND WAIT .
+  ELSE.
+    ROLLBACK WORK.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  PROCESS_CANCEL
+*&---------------------------------------------------------------------*
+*       add by pft 20180122
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM process_cancel .
+*  BREAK 9901.
+  DATA  l_mblnr LIKE mseg-mblnr.
+  LOOP AT it_mseg INTO wa_mseg ..
+    IF  wa_mseg-smbln IS NOT INITIAL.
+      wa_mseg-z_cancel = 'X'.
+    ELSE.
+      SELECT SINGLE mblnr INTO l_mblnr FROM mseg WHERE smbln = wa_mseg-mblnr AND sjahr = wa_mseg-mjahr AND smblp = wa_mseg-zeile.
+      IF sy-subrc = 0 .
+        wa_mseg-z_cancel = 'XX'.
+      ENDIF.
+    ENDIF.
+    MODIFY it_mseg FROM wa_mseg TRANSPORTING z_cancel.
+  ENDLOOP.
+  IF p_cancel = ''.
+    DELETE it_mseg WHERE z_cancel = 'X' OR z_cancel = 'XX'.
+  ENDIF.
+
+
+
+ENDFORM.

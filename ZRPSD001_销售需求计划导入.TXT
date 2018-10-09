@@ -1,0 +1,62 @@
+*&---------------------------------------------------------------------*
+*& 程序名： ZRPSD001
+*& 创建者(公司)/日期： QUYT/20170725
+*& 程序描述:销售需求计划导入
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    QUYT           20170725      创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpsd001.
+
+INCLUDE zrpsd001t01.  "全局数据定义
+INCLUDE zrpsd001s01.  "选择界面定义
+INCLUDE zrpsd001f01.  "子程序定义
+
+************************************************************************
+*INITIALIZATION.
+************************************************************************
+INITIALIZATION.
+  PERFORM frm_initial_data.
+
+************************************************************************
+*AT SELECTION-SCREEN ON VALUE-REQUEST
+************************************************************************
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_file.
+  PERFORM frm_filename_find CHANGING p_file.
+************************************************************************
+* AT SELECTION-SCREEN OUTPUT
+************************************************************************
+AT SELECTION-SCREEN OUTPUT.
+  PERFORM frm_modify_screen.
+************************************************************************
+* AT SELECTION-SCREEN
+************************************************************************
+AT SELECTION-SCREEN.
+  CLEAR sy-ucomm.
+  CASE sscrfields-ucomm.
+    WHEN 'FC01'.  "开启文件
+      CASE 'X'.
+        WHEN r1. "销售需求计划导入-客户
+          PERFORM frm_download_template USING 'ZSD001A' CHANGING p_file.
+        WHEN r2. "销售需求计划导入-销售大区
+          PERFORM frm_download_template USING 'ZSD001B' CHANGING p_file.
+        WHEN r3."销售需求计划导入-公司
+          PERFORM frm_download_template USING 'ZSD001C' CHANGING p_file.
+        WHEN OTHERS.
+      ENDCASE.
+    WHEN 'ONLI'.
+      PERFORM frm_check_auth.
+    WHEN OTHERS.
+  ENDCASE.
+************************************************************************
+* START-OF-SELECTION
+************************************************************************
+START-OF-SELECTION.
+
+  IF r4 = 'X'.
+    PERFORM frm_upload_data.
+  ELSEIF r5 = 'X'.
+    PERFORM frm_select_data.
+  ENDIF.
+  PERFORM frm_get_fieldcat.
+  PERFORM frm_output_data.

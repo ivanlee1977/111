@@ -1,0 +1,70 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM013T01
+*&---------------------------------------------------------------------*
+TABLES:mseg,mkpf,mara,vtbbewe.
+
+DATA: BEGIN OF gt_alv OCCURS 0,
+        box(1),
+        matnr    LIKE mard-matnr, "物料
+        werks    LIKE mard-werks, "工厂
+        lgort    LIKE mard-lgort, "库存地点
+        labst    LIKE mard-labst, "当前库存
+        value1   LIKE mard-labst, "区间1
+        value2   LIKE mard-labst, "区间2
+        value3   LIKE mard-labst, "区间3
+        value4   LIKE mard-labst, "区间4
+        value5   LIKE mard-labst, "区间5
+        value6   LIKE mard-labst, "区间6
+        value7   LIKE mard-labst, "区间7
+        value8   LIKE mard-labst, "区间8
+        value9   LIKE mard-labst, "区间9
+        value10  LIKE mard-labst, "区间10
+        xchar(1),"判断数据来源，如果空根据MSEG取，否则根据MCHB取
+      END OF gt_alv.
+
+*   未启用批次管理的物料库存
+DATA: BEGIN OF gt_mard OCCURS 0,
+        matnr LIKE mard-matnr, "物料
+        werks LIKE mard-werks, "工厂
+        lgort LIKE mard-lgort, "库存地点
+        xchar LIKE marc-xchar, "批次管理标识
+        labst LIKE mard-labst, "当前库存
+      END OF gt_mard.
+
+* 物料收发存信息
+DATA: BEGIN OF gt_mseg OCCURS 0,
+        mblnr LIKE mseg-mblnr, "物料凭证号
+        mjahr LIKE mseg-mjahr, "物料凭证年度
+        zeile LIKE mseg-zeile, "物料凭证行项目号
+        sjahr LIKE mseg-sjahr, "冲销年度
+        smbln LIKE mseg-smbln, "冲销凭证
+        smblp LIKE mseg-smblp, "冲销行项目
+        bwart LIKE mseg-bwart, "移动类型
+        matnr LIKE mseg-matnr, "物料号
+        werks LIKE mseg-werks, "工厂
+        lgort LIKE mseg-lgort, "库存地点
+        menge LIKE mseg-menge, "数量
+        budat LIKE mseg-budat_mkpf, "凭证日期
+      END OF gt_mseg.
+
+*  启用批次管理的料号
+DATA: BEGIN OF gt_mchb OCCURS 0,
+        matnr LIKE mchb-matnr, "物料
+        werks LIKE mchb-werks, "工厂
+        lgort LIKE mchb-lgort, "库存地点
+        charg LIKE mchb-charg, "批次
+        ersda LIKE mchb-ersda, "创建日期
+        labst LIKE mchb-clabs, "当前库存
+      END OF gt_mchb.
+
+
+*  定义屏幕区间上的变量
+DATA: gv_q1date TYPE vtbbewe-atage,
+      gv_q2date TYPE vtbbewe-atage,
+      gv_q3date TYPE vtbbewe-atage,
+      gv_q4date TYPE vtbbewe-atage,
+      gv_q5date TYPE vtbbewe-atage,
+      gv_q6date TYPE vtbbewe-atage,
+      gv_q7date TYPE vtbbewe-atage,
+      gv_q8date TYPE vtbbewe-atage,
+      gv_q9date TYPE vtbbewe-atage.

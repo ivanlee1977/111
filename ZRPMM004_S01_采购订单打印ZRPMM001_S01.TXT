@@ -1,0 +1,14 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPMM004_S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS: s_bukrs FOR ekko-bukrs OBLIGATORY DEFAULT '1000',
+                s_ekorg FOR ekko-ekorg,
+                s_ekgrp FOR ekko-ekgrp,
+                s_matkl FOR ekpo-matkl,
+                s_ebeln FOR ekpo-ebeln,
+                s_lifnr FOR ekko-lifnr,
+                s_budat FOR mkpf-budat  .
+PARAMETERS: p_chk AS CHECKBOX.
+SELECTION-SCREEN END OF BLOCK b1.

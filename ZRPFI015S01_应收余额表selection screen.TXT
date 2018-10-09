@@ -1,0 +1,17 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPFI015S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_bukrs FOR bsid-bukrs OBLIGATORY,
+               s_prctr FOR bsid-prctr,
+               s_kunnr FOR bsid-kunnr,
+               s_hkont FOR bsid-hkont,
+               s_kkber FOR bsid-kkber.
+PARAMETERS:p_gjahr LIKE bsid-gjahr OBLIGATORY DEFAULT sy-datum(4),
+           p_monat LIKE bsid-monat OBLIGATORY DEFAULT sy-datum+4(2).
+SELECTION-SCREEN END OF BLOCK blc.
+SELECTION-SCREEN BEGIN OF BLOCK blc1 WITH FRAME TITLE TEXT-002.
+PARAMETERS:r1 RADIOBUTTON GROUP ra DEFAULT 'X',
+           r2 RADIOBUTTON GROUP ra.
+SELECTION-SCREEN END OF BLOCK blc1.

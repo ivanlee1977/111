@@ -1,0 +1,27 @@
+*& 程序名： ZRPMM021
+*& 创建者(公司)/日期： 雷鸣涛/20170912
+*& 程序描述：外协调拨拣配单打印
+*&---------------------------------------------------------------------*
+
+*&---------------------------------------------------------------------*
+REPORT zrpmm021.
+
+INCLUDE zrpmm021_t01.
+INCLUDE zrpmm021_s01.
+INCLUDE zrpmm021_f01.
+
+INITIALIZATION.
+*PERFORM frm_createdate.
+
+AT SELECTION-SCREEN .
+
+START-OF-SELECTION.
+  IF  s_ebeln[] IS INITIAL AND s_ekgrp[] IS INITIAL
+  AND   s_bedat[] IS INITIAL AND s_lifnr[] IS INITIAL .
+    MESSAGE '请输入相应查找条件！' TYPE 'E'.
+    RETURN.
+  ENDIF.
+
+  PERFORM frm_getdata.
+  PERFORM frm_getfact.
+  PERFORM frm_show.

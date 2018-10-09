@@ -1,0 +1,138 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPSD004_T01
+*&---------------------------------------------------------------------*
+
+
+TABLES: vbak,vbap,zprintnum,vbkd.
+TYPE-POOLS:slis,vrm.
+
+DATA:  w_line TYPE vrm_values WITH HEADER LINE.
+
+DATA: BEGIN OF gt_vbak  OCCURS 0,
+        chk         TYPE c1,
+        vkorg       LIKE vbak-vkorg,
+        vkorg_vtext LIKE tvkot-vtext,
+        vtweg       LIKE vbak-vtweg,
+        vtext1      LIKE tvtwt-vtext,
+        spart       LIKE vbak-spart,
+        vtext2      LIKE tspat-vtext,
+        kunnr       LIKE vbak-kunnr,
+*        name1      LIKE kna1-name1,
+        auart       LIKE vbak-auart,
+        bezei1      LIKE tvakt-bezei,
+        vbeln       LIKE vbak-vbeln,
+        erdat       LIKE vbak-erdat,
+        name        TYPE char80,
+        addr        TYPE char200,
+        extension1  LIKE adrc-extension1,
+        tel_number  LIKE adrc-tel_number,
+        fax_number  LIKE adrc-fax_number,
+        bzirk       LIKE vbkd-bzirk,
+        bztxt       LIKE t171t-bztxt,
+*        zmemo      TYPE char200,
+        kvgr1       LIKE vbak-kvgr1,
+        kvgr1_bezei LIKE tvv1t-bezei,
+        vdatu       LIKE vbak-vdatu,
+        ihrez       LIKE vbkd-ihrez,
+        kvgr2       LIKE vbak-kvgr2,
+        kvgr2_bezei LIKE tvv2t-bezei,
+        bezei2      LIKE tvv2t-bezei,
+        zterm       LIKE vbkd-zterm,
+        kvgr3       LIKE vbak-kvgr3,
+        bname       LIKE vbak-bname,
+        kvgr4       LIKE vbak-kvgr4,
+        ernam       LIKE vbak-ernam,
+        zsum        LIKE zprintnum-zsum,
+        vkbur       LIKE vbak-vkbur,
+        posnr       LIKE vbap-posnr,
+        matnr       LIKE vbap-matnr,
+        arktx       LIKE vbap-arktx,
+        vrkme       LIKE vbap-vrkme,
+        kwmeng      LIKE vbap-kwmeng,
+        kzwi        LIKE vbap-kzwi1,
+        kzwi1       LIKE vbap-kzwi1,
+        kbetr       LIKE konv-kbetr,
+        knumv       LIKE vbak-knumv,
+        bezei3      LIKE ztsd002-bezei,
+        tel         LIKE ztsd002-tel,
+        fax         LIKE ztsd002-fax,
+        waerk       LIKE vbak-waerk,
+        zyhxx       TYPE char4,
+        zterm_vtext LIKE tvzbt-vtext,
+        ztotal      TYPE p DECIMALS 2,
+      END OF gt_vbak.
+
+
+
+
+DATA: BEGIN OF gt_head  OCCURS 0,
+
+        vtweg      LIKE vbak-vtweg,
+        vtext1     LIKE tvtwt-vtext,
+        spart      LIKE vbak-spart,
+        vtext2     LIKE tspat-vtext,
+        vbeln      LIKE vbak-vbeln,
+        erdat      LIKE vbak-erdat,
+        name       TYPE char80,
+        addr       TYPE char100,
+        extension1 LIKE adrc-extension1,
+        tel_number LIKE adrc-tel_number,
+        fax_number LIKE adrc-fax_number,
+        kvgr1      LIKE vbak-kvgr1,
+        bezei3     LIKE ztsd002-bezei,
+        tel        LIKE ztsd002-tel,
+        fax        LIKE ztsd002-fax,
+        vdatu      LIKE vbak-vdatu,
+        vtext      LIKE tvzbt-vtext,   "付款方式中文
+        ernam      LIKE vbak-ernam,
+        zmemo      TYPE char200,
+        tel1       TYPE char20,
+        fax1       TYPE char20,
+        fax2       TYPE char20,
+        kbetr      LIKE konv-kbetr,
+        inco       TYPE char40,
+        inco1      LIKE vbkd-inco1,
+        inco2      LIKE vbkd-inco2,
+        bank1      TYPE char100,
+        bank2      TYPE char100,
+        bank3      TYPE char100,
+        bank4      TYPE char100,
+        bank5      TYPE char100,
+        waerk       LIKE vbak-waerk,
+      END OF gt_head.
+
+DATA: BEGIN OF gt_item OCCURS 0,
+        num    TYPE i,
+        matnr  LIKE vbap-matnr,
+        arktx  LIKE vbap-arktx,
+        vrkme  LIKE vbap-vrkme,
+        kwmeng LIKE vbap-kwmeng,
+        kzwi   LIKE vbap-kzwi1,
+        kzwi1  LIKE vbap-kzwi1,
+        vbeln  LIKE vbak-vbeln,
+        waerk  LIKE vbap-waerk,
+      END OF gt_item.
+
+
+DATA: gt_fcat   TYPE slis_t_fieldcat_alv WITH HEADER LINE,
+      gs_layout TYPE slis_layout_alv.
+
+DATA: gs_option  TYPE ssfcompop,
+      gs_control TYPE ssfctrlop.
+
+DATA lv_name TYPE rs38l_fnam.
+DATA lv_vbak LIKE TABLE OF gt_vbak WITH HEADER LINE.
+DATA num TYPE i.
+
+DATA gv_fn TYPE tdsfname.
+       DATA: zje       TYPE netwr, zwje TYPE char200, ztt TYPE char10.
+DATA: gn type char1.
+DEFINE g_fieldfcat .
+  gt_fcat-fieldname = &1.
+  gt_fcat-seltext_s = &2.
+  gt_fcat-ddictxt = 'S'.
+  gt_fcat-ref_fieldname = &3.
+  gt_fcat-ref_tabname = &4.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

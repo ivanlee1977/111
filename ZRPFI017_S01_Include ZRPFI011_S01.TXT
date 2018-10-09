@@ -1,0 +1,9 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPFI017_S01
+*&---------------------------------------------------------------------*
+SELECT-OPTIONS:
+        s_rbukrs FOR faglflext-rbukrs,
+        s_prctr FOR faglflext-prctr.
+PARAMETERS s_ryear TYPE faglflext-ryear OBLIGATORY.
+*SELECT-OPTIONS:s_rpmax FOR faglflext-rpmax OBLIGATORY no-EXTENSION.
+PARAMETERS s_rpmax TYPE faglflext-rpmax OBLIGATORY.

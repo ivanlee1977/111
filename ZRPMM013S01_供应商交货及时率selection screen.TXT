@@ -1,0 +1,16 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPMM013S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_bukrs FOR ekko-bukrs OBLIGATORY DEFAULT '1000',
+               s_lifnr FOR ekko-lifnr,
+               s_ekgrp FOR ekko-ekgrp,
+               s_eindt FOR eket-eindt,
+               s_budat FOR mkpf-budat.
+PARAMETERS:p_days TYPE i DEFAULT '5' OBLIGATORY.
+SELECTION-SCREEN END OF BLOCK blc.
+
+SELECTION-SCREEN BEGIN OF BLOCK blc1 WITH FRAME TITLE TEXT-002.
+PARAMETERS:r1 RADIOBUTTON GROUP ra DEFAULT 'X',
+           r2 RADIOBUTTON GROUP ra.
+SELECTION-SCREEN END OF BLOCK blc1.

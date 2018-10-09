@@ -1,0 +1,414 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM013F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data.
+  DATA:BEGIN OF lt_bseg OCCURS 0,
+         ebeln      LIKE eket-ebeln,
+         ebelp      LIKE eket-ebelp,
+         etenr      LIKE eket-etenr,
+         eindt      LIKE eket-eindt,
+         mblnr      LIKE mseg-mblnr,
+         mjahr      LIKE mseg-mjahr,
+         zeile      LIKE mseg-zeile,
+         bwart      LIKE mseg-bwart,
+         bukrs      LIKE mseg-bukrs,
+         lifnr      LIKE mseg-lifnr,
+         budat_mkpf LIKE mseg-budat_mkpf,
+         sjahr      LIKE mseg-sjahr,
+         smbln      LIKE mseg-smbln,
+         smblp      LIKE mseg-smblp,
+         menge      LIKE mseg-menge,
+       END OF lt_bseg.
+
+  DATA:BEGIN OF lt_ekpo OCCURS 0,
+         ebeln LIKE ekpo-ebeln,
+         ebelp LIKE ekpo-ebelp,
+         matnr LIKE ekpo-matnr,
+         txz01 LIKE ekpo-txz01,
+       END OF lt_ekpo.
+  DATA:lv_percent TYPE p DECIMALS 2,
+       lv_total   TYPE p DECIMALS 2.
+
+***抓取满足条件的数据
+  IF r1 = 'X'.
+    SELECT a~ebeln
+           a~ebelp
+           a~etenr
+           a~eindt
+           b~mblnr
+           b~mjahr
+           b~zeile
+           b~bwart
+           b~bukrs
+           b~lifnr
+           b~budat_mkpf
+           b~sjahr
+           b~smbln
+           b~smblp
+           b~menge
+      INTO CORRESPONDING FIELDS OF TABLE lt_bseg
+      FROM eket AS a
+      INNER JOIN mseg AS b
+      ON a~ebeln = b~ebeln
+      AND a~ebelp = b~ebelp
+      INNER JOIN ekko AS c
+      ON a~ebeln = c~ebeln
+      WHERE c~bukrs IN s_bukrs
+        AND c~lifnr IN s_lifnr
+        AND c~ekgrp IN s_ekgrp
+        AND a~eindt IN s_eindt
+        AND b~budat_mkpf IN s_budat
+        AND b~bwart IN ('101','102','161','162','122','123').
+  ELSE.
+    SELECT a~ebeln
+           a~ebelp
+           a~etens AS etenr
+           a~eindt
+           b~mblnr
+           b~mjahr
+           b~zeile
+           b~bwart
+           b~bukrs
+           b~lifnr
+           b~budat_mkpf
+           b~sjahr
+           b~smbln
+           b~smblp
+           a~menge
+   INTO CORRESPONDING FIELDS OF TABLE lt_bseg
+   FROM ekes AS a
+   INNER JOIN mseg AS b
+   ON a~ebeln = b~ebeln
+   AND a~ebelp = b~ebelp
+   AND a~vbeln = b~vbeln_im
+   AND a~vbelp = b~vbelp_im
+   INNER JOIN ekko AS c
+   ON a~ebeln = c~ebeln
+   WHERE c~bukrs IN s_bukrs
+     AND c~lifnr IN s_lifnr
+     AND c~ekgrp IN s_ekgrp
+     AND a~eindt IN s_eindt
+     AND b~budat_mkpf IN s_budat
+     AND b~bwart IN ('101','102','161','162','122','123').
+  ENDIF.
+
+  LOOP AT lt_bseg WHERE smbln IS NOT INITIAL.
+    DELETE lt_bseg INDEX sy-tabix.
+    DELETE lt_bseg WHERE mblnr = lt_bseg-smbln AND mjahr = lt_bseg-sjahr AND zeile = lt_bseg-smblp.
+  ENDLOOP.
+  DELETE lt_bseg WHERE bwart = '102' OR bwart = '162' OR bwart = '122'.
+
+  CHECK lt_bseg[] IS NOT INITIAL.
+  SELECT ebeln
+         ebelp
+         matnr
+         txz01
+    INTO CORRESPONDING FIELDS OF TABLE lt_ekpo
+    FROM ekpo
+    FOR ALL ENTRIES IN lt_bseg
+    WHERE ebeln = lt_bseg-ebeln
+      AND ebelp = lt_bseg-ebelp.
+
+***整理明细数据到内表
+  SORT lt_ekpo BY ebeln ebelp.
+  LOOP AT lt_bseg.
+    READ TABLE lt_ekpo WITH KEY ebeln = lt_bseg-ebeln ebelp = lt_bseg-ebelp BINARY SEARCH.
+    IF sy-subrc = 0.
+      MOVE-CORRESPONDING lt_ekpo TO gt_detail.
+      IF gt_detail-matnr IS NOT INITIAL.
+        SELECT SINGLE maktx INTO gt_detail-txz01 FROM makt WHERE matnr = gt_detail-matnr AND spras = sy-langu.
+      ENDIF.
+    ENDIF.
+    gt_detail-lifnr = lt_bseg-lifnr.
+    SELECT SINGLE name1 INTO gt_detail-name1 FROM lfa1 WHERE lifnr = gt_detail-lifnr.
+    gt_detail-mblnr = lt_bseg-mblnr.
+    gt_detail-mjahr = lt_bseg-mjahr.     "年度
+    gt_detail-zeile = lt_bseg-zeile.     "项次
+    gt_detail-eindt = lt_bseg-eindt.
+    gt_detail-budat = lt_bseg-budat_mkpf.
+    gt_detail-zcyts = lt_bseg-eindt - lt_bseg-budat_mkpf.
+    gt_detail-menge = lt_bseg-menge.
+    APPEND gt_detail.
+
+    MOVE-CORRESPONDING gt_detail TO gt_mat_detail.
+    IF gt_detail-zcyts >= 0.  "交货提前
+      gt_mat_detail-ztqcs = 1.
+    ELSE.
+      gt_mat_detail-zyccs = 1.
+    ENDIF.
+    COLLECT gt_mat_detail.
+
+    gt_out-lifnr = lt_bseg-lifnr.
+    gt_out-name1 = gt_detail-name1.
+    IF gt_detail-zcyts >= 0.  "交货提前
+      gt_out-ztqcs = 1.
+    ELSE.
+      gt_out-zyccs = 1.
+    ENDIF.
+    COLLECT gt_out.
+    CLEAR:gt_detail,gt_mat_detail,gt_out.
+  ENDLOOP.
+
+***计算占比
+  LOOP AT gt_out.
+    CLEAR:lv_total,lv_percent.
+    lv_total = gt_out-ztqcs + gt_out-zyccs.
+    IF lv_total NE 0.
+      lv_percent = gt_out-ztqcs / lv_total * 100.
+      gt_out-ztqzb = lv_percent.
+      CONDENSE gt_out-ztqzb NO-GAPS.
+      CONCATENATE gt_out-ztqzb '%' INTO gt_out-ztqzb.
+      lv_percent = 100 - lv_percent.
+      gt_out-zyczb = lv_percent.
+      CONDENSE gt_out-zyczb NO-GAPS.
+      CONCATENATE gt_out-zyczb '%' INTO gt_out-zyczb.
+      MODIFY gt_out.
+    ENDIF.
+  ENDLOOP.
+
+  LOOP AT gt_mat_detail.
+    CLEAR:lv_total,lv_percent.
+    lv_total = gt_mat_detail-ztqcs + gt_mat_detail-zyccs.
+    IF lv_total NE 0.
+      lv_percent = gt_mat_detail-ztqcs / lv_total * 100.
+      gt_mat_detail-ztqzb = lv_percent.
+      CONDENSE gt_mat_detail-ztqzb NO-GAPS.
+      CONCATENATE gt_mat_detail-ztqzb '%' INTO gt_mat_detail-ztqzb.
+      lv_percent = 100 - lv_percent.
+      gt_mat_detail-zyczb = lv_percent.
+      CONDENSE gt_mat_detail-zyczb NO-GAPS.
+      CONCATENATE gt_mat_detail-zyczb '%' INTO gt_mat_detail-zyczb.
+      MODIFY gt_mat_detail.
+    ENDIF.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  mcr_build_fieldcat:gt_fcat  'LIFNR'   '供应商代码'    'C'   '10'  'LIFNR'   'EKKO',
+                     gt_fcat  'NAME1'   '供应商名称'    'C'   '35'  'NAME1'   'LFA1',
+                     gt_fcat  'ZTQCS'   '交货提前次数'  'I'   '10'  ''        '',
+                     gt_fcat  'ZTQZB'   '提前占比'      'C'   '20'  ''        '',
+                     gt_fcat  'ZYCCS'   '交货延迟次数'  'I'   '10'  ''        '',
+                     gt_fcat  'ZYCZB'   '延迟占比'      'C'   '20'  ''        ''.
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK       = ' '
+*     I_BYPASSING_BUFFER      =
+*     I_BUFFER_ACTIVE         =
+      i_callback_program      = sy-repid
+*     i_callback_pf_status_set = ''
+      i_callback_user_command = 'FRM_USER_COMMAND'
+*     I_CALLBACK_TOP_OF_PAGE  = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME        =
+*     I_BACKGROUND_ID         = ' '
+*     I_GRID_TITLE            =
+*     I_GRID_SETTINGS         =
+      is_layout_lvc           = gs_layout
+      it_fieldcat_lvc         = gt_fcat[]
+*     IT_EXCLUDING            =
+*     IT_SPECIAL_GROUPS_LVC   =
+*     IT_SORT_LVC             =
+*     IT_FILTER_LVC           =
+*     IT_HYPERLINK            =
+*     IS_SEL_HIDE             =
+      i_default               = 'X'
+      i_save                  = 'A'
+*     IS_VARIANT              =
+*     IT_EVENTS               =
+*     IT_EVENT_EXIT           =
+*     IS_PRINT_LVC            =
+*     IS_REPREP_ID_LVC        =
+*     I_SCREEN_START_COLUMN   = 0
+*     I_SCREEN_START_LINE     = 0
+*     I_SCREEN_END_COLUMN     = 0
+*     I_SCREEN_END_LINE       = 0
+*     I_HTML_HEIGHT_TOP       =
+*     I_HTML_HEIGHT_END       =
+*     IT_ALV_GRAPHICS         =
+*     IT_EXCEPT_QINFO_LVC     =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+*   IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER =
+*     ES_EXIT_CAUSED_BY_USER  =
+    TABLES
+      t_outtab                = gt_out[]
+    EXCEPTIONS
+      program_error           = 1
+      OTHERS                  = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_USER_COMMAND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_user_command USING r_ucomm LIKE sy-ucomm
+                            rs_selfield TYPE slis_selfield..
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CASE r_ucomm.
+    WHEN '&IC1'.
+      READ TABLE gt_out INDEX rs_selfield-tabindex.
+      PERFORM frm_display_detail_data1.
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DISPLAY_DETAIL_DATA1
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_display_detail_data1 .
+  DATA:ls_layout TYPE lvc_s_layo,
+       lt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+  REFRESH gt_mat_detail_alv.
+  LOOP AT gt_mat_detail WHERE lifnr = gt_out-lifnr.
+    MOVE-CORRESPONDING gt_mat_detail TO gt_mat_detail_alv.
+    APPEND gt_mat_detail_alv.
+    CLEAR gt_mat_detail_alv.
+  ENDLOOP.
+
+  mcr_build_fieldcat:lt_fcat  'LIFNR'   '供应商代码'    'C'   '10'  'LIFNR'   'EKKO',
+                     lt_fcat  'NAME1'   '供应商名称'    'C'   '35'  'NAME1'   'LFA1',
+                     lt_fcat  'MATNR'   '物料号码'    'C'   '18'  'MATNR'   'EKPO',
+                     lt_fcat  'TXZ01'   '物料描述'    'C'   '40'  'TXZ01'   'EKPO',
+                     lt_fcat  'ZTQCS'   '交货提前次数'  'I'   '10'  ''        '',
+                     lt_fcat  'ZTQZB'   '提前占比'      'C'   '20'  ''        '',
+                     lt_fcat  'ZYCCS'   '交货延迟次数'  'I'   '10'  ''        '',
+                     lt_fcat  'ZYCZB'   '延迟占比'      'C'   '20'  ''        ''.
+  ls_layout-cwidth_opt = 'X'.
+  ls_layout-zebra = 'X'.
+
+***调用ALV进行显示
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program      = sy-repid
+      i_callback_user_command = 'FRM_USER_COMMAND1'
+      is_layout_lvc           = ls_layout
+      it_fieldcat_lvc         = lt_fcat[]
+      i_default               = 'X'
+      i_save                  = 'A'
+    TABLES
+      t_outtab                = gt_mat_detail_alv[]
+    EXCEPTIONS
+      program_error           = 1
+      OTHERS                  = 2.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_USER_COMMAND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_user_command1 USING r_ucomm LIKE sy-ucomm
+                             rs_selfield TYPE slis_selfield..
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CASE r_ucomm.
+    WHEN '&IC1'.
+      READ TABLE gt_mat_detail_alv INDEX rs_selfield-tabindex.
+      PERFORM frm_display_detail_data2.
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DISPLAY_DETAIL_DATA2
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_display_detail_data2 .
+  DATA:ls_layout TYPE lvc_s_layo,
+       lt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+  REFRESH gt_detail_alv.
+  LOOP AT gt_detail WHERE lifnr = gt_mat_detail_alv-lifnr AND matnr = gt_mat_detail_alv-matnr.
+    MOVE-CORRESPONDING gt_detail TO gt_detail_alv.
+    IF gt_detail_alv-zcyts < 0.
+      gt_detail_alv-color = 'C610'.
+    ELSEIF gt_detail_alv-zcyts > p_days.
+      gt_detail_alv-color = 'C310'.
+    ENDIF.
+    APPEND gt_detail_alv.
+    CLEAR gt_detail_alv.
+  ENDLOOP.
+
+  mcr_build_fieldcat:lt_fcat  'LIFNR'   '供应商代码'    'C'   '10'  'LIFNR'   'EKKO',
+                     lt_fcat  'NAME1'   '供应商名称'    'C'   '35'  'NAME1'   'LFA1',
+                     lt_fcat  'EBELN'   '采购订单号'    'C'   '10'  'EBELN'   'EKPO',
+                     lt_fcat  'EBELP'   '项次'          'N'   '5'   'EBELP'   'EKPO',
+                     lt_fcat  'MBLNR'   '物料凭证号'    'C'   '10'  'MBLNR'   'MSEG',
+                     lt_fcat  'MJAHR'   '年度'          'C'   '4'   'MJAHR'   'MSEG',
+                     lt_fcat  'ZEILE'   '项次'          'N'   '5'   'ZEILE'   'MSEG',
+                     lt_fcat  'MATNR'   '物料号码'    'C'   '18'  'MATNR'   'EKPO',
+                     lt_fcat  'TXZ01'   '物料描述'    'C'   '40'  'TXZ01'   'EKPO',
+                     lt_fcat  'MENGE'   '数量'        'P'   '15'  'MENGE'   'EKPO',
+                     lt_fcat  'EINDT'   '计划交期'    ''    ''    'EINDT'   'EKET',
+                     lt_fcat  'BUDAT'   '实际交期'    ''    ''    'BUDAT'   'MKPF',
+                     lt_fcat  'ZCYTS'   '差异天数'    'I'   '10'    ''        ''.
+
+  ls_layout-cwidth_opt = 'X'.
+  ls_layout-zebra = 'X'.
+  ls_layout-info_fname = 'COLOR'.
+***调用ALV进行显示
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program = sy-repid
+      is_layout_lvc      = ls_layout
+      it_fieldcat_lvc    = lt_fcat[]
+      i_default          = 'X'
+      i_save             = 'A'
+    TABLES
+      t_outtab           = gt_detail_alv[]
+    EXCEPTIONS
+      program_error      = 1
+      OTHERS             = 2.
+
+ENDFORM.

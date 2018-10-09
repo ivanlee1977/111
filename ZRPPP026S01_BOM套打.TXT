@@ -1,0 +1,10 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPPP010S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_matnr FOR mast-matnr OBLIGATORY,
+               s_werks FOR mast-werks.
+PARAMETERS:p_datum LIKE sy-datum OBLIGATORY DEFAULT sy-datum.
+PARAMETERS:p_capid TYPE tc04-capid DEFAULT 'PP01' OBLIGATORY.
+*PARAMETERS:p_file TYPE string OBLIGATORY.
+SELECTION-SCREEN END OF BLOCK blc.

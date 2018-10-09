@@ -1,0 +1,113 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM034T01
+*&---------------------------------------------------------------------*
+TABLES :sscrfields, "选择屏幕上的字段
+        rlgrap.
+DATA:gt_upload LIKE zalsmex_tabline OCCURS 0 WITH HEADER LINE.
+FIELD-SYMBOLS:<fs_data> LIKE LINE OF gt_upload.
+
+DATA:gt_header TYPE alsmex_tabline OCCURS 0 WITH HEADER LINE.
+
+DATA:BEGIN OF gt_alv OCCURS 0.
+    INCLUDE STRUCTURE zsfi_bkpf.
+DATA:zicon(20) TYPE c,
+     msgty     LIKE sy-msgty,
+     zmsg      TYPE bapi_msg,
+     END OF gt_alv.
+
+*  记帐码对应的借贷标识
+DATA:gt_tbsl LIKE tbsl OCCURS 0 WITH HEADER LINE.
+
+DATA: gv_structure   TYPE dd02l-tabname,
+      gv_tabname(30) TYPE c.
+
+FIELD-SYMBOLS: <fs_tab_line> TYPE any,
+               <fs_tab>      TYPE STANDARD TABLE.
+
+***BAPI定义
+DATA:gs_dcheader          LIKE bapiache09,
+     gt_accountgl         LIKE bapiacgl09 OCCURS 0 WITH HEADER LINE, "G/L account item
+     gt_accountreceivable LIKE bapiacar09 OCCURS 0 WITH HEADER LINE, "Customer Item
+     gt_accountpayable    LIKE bapiacap09 OCCURS 0 WITH HEADER LINE, "Vendor Item
+     gt_currencyamount    LIKE bapiaccr09 OCCURS 0 WITH HEADER LINE,
+     gt_criteria          LIKE bapiackec9 OCCURS 0 WITH HEADER LINE,
+     gt_return            LIKE bapiret2 OCCURS 0 WITH HEADER LINE,
+     gt_extension2        LIKE bapiparex OCCURS 0 WITH HEADER LINE.
+DATA:gv_no        TYPE posnr_acc,
+     lv_exit      TYPE c,
+     lv_dmbtr     TYPE dmbtr,
+     lv_wrbtr     TYPE wrbtr,
+     lv_dmbtr_tem TYPE dmbtr,
+     lv_wrbtr_tem TYPE wrbtr.
+
+*** BDC定义
+DATA:gt_ftpost LIKE ftpost OCCURS 0 WITH HEADER LINE,
+     gt_blntab LIKE blntab OCCURS 0 WITH HEADER LINE,
+     gt_fttax  LIKE fttax OCCURS 0 WITH HEADER LINE.
+
+DATA: gv_msgid LIKE sy-msgid,
+      gv_msgno LIKE sy-msgno,
+      gv_msgty LIKE sy-msgty,
+      gv_msgv1 LIKE sy-msgv1,
+      gv_msgv2 LIKE sy-msgv2,
+      gv_msgv3 LIKE sy-msgv3,
+      gv_msgv4 LIKE sy-msgv4,
+      gv_subrc LIKE sy-subrc.
+
+DEFINE t_ftpost.
+  gt_ftpost-stype = &1.
+  gt_ftpost-count = &2.
+  gt_ftpost-fnam  = &3.
+  gt_ftpost-fval  = &4.
+  CONDENSE gt_ftpost-fval NO-GAPS.
+  APPEND gt_ftpost.
+END-OF-DEFINITION.
+
+DATA:lv_msg  TYPE string.
+DATA: ls_bkpf  LIKE bkpf,
+      lv_belnr LIKE bkpf-belnr.
+
+FIELD-SYMBOLS:<gt_alv> LIKE gt_alv.
+
+DEFINE mcr_add_zero.
+  IF &1 IS NOT INITIAL.
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+    EXPORTING
+      input  = &1
+    IMPORTING
+      output = &1.
+  ENDIF.
+END-OF-DEFINITION.
+
+DEFINE mcr_convert_unit_input.
+  DATA: lv_meins LIKE mara-meins.
+  lv_meins = &1.
+  IF &1 IS NOT INITIAL.
+    CALL FUNCTION 'CONVERSION_EXIT_CUNIT_INPUT'
+    EXPORTING
+      input          = &1
+      language       = sy-langu
+    IMPORTING
+      output         = &1
+    EXCEPTIONS
+      unit_not_found = 1
+      OTHERS         = 2.
+  ENDIF.
+  IF &1 IS INITIAL.
+&1 = lv_meins.
+  ENDIF.
+END-OF-DEFINITION.
+
+DEFINE mcr_add_msg.
+  IF &1-zmsg IS INITIAL.
+    &1-zmsg = &2.
+  ELSE.
+    CONCATENATE &1-zmsg &2 INTO &1-zmsg.
+  ENDIF.
+END-OF-DEFINITION.
+
+CONSTANTS:con_x TYPE c  VALUE 'X'.
+
+***alv data definr
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.

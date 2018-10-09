@@ -1,0 +1,114 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPSD003_T01
+*&---------------------------------------------------------------------*
+
+TABLES: vbak,vbap,zprintnum.
+TYPE-POOLS:slis,vrm.
+
+
+
+DATA: BEGIN OF gt_vbak  OCCURS 0,
+        chk        TYPE c1,
+        vkorg      LIKE vbak-vkorg,
+        auart      LIKE vbak-auart,
+        bezei      LIKE tvakt-bezei,
+        kunnr      LIKE vbak-kunnr,
+        name1      LIKE kna1-name1,
+        vbeln      LIKE vbak-vbeln,
+        erdat      LIKE vbak-erdat,
+        name       TYPE char80,
+        addr       TYPE char100,
+        extension1 LIKE adrc-extension1,
+        tel_number LIKE adrc-tel_number,
+        fax_number LIKE adrc-fax_number,
+        matnr      LIKE vbap-matnr,
+        arktx      LIKE vbap-arktx,
+        vrkme      LIKE vbap-vrkme,
+        kwmeng     LIKE vbap-kwmeng,
+        kzwi       LIKE vbap-kzwi1,
+        kzwi1      LIKE vbap-kzwi1,
+        zmemo      TYPE char200,
+        kvgr1      LIKE vbak-kvgr1,
+        vdatu      LIKE vbak-vdatu,
+        ihrez      LIKE vbkd-ihrez,
+        zterm      LIKE vbkd-zterm,
+        kvgr3      LIKE vbak-kvgr3,
+        bname      LIKE vbak-bname,
+        kvgr4      LIKE vbak-kvgr4,
+        ernam      LIKE vbak-ernam,
+        zsum       LIKE ztsd001-zsum,
+        vkbur      LIKE vbak-vkbur,
+        ktext      LIKE vbak-ktext,
+        kvgr2      LIKE vbak-kvgr2,
+      END OF gt_vbak.
+
+
+
+
+DATA: BEGIN OF gt_head  OCCURS 0,
+*
+*        vkorg      LIKE vbak-vkorg,
+*        auart      LIKE vbak-auart,
+*        bezei      LIKE tvakt-bezei,
+*        kunnr      LIKE vbak-kunnr,
+*        name1      LIKE kna1-name1,
+        vbeln      LIKE vbak-vbeln,
+        erdat      LIKE vbak-erdat,
+        name       TYPE char80,
+        addr       TYPE char100,
+        extension1 LIKE adrc-extension1,
+        tel_number LIKE adrc-tel_number,
+        fax_number LIKE adrc-fax_number,
+        kvgr1      LIKE vbak-kvgr1,
+        bezei1     LIKE tvv1t-bezei,   "销售工程师中文
+        vdatu      LIKE vbak-vdatu,
+        ihrez      LIKE vbkd-ihrez,
+        zterm      LIKE vbkd-zterm,
+        vtext      LIKE tvzbt-vtext,   "付款方式中文
+        kvgr3      LIKE vbak-kvgr3,
+        bezei2     LIKE tvv3t-bezei,   "物流公司中文
+        bname      LIKE vbak-bname,     "交货地址
+        kvgr4      LIKE vbak-kvgr4,
+        bezei3     LIKE tvv4t-bezei,   "发票类型中文
+        ernam      LIKE vbak-ernam,
+        zmemo      TYPE char200,
+        tel1       TYPE char20,
+        fax1       TYPE char20,
+        fax2       TYPE char20,
+        ktext      LIKE vbak-ktext,
+      END OF gt_head.
+
+DATA: BEGIN OF gt_item OCCURS 0,
+        num    TYPE i,
+        matnr  LIKE vbap-matnr,
+        arktx  LIKE vbap-arktx,
+        vrkme  LIKE vbap-vrkme,
+        kwmeng LIKE vbap-kwmeng,
+        kzwi   LIKE vbap-kzwi1,
+        kzwi1  LIKE vbap-kzwi1,
+        vbeln  LIKE vbak-vbeln,
+        waerk  LIKE vbap-waerk,
+      END OF gt_item.
+
+
+DATA: gt_fcat   TYPE slis_t_fieldcat_alv WITH HEADER LINE,
+      gs_layout TYPE slis_layout_alv.
+
+DATA: gs_option  TYPE ssfcompop,
+      gs_control TYPE ssfctrlop.
+
+DATA lv_name TYPE rs38l_fnam.
+DATA lv_vbak LIKE TABLE OF gt_vbak WITH HEADER LINE.
+DATA num TYPE i.
+
+DATA gv_fn TYPE tdsfname.
+
+DEFINE g_fieldfcat .
+  gt_fcat-fieldname = &1.
+  gt_fcat-seltext_s = &2.
+  gt_fcat-ddictxt = 'S'.
+  gt_fcat-ref_fieldname = &3.
+  gt_fcat-ref_tabname = &4.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

@@ -1,0 +1,17 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZSDRP014S01
+*&---------------------------------------------------------------------*
+***Ñ¡ÔñÆÁÄ»
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+PARAMETERS:p_r1 RADIOBUTTON GROUP r1 DEFAULT 'X' USER-COMMAND r0,
+           p_r2 RADIOBUTTON GROUP r1.
+SELECTION-SCREEN END OF BLOCK b1.
+
+
+SELECTION-SCREEN BEGIN OF BLOCK b2 WITH FRAME TITLE TEXT-002.
+PARAMETERS p_bukrs TYPE ztfi002-bukrs OBLIGATORY DEFAULT 1000 MODIF ID PP.
+SELECT-OPTIONS: s_prctr FOR ztfi002-prctr DEFAULT 'P1000' MODIF ID PP.
+PARAMETERS p_zyhzh TYPE ztfi002-zyhzh DEFAULT '1001010000' MODIF ID PP.
+PARAMETERS p_gjahr TYPE bsis-gjahr OBLIGATORY DEFAULT sy-datum+0(4) MODIF ID PP.
+SELECT-OPTIONS: s_monat FOR bsis-monat OBLIGATORY NO-EXTENSION DEFAULT sy-datum+4(2) MODIF ID PP.
+SELECTION-SCREEN END OF BLOCK b2.

@@ -1,0 +1,212 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZSDRP014T01
+*&---------------------------------------------------------------------*
+TABLES: ztsd005,ztsd004,vbrp,vbrk,knvv,ztsd006.
+
+DATA: BEGIN OF gt_alv OCCURS 0 ,
+        box                TYPE c,
+        sel                TYPE c,
+        zjhdh              LIKE ztsd005-zjhdh, "计划号
+        zjsbs              LIKE ztsd005-zjsbs, "传金税标识
+        dzdhm              LIKE ztsd004-dzdhm, "对账单号
+        zdate              LIKE ztsd004-zdate, "对帐单日期
+        kunnr              LIKE kna1-kunnr, "客户编码
+        name               TYPE c LENGTH 50, "客户名称
+        vgbel              LIKE vbrp-vgbel, "交货单号
+        vgpos              LIKE vbrp-vgpos, "交货项目
+        matnr              LIKE vbrp-matnr, "产品编码
+        arktx              LIKE vbrp-arktx, "货品名称
+        kzwi1              LIKE vbap-kzwi1, "总价
+        zpric              LIKE vbap-kzwi1, "单价
+        menge              LIKE vbrp-fkimg, "数量
+        vrkme              LIKE vbrp-vrkme, "单位
+        fkimg              LIKE vbrp-fkimg, "实际已开票数量
+        zjshj              LIKE vbap-kzwi1, "价税合计
+        zbz                TYPE string, "备注
+        zvat_num           LIKE kna1-zvat_num, "纳税人识别号
+        zaccount           LIKE kna1-zaccount, "开户行及帐号
+        zaddr              LIKE kna1-zaddr, "地址和电话
+        katr1              LIKE kna1-katr1, "开票备注
+        kvgr4              LIKE knvv-kvgr4, "开票方式
+        bezei              LIKE tvv4t-bezei, "开票方式
+        vkorg              LIKE vbrk-vkorg, "销售组织
+        vtweg              LIKE vbrk-vtweg, "分销渠道
+        ktgrd              LIKE vbrk-ktgrd, "客户组的帐户分配
+        bukrs              LIKE vbrk-bukrs, "公司代码
+        vbeln              LIKE vbrp-vbeln, "销售发票
+        posnr              LIKE vbrp-posnr, "发票项目
+        zjhrq              LIKE ztsd005-zjhrq, "计划日期
+        fkart              LIKE vbrk-fkart, "发票类型
+        aubel              LIKE vbrp-aubel, "销售订单号
+        zsfqx              LIKE ztsd005-zsfqx, "是否取消开票计划
+        zspbs              LIKE ztsd005-zspbs, "审批标识
+        style              TYPE lvc_t_styl, "控制单元格可编辑
+        menge_bs           LIKE vbrp-fkimg, "数量（用于做比较）
+        objek              LIKE ausp-objek, "取商品名称和商品型号
+        cpmc               TYPE ausp-atwrt, "商品名称
+        cpxh               TYPE ausp-atwrt, "商品型号
+        vtext              LIKE tvk1t-vtext, "开票备注描述
+        zswbz(50),"商务备注
+        zsflm              LIKE ztsd011-zsflm, "开票税分类码
+        invoicenumber(100),"金税发票号
+*  ADD BY PFT 20171226
+        invoicedate        LIKE ztsd006-invoicedate, "金税开票日期
+        vsart              LIKE ztsd006-vsart, "装运方式
+        zwldh              LIKE ztsd006-zwldh, "物流单号
+        zhd                LIKE ztsd006-zhd, "回单
+        zterm              LIKE vbkd-zterm,   "付款条件
+        zterm_txt          LIKE tvzbt-vtext,  "付款条件描述
+        augru              LIKE vbak-augru,   "订单原因
+        augru_txt          LIKE tvaut-bezei,  "订单原因描述
+        vsart_txt          LIKE t173t-bezei, "物流公司描述
+*  END BY PFT 20171226
+*  add by quyantao 20180202
+        zkpgs              LIKE knb1-ekvbd,   "实际开票公司代码
+        zname              LIKE kna1-name1,   "实际开票公司名称
+*  end add
+*add by leimt 20180319
+        kvgr1              TYPE knvv-kvgr1,
+        ernam              TYPE likp-ernam,
+        wadat_ist          TYPE likp-wadat_ist,
+        bezei_kvgr1        TYPE tvv1t-bezei,
+        bezei_kvgr2        TYPE  char100,
+        zhlv               TYPE char3,
+*end by leimt
+      END OF gt_alv.
+
+DATA:gt_ztsd004 LIKE ztsd004 OCCURS 0 WITH HEADER LINE, "对账单数据
+     gt_ztsd005 LIKE ztsd005 OCCURS 0 WITH HEADER LINE, "计划开票数据
+     gt_ztsd006 LIKE ztsd006 OCCURS 0 WITH HEADER LINE, "金税已开票数量
+     gt_ztsd011 LIKE ztsd011 OCCURS 0 WITH HEADER LINE, "开票税分类码维护表
+     gt_tvv4t   LIKE tvv4t OCCURS 0 WITH HEADER LINE, "开票方式描述
+     gt_kna1    LIKE kna1 OCCURS 0 WITH HEADER LINE, "客户主数据
+     gt_knmt    LIKE knmt OCCURS 0 WITH HEADER LINE, "客户物料
+     gt_knvv    LIKE knvv OCCURS 0 WITH HEADER LINE. "客户主记录销售数据
+
+DATA: BEGIN OF gt_mara OCCURS 0 ,
+        matnr LIKE mara-matnr,
+        spart LIKE mara-spart,
+        matkl LIKE mara-matkl,
+        maktx LIKE makt-maktx,
+      END OF gt_mara.
+
+* 根据年月、发票号、行项目累加数量（区分本月和历史）
+DATA: BEGIN OF gt_ztsd005_col OCCURS 0,
+        zdate TYPE c LENGTH 6, "年月日
+        vbeln LIKE vbrp-vbeln, "销售发票
+        posnr LIKE vbrp-posnr, "发票项目
+        menge LIKE ztsd005-menge,
+      END OF gt_ztsd005_col.
+* 根据发票号、行项目汇总已开票数量
+DATA: BEGIN OF gt_ztsd006_col OCCURS 0,
+        vbeln LIKE vbrp-vbeln, "销售发票
+        posnr LIKE vbrp-posnr, "发票项目
+        fkimg LIKE ztsd006-fkimg, "已开票数量
+      END OF gt_ztsd006_col.
+
+DATA: BEGIN OF gt_vbak OCCURS 0 ,
+        vbeln LIKE vbak-vbeln, "销售订单号
+        bstnk LIKE vbak-bstnk, "客户采购订单号
+        augru LIKE vbak-augru,
+        zterm LIKE vbkd-zterm, "付款方式
+      END OF gt_vbak.
+*   定义中间表（存放客户和计划单号的关系）
+DATA: BEGIN OF gt_zjhd OCCURS 0,
+        zjhdh LIKE ztsd005-zjhdh,
+        kunnr LIKE kna1-kunnr,
+        vkorg LIKE knvv-vkorg,
+      END OF gt_zjhd.
+*  取商品名称和商品型号
+DATA: BEGIN OF gt_ausp OCCURS 0,
+        objek LIKE ausp-objek,
+        atinn LIKE ausp-atinn,
+        atwrt LIKE ausp-atwrt,
+        atnam LIKE cabn-atnam,
+      END OF gt_ausp.
+
+DATA: lv_err  TYPE c, "标识：S成功，E失败
+      lv_spbs TYPE c. "审批标识 ，控制长文本是否可编辑
+
+DATA: ls_stylerow TYPE lvc_s_styl,
+      lt_styletab TYPE lvc_t_styl.
+
+DATA gc_custom_control_name TYPE scrfname VALUE 'CONTROL'.
+DATA gr_ccontainer TYPE REF TO cl_gui_custom_container.
+
+DATA: x_docking TYPE REF TO cl_gui_docking_container,
+      x_editor  TYPE REF TO cl_gui_textedit.
+
+DATA: header LIKE thead.
+DATA: BEGIN OF gs_lines.
+    INCLUDE STRUCTURE  tline .
+DATA: END OF gs_lines,
+gt_lines LIKE TABLE OF gs_lines.
+
+DATA: p_name LIKE header-tdname.
+
+TYPES:BEGIN OF textline,
+        line(255) TYPE c,
+      END OF textline.
+DATA texttable TYPE TABLE OF textline.
+
+
+*----------------------------------------------------------------------*
+*       CLASS lcl_event_receiver DEFINITION
+*----------------------------------------------------------------------*
+CLASS lcl_event_receiver DEFINITION.
+  PUBLIC SECTION.
+    METHODS handle_modify
+                  FOR EVENT data_changed_finished OF cl_gui_alv_grid
+      IMPORTING e_modified et_good_cells.
+ENDCLASS. "LCL_EVENT_RECEIVER DEFINITION
+*----------------------------------------------------------------------*
+*       CLASS LCL_EVENT_RECEIVER IMPLEMENTATION
+*----------------------------------------------------------------------*
+CLASS lcl_event_receiver IMPLEMENTATION.
+  METHOD handle_modify.
+    DATA: wa_alv     LIKE gt_alv,
+          wa_cells   TYPE lvc_s_modi,
+          lv_enter   TYPE REF TO cl_gui_event,
+          lv_eventid TYPE i,
+          lv_tabix   LIKE sy-tabix,
+          lv_mess    TYPE string,
+          lv_mseg    TYPE useg-menge.
+
+*   获取当前事件
+    lv_enter   = ref->cur_event.
+*   实例化成功的时候
+    IF lv_enter IS NOT INITIAL.
+      lv_eventid = lv_enter->eventid.
+    ENDIF.
+
+*   只有在[回车]和生成开票计划事件的时候，再进行检查(19:代表回车事件)
+    IF ( lv_eventid = 19 AND sy-ucomm   = '' ) OR sy-ucomm   = 'ZSCKP'.
+      LOOP AT gt_alv INTO wa_alv WHERE sel = 'X'.
+        lv_tabix = sy-tabix.
+        lv_mess = wa_alv-menge_bs . CONDENSE lv_mess.
+        CLEAR:lv_mseg.
+        IF wa_alv-menge < 0.
+          lv_mseg = wa_alv-menge_bs - wa_alv-menge.
+        ELSE.
+          lv_mseg = wa_alv-menge - wa_alv-menge_bs.
+        ENDIF.
+        IF lv_mseg > 0.
+          CONCATENATE '修改后的数量不能大于剩余数量' lv_mess INTO lv_mess. CONDENSE lv_mess.
+          MESSAGE e000 WITH lv_mess DISPLAY LIKE 'E'.
+          EXIT.
+        ENDIF.
+*   计算价税合计= vbap-kzwi1/vbrp-fkimg*本次计划开票的数量
+        IF ( wa_alv-fkart EQ 'ZG1' OR wa_alv-fkart EQ 'ZG4' ) AND wa_alv-menge GT 0.
+          wa_alv-menge = 0 - wa_alv-menge.
+        ENDIF.
+        IF wa_alv-fkimg NE 0.
+          wa_alv-zjshj = wa_alv-kzwi1 / wa_alv-fkimg * wa_alv-menge.
+        ENDIF.
+        MODIFY gt_alv FROM wa_alv INDEX lv_tabix TRANSPORTING zjshj.
+      ENDLOOP.
+      PERFORM sub_refresh_data.
+    ENDIF.
+  ENDMETHOD.
+  "HANDLE_MODIFY
+ENDCLASS. "LCL_EVENT_RECEIVER IMPLEMENTATION
+DATA:gt_event_receiver TYPE REF TO lcl_event_receiver.

@@ -1,0 +1,27 @@
+*&---------------------------------------------------------------------*
+*& Report ZRPSD024
+*&---------------------------------------------------------------------*
+*&制作人：leimt
+*&---------------------------------------------------------------------*
+REPORT zrpsd024.
+
+INCLUDE zrpsd024_t01.
+INCLUDE zrpsd024_s01.
+INCLUDE zrpsd024_f01.
+
+INITIALIZATION.
+
+AT SELECTION-SCREEN OUTPUT.
+
+  PERFORM frm_hide_screen.
+
+START-OF-SELECTION.
+*  IF  s_vkorg[] IS INITIAL OR s_erdat[] IS INITIAL  .
+*    MESSAGE '销售组织、创建日期必填！' TYPE 'E'.
+*    RETURN.
+*  ENDIF.
+
+  PERFORM frm_getdata.
+  PERFORM frm_processdata.
+  PERFORM frm_fieldcat.
+  PERFORM frm_show.

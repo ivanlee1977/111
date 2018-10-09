@@ -1,0 +1,16 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPMM021_S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_date FOR plaf-psttr DEFAULT sy-datum,
+                s_dispo FOR plaf-dispo ,
+                s_matnr FOR plaf-matnr ,
+                s_plnum FOR plaf-plnum,
+                s_beskz FOR plaf-beskz,
+                s_sobes FOR plaf-sobes,
+                s_pertr FOR plaf-pertr,
+                s_psttr FOR plaf-psttr,
+                s_pedtr FOR plaf-pedtr.
+PARAMETERS: r_1 TYPE plaf-auffx AS CHECKBOX .
+SELECTION-SCREEN END OF BLOCK b1.

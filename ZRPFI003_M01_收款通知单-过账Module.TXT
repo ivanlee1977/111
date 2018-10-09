@@ -1,0 +1,137 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI003_M01
+*&---------------------------------------------------------------------*
+
+*&---------------------------------------------------------------------*
+*&      Module  INIT_ALV  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE init_alv OUTPUT.
+  IF cl_alv IS INITIAL.
+*    CREATE OBJECT cl_container "生成容器
+*      EXPORTING
+*        container_name = 'CONT'.
+
+    CREATE OBJECT cl_alv "生成ALV
+      EXPORTING
+*        i_parent = cl_container.
+         i_parent = cl_gui_custom_container=>screen0.
+
+    PERFORM f_alv_set_fieldcats.
+    PERFORM f_alv_set_layout.
+    PERFORM f_alv_exclude_toolbar.
+
+*    CALL METHOD CL_ALV->SET_DROP_DOWN_TABLE "下拉列表
+*      EXPORTING
+*        IT_DROP_DOWN = GT_DDVAL.
+*
+*    CALL METHOD CL_ALV->REGISTER_F4_FOR_FIELDS              "F4帮助
+*      EXPORTING
+*        IT_F4 = GT_F4.
+
+    CONCATENATE sy-repid  '0100' INTO gs_variant-report.
+    CALL METHOD cl_alv->set_table_for_first_display
+      EXPORTING
+        is_variant           = gs_variant
+        i_save               = 'A'
+        i_default            = 'X'
+        is_layout            = gs_layout
+        it_toolbar_excluding = gt_toolbar_excluding
+      CHANGING
+        it_outtab            = gt_alv[]
+        it_fieldcatalog      = gt_alv_fcat[].
+
+    CREATE OBJECT cl_button_event.
+    SET HANDLER cl_button_event->handle_user_command FOR cl_alv.
+    SET HANDLER cl_button_event->handle_toolbar FOR cl_alv.
+    SET HANDLER cl_button_event->handle_on_f4 FOR cl_alv.
+    SET HANDLER cl_button_event->handle_double_click FOR cl_alv.
+    SET HANDLER cl_button_event->handle_hotspot_click FOR cl_alv.
+
+    CALL METHOD cl_alv->register_edit_event
+      EXPORTING
+        i_event_id = cl_gui_alv_grid=>mc_evt_modified.
+
+    CALL METHOD cl_alv->set_ready_for_input
+      EXPORTING
+        i_ready_for_input = 1.
+*    CALL METHOD CL_ALV->REGISTER_F4_FOR_FIELDS              "F4帮助
+*      EXPORTING
+*        IT_F4  = GT_F4      .
+
+    CALL METHOD cl_alv->set_toolbar_interactive.
+
+  ELSE.
+    PERFORM f_refresh_alv_display.
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  STATUS_0100  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE status_0100 OUTPUT.
+  SET PF-STATUS 'PF_100'.
+  SET TITLEBAR 'TITLE'.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0100  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_0100 INPUT.
+  CLEAR:save_ok.
+  save_ok = ok_code.
+  CLEAR: ok_code.
+  CASE save_ok.
+    WHEN 'BACK' .
+      LEAVE TO SCREEN 0.
+    WHEN 'EXIT'.
+      LEAVE TO SCREEN 0.
+    WHEN 'CANCEL'.
+      LEAVE TO SCREEN 0.
+  ENDCASE.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  STATUS_9002  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE status_9002 OUTPUT.
+  SET PF-STATUS 'PF_9002'.
+  SET TITLEBAR 'TIT9002'.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_9002  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_9002 INPUT.
+  CLEAR:save_ok.
+  save_ok = ok_code.
+  CLEAR: ok_code.
+  CASE save_ok.
+    WHEN 'BACK_2' .
+      LEAVE TO SCREEN 0.
+    WHEN 'EXIT_2'.
+      LEAVE TO SCREEN 0.
+    WHEN 'CANCEL_2'.
+      LEAVE TO SCREEN 0.
+  ENDCASE.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  CTR02_CHANGE_TC_ATTR  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE ctr02_change_tc_attr OUTPUT.
+  DESCRIBE TABLE gt_skh_9002 LINES ctr02-lines.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  CTR02_GET_LINES  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE ctr02_get_lines OUTPUT.
+ENDMODULE.

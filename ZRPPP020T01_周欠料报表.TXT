@@ -1,0 +1,132 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP020T01
+*&---------------------------------------------------------------------*
+TABLES:sscrfields,mara,mast.
+
+DATA:gt_upload LIKE zalsmex_tabline OCCURS 0 WITH HEADER LINE.
+FIELD-SYMBOLS:<fs_upload> LIKE LINE OF gt_upload.
+
+DATA:BEGIN OF gt_excel OCCURS 0,
+       matnr     LIKE mara-matnr,    "物料号码
+       maktx     LIKE makt-maktx,    "物料描述
+       menge1    TYPE p DECIMALS 3,  "第1周需求
+       menge2    TYPE p DECIMALS 3,  "第2周需求
+       zicon(30) TYPE c,          "状态
+       zmsg(500) TYPE c,          "消息
+     END OF gt_excel.
+
+DATA:gs_excel LIKE LINE OF gt_excel.
+
+DATA:BEGIN OF gt_bom_data OCCURS 0,
+       matnr  LIKE mara-matnr,
+       maktx  LIKE makt-maktx,
+       idnrk  LIKE stpo-idnrk,
+       zmakt  LIKE makt-maktx,
+       zmeng1 LIKE stpo-menge,   "第一周需求*BOM用量数量
+       zmeng2 LIKE stpo-menge,   "第二周需求*BOM用量数量
+       menge1 TYPE p DECIMALS 3, "EXCEL导入第一周需求
+       menge2 TYPE p DECIMALS 3, "EXCEL导入第一周需求
+     END OF gt_bom_data.
+
+DATA:BEGIN OF gt_scql_data OCCURS 0,
+       rsnum LIKE resb-rsnum,
+       rspos LIKE resb-rspos,
+       aufnr LIKE resb-aufnr,
+       matnr LIKE afpo-matnr,
+       maktx LIKE makt-maktx,
+       idnrk LIKE resb-matnr,
+       zmakt LIKE makt-maktx,
+       bdmng LIKE resb-bdmng,   "需求数量
+       enmng LIKE resb-enmng,   "已发数量
+       zqlsl LIKE resb-enmng,   "欠料数量
+     END OF gt_scql_data.
+
+DATA:BEGIN OF gt_wxxq_data OCCURS 0,
+       rsnum LIKE resb-rsnum,
+       rspos LIKE resb-rspos,
+       ebeln LIKE resb-ebeln,
+       ebelp LIKE resb-ebelp,
+       matnr LIKE ekpo-matnr,
+       maktx LIKE makt-maktx,
+       idnrk LIKE resb-matnr,
+       zmakt LIKE makt-maktx,
+       bdmng LIKE resb-bdmng,   "需求数量
+       enmng LIKE resb-enmng,   "已发数量
+       zqlsl LIKE resb-enmng,   "欠料数量
+     END OF gt_wxxq_data.
+
+DATA:gt_mssl LIKE mssl OCCURS 0 WITH HEADER LINE.
+
+DATA:BEGIN OF gt_mard OCCURS 0,
+       matnr LIKE mard-matnr,
+       werks LIKE mard-werks,
+       lgort LIKE mard-lgort,
+       labst LIKE mard-labst,
+       insme LIKE mard-insme,
+     END OF gt_mard.
+
+DATA:BEGIN OF gt_po_data OCCURS 0,
+       ebeln LIKE ekpo-ebeln,
+       ebelp LIKE ekpo-ebelp,
+       matnr LIKE ekpo-matnr,
+       txz01 LIKE ekpo-txz01,
+       etenr LIKE eket-etenr,
+       eindt LIKE eket-eindt,
+       menge LIKE eket-menge,  "计划行数量
+       wemng LIKE eket-wemng,  "已收货数量
+       zwqsl LIKE eket-menge,  "未清数量
+       UMREZ LIKE ekpo-UMREZ,
+       UMREn LIKE ekpo-UMREn,
+     END OF gt_po_data.
+
+DATA:BEGIN OF gt_ekes OCCURS 0,
+       ebeln LIKE ekpo-ebeln,
+       ebelp LIKE ekpo-ebelp,
+       matnr LIKE ekpo-matnr,
+       txz01 LIKE ekpo-txz01,
+       vbeln LIKE ekes-vbeln,
+       vbelp LIKE ekes-vbelp,
+       eindt LIKE ekes-eindt,
+       menge LIKE ekes-menge,
+       dabmg LIKE ekes-dabmg,
+       zwqsl LIKE ekes-menge,  "未清数量
+     END OF gt_ekes.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       idnrk  LIKE stpo-idnrk,   "物料代码
+       zmakt  LIKE makt-maktx,   "物料描述
+       zmeng1 TYPE p DECIMALS 3, "第一周需求数
+       zmeng2 TYPE p DECIMALS 3, "第二周需求数
+       zscql  TYPE p DECIMALS 3, "已开单生产欠料数
+       zwxxq  TYPE p DECIMALS 3, "已开单外协需求数
+       zgyskc TYPE p DECIMALS 3, "供应商库存
+       zwxql  TYPE p DECIMALS 3, "外协欠料数
+       zkc    TYPE p DECIMALS 3, "库存（包含原材料仓，生产现场仓）
+       zqlsl  TYPE p DECIMALS 3, "欠料数量
+       nfmat  TYPE marc-nfmat,   "后继物料
+       zqdwl  TYPE mara-matnr,   "取代物料
+       zdjkc  TYPE p DECIMALS 3, "待检库存
+       zwqpo  TYPE p DECIMALS 3, "未清PO数量
+       ztzjh  TYPE p DECIMALS 3, "通知叫货数量
+       zqwjq  LIKE sy-datum,     "期望交期
+       dispo  LIKE marc-dispo,   "MRP控制者
+       znxjh  TYPE p DECIMALS 3, "内向交货数量
+     END OF gt_out.
+***alv data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  &1-fieldname = &2.
+  &1-coltext   = &3.
+  &1-scrtext_l = &3.
+  &1-scrtext_m = &3.
+  &1-scrtext_s = &3.
+  &1-ref_field = &4.
+  &1-ref_table = &5.
+  &1-inttype   = &6.
+  &1-intlen    = &7.
+  &1-hotspot   = &8.
+  APPEND &1.
+  CLEAR &1.
+END-OF-DEFINITION.

@@ -1,0 +1,121 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPQM009T01
+*&---------------------------------------------------------------------*
+TABLES:mseg,mara,mkpf,knvv,ausp.
+
+DATA: BEGIN OF gt_alv OCCURS 0,
+        kunnr    LIKE mseg-kunnr, "客户代码
+        name1    LIKE kna1-name1, "客户名称
+        kdgrp    LIKE knvv-kdgrp, "所属行业
+        ktext    LIKE t151t-ktext, "所属行业描述
+        spart    LIKE mara-spart, "产品组
+        vtext    LIKE tspat-vtext, "产品组描述
+        zcpx     LIKE ausp-atwrt, "产品线
+        zxl      LIKE ausp-atwrt, "系列
+        zzxl     LIKE ausp-atwrt, "子系列
+        dyzxh    LIKE ausp-atwrt, "对应主型号
+        matnr    LIKE mseg-matnr, "物料编码
+        maktx    LIKE makt-maktx, "物料描述
+        charg    LIKE mseg-charg, "版本(批次)
+        dlymo    TYPE c LENGTH 2,
+        menge_fh LIKE mseg-menge, "发货数量
+        menge_wx LIKE mseg-menge, "维修数量
+      END OF gt_alv.
+
+DATA:BEGIN OF gt_mseg OCCURS 0,
+       mblnr      LIKE mseg-mblnr,
+       mjahr      LIKE mseg-mjahr,
+       zeile      LIKE mseg-zeile,
+       matnr      LIKE mseg-matnr,
+       werks      LIKE mseg-werks,
+       bwart      LIKE mseg-bwart,
+       menge      LIKE mseg-menge,
+       charg      LIKE mseg-charg,
+       sjahr      LIKE mseg-sjahr,
+       smbln      LIKE mseg-smbln,
+       smblp      LIKE mseg-smblp,
+       budat_mkpf LIKE mseg-budat_mkpf,
+       kunnr      LIKE mseg-kunnr,
+       spart      LIKE mara-spart,
+       dlymo      TYPE c LENGTH 2,
+     END OF gt_mseg.
+*  抓取维修通知单中的数据
+DATA:BEGIN OF gt_ztcs001 OCCURS 0,
+       qmnum    LIKE ztcs001-qmnum,
+       zindx    LIKE ztcs001-zindx,
+       matnr    LIKE ztcs001-matnr,
+       zbarcode LIKE ztcs001-zbarcode,
+       zversion LIKE ztcs001-zversion,
+       menge    LIKE ztcs001-menge,
+       zjhrq    LIKE ztcs001-zjhrq,
+       erdat    LIKE ztcs001-erdat,
+       kunnr    LIKE qmel-kunum,
+       spart    LIKE mara-spart,
+       dlymo    TYPE c LENGTH 2,
+     END OF gt_ztcs001 .
+
+*  获取主型号、系列、产品线
+DATA: BEGIN OF gt_ausp OCCURS 0,
+        objek LIKE ausp-objek,
+        atinn LIKE ausp-atinn,
+        atwrt LIKE ausp-atwrt,
+        atnam LIKE cabn-atnam,
+      END OF gt_ausp.
+*  系列内表
+DATA:BEGIN OF gt_xl OCCURS 0,
+       atwrt LIKE ausp-atwrt,
+     END OF gt_xl,
+     gt_zxl LIKE gt_xl OCCURS 0 WITH HEADER LINE. "子系列内表
+
+* 客户信息
+DATA: gt_kna1 LIKE kna1 OCCURS 0 WITH HEADER LINE,
+      gt_knvv LIKE knvv OCCURS 0 WITH HEADER LINE,
+      gt_makt LIKE makt OCCURS 0 WITH HEADER LINE.
+
+* 动态日期
+DATA: BEGIN OF lt_month OCCURS 0,
+        dlymo TYPE c LENGTH 2,
+        low   TYPE i,
+        high  TYPE i,
+      END OF lt_month.
+
+*  根据选择屏幕分析年月取出第一天和最后一天
+DATA:lv_date_from LIKE sy-datum,
+     lv_date_to   LIKE sy-datum.
+
+* 定义ALV动态内表
+DATA: d_ref      TYPE REF TO data,
+      d_ref1     TYPE REF TO   data,
+      lt_alv_cat TYPE TABLE OF lvc_s_fcat,
+      ls_alv_cat LIKE LINE OF  lt_alv_cat.
+DATA:i_layout_lvc TYPE lvc_s_layo .
+DATA: gt_events TYPE slis_t_event WITH HEADER LINE.
+
+DATA: lt_table LIKE TABLE OF dntab.
+DATA: ls_table TYPE dntab.
+DATA: dyn_table  TYPE REF TO data,
+      dyn_table1 TYPE REF TO data.
+DATA: dyn_wa  TYPE REF TO data,
+      dyn_wa1 TYPE REF TO data.
+
+DATA: l_dyname LIKE d020s-prog,                             "INS 415471
+      l_dynumb LIKE d020s-dnum.
+FIELD-SYMBOLS :
+  <dyn_table>  TYPE table,
+  <dyn_wa>     TYPE any,
+  <dyn_field>  TYPE any,
+  <dyn_table1> TYPE table,
+  <dyn_wa1>    TYPE any,
+  <fs_str>     TYPE any.
+
+
+DEFINE mcr_build_fieldcat.
+  ls_alv_cat-fieldname = &1.
+  ls_alv_cat-scrtext_l = &2.
+  ls_alv_cat-ref_field = &3.
+  ls_alv_cat-ref_table = &4.
+  ls_alv_cat-outputlen = &5.
+  ls_alv_cat-no_zero = &6.
+  APPEND ls_alv_cat TO lt_alv_cat.
+  CLEAR ls_alv_cat.
+END-OF-DEFINITION.

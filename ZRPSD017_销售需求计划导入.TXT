@@ -1,0 +1,63 @@
+*&---------------------------------------------------------------------*
+*& 程序名： ZRPSD017
+*& 创建者(公司)/日期： PFT/20170918
+*& 程序描述:销售价格制定
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    PFT           20170918      创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpsd017.
+
+INCLUDE zalv.
+INCLUDE zrpsd017t01.
+INCLUDE zrpsd017s01.
+INCLUDE zrpsd017f01.
+
+************************************************************************
+*INITIALIZATION.
+************************************************************************
+INITIALIZATION.
+  PERFORM frm_get_mara."获取物料组为2010 4010  5010
+************************************************************************
+*AT SELECTION-SCREEN ON VALUE_REQUEST.
+************************************************************************
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_xl-low.
+  PERFORM sub_search_help_zxl USING 'XL' 'S_XL' 'ZFER_XL'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_xl-high.
+  PERFORM sub_search_help_zxl USING 'XL' 'S_XL'  'ZFER_XL'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_zxl-low.
+  PERFORM sub_search_help_zxl USING 'ZXL' 'S_ZXL'  'ZFER_ZXL'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_zxl-high.
+  PERFORM sub_search_help_zxl USING 'ZXL' 'S_ZXL'  'ZFER_ZXL'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_cpx-low.
+  PERFORM sub_search_help_zxl USING 'CPX' 'S_ZXL'  'ZFER_CPX'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_cpx-high.
+  PERFORM sub_search_help_zxl USING 'CPX' 'S_ZXL'  'ZFER_CPX'.
+************************************************************************
+* AT SELECTION-SCREEN OUTPUT
+************************************************************************
+AT SELECTION-SCREEN OUTPUT.
+  PERFORM frm_modify_screen.
+************************************************************************
+* AT SELECTION-SCREEN
+************************************************************************
+AT SELECTION-SCREEN.
+************************************************************************
+* START-OF-SELECTION
+************************************************************************
+START-OF-SELECTION.
+  IF r1 EQ 'X'.
+    PERFORM frm_get_mara.
+    PERFORM frm_get_data."取数
+  ENDIF.
+  IF r2 EQ 'X' OR r3 EQ 'X'.
+    PERFORM frm_process_data."对取出的数据进行处理
+  ENDIF.
+  PERFORM sub_build_fieldcat.
+  PERFORM sub_build_layout.
+  PERFORM sub_display_alv TABLES gt_alv USING  'ALV_USER_COMMAND' 'PF_STATUS_SET'.

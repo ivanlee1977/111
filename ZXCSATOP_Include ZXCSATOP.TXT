@@ -1,0 +1,19 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZXCSATOP
+*&---------------------------------------------------------------------*
+TABLES:mara.
+
+DATA: BEGIN OF gw_bom_add,
+        zroh_iczycs  TYPE char30,
+        zroh_pcbgy   TYPE char30,
+        zroh_pcbcz   TYPE char30,
+        zroh_pcbcs   TYPE char30,
+        zroh_bcdzlth TYPE char30,
+        zroh_bccz    TYPE char30,
+        zroh_bcrz    TYPE char30,
+        zroh_gysxh   TYPE char30,
+        zroh_jgth    TYPE char30,
+        zroh_syth    TYPE char30,
+        zroh_mh      TYPE char30,
+        zroh_tsbz    TYPE char30,
+      END OF gw_bom_add.

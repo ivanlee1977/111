@@ -1,0 +1,9 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP001S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_matnr FOR mara-matnr,"物料号
+               s_werks FOR marc-werks OBLIGATORY DEFAULT '1000',"工厂
+               s_dispo FOR marc-dispo,"MRP控制者
+               s_spart FOR mara-spart."产品组
+SELECTION-SCREEN END OF BLOCK blc.

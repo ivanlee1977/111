@@ -1,0 +1,48 @@
+*&---------------------------------------------------------------------*
+*& 程序名： ZRPPLM003
+*& 创建者(公司)/日期： PFT/20180428
+*& 程序描述: 研发新品信息记录表
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    leimt           20180428      创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpplm003.
+
+INCLUDE zrpplm003t01.
+INCLUDE zrpplm003s01.
+INCLUDE zrpplm003f01.
+
+************************************************************************
+*INITIALIZATION.
+************************************************************************
+INITIALIZATION.
+  PERFORM frm_initial_data.
+************************************************************************
+*AT SELECTION-SCREEN ON VALUE-REQUEST
+************************************************************************
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_file.
+  PERFORM frm_filename_find CHANGING p_file.
+************************************************************************
+* AT SELECTION-SCREEN OUTPUT
+************************************************************************
+AT SELECTION-SCREEN OUTPUT.
+************************************************************************
+* AT SELECTION-SCREEN
+************************************************************************
+AT SELECTION-SCREEN.
+  CLEAR sy-ucomm.
+  CASE sscrfields-ucomm.
+    WHEN 'FC01'.  "开启文件
+      PERFORM frm_download_template USING 'ZPLM001' CHANGING p_file.
+    WHEN 'FC02'.
+      PERFORM frm_update.
+    WHEN OTHERS.
+  ENDCASE.
+************************************************************************
+* START-OF-SELECTION
+************************************************************************
+START-OF-SELECTION.
+
+  PERFORM frm_upload_data.
+  PERFORM frm_get_fieldcat.
+  PERFORM frm_output_data.

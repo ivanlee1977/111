@@ -1,0 +1,413 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPSD009F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_MAINTAIN_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:BEGIN OF lt_kna1 OCCURS 0,
+         kunnr LIKE kna1-kunnr,
+         name1 LIKE kna1-name1,
+       END OF lt_kna1.
+  DATA:lt_t173t LIKE t173t OCCURS 0 WITH HEADER LINE.
+
+***抓取满足条件的数据
+  IF p_chk IS INITIAL.
+    SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE gt_out
+    FROM ztsd003zxdb
+    WHERE kunag IN s_kunag
+      AND erdat IN s_erdat
+      AND zzxno IN s_zzxno
+      AND zwcbs EQ space.
+  ELSE.
+    SELECT *
+      INTO CORRESPONDING FIELDS OF TABLE gt_out
+      FROM ztsd003zxdb
+      WHERE kunag IN s_kunag
+        AND erdat IN s_erdat
+        AND zzxno IN s_zzxno.
+  ENDIF.
+
+  CHECK gt_out[] IS NOT INITIAL.
+  SELECT kunnr name1
+    INTO CORRESPONDING FIELDS OF TABLE lt_kna1
+    FROM kna1
+    FOR ALL ENTRIES IN gt_out
+    WHERE kunnr = gt_out-kunag.
+
+***运输公司名称
+  SELECT * INTO TABLE lt_t173t FROM t173t WHERE spras = sy-langu.
+
+  SORT lt_kna1 BY kunnr.
+  SORT lt_t173t BY vsart.
+
+  LOOP AT gt_out.
+    READ TABLE lt_kna1 WITH KEY kunnr = gt_out-kunag BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-name1 = lt_kna1-name1.
+    ENDIF.
+***运输公司名称
+    READ TABLE lt_t173t WITH KEY vsart = gt_out-vsart BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-bezei = lt_t173t-bezei.
+    ENDIF.
+
+    PERFORM frm_get_field_style CHANGING gt_out-stytab.
+    MODIFY gt_out.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  mcr_build_fieldcat: 'ZZXNO'       '装箱单号'     'ZZXNO'   'ZTSD003ZXDB'  ''     '8',
+                      'KUNAG'       '售达方'       'KUNAG'   'LIKP'     ''         '8',
+                      'NAME1'       '售达方名称'   'NAME1'   'KNA1'     ''         '20',
+                      'ERDAT'       '创建日期'     'ERDAT'   'ZTSD003ZXDB'  ''     '8',
+                      'ZSNO'        '开始箱号'     'ZSNO'    'ZTSD003ZXDB'  'X'    '8',
+                      'ZENO'        '结束箱号'     'ZENO'    'ZTSD003ZXDB'  'X'    '8',
+                      'BRGEW'       '毛重'         'BRGEW'    'ZTSD003ZXDB' 'X'    '8',
+                      'ZSJYF'       '实际运费'     'ZSJYF'    'ZTSD003ZXDB' 'X'    '8',
+                      'ZTSDZF'      '特殊单证费'   'ZTSDZF'   'ZTSD003ZXDB' 'X'    '8',
+                      'ZCLSYF'      '车辆使用费'   'ZCLSYF'   'ZTSD003ZXDB' 'X'    '8',
+                      'ZLABDF'      '离岸本地费'   'ZLABDF'   'ZTSD003ZXDB' 'X'    '8',
+                      'ZWXYZF'      '维修运杂费'   'ZWXYZF'   'ZTSD003ZXDB' 'X'    '8',
+                      'ZQTFY'       '其他费用'     'ZQTFY'    'ZTSD003ZXDB' 'X'    '8',
+                      'VSART'       '运输方式'     'VSART'    'T173T'        'X'    '6',
+                      'BEZEI'       '运输公司名称' 'BEZEI'    'T173T'       ''    '20',
+                      'ZKDZH'       '快递付款账号' 'ZKDZH'    'ZTSD003ZXDB' 'X'    '20',
+                      'ZYSDH'       '运输单号'     'ZYSDH'    'ZTSD003ZXDB' 'X'    '20',
+                      'ZFHRQ'       '发货日期'     'ZFHRQ'    'ZTSD003ZXDB' 'X'    '8',
+                      'ZQSRQ'       '签收日期'     'ZQSRQ'    'ZTSD003ZXDB' 'X'    '8',
+                      'WAERS'       '运费币别'     'WAERS'    'TE558'       'X'    '5',
+                      'ZWCBS'       '完成标识'     'ZWCBS'    'ZTSD003ZXDB' ''     '6',
+                      'ZBGDH'       '报关单号'     'ZBGDH'    'ZTSD003ZXDB' 'X'     '20',
+                      'ZBZ'         '备注'         'ZBZ'      'ZTSD003ZXDB' 'X'     '50'.
+
+
+*  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+  gs_layout-no_toolbar = 'X'.
+  gs_layout-stylefname = 'STYTAB'.
+  gs_layout-box_fname = 'CHECK'.
+  gs_layout-sel_mode  = 'A'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK        = ' '
+*     I_BYPASSING_BUFFER       =
+*     I_BUFFER_ACTIVE          =
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'FRM_SET_PF_STATUS'
+      i_callback_user_command  = 'FRM_USER_COMMAND'
+*     I_CALLBACK_TOP_OF_PAGE   = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME         =
+*     I_BACKGROUND_ID          = ' '
+*     I_GRID_TITLE             =
+*     I_GRID_SETTINGS          =
+      is_layout_lvc            = gs_layout
+      it_fieldcat_lvc          = gt_fcat[]
+*     IT_EXCLUDING             =
+*     IT_SPECIAL_GROUPS_LVC    =
+*     IT_SORT_LVC              =
+*     IT_FILTER_LVC            =
+*     IT_HYPERLINK             =
+*     IS_SEL_HIDE              =
+      i_default                = 'X'
+      i_save                   = 'A'
+*     IS_VARIANT               =
+      it_events                = gt_events[]
+*     IT_EVENT_EXIT            =
+*     IS_PRINT_LVC             =
+*     IS_REPREP_ID_LVC         =
+*     I_SCREEN_START_COLUMN    = 0
+*     I_SCREEN_START_LINE      = 0
+*     I_SCREEN_END_COLUMN      = 0
+*     I_SCREEN_END_LINE        = 0
+*     I_HTML_HEIGHT_TOP        =
+*     I_HTML_HEIGHT_END        =
+*     IT_ALV_GRAPHICS          =
+*     IT_EXCEPT_QINFO_LVC      =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER  =
+*     ES_EXIT_CAUSED_BY_USER   =
+    TABLES
+      t_outtab                 = gt_out
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PF_STATUS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_set_pf_status USING rt_extab TYPE slis_t_extab.
+  SET PF-STATUS 'PF_1000' .
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_USER_COMMAND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_user_command USING r_ucomm LIKE sy-ucomm
+                            rs_selfield TYPE slis_selfield..
+
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CALL METHOD gv_grid->check_changed_data( ).
+
+  CASE r_ucomm.
+    WHEN 'ZSAVE'.  "保存
+      PERFORM frm_save_data.
+    WHEN 'ZWC'.    "完成
+      PERFORM frm_set_wc USING 'X'.
+    WHEN 'ZCANCELWC'."取消完成
+      PERFORM frm_set_wc USING space.
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SAVE_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_save_data .
+  DATA:lt_data LIKE ztsd003zxdb OCCURS 0 WITH HEADER LINE.
+  LOOP AT gt_out.
+    MOVE-CORRESPONDING gt_out TO lt_data.
+    APPEND lt_data.
+    CLEAR lt_data.
+    SELECT SINGLE bezei INTO gt_out-bezei FROM t173t WHERE vsart = gt_out-vsart AND spras = sy-langu.
+    MODIFY gt_out.
+  ENDLOOP.
+  IF lt_data[] IS NOT INITIAL.
+    MODIFY ztsd003zxdb FROM TABLE lt_data.
+    IF sy-subrc = 0.
+      COMMIT WORK AND WAIT.
+      MESSAGE '保存数据成功' TYPE 'S'.
+    ELSE.
+      ROLLBACK WORK.
+      MESSAGE '保存数据失败' TYPE 'E'.
+    ENDIF.
+  ELSE.
+    MESSAGE '没有需要保存的数据' TYPE 'S'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELD_STYLE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      <--P_GT_OUT_STYTAB  text
+*----------------------------------------------------------------------*
+FORM frm_get_field_style  CHANGING t_stytab TYPE lvc_t_styl.
+
+  DATA:ls_stytab TYPE lvc_s_styl.
+  REFRESH:t_stytab.
+
+  CHECK gt_out-zwcbs IS NOT INITIAL.
+
+  ls_stytab-fieldname = 'ZSNO'.
+  ls_stytab-style = cl_gui_alv_grid=>mc_style_disabled.
+  INSERT ls_stytab INTO TABLE t_stytab.
+
+  ls_stytab-fieldname = 'ZENO'.
+  ls_stytab-style = cl_gui_alv_grid=>mc_style_disabled.
+  INSERT ls_stytab INTO TABLE t_stytab.
+
+  ls_stytab-fieldname = 'BRGEW'.
+  ls_stytab-style = cl_gui_alv_grid=>mc_style_disabled.
+  INSERT ls_stytab INTO TABLE t_stytab.
+
+  ls_stytab-fieldname = 'ZSJYF'.
+  ls_stytab-style = cl_gui_alv_grid=>mc_style_disabled.
+  INSERT ls_stytab INTO TABLE t_stytab.
+
+  ls_stytab-fieldname = 'ZTSDZF'.
+  ls_stytab-style = cl_gui_alv_grid=>mc_style_disabled.
+  INSERT ls_stytab INTO TABLE t_stytab.
+
+  ls_stytab-fieldname = 'ZCLSYF'.
+  ls_stytab-style = cl_gui_alv_grid=>mc_style_disabled.
+  INSERT ls_stytab INTO TABLE t_stytab.
+
+  ls_stytab-fieldname = 'ZLABDF'.
+  ls_stytab-style = cl_gui_alv_grid=>mc_style_disabled.
+  INSERT ls_stytab INTO TABLE t_stytab.
+
+  ls_stytab-fieldname = 'ZWXYZF'.
+  ls_stytab-style = cl_gui_alv_grid=>mc_style_disabled.
+  INSERT ls_stytab INTO TABLE t_stytab.
+
+  ls_stytab-fieldname = 'ZQTFY'.
+  ls_stytab-style = cl_gui_alv_grid=>mc_style_disabled.
+  INSERT ls_stytab INTO TABLE t_stytab.
+
+  ls_stytab-fieldname = 'VSART'.
+  ls_stytab-style = cl_gui_alv_grid=>mc_style_disabled.
+  INSERT ls_stytab INTO TABLE t_stytab.
+
+  ls_stytab-fieldname = 'ZKDZH'.
+  ls_stytab-style = cl_gui_alv_grid=>mc_style_disabled.
+  INSERT ls_stytab INTO TABLE t_stytab.
+
+  ls_stytab-fieldname = 'ZYSDH'.
+  ls_stytab-style = cl_gui_alv_grid=>mc_style_disabled.
+  INSERT ls_stytab INTO TABLE t_stytab.
+
+  ls_stytab-fieldname = 'ZFHRQ'.
+  ls_stytab-style = cl_gui_alv_grid=>mc_style_disabled.
+  INSERT ls_stytab INTO TABLE t_stytab.
+
+  ls_stytab-fieldname = 'ZQSRQ'.
+  ls_stytab-style = cl_gui_alv_grid=>mc_style_disabled.
+  INSERT ls_stytab INTO TABLE t_stytab.
+
+  ls_stytab-fieldname = 'WAERS'.
+  ls_stytab-style = cl_gui_alv_grid=>mc_style_disabled.
+  INSERT ls_stytab INTO TABLE t_stytab.
+
+  ls_stytab-fieldname = 'ZBGDH'.
+  ls_stytab-style = cl_gui_alv_grid=>mc_style_disabled.
+  INSERT ls_stytab INTO TABLE t_stytab.
+
+  ls_stytab-fieldname = 'ZBZ'.
+  ls_stytab-style = cl_gui_alv_grid=>mc_style_disabled.
+  INSERT ls_stytab INTO TABLE t_stytab.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SET_WC
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_set_wc USING u_flag TYPE c.
+  DATA:lt_data LIKE ztsd003zxdb OCCURS 0 WITH HEADER LINE.
+
+  READ TABLE gt_out WITH KEY check = 'X'.
+  IF sy-subrc NE 0.
+    MESSAGE '请至少选择一行数据' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  LOOP AT gt_out WHERE check = 'X' AND zwcbs NE u_flag.
+    MOVE-CORRESPONDING gt_out TO lt_data.
+    lt_data-zwcbs = u_flag.
+    APPEND lt_data.
+    CLEAR lt_data.
+  ENDLOOP.
+  IF lt_data[] IS NOT INITIAL.
+    MODIFY ztsd003zxdb FROM TABLE lt_data.
+    IF sy-subrc = 0.
+      COMMIT WORK AND WAIT.
+      LOOP AT gt_out WHERE check = 'X' AND zwcbs NE u_flag.
+        gt_out-zwcbs = u_flag.
+        PERFORM frm_get_field_style CHANGING gt_out-stytab.
+        MODIFY gt_out.
+      ENDLOOP.
+      IF u_flag = 'X'.
+        MESSAGE '设置完成标识成功' TYPE 'S'.
+      ELSE.
+        MESSAGE '取消完成标识成功' TYPE 'S'.
+      ENDIF.
+    ELSE.
+      ROLLBACK WORK.
+      IF u_flag = 'X'.
+        MESSAGE '设置完成标识失败' TYPE 'S'.
+      ELSE.
+        MESSAGE '取消完成标识失败' TYPE 'S'.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  SUB_BUILD_EVENTS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_build_events .
+  REFRESH: gt_events.
+  gt_events-name = 'CALLER_EXIT'.
+  gt_events-form = 'FRM_BUTTON'.
+  APPEND gt_events.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  FM_BUTTON
+*&---------------------------------------------------------------------*
+*       设置enter事件
+*----------------------------------------------------------------------*
+*      -->E_GRID     text
+*----------------------------------------------------------------------*
+
+FORM frm_button USING g_grid TYPE slis_data_caller_exit.
+* 设置enter事件
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = gv_grid.
+
+  CALL METHOD gv_grid->check_changed_data( ).
+
+  CALL METHOD gv_grid->register_edit_event
+    EXPORTING
+      i_event_id = cl_gui_alv_grid=>mc_evt_enter
+    EXCEPTIONS
+      error      = 1
+      OTHERS     = 2.
+  CREATE OBJECT gt_event_receiver.
+  SET HANDLER   gt_event_receiver->handle_modify FOR gv_grid.
+ENDFORM. "FM_BUTTON

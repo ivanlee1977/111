@@ -1,0 +1,173 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM001_TOP
+*&---------------------------------------------------------------------*
+TYPE-POOLS:slis,vrm.
+
+TABLES:ekpo,ekko,resb,marc,zprintnum,plaf.
+
+
+DATA:BEGIN OF gt_item  OCCURS 0,"展示内表
+       plnum LIKE plaf-plnum,
+       matnr LIKE  plaf-matnr,
+       maktx LIKE  makt-maktx,
+       gsmng LIKE  plaf-gsmng,
+       meins LIKE  plaf-meins,
+       psttr LIKE  plaf-psttr,
+       pedtr LIKE  plaf-pedtr,
+       pertr LIKE  plaf-pertr,
+       dispo LIKE  plaf-dispo,
+       paart LIKE  plaf-paart,
+       beskz LIKE  plaf-beskz,
+       sobes LIKE  plaf-sobes,
+       auffx LIKE  plaf-auffx,
+       pstmp LIKE plaf-pstmp,
+       webaz TYPE plaf-webaz,
+     END OF gt_item.
+
+TYPES:BEGIN OF gs_alv  ,"展示内表
+        plnum LIKE plaf-plnum,
+        matnr LIKE  plaf-matnr,
+        maktx LIKE  makt-maktx,
+        gsmng LIKE  plaf-gsmng,
+        meins LIKE  plaf-meins,
+        psttr LIKE  plaf-psttr,
+        pedtr LIKE  plaf-pedtr,
+        pertr LIKE  plaf-pertr,
+        dispo LIKE  plaf-dispo,
+        paart LIKE  plaf-paart,
+        beskz LIKE  plaf-beskz,
+        sobes LIKE  plaf-sobes,
+        auffx LIKE  plaf-auffx,
+        pstmp LIKE plaf-pstmp,
+        nfmat LIKE marc-nfmat,
+        webaz TYPE plaf-webaz,
+      END OF gs_alv.
+DATA gt_alv TYPE TABLE OF gs_alv WITH HEADER LINE.
+
+DATA:ok_code   TYPE sy-ucomm,
+     save_ok   TYPE sy-ucomm,
+     gv_matnr  TYPE plaf-matnr,
+     gv_date   TYPE sy-datum,
+     errorcode TYPE i.
+
+DATA: gt_fcat    TYPE slis_t_fieldcat_alv WITH HEADER LINE,
+      gs_layout1 TYPE slis_layout_alv.
+
+
+DATA: gs_option          TYPE ssfcompop,
+      gs_control         TYPE ssfctrlop,
+      job_output_options TYPE ssfcresop. ""SF使用参数
+
+DATA lv_name TYPE rs38l_fnam.
+DEFINE g_fieldfcat .
+  gt_fcat-fieldname = &1.
+  gt_fcat-seltext_s = &2.
+  gt_fcat-ddictxt = 'S'.
+  gt_fcat-ref_fieldname = &3.
+  gt_fcat-ref_tabname = &4.
+  gt_fcat-decimals_out = &5.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.
+
+DATA:lv_enter   TYPE REF TO cl_gui_event,
+     lv_eventid TYPE i.
+*  回车检查消息
+DATA:lv_msgv1     TYPE bapi_msg,
+     lv_fieldname TYPE lvc_fname,
+     lv_row       TYPE int4.
+
+DATA: ls_stylerow TYPE lvc_s_styl,
+      lt_styletab TYPE lvc_t_styl.
+
+*-------------------ALV属性声明区---------------------------------*
+DATA: gt_alv_fcat          TYPE  lvc_t_fcat WITH HEADER LINE,
+      "字段属性
+      gs_alv_fcat          LIKE  LINE OF gt_alv_fcat,
+      gt_sort              TYPE lvc_t_sort WITH HEADER LINE,
+      gt_toolbar_excluding TYPE  ui_functions, "删除功能内表
+      gs_layout            TYPE  lvc_s_layo,   "ALV布局
+      gs_variant           TYPE  disvariant,   "是否保存变式
+      gt_ddval             TYPE  lvc_t_drop,   "下拉列表内表
+      gs_ddval             TYPE  lvc_s_drop,   "下拉列表结构
+      gt_f4                TYPE  lvc_t_f4,     "f4帮助内表
+      gs_f4                TYPE  lvc_s_f4.     "f4帮助结构
+
+DATA: BEGIN OF gs_refresh,
+        row TYPE char1 VALUE 'X',
+        col TYPE char1 VALUE 'X',
+      END OF gs_refresh.
+
+DATA: cl_alv       TYPE REF TO cl_gui_alv_grid,
+      cl_container TYPE REF TO cl_gui_custom_container.
+
+CLASS lcl_event_receiver DEFINITION.
+  PUBLIC SECTION.
+    METHODS:
+      handle_toolbar FOR EVENT toolbar OF cl_gui_alv_grid
+        IMPORTING e_object e_interactive,
+
+      handle_user_command FOR EVENT user_command OF cl_gui_alv_grid
+        IMPORTING e_ucomm,
+
+      handle_double_click  FOR EVENT double_click  OF cl_gui_alv_grid
+        IMPORTING e_row e_column es_row_no,
+
+      handle_on_f4 FOR EVENT onf4 OF cl_gui_alv_grid
+        IMPORTING e_fieldname  e_fieldvalue   es_row_no
+                    er_event_data  et_bad_cells   e_display,
+
+      handle_data_changed FOR EVENT data_changed OF cl_gui_alv_grid
+        IMPORTING er_data_changed,
+
+      handle_data_changed_finished FOR EVENT data_changed_finished OF cl_gui_alv_grid
+        IMPORTING e_modified et_good_cells.
+
+ENDCLASS.
+
+*---------------------------------------------------------------------*
+*       CLASS lcl_event_receiver IMPLEMENTATION
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+CLASS lcl_event_receiver IMPLEMENTATION.
+  METHOD handle_toolbar.
+    PERFORM f_class_set_toolbar CHANGING e_object ."e_interactive.
+  ENDMETHOD.
+
+  METHOD handle_user_command.
+*    PERFORM  f_class_toolbar_user_command USING e_ucomm.
+  ENDMETHOD.
+
+  METHOD handle_double_click.
+*    PERFORM double_click USING e_row.
+  ENDMETHOD.
+
+  METHOD handle_on_f4.
+*    PERFORM f_class_on_f4 CHANGING e_fieldname  e_fieldvalue
+*      es_row_no    er_event_data
+*      et_bad_cells   e_display.
+  ENDMETHOD.
+
+  METHOD handle_data_changed.
+*    PERFORM f_class_data_changed USING er_data_changed.
+  ENDMETHOD.
+
+  METHOD  handle_data_changed_finished.
+*    BREAK-POINT.
+*    CLEAR: lv_enter,lv_eventid.
+**   获取当前事件
+*    lv_enter   = cl_alv->cur_event.
+**   实例化成功的时候
+*    IF lv_enter IS NOT INITIAL.
+*      lv_eventid = lv_enter->eventid.
+*    ENDIF.
+**   只有在[回车]事件的时候，再进行检查(18:代表回车事件)
+*    IF ( lv_eventid = 4 OR lv_eventid = 18 ) AND sy-ucomm   = ''.
+*    PERFORM f_class_data_changed_finished USING e_modified et_good_cells.
+*    ENDIF.
+
+  ENDMETHOD.
+ENDCLASS.
+
+DATA: cl_button_event TYPE REF TO lcl_event_receiver.

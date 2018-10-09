@@ -1,0 +1,903 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM001_F01
+*&---------------------------------------------------------------------*
+
+FORM get_data."取数据
+  CLEAR:gt_item[].
+  SELECT
+         a~ebeln
+         a~ebelp
+         a~matnr
+         a~menge
+         a~adrn2
+         a~ebelp
+         a~txz01
+         a~meins AS lmein
+         a~ematn
+         a~zzcav
+         a~zcpcl
+         a~zmrcl
+         a~zds
+         a~zgate
+         a~zmjcp
+         a~zyjsm
+         a~zkmzq
+         a~zsl  "ADD BY PFT 20171225
+*         a~brtwr
+         a~mwskz
+         a~werks
+         a~bpumz
+         a~bpumn
+         a~netpr
+         a~peinh
+         a~infnr
+
+         b~bukrs
+         b~lifnr
+         b~ekorg
+         b~ekgrp
+         b~bedat
+         b~aedat
+         b~zterm
+         b~adrnr
+         b~waers
+         b~frgrl
+
+         c~eindt
+         b~frgsx
+            INTO CORRESPONDING FIELDS OF TABLE gt_item
+        FROM ekpo AS a
+        INNER JOIN ekko AS b ON a~ebeln EQ b~ebeln
+        INNER JOIN eket AS c ON a~ebeln EQ c~ebeln AND a~ebelp EQ c~ebelp
+        FOR ALL ENTRIES IN gt_t024
+        WHERE b~bukrs IN s_bukrs
+         AND  a~ebeln IN s_ebeln
+         AND  b~ekgrp EQ gt_t024-ekgrp
+         AND  b~bedat IN s_bedat
+         AND  b~lifnr IN s_lifnr
+*         AND  b~frgke EQ 'R'
+         AND  a~loekz EQ ''.
+ENDFORM.
+
+FORM process_data."处理数据
+  DATA:lv_fwste TYPE fwste.
+  DATA:it_ekes TYPE ekes OCCURS 0 WITH HEADER LINE .
+  DATA:it_eina TYPE eina OCCURS 0 WITH HEADER LINE .
+
+  DATA: l_object  TYPE kssk-objek,
+        l_class   TYPE klah-class,
+        l_matty   TYPE atwrt,
+        lit_class TYPE TABLE OF sclass,
+        lit_objda TYPE TABLE OF clobjdat,
+        lwa_objda TYPE clobjdat.
+
+  DATA:BEGIN OF wa_mara,
+         matnr LIKE mara-matnr,
+         mfrnr LIKE mara-mfrnr,
+       END OF wa_mara,
+       it_mara LIKE wa_mara OCCURS 0.
+
+  DATA:BEGIN OF wa_makt,
+         matnr LIKE makt-matnr,
+         maktx LIKE makt-maktx,
+       END OF wa_makt,
+       it_makt LIKE wa_makt OCCURS 0.
+
+
+  DATA:BEGIN OF wa_lfa1,
+         lifnr LIKE lfa1-lifnr,
+         name1 LIKE lfa1-name1,
+         adrnr LIKE lfa1-adrnr,
+         telf1 LIKE lfa1-telf1, "电话（供应商）
+         telfx LIKE lfa1-telfx, "传真（供应商）
+         sortl LIKE lfa1-sortl, "品牌
+       END OF wa_lfa1,
+       it_lfa1 LIKE wa_lfa1 OCCURS 0.
+
+  DATA:BEGIN OF  wa_adrc,
+         addrnumber LIKE adrc-addrnumber,
+         street     LIKE adrc-street,
+         name1      LIKE adrc-name1,
+         g_fax      LIKE adrc-fax_number,
+         g_tel      LIKE adrc-tel_number,
+       END OF wa_adrc,
+       it_adrc LIKE wa_adrc OCCURS 0.
+
+
+  DATA:BEGIN OF wa_t024,
+         ekgrp LIKE t024-ekgrp,
+         eknam LIKE t024-eknam,
+         ektel LIKE t024-ektel,
+       END OF wa_t024,
+       it_t024 LIKE wa_t024 OCCURS 0.
+
+  DATA :BEGIN OF wa_t052u,
+          zterm LIKE t052u-zterm,
+          text1 LIKE t052u-text1,
+        END OF wa_t052u.
+  DATA:it_t052u LIKE wa_t052u OCCURS 0.
+
+  DATA:BEGIN OF wa_knvk,
+         parnr LIKE knvk-parnr,
+         lifnr LIKE knvk-lifnr,
+         name1 LIKE knvk-name1,
+       END OF wa_knvk,
+       it_knvk LIKE wa_knvk OCCURS 0.
+
+  DATA:BEGIN OF wa_t007s,
+         mwskz LIKE t007s-mwskz,
+         text1 LIKE t007s-text1,
+       END OF wa_t007s,
+       it_t007s LIKE wa_t007s OCCURS 0.
+
+  DATA:BEGIN OF wa_t001w,
+         werks LIKE t001w-werks,
+         stras LIKE t001w-stras,
+       END OF wa_t001w,
+       it_t001w LIKE wa_t001w OCCURS 0.
+
+  DATA:BEGIN OF wa_t001,
+         bukrs LIKE t001-bukrs,
+         butxt LIKE t001-butxt,
+         adrnr LIKE t001-adrnr,
+       END OF wa_t001,
+       it_t001 LIKE wa_t001 OCCURS 0.
+
+  "获取辅助信息
+  IF gt_item[] IS NOT INITIAL .
+    "供应商名称
+    SELECT lifnr name1  adrnr telf1 telfx  sortl INTO TABLE it_lfa1 FROM lfa1
+      FOR ALL ENTRIES IN gt_item
+      WHERE lifnr EQ gt_item-lifnr.
+
+*取街道地址
+    SELECT addrnumber
+           street
+           name1
+           fax_number AS  g_fax
+           tel_number AS  g_tel
+      INTO TABLE it_adrc FROM adrc
+   FOR ALL ENTRIES IN gt_item WHERE addrnumber  EQ gt_item-adrnr.
+
+    SELECT addrnumber street name1 fax_number AS  g_fax  tel_number AS  g_tel APPENDING TABLE it_adrc FROM adrc
+   FOR ALL ENTRIES IN gt_item WHERE addrnumber  EQ gt_item-adrn2.
+
+    "采购组描述
+    SELECT ekgrp eknam ektel INTO TABLE it_t024 FROM t024
+      FOR ALL ENTRIES IN gt_item WHERE ekgrp  EQ gt_item-ekgrp.
+
+    "付款条件描述
+    IF p_en EQ 'X'.
+      SELECT zterm text1 INTO TABLE it_t052u FROM t052u
+        FOR ALL ENTRIES IN gt_item WHERE zterm EQ gt_item-zterm
+        AND spras EQ 'E'.
+    ELSE.
+      SELECT zterm text1 INTO TABLE it_t052u FROM t052u
+        FOR ALL ENTRIES IN gt_item WHERE zterm EQ gt_item-zterm
+         AND spras EQ sy-langu.
+    ENDIF.
+
+    "取供应商联系人
+    SELECT parnr lifnr  name1 INTO TABLE it_knvk FROM knvk
+      FOR ALL ENTRIES IN gt_item WHERE lifnr EQ gt_item-lifnr.
+    "取票据类型
+    IF p_en EQ 'X'.
+      SELECT mwskz text1 INTO TABLE  it_t007s FROM t007s
+        FOR ALL ENTRIES IN gt_item WHERE mwskz EQ gt_item-mwskz AND kalsm = 'TAXCN' AND spras = 'E'.
+    ELSE.
+      SELECT mwskz text1 INTO TABLE  it_t007s FROM t007s
+     FOR ALL ENTRIES IN gt_item WHERE mwskz EQ gt_item-mwskz AND kalsm = 'TAXCN' AND spras = '1'.
+    ENDIF.
+    "取工厂地址
+    SELECT werks stras INTO TABLE it_t001w FROM t001w
+      FOR ALL ENTRIES IN gt_item WHERE werks EQ gt_item-werks.
+
+    "公司描述
+    SELECT bukrs butxt adrnr INTO TABLE it_t001 FROM t001
+      FOR ALL ENTRIES IN gt_item WHERE bukrs EQ gt_item-bukrs.
+
+    "物料主数据供应商
+    SELECT matnr  mfrnr INTO TABLE it_mara FROM mara
+      FOR ALL ENTRIES IN gt_item WHERE matnr EQ gt_item-ematn.
+
+    SELECT matnr maktx INTO TABLE it_makt FROM makt
+      FOR ALL ENTRIES IN gt_item WHERE matnr EQ gt_item-matnr AND spras EQ 'E'.
+
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE it_ekes FROM ekes
+      FOR ALL ENTRIES IN gt_item WHERE ebeln EQ gt_item-ebeln AND ebelp EQ gt_item-ebelp.
+
+    "取采购信息记录信息
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE it_eina FROM eina
+      FOR ALL ENTRIES IN gt_item WHERE infnr EQ gt_item-infnr
+                                  AND  loekz EQ ''.
+
+  ENDIF.
+
+
+  "品牌
+  IF it_mara[] IS NOT INITIAL .
+    SELECT lifnr name1  adrnr telf1 telfx  sortl APPENDING TABLE it_lfa1 FROM lfa1
+      FOR ALL ENTRIES IN it_mara
+      WHERE lifnr EQ it_mara-mfrnr.
+  ENDIF.
+
+
+  IF it_lfa1[] IS NOT INITIAL .
+*取街道地址
+    SELECT addrnumber street APPENDING TABLE it_adrc FROM adrc
+   FOR ALL ENTRIES IN it_lfa1 WHERE addrnumber  = it_lfa1-adrnr.
+  ENDIF.
+
+  IF it_t001[] IS NOT INITIAL.
+    IF p_en EQ 'X'.
+      SELECT addrnumber street name1 fax_number AS  g_fax  tel_number AS  g_tel APPENDING TABLE it_adrc FROM adrc
+    FOR ALL ENTRIES IN it_t001 WHERE addrnumber  EQ it_t001-adrnr AND langu EQ 'E'.
+    ELSE.
+      SELECT addrnumber street name1 fax_number AS  g_fax  tel_number AS  g_tel APPENDING TABLE it_adrc FROM adrc
+    FOR ALL ENTRIES IN it_t001 WHERE addrnumber  EQ it_t001-adrnr.
+    ENDIF.
+  ENDIF.
+
+
+  "排序辅助表
+  SORT it_lfa1 BY lifnr.
+  SORT it_t024 BY ekgrp.
+  SORT it_t052u BY zterm.
+  SORT it_knvk BY lifnr.
+  SORT it_t001  BY bukrs.
+
+  DATA:p_namefirst LIKE adrp-name_first,
+       p_namelast  LIKE adrp-name_first.
+
+
+  SELECT SINGLE name_first name_last INTO (p_namefirst,p_namelast)
+    FROM adrp AS a
+    JOIN usr21 AS b ON a~persnumber EQ b~persnumber
+    WHERE bname EQ sy-uname.
+
+  "读取辅助信息
+  LOOP AT gt_item INTO gw_item.
+    "用户名称
+    CONCATENATE p_namelast p_namefirst INTO gw_item-zuser.
+    SELECT SINGLE zsum INTO gw_item-zsum1 FROM zprintnum WHERE zpo = gw_item-ebeln AND zprgname = 'ZMM001'.
+    "取供应商名称
+    READ TABLE it_lfa1 INTO wa_lfa1 WITH KEY lifnr = gw_item-lifnr BINARY SEARCH.
+    IF sy-subrc EQ 0.
+      gw_item-name1 = wa_lfa1-name1."供应商描述
+      gw_item-telf1 = wa_lfa1-telf1."电话（供应商）
+      gw_item-telfx = wa_lfa1-telfx."传真（供应商）
+      IF gw_item-adrnr IS INITIAL .
+        gw_item-adrnr  = wa_lfa1-adrnr.
+      ENDIF.
+    ENDIF.
+
+    IF p_en EQ 'X'.
+      "取英文描述
+      READ TABLE it_makt INTO wa_makt WITH KEY matnr = gw_item-matnr.
+      IF sy-subrc EQ 0.
+        gw_item-maktx_en = wa_makt-maktx.
+      ENDIF.
+    ENDIF.
+
+    IF p_ch EQ 'X'.
+      CLEAR l_object.
+      l_object = gw_item-matnr.
+      CALL FUNCTION 'CLAF_CLASSIFICATION_OF_OBJECTS'
+        EXPORTING
+          class              = 'Z_ROH_CLASS'
+          classtext          = 'X'
+          classtype          = '001'
+*         CLINT              = 0
+          features           = 'X'
+          language           = sy-langu
+          object             = l_object
+*         OBJECTTABLE        = ' '
+          key_date           = sy-datum
+          initial_charact    = 'X'
+          no_value_descript  = ''
+*         CHANGE_SERVICE_CLF = 'X'
+*         INHERITED_CHAR     = ' '
+*         CHANGE_NUMBER      = ' '
+        TABLES
+          t_class            = lit_class
+          t_objectdata       = lit_objda
+*         I_SEL_CHARACTERISTIC       =
+*         T_NO_AUTH_CHARACT  =
+        EXCEPTIONS
+          no_classification  = 1
+          no_classtypes      = 2
+          invalid_class_type = 3
+          OTHERS             = 4.
+      IF sy-subrc <> 0.
+* Implement suitable error handling here
+      ELSE.
+* 读取特性值
+        LOOP AT lit_objda INTO lwa_objda WHERE ausp1 NE '?'.
+          CONCATENATE gw_item-txz01 '/'lwa_objda-ausp1 INTO gw_item-txz01.
+        ENDLOOP.
+      ENDIF.
+    ENDIF.
+
+    "取地址
+    READ TABLE it_adrc INTO wa_adrc WITH KEY addrnumber = gw_item-adrnr.
+    IF sy-subrc EQ 0.
+      gw_item-street = wa_adrc-street.
+    ENDIF.
+
+    "取采购组描述
+    READ TABLE it_t024 INTO wa_t024 WITH KEY ekgrp = gw_item-ekgrp BINARY SEARCH.
+    IF sy-subrc EQ 0.
+      IF p_en EQ 'X'.
+        gw_item-eknam = wa_t024-ektel.
+      ELSE.
+        gw_item-eknam = wa_t024-eknam.
+      ENDIF.
+    ENDIF.
+
+    "取采购付款条款文本
+    READ TABLE it_t052u INTO wa_t052u WITH KEY  zterm = gw_item-zterm BINARY SEARCH .
+    IF sy-subrc EQ 0 .
+      gw_item-ztext  = wa_t052u-text1.
+    ENDIF.
+
+    "取供应商联系人
+    READ TABLE it_knvk INTO wa_knvk WITH KEY  lifnr = gw_item-lifnr.
+    IF sy-subrc EQ 0 .
+      gw_item-name2 = wa_knvk-name1.
+    ENDIF.
+
+    "取票据类型
+    READ TABLE it_t007s INTO wa_t007s WITH KEY mwskz = gw_item-mwskz.
+    IF sy-subrc EQ 0 .
+      IF p_ww = 'X'.
+        gw_item-text1 = wa_t007s-text1(3).      "modi by leimt 20180502
+      ELSE.
+        gw_item-text1 = wa_t007s-text1.
+      ENDIF.
+
+    ENDIF.
+
+    IF gw_item-adrn2 IS NOT INITIAL .
+      "取地址
+      IF p_en = 'X'.
+        SELECT SINGLE street INTO gw_item-shdz FROM adrc WHERE addrnumber = gw_item-adrn2 AND nation = 'I'.
+      ELSE.
+        READ TABLE it_adrc INTO wa_adrc WITH KEY addrnumber = gw_item-adrn2.
+        IF sy-subrc EQ 0.
+          gw_item-shdz = wa_adrc-street.
+        ENDIF.
+      ENDIF.
+    ELSE.
+      READ TABLE it_t001w INTO wa_t001w WITH KEY werks = gw_item-werks.
+      IF sy-subrc EQ 0.
+        gw_item-shdz = wa_t001w-stras.
+      ENDIF.
+    ENDIF.
+
+    "公司描述
+    READ TABLE it_t001 INTO wa_t001 WITH KEY bukrs = gw_item-bukrs.
+    IF sy-subrc EQ 0.
+      gw_item-butxt = wa_t001-butxt.
+      READ TABLE it_adrc INTO wa_adrc WITH KEY addrnumber = wa_t001-adrnr.
+      IF sy-subrc EQ 0.
+        gw_item-g_tel = wa_adrc-g_tel.
+        gw_item-g_fax = wa_adrc-g_fax.
+        gw_item-g_street = wa_adrc-street.
+      ENDIF.
+    ENDIF.
+    CLEAR lv_fwste.
+    CALL FUNCTION 'RECP_FI_TAX_CALCULATE'
+      EXPORTING
+        ic_bukrs    = gw_item-bukrs
+        ic_mwskz    = gw_item-mwskz
+        ic_waers    = 'CNY'
+      IMPORTING
+        ep_tax_rate = lv_fwste
+      EXCEPTIONS
+        not_found   = 1
+        OTHERS      = 2.
+
+    "取品牌
+    READ TABLE it_mara INTO wa_mara WITH KEY matnr = gw_item-ematn.
+    IF sy-subrc EQ 0.
+      READ TABLE it_lfa1 INTO wa_lfa1 WITH KEY lifnr = wa_mara-mfrnr.
+      IF sy-subrc EQ 0.
+        gw_item-sortl = wa_lfa1-sortl.
+      ENDIF.
+    ENDIF.
+
+    "含税单价
+    gw_item-netpr = gw_item-netpr / gw_item-peinh * ( 1 + lv_fwste / 100 ) .
+    "总金额
+    gw_item-brtwr = gw_item-netpr * gw_item-menge.
+
+    PERFORM get_longtxt_po_item  USING gw_item-ebeln gw_item-ebelp CHANGING gw_item-beizhu."行项目文本
+
+    "首批交货日期
+    SORT it_ekes BY ebeln ebelp eindt.
+    READ TABLE it_ekes WITH KEY ebeln = gw_item-ebeln ebelp = gw_item-ebelp.
+    IF sy-subrc EQ 0.
+      gw_item-eindt_first = it_ekes-eindt.
+    ENDIF.
+    "尾数交完日期
+    SORT it_ekes BY ebeln ebelp eindt DESCENDING.
+    READ TABLE it_ekes WITH KEY ebeln = gw_item-ebeln ebelp = gw_item-ebelp.
+    IF sy-subrc EQ 0.
+      gw_item-eindt_end = it_ekes-eindt.
+    ENDIF.
+
+    "取采购数量和单位
+    READ TABLE it_eina WITH  KEY infnr = gw_item-infnr.
+    IF sy-subrc EQ 0.
+      IF it_eina-umren NE 0.
+        gw_item-menge_e = gw_item-menge * it_eina-umrez / it_eina-umren.
+      ENDIF.
+      gw_item-meins_e = it_eina-meins.
+    ENDIF.
+
+    IF p_pcb = 'X'.
+      IF gw_item-bpumn NE 0.
+        gw_item-netpr = gw_item-netpr * gw_item-bpumz / gw_item-bpumn.
+      ENDIF.
+      gw_item-brtwr = gw_item-netpr * gw_item-menge.
+*      SELECT SINGLE meins INTO gw_item-lmein FROM mara WHERE matnr = gw_item-matnr.
+    ENDIF.
+
+    IF gw_item-zzcav IS INITIAL.
+      gw_item-zzcav = '\'.
+    ENDIF.
+
+    IF gw_item-zcpcl IS INITIAL.
+      gw_item-zcpcl = '\'.
+    ENDIF.
+
+
+    IF gw_item-zmrcl IS INITIAL.
+      gw_item-zmrcl = '\'.
+    ENDIF.
+
+    IF gw_item-zds IS INITIAL.
+      gw_item-zds = '\'.
+    ENDIF.
+
+    IF gw_item-zgate IS INITIAL.
+      gw_item-zgate = '\'.
+    ENDIF.
+
+    IF gw_item-zmjcp IS INITIAL.
+      gw_item-zmjcp = '\'.
+    ENDIF.
+
+    IF gw_item-zyjsm IS INITIAL.
+      gw_item-zyjsm = '\'.
+    ENDIF.
+
+***K3旧订单号
+    PERFORM frm_get_text USING gw_item-ebeln CHANGING gw_item-zoldno.
+    MODIFY gt_item FROM gw_item.
+  ENDLOOP.
+
+  CLEAR gt_main.
+  APPEND LINES OF gt_item TO gt_main.
+  SORT gt_item BY ebeln.
+  DELETE ADJACENT DUPLICATES FROM gt_item COMPARING ebeln.
+
+  SORT gt_main BY ebeln ebelp.
+  "清空辅助表
+  CLEAR:it_lfa1[],it_adrc[],it_t024[],it_t052u[],it_knvk[],it_t007s[],it_adrc[],it_t001w[],it_t001[],it_ekes[].
+ENDFORM.
+
+FORM get_alv."ALV显示界面
+  DATA : col_pos TYPE i VALUE 1.
+
+  CLEAR:it_fieldcat,wa_fieldcat.
+
+  gs_layout-zebra = 'X'.
+  gs_layout-cwidth_opt = 'X'."
+  gs_layout-stylefname = 'FIELD_STYLE'. " 将内表中的字段名存入显示格式
+  gs_layout-box_fname        = 'SEL'.
+  i_grid_settings-edt_cll_cb = 'X'.
+*  wa_events-name = 'CALLER_EXIT'.
+*  wa_events-form = 'CALLER_EXIT'.
+*  APPEND wa_events TO it_events.
+
+  PERFORM fieldcat_int USING col_pos  'EBELN'   ' '   '采购订单'          ''  'EBELN' 'EKPO' '' ''.
+  PERFORM fieldcat_int USING col_pos  'BUKRS'   ' '   '公司代码'   ''  'BUKRS' 'T001' '' ''.
+  PERFORM fieldcat_int USING col_pos  'EKGRP'   ' '   '采购组'   ''  '' '' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'LIFNR'   ' '   '供应商'   ''  'LIFNR' 'LFA1' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'NAME1'   ' '   '供应商描述'   ''  '' '' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'BEDAT'   ' '   '凭证日期'   ''  '' '' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'ZOLDNO'  ' '   '旧订单号'   ''  '' '' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'ZSUM1'  ' '   '打印次数'   ''  '' '' ''   ''.
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program       = sy-repid
+      is_layout_lvc            = gs_layout
+      it_fieldcat_lvc          = it_fieldcat
+      it_events                = it_events
+      i_save                   = 'A'
+      i_callback_pf_status_set = 'SET_PF_STATUS'
+      i_callback_user_command  = 'ALV_USER_COMMAND'
+      i_grid_settings          = i_grid_settings
+    TABLES
+      t_outtab                 = gt_item[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+            WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+ENDFORM.
+
+FORM set_pf_status USING rt_extab TYPE slis_t_extab.
+
+  DATA: wa_extab TYPE slis_extab.
+
+  SET PF-STATUS 'ZRPMM001_STATUS' EXCLUDING rt_extab.
+
+ENDFORM.                    "set_pf_status1
+
+FORM alv_user_command USING r_ucomm LIKE sy-ucomm  rs_selfield TYPE slis_selfield.
+*   获取ALV中的鼠标勾选记录
+  DATA: l_grid TYPE REF TO cl_gui_alv_grid.
+  DATA: lv_mess TYPE string.
+
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = l_grid.
+  rs_selfield-refresh = 'X'."
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  r_ucomm = sy-ucomm.
+  save_ok =  r_ucomm .
+  CASE r_ucomm.
+      "打印
+    WHEN 'C_PRINT'.
+      CLEAR:lv_mess.
+*      LOOP AT gt_item INTO gw_item WHERE sel = 'X' AND frgrl EQ 'X'.
+*        CONCATENATE '采购订单' gw_item-ebeln '未审批，不能打印' INTO lv_mess .
+*        MESSAGE e398(00) WITH lv_mess DISPLAY LIKE 'E'.
+*      ENDLOOP.
+      PERFORM print_report.
+      rs_selfield-refresh = 'X'.
+  ENDCASE.
+
+
+ENDFORM.                    "alv_user_command
+
+FORM fieldcat_int  USING   p_col_pos         " 1
+                            p_fieldname       " 2
+                            p_key             " 3
+                            p_seltext_l       " 4
+                            p_zero
+                            p_filename
+                            p_talbename
+                            p_outputlen
+                            p_edit .
+
+  wa_fieldcat-col_pos       = p_col_pos.
+  wa_fieldcat-fieldname     = p_fieldname.
+  wa_fieldcat-key           = p_key.
+  wa_fieldcat-coltext     = p_seltext_l.
+  wa_fieldcat-no_zero        = p_zero.
+  wa_fieldcat-ref_field   = p_filename.
+  wa_fieldcat-ref_table    = p_talbename.
+  wa_fieldcat-tipddictxt       = 'L'.
+  wa_fieldcat-edit           = p_edit  .
+  APPEND wa_fieldcat TO it_fieldcat.
+  p_col_pos = p_col_pos + 1.
+  CLEAR: wa_fieldcat.
+ENDFORM.                    " FIELDCAT_INT
+
+FORM print_report.
+  DATA fm_name TYPE rs38l_fnam.
+  DATA:xssfctrlop LIKE ssfctrlop.
+  DATA: it_head LIKE zszmm001_head OCCURS 0 WITH HEADER LINE.
+  DATA: lt_item LIKE zszmm001_item OCCURS 0 WITH HEADER LINE.
+
+  DATA:lv_sum LIKE bseg-dmbtr.
+
+  l_wa_ssfctrlop-no_close  = ''.          "关闭假脱机请求
+  l_wa_ssfctrlop-no_open   = 'X'.          "调用smartform
+*  l_wa_ssfctrlop-device    = 'PRINTER'.    "PRINTER\MAIL\TELEFAX，缺省是PRINTER
+*  l_wa_ssfctrlop-preview   = 'X'.          "预览
+** l_wa_ssfctrlop-no_dialog = 'X'.          "打开对话窗口打开
+*  l_wa_ssfcompop-tdimmed   = 'X'.          "设置立即打印标志。
+*  l_wa_ssfcompop-tddelete  = 'X'.          "设置输出后删除 。
+
+*  ls_composer_param-tdnewid  = 'X'.
+*  ls_composer_param-tdimmed  = 'X'.
+*  xssfctrlop-preview = 'X'.
+  xssfctrlop-no_open   = 'X'.
+  xssfctrlop-no_close  = ''.
+*  xssfctrlop-no_dialog = 'X'.
+
+  DATA: option TYPE ssfcresop.""SF使用参数
+  DATA: l_tdsfname TYPE tdsfname.
+
+***调用SSF_OPEN函数设置打印机，
+  CALL FUNCTION 'SSF_OPEN'
+    EXPORTING
+*     output_options     = ls_composer_param
+      control_parameters = xssfctrlop
+*     user_settings      = ' '
+    IMPORTING
+      job_output_options = option "option-tdpreview 空为打印，X为预览
+    EXCEPTIONS
+      formatting_error   = 1
+      internal_error     = 2
+      send_error         = 3
+      user_canceled      = 4
+      OTHERS             = 5.
+
+  IF p_bz EQ 'X'.
+    IF p_ch EQ 'X'.
+      l_tdsfname = 'ZSFZMM001'.
+    ELSEIF p_en EQ 'X'.
+      l_tdsfname = 'ZSFZMM001_EN'.
+    ENDIF.
+  ELSEIF p_ww EQ 'X'.
+    l_tdsfname = 'ZSFZMM001_A'.
+  ELSEIF p_mj EQ 'X'.
+    l_tdsfname = 'ZSFZMM001_B'.
+  ELSEIF p_pcb EQ 'X'.
+    l_tdsfname = 'ZSFZMM001_C'.
+  ENDIF.
+
+  CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
+    EXPORTING
+      formname           = l_tdsfname
+    IMPORTING
+      fm_name            = fm_name
+    EXCEPTIONS
+      no_form            = 1
+      no_function_module = 2
+      OTHERS             = 3.
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+
+  CLEAR:it_head[].
+  "表头数据.
+  LOOP AT gt_item INTO gw_item WHERE sel EQ 'X'.
+    MOVE-CORRESPONDING gw_item TO it_head.
+    APPEND it_head.
+  ENDLOOP.
+  SORT it_head BY ebeln.
+  DELETE ADJACENT DUPLICATES FROM it_head COMPARING ALL FIELDS.
+
+  LOOP AT it_head.
+
+    AT FIRST.
+      xssfctrlop-no_close = 'X'.
+    ENDAT.
+    AT LAST.
+      xssfctrlop-no_close = ''.
+    ENDAT.
+    DATA:l_num TYPE i .
+    CLEAR:l_num,lv_sum.
+    REFRESH: lt_item.
+    LOOP AT gt_main INTO gw_main WHERE ebeln EQ it_head-ebeln.
+      l_num = l_num + 1.
+      lv_sum = lv_sum + gw_main-brtwr.
+      MOVE-CORRESPONDING gw_main TO lt_item.
+      lt_item-zxuhao = l_num.
+      APPEND lt_item.
+      IF it_head-zsl IS INITIAL.
+        it_head-zsl = gw_main-zsl.
+      ENDIF.
+    ENDLOOP.
+
+    DATA lv_tabix TYPE sy-tabix.
+    CALL FUNCTION fm_name
+      EXPORTING
+        control_parameters = xssfctrlop
+        wa_head            = it_head
+        lv_sum             = lv_sum
+      IMPORTING
+*       DOCUMENT_OUTPUT_INFO       =
+        job_output_info    = w_job_output_info
+      TABLES
+        it_item            = lt_item[]
+      EXCEPTIONS
+        formatting_error   = 1
+        internal_error     = 2
+        send_error         = 3
+        user_canceled      = 4.
+
+*    xssfctrlop-no_open = 'X'.
+    l_wa_ssfctrlop-no_open = 'X'.
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ELSE.
+      IF w_job_output_info-outputdone = 'X' .
+*      IF option-tdpreview IS INITIAL.
+        LOOP AT it_head.
+
+          PERFORM frm_addprintsum USING it_head-ebeln.
+          READ TABLE gt_item INTO gw_item WITH KEY sel = 'X' ebeln = it_head-ebeln.
+          IF sy-subrc = 0.
+            lv_tabix = sy-tabix.
+            gw_item-zsum1 = gw_item-zsum1 + 1.
+            MODIFY gt_item FROM gw_item INDEX lv_tabix.
+          ENDIF.
+        ENDLOOP.
+
+      ENDIF.
+    ENDIF.
+
+  ENDLOOP.
+  IF sy-subrc NE 0.
+    MESSAGE s000(oo) WITH '请先选择要打印的记录' DISPLAY LIKE 'E'.
+  ENDIF.
+
+****关闭打印机设置***
+  CALL FUNCTION 'SSF_CLOSE'
+    IMPORTING
+      job_output_info  = w_job_output_info
+    EXCEPTIONS
+      formatting_error = 1
+      internal_error   = 2
+      send_error       = 3
+      OTHERS           = 4.
+
+
+  FREE: it_head[],lt_item[].
+
+ENDFORM.
+
+
+FORM get_longtxt_po_item  USING pebeln pebelp CHANGING pztext2.
+  CLEAR:pztext2.
+  DATA: gt_tline TYPE STANDARD TABLE OF tline WITH HEADER LINE.
+  DATA: tdname TYPE thead-tdname.
+  CONCATENATE  pebeln pebelp INTO tdname.
+  CALL FUNCTION 'READ_TEXT'
+    EXPORTING
+      client                  = sy-mandt
+      id                      = 'F01'
+      language                = sy-langu
+      name                    = tdname
+      object                  = 'EKPO'
+    TABLES
+      lines                   = gt_tline
+    EXCEPTIONS
+      id                      = 1
+      language                = 2
+      name                    = 3
+      not_found               = 4
+      object                  = 5
+      reference_check         = 6
+      wrong_access_to_archive = 7
+      OTHERS                  = 8.
+  IF sy-subrc EQ 0 AND  gt_tline[] IS NOT INITIAL .
+    LOOP AT gt_tline.
+      CONCATENATE pztext2 gt_tline-tdline INTO pztext2.
+    ENDLOOP.
+  ENDIF.
+ENDFORM.                    " GET_LONGTXT_FRM
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_TEXT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_GW_ITEM_EBELN  text
+*      <--P_GW_ITEM_ZOLDNO  text
+*----------------------------------------------------------------------*
+FORM frm_get_text  USING    u_ebeln LIKE ekko-ebeln
+                   CHANGING c_text TYPE c.
+  DATA:lv_name  LIKE thead-tdname,
+       lt_lines LIKE tline OCCURS 0 WITH HEADER LINE.
+
+  CLEAR c_text.
+
+  lv_name = u_ebeln.
+
+  CALL FUNCTION 'READ_TEXT'
+    EXPORTING
+      client                  = sy-mandt
+      id                      = 'F01'
+      language                = sy-langu
+      name                    = lv_name
+      object                  = 'EKKO'
+    TABLES
+      lines                   = lt_lines
+    EXCEPTIONS
+      id                      = 1
+      language                = 2
+      name                    = 3
+      not_found               = 4
+      object                  = 5
+      reference_check         = 6
+      wrong_access_to_archive = 7
+      OTHERS                  = 8.
+  IF sy-subrc = 0.
+    DELETE lt_lines WHERE tdline IS INITIAL.
+    LOOP AT lt_lines.
+      IF c_text IS INITIAL.
+        c_text = lt_lines-tdline.
+      ELSE.
+        CONCATENATE c_text lt_lines-tdline INTO c_text.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_AUTH
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_auth .
+  REFRESH:gt_t024.
+
+  SELECT * INTO TABLE gt_t024
+    FROM t024
+    WHERE ekgrp IN s_ekgrp.
+
+  LOOP AT gt_t024.
+    AUTHORITY-CHECK OBJECT 'M_BEST_EKG'
+             ID 'ACTVT' FIELD '03'
+             ID 'EKGRP' FIELD gt_t024-ekgrp.
+    IF sy-subrc <> 0.
+      DELETE gt_t024.
+    ENDIF.
+  ENDLOOP.
+
+  IF sy-subrc <> 0.
+    MESSAGE '没有采购组的权限' TYPE 'E'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_ADDPRINTSUM
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LV_VBELN  text
+*      -->P_WA_MSEG_MATNR  text
+*      -->P_WA_MSEG_EBELN  text
+*      -->P_WA_MSEG_LGORT  text
+*      -->P_2240   text
+*----------------------------------------------------------------------*
+FORM frm_addprintsum  USING    lv_ebeln.
+
+
+  DATA wa LIKE TABLE OF zprintnum WITH HEADER LINE.
+
+  wa-mandt = sy-mandt.
+  wa-zprgname = 'ZMM001'.
+  wa-zpo = lv_ebeln.
+  wa-zernam = sy-uname.
+  wa-zdate = sy-datum.
+  wa-ztime = sy-uzeit.
+
+  SELECT SINGLE * FROM zprintnum WHERE zpo = wa-zpo AND zprgname = 'ZMM001' .
+
+  IF sy-subrc EQ 0.
+    UPDATE zprintnum SET
+     zernam = @sy-uname,
+     zdate = @sy-datum,
+     ztime = @sy-uzeit,
+     zsum = zsum + 1
+     WHERE zprgname = 'ZMM001'
+       AND zpo = @wa-zpo.
+
+
+  ELSE.
+    wa-zsum = 1.
+    INSERT INTO zprintnum VALUES @wa.
+
+  ENDIF.
+
+  IF sy-subrc = 0.
+    COMMIT WORK AND WAIT .
+  ELSE.
+    ROLLBACK WORK.
+  ENDIF.
+ENDFORM.

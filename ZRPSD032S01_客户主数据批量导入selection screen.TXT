@@ -1,0 +1,8 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM008S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN: FUNCTION KEY 1,FUNCTION KEY 2. "工具栏启用标准铵1=>导入数据
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+PARAMETERS:p_file LIKE rlgrap-filename .
+SELECTION-SCREEN END OF BLOCK blc.

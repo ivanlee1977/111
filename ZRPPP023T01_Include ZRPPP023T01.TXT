@@ -1,0 +1,53 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPPP023T01
+*&---------------------------------------------------------------------*
+TABLES: marc,mara,afpo,plaf,sscrfields..
+TYPE-POOLS:ole2.
+DATA: il_raw TYPE truxs_t_text_data.
+DATA:l_obj TYPE REF TO cl_gui_frontend_services.
+DATA: it_file TYPE filetable WITH HEADER LINE.
+DATA: g_rc TYPE i.
+
+
+
+DATA:ok_code   TYPE sy-ucomm,
+     save_ok   TYPE sy-ucomm,
+     errorcode TYPE i.
+
+DATA: gt_fcat   TYPE slis_t_fieldcat_alv WITH HEADER LINE,
+      gs_layout TYPE slis_layout_alv.
+
+DEFINE g_fieldfcat .
+  gt_fcat-fieldname = &1.
+  gt_fcat-seltext_s = &2.
+  gt_fcat-ddictxt = 'S'.
+  gt_fcat-ref_fieldname = &3.
+  gt_fcat-ref_tabname = &4.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.
+
+DATA: BEGIN OF gt_item1 OCCURS 0,
+        matnr  TYPE makt-matnr,
+        maktx  TYPE makt-maktx,
+        maabc  TYPE marc-maabc,
+        bstmi  TYPE marc-bstmi,
+        lfimg  TYPE lips-lfimg,
+        labst  TYPE mard-labst,
+        psmng  TYPE afpo-psmng,
+        wemng  TYPE afpo-wemng,
+        zmenge TYPE lips-lfimg,
+      END OF gt_item1.
+
+DATA: BEGIN OF gt_item2 OCCURS 0,
+        matnr  TYPE makt-matnr,
+        maktx  TYPE makt-maktx,
+        zmenge TYPE lips-lfimg,
+        labst1 TYPE mard-labst,
+        labst2 TYPE mard-labst,
+        labst3 TYPE mard-labst,
+        labst4 TYPE mard-labst,
+        labst5 TYPE mard-labst,
+        zlabst TYPE mard-labst,
+        zmenge1 TYPE lips-lfimg,
+      END OF gt_item2.

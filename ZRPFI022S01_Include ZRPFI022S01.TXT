@@ -1,0 +1,10 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI022S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_bukrs FOR faglflext-rbukrs OBLIGATORY DEFAULT '1000',
+               s_prctr FOR faglflext-prctr.
+PARAMETERS:p_ryear LIKE faglflext-ryear DEFAULT sy-datum(4) OBLIGATORY.
+SELECT-OPTIONS:s_rpmax FOR faglflext-rpmax DEFAULT sy-datum+4(2) OBLIGATORY.
+PARAMETERS:p_glf AS CHECKBOX DEFAULT 'X'. "是否包含关联方
+SELECTION-SCREEN END OF BLOCK blc.

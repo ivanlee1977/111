@@ -1,0 +1,30 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZXMBCU02
+*&---------------------------------------------------------------------*
+DATA:lv_lplpr LIKE mbew-lplpr,
+     lv_vprsv LIKE mbew-vprsv,
+     lv_mtart LIKE mara-mtart,
+     lv_mess  TYPE string.
+
+e_sgtxt = i_mseg-sgtxt.
+
+***物料移动时需要检查是否有标准价格，否则报错
+SELECT SINGLE mtart INTO lv_mtart FROM mara WHERE matnr = i_mseg-matnr.
+BREAK xul.
+IF lv_mtart NE 'Z005' and lv_mtart NE 'Z007'.
+  SELECT SINGLE vprsv INTO lv_vprsv FROM mbew WHERE matnr = i_mseg-matnr AND bwkey = i_mseg-werks.
+  IF lv_vprsv EQ 'S'.
+    SELECT SINGLE lplpr INTO lv_lplpr FROM mbew WHERE matnr = i_mseg-matnr AND bwkey = i_mseg-werks.
+    IF lv_lplpr IS INITIAL.
+      CLEAR:lv_mess.
+      CALL FUNCTION 'CONVERSION_EXIT_MATN1_OUTPUT'
+        EXPORTING
+          input  = i_mseg-matnr
+        IMPORTING
+          output = lv_mess.
+
+      CONCATENATE '请联系财务评估物料' lv_mess '的价格' INTO lv_mess. CONDENSE lv_mess.
+      MESSAGE lv_mess TYPE 'E'.
+    ENDIF.
+  ENDIF.
+ENDIF.

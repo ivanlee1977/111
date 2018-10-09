@@ -1,0 +1,878 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPSD004_F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GETDATA
+*
+*&---------------------------------------------------------------------*
+*       SPRAS = 1. 语言取默认值，否认会限出错误值，但不会报错
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_getdata .
+  DATA: lv_index LIKE sy-tabix,zstr TYPE char200.
+  gv_fn = 'ZSFSD_004'.
+
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE gt_vbak
+    FROM vbak AS a JOIN vbap AS b ON a~vbeln = b~vbeln
+    WHERE  a~vkorg = s_vkorg
+       AND a~vbeln IN s_vbeln
+       AND a~erdat IN s_erdat
+       AND a~kvgr1 IN s_kvgr1
+       AND a~kvgr2 IN s_kvgr2
+       AND a~kunnr IN s_kunnr
+       AND a~vtweg IN s_vtweg
+       AND a~spart IN s_spart
+       AND b~matnr IN s_matnr
+       AND a~auart IN  ('ZOR1','ZOR2','ZKE','ZKEC')
+*       AND a~augru IS NULL
+*       AND a~lifsk = 30
+    .
+
+  CHECK gt_vbak[] IS NOT INITIAL.
+
+*************************
+  DATA: lv_s1 TYPE char10,
+        lv    TYPE int4..
+  DATA: BEGIN OF lt_adrc  OCCURS 0,
+          name1      LIKE adrc-name1,
+          name2      LIKE adrc-name2,
+          street     LIKE adrc-street,
+          str_suppl1 LIKE adrc-str_suppl1,
+          str_suppl2 LIKE adrc-str_suppl1,
+          str_suppl3 LIKE adrc-str_suppl1,
+          str_suppl4 LIKE adrc-str_suppl1,
+          house_num1 LIKE adrc-house_num1,
+          extension1 LIKE adrc-extension1,
+          tel_number LIKE adrc-tel_number,
+          fax_number LIKE adrc-fax_number,
+        END OF lt_adrc.
+  DATA: BEGIN OF lt_total OCCURS 0,
+          vbeln LIKE vbak-vbeln,
+          kzwi1 LIKE vbap-kzwi1,
+        END OF lt_total.
+  LOOP AT gt_vbak.
+    MOVE-CORRESPONDING gt_vbak TO lt_total.
+    COLLECT lt_total.
+  ENDLOOP.
+  DATA:lv_kvgr11 LIKE knvv-kvgr1.
+  LOOP AT gt_vbak.
+    IF gt_vbak-kunnr = 'A000' OR gt_vbak-kunnr = 'C000'.
+      AUTHORITY-CHECK OBJECT 'Z_KVGR1'
+               ID 'KVGR1' FIELD gt_vbak-kvgr1.
+    ELSE.  "取客户主数据业务员，进行权限控制 20180103  YZP
+      CLEAR lv_kvgr11.
+      SELECT SINGLE kvgr1 INTO lv_kvgr11 FROM knvv WHERE kunnr = gt_vbak-kunnr AND vkorg = gt_vbak-vkorg.
+      AUTHORITY-CHECK OBJECT 'Z_KVGR1'
+               ID 'KVGR1' FIELD lv_kvgr11.
+    ENDIF.
+    IF sy-subrc <> 0.
+      DELETE gt_vbak.
+      CONTINUE.
+    ENDIF.
+
+    READ TABLE lt_total WITH KEY vbeln = gt_vbak-vbeln.
+    gt_vbak-ztotal = lt_total-kzwi1.
+    SELECT SINGLE zsum INTO gt_vbak-zsum FROM zprintnum WHERE zpo = gt_vbak-vbeln AND zprgname = 'ZSD004'.
+    IF s_zprint NE 'X' AND sy-subrc EQ 0.   "未打印订单过滤
+      DELETE gt_vbak.
+      CONTINUE.
+    ENDIF.
+
+    SELECT SINGLE b~bzirk INTO gt_vbak-bzirk
+      FROM vbak AS a JOIN vbkd AS b ON a~vbeln = b~vbeln
+      WHERE b~bzirk IN s_bzirk      .
+    IF sy-subrc NE 0.   "条件过滤
+      DELETE gt_vbak.
+      CONTINUE.
+    ENDIF.
+    SELECT SINGLE vtext INTO gt_vbak-vkorg_vtext FROM tvkot WHERE vkorg = gt_vbak-vkorg AND spras = 1.
+*    CONCATENATE gt_vbak-vkorg gt_vbak-vkorg_vtext INTO gt_vbak-vkorg_vtext.
+
+*VBKD-BZIRK
+    SELECT SINGLE bzirk zterm INTO (gt_vbak-bzirk,gt_vbak-zterm) FROM vbkd WHERE vbeln = gt_vbak-vbeln  .
+    SELECT SINGLE bztxt INTO gt_vbak-bztxt FROM  t171t WHERE bzirk = gt_vbak-bzirk  AND spras = 1.
+*    CONCATENATE gt_vbak-bzirk gt_vbak-bztxt INTO gt_vbak-bztxt.
+
+    SELECT SINGLE bezei INTO gt_vbak-bezei1 FROM tvakt WHERE auart = gt_vbak-auart AND spras = 1 .
+*    CONCATENATE gt_vbak-auart gt_vbak-bezei1 INTO gt_vbak-bezei1.
+
+    SELECT SINGLE vtext INTO gt_vbak-vtext1 FROM tvtwt WHERE vtweg = gt_vbak-vtweg AND spras = 1.
+*    CONCATENATE gt_vbak-vtweg gt_vbak-vtext1 INTO gt_vbak-vtext1.
+
+    SELECT SINGLE vtext INTO gt_vbak-vtext2 FROM tspat WHERE spart = gt_vbak-spart AND spras = 1.
+*    CONCATENATE gt_vbak-spart gt_vbak-vtext2 INTO gt_vbak-vtext2.
+
+    SELECT SINGLE bezei INTO gt_vbak-kvgr1_bezei FROM tvv1t WHERE kvgr1 = gt_vbak-kvgr1 AND spras = 1.
+*    CONCATENATE gt_vbak-kvgr1 gt_vbak-kvgr1_bezei INTO gt_vbak-kvgr1_bezei.
+
+    SELECT SINGLE bezei INTO gt_vbak-kvgr2_bezei FROM tvv2t WHERE kvgr2 = gt_vbak-kvgr2 AND spras = 1.
+*    CONCATENATE gt_vbak-kvgr2 gt_vbak-kvgr2_bezei INTO gt_vbak-kvgr2_bezei.
+
+    SELECT SINGLE adrnr INTO lv_s1 FROM vbpa WHERE vbeln = gt_vbak-vbeln AND parvw = 'WE' .
+    SELECT SINGLE * INTO CORRESPONDING FIELDS OF lt_adrc  FROM adrc  WHERE addrnumber = lv_s1 .
+    CONCATENATE lt_adrc-name1  lt_adrc-name2 INTO gt_vbak-name   .
+    CONCATENATE lt_adrc-street  lt_adrc-str_suppl1 lt_adrc-str_suppl2 lt_adrc-str_suppl3 lt_adrc-str_suppl4 lt_adrc-house_num1 INTO gt_vbak-addr  .
+    gt_vbak-extension1 = lt_adrc-extension1.
+    gt_vbak-tel_number = lt_adrc-tel_number.
+    gt_vbak-fax_number = lt_adrc-fax_number.
+
+    gt_vbak-kzwi = gt_vbak-kzwi1 / gt_vbak-kwmeng.
+
+    SELECT SINGLE bezei AS bezei3 tel fax INTO CORRESPONDING FIELDS OF gt_vbak FROM ztsd002 WHERE kvgr1 = gt_vbak-kvgr1.
+
+    SELECT SINGLE kbetr INTO gt_vbak-kbetr FROM konv WHERE knumv = gt_vbak-knumv AND kposn = '' .
+
+    CASE p_zprint.
+      WHEN '0'.
+        gt_vbak-zyhxx = '农业银行'.
+      WHEN '1'.
+        gt_vbak-zyhxx = '招商银行'.
+      WHEN '2'.
+        gt_vbak-zyhxx = '香港帐户'.
+      WHEN '3'.
+        gt_vbak-zyhxx = '其他'.
+      WHEN OTHERS.
+    ENDCASE.
+
+    SELECT SINGLE vtext INTO gt_vbak-zterm_vtext FROM tvzbt WHERE zterm = gt_vbak-zterm AND spras = 1 .
+
+    MODIFY gt_vbak.
+  ENDLOOP.
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GETFACT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_getfact .
+  g_fieldfcat:
+  'VKORG' '销售组织代码' 'VKORG' 'VBAK',
+  'VKORG_VTEXT' '销售组织' 'VTEXT' 'TVKOT',
+  'BZIRK ' '销售大区代码' 'BZIRK ' 'VBAK',
+  'BZTXT' '销售大区' 'BZTXT' 'T171T',
+  'VTWEG' '分销渠道代码' 'VTWEG' 'VBAK',
+  'VTEXT1' '分销渠道' 'VTEXT' 'TVTWT',
+
+  'SPART' '产品组代码' 'SPART' 'VBAK',
+  'VTEXT2' '产品组' 'VTEXT' 'TSPAT',
+  'AUART' '订单类型代码' 'AUART' 'VBAK',
+  'BEZEI1' '订单类型' 'BEZEI' 'TVAKT',
+  'VBELN' '销售订单号' 'VBELN' 'VBAK',
+  'ERDAT' '创建日期' 'ERDAT' 'VBAK',
+  'KVGR1_BEZEI' '销售代表' 'BEZEI' 'TVV1T',
+  'KVGR2_BEZEI' '商务' 'BEZEI' 'TVV1T',
+  'NAME' '客户名称' '' '',
+  'ADDR' '客户地址' '' '',
+  'EXTENSION1' '联系人' 'EXTENSION1' 'ADRC',
+  'TEL_NUMBER' '联系电话' 'TEL_NUMBER' 'ADRC',
+  'FAX_NUMBER' '传真' 'FAX_NUMBER' 'ADRC',
+  'POSNR' '项目' 'POSNR' 'VBAP',
+  'MATNR' '产品编码' 'MATNR' 'VBAP',
+  'ARKTX' '品名规格' 'ARKTX' 'VBAP',
+  'VRKME' '单位' 'VRKME' 'VBAP',
+  'KWMENG' '数量' 'KWMENG' 'VBAP',
+  'WAERK' '币别' 'WAERK' 'VBAK',
+  'KZWI' '单价' 'KZWI1' 'VBAP',
+  'KZWI1' '价税合计' 'KZWI1' 'VBAP',
+  'ZTOTAL' '总金额' 'KZWI1' 'VBAP',
+  'ZYHXX' '银行信息' '' '',
+  'ZTERM_VTEXT' '付款条件' 'VTEXT' 'TVZBT',
+  'ZSUM' '已打印' '' ''
+
+  .
+
+
+  gs_layout-colwidth_optimize = 'X'.
+  gs_layout-box_fieldname = 'CHK'.
+  gs_layout-box_tabname = 'gt_vbak'.
+*  gs_layout-edit = 'X'.
+  gs_layout-zebra = 'X'.
+*  gs_layout-no_vline = 'X'.
+*  gs_layout-no_hline = 'X'.
+
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SHOW
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM  frm_show .
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'FRM_PF_STATUS'
+      i_callback_user_command  = 'FRM_USER_COMMAND'
+      is_layout                = gs_layout
+      it_fieldcat              = gt_fcat[]
+    TABLES
+      t_outtab                 = gt_vbak[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+           WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+
+ENDFORM.
+
+FORM frm_pf_status USING rt_extab TYPE slis_t_extab.
+  DATA: BEGIN OF tab OCCURS 0,
+          fcode LIKE rsmpe-func,
+        END OF tab.
+
+  tab-fcode = '&ETA'. APPEND tab.
+  tab-fcode = '&SL'. APPEND tab.
+  tab-fcode = '&OL0'. APPEND tab.
+  tab-fcode = '&INFO'. APPEND tab.
+
+  SET PF-STATUS '0100'
+  EXCLUDING tab IMMEDIATELY.
+ENDFORM.
+
+FORM frm_user_command  USING r_ucomm LIKE sy-ucomm
+                           rs_selfield TYPE slis_selfield.
+
+  DATA: lv_grid TYPE REF TO cl_gui_alv_grid.
+
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = lv_grid.
+
+  CALL METHOD lv_grid->check_changed_data( ).
+
+  CASE r_ucomm.
+    WHEN 'ZCLICK'.
+      PERFORM frm_print.
+    WHEN '&IC1'.
+    WHEN 'ZEXCEL'.
+      gn = 'X'.
+*      PERFORM frm_excel.
+      PERFORM frm_print.
+*      IF rs_selfield-fieldname EQ 'vbeln' AND
+*rs_selfield-value IS NOT INITIAL.
+*        SET PARAMETER ID 'BES' FIELD rs_selfield-value.
+*        CALL TRANSACTION 'ME23N' AND SKIP FIRST SCREEN.
+*      ENDIF.
+    WHEN OTHERS.
+  ENDCASE.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PRINT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_print .
+
+
+  PERFORM frm_chkprint.
+
+  PERFORM frm_open_print.
+
+  PERFORM frm_loopprint.
+
+  PERFORM frm_ssf_close.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OPEN_PRINT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_open_print .
+
+  gs_control-no_open = 'X'.
+  gs_control-no_close = 'X'.
+  gs_control-no_dialog = 'X'.
+  gs_control-getotf = 'X'.
+  gs_option-tdimmed  = 'X'.
+
+  CALL FUNCTION 'SSF_OPEN'
+    EXPORTING
+      control_parameters = gs_control
+    EXCEPTIONS
+      formatting_error   = 1
+      internal_error     = 2
+      send_error         = 3
+      user_canceled      = 4
+      OTHERS             = 5.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+  CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
+    EXPORTING
+      formname           = 'ZSFSD_004'
+    IMPORTING
+      fm_name            = lv_name
+    EXCEPTIONS
+      no_form            = 1
+      no_function_module = 2
+      OTHERS             = 3.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_LINE
+*&---------------------------------------------------------------------*
+*      不足8行补空行
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_line .
+  DATA lv_n  TYPE i .
+  lv_n = lines( gt_item ).
+  IF lv_n MOD 9 NE 0 .
+    lv_n = 9 - lv_n MOD 9.
+    DO  lv_n TIMES.
+      CLEAR gt_item.
+*      gt_item-matnr = ' '.
+      gt_item-kwmeng = ' '.
+      APPEND gt_item.
+    ENDDO.
+
+  ENDIF.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SSF_CLOSE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_ssf_close .
+  DATA: ls_output_info TYPE ssfcrescl,
+        bin_size       TYPE i,
+        pdf_lines      TYPE TABLE OF tline WITH HEADER LINE,
+        fullpath       TYPE string,
+        path           TYPE string,
+        filename       TYPE string.
+  IF gn NE 'X'.
+    CALL FUNCTION 'SSF_CLOSE'
+      IMPORTING
+        job_output_info  = ls_output_info
+      EXCEPTIONS
+        formatting_error = 1
+        internal_error   = 2
+        send_error       = 3
+        OTHERS           = 4.
+    IF sy-subrc <> 0.
+* Implement suitable error handling here
+    ENDIF.
+
+    CALL FUNCTION 'CONVERT_OTF'
+      EXPORTING
+        format       = 'PDF'
+      IMPORTING
+        bin_filesize = bin_size
+      TABLES
+        otf          = ls_output_info-otfdata[]
+        lines        = pdf_lines.
+
+    CALL METHOD cl_gui_frontend_services=>file_save_dialog
+      EXPORTING
+        default_extension = 'PDF'
+        file_filter       = '*.PDF'
+      CHANGING
+        filename          = filename
+        path              = path
+        fullpath          = fullpath.
+
+    CALL FUNCTION 'GUI_DOWNLOAD'
+      EXPORTING
+        bin_filesize = bin_size
+        filename     = fullpath
+        filetype     = 'BIN'
+        codepage     = '8404'
+        ignore_cerr  = abap_true
+      TABLES
+        data_tab     = pdf_lines.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHKDATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+*FORM frm_chkdata .
+*  CHECK sy-ucomm = 'ONLI'.
+*  AUTHORITY-CHECK OBJECT ''
+*  ID 'BUKRS' FIELD 'S_bukrs'.
+*  IF sy-subrc NE 0.
+*    MESSAGE '没有权限' TYPE 'E'.
+*    EXIT.
+*  ENDIF.
+*  IF zmf = 'X' AND zth ='X'.
+*    MESSAGE '退货采购订单、免费采购订单，只能选择一个，不能同时勾选' TYPE 'E'.
+*  ENDIF.
+*ENDFORM.
+
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHKPRINT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_chkprint .
+  READ TABLE gt_vbak WITH KEY chk = 'X' TRANSPORTING NO FIELDS.
+  IF sy-subrc NE 0.
+    MESSAGE '请至少选择一行进行打印' TYPE 'E'.
+    EXIT.
+  ENDIF.
+  SORT gt_vbak BY vbeln.
+*  READ TABLE gt_vbak WITH KEY chk = 'X' frgke = 'N' TRANSPORTING NO
+*FIELDS.
+*  IF sy-subrc EQ 0.
+*    MESSAGE '未审批订单不能打印' TYPE 'E'.
+*    EXIT.
+*  ENDIF.
+*
+*  READ TABLE gt_vbak WITH KEY chk = 'X' frgke = 'X' TRANSPORTING NO
+*FIELDS.
+*  IF sy-subrc EQ 0.
+*    MESSAGE '拒绝订单不能打印' TYPE 'E'.
+*    EXIT.
+*  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_LOOPPRINT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_loopprint .
+
+  DATA: it_tlines LIKE tline OCCURS 0 WITH HEADER LINE.
+
+
+  DATA zstr LIKE thead-tdname.
+
+
+
+  LOOP AT gt_vbak WHERE chk = 'X'.
+
+
+    MOVE-CORRESPONDING gt_vbak TO gt_head.
+    IF zstr NE gt_head-vbeln.
+      MOVE gt_head-vbeln TO zstr.
+    ELSE.
+      CONTINUE.
+    ENDIF.
+
+*
+*    gt_head-zmemo = it_tlines-tdline.
+*    SELECT SINGLE bezei INTO gt_head-bezei1 FROM tvv1t WHERE kvgr1 = gt_vbak-kvgr1 AND spras = 1 .
+    SELECT SINGLE vtext INTO gt_head-vtext FROM tvzbt WHERE zterm = gt_vbak-zterm AND spras = 'E' .
+*    SELECT SINGLE bezei INTO gt_head-bezei2 FROM tvv3t WHERE kvgr3 = gt_vbak-kvgr3 AND spras = 1 .
+*    SELECT SINGLE bezei INTO gt_head-bezei3 FROM tvv4t WHERE kvgr4 = gt_vbak-kvgr4 AND spras = 1 .
+    SELECT SINGLE inco1 inco2  INTO (gt_head-inco1,gt_head-inco2)  FROM vbkd WHERE vbeln = gt_vbak-vbeln .
+    CONCATENATE gt_head-inco1 ' ' gt_head-inco2 INTO gt_head-inco SEPARATED BY ' ' .
+    CASE p_zprint.
+      WHEN '0'.
+        gt_head-bank1 = '深圳市雷赛智能控制股份有限公司'."Beneficiary Name
+        gt_head-bank2 = '中国农业银行深圳海王支行'."Bank Name
+        gt_head-bank3 = '41016100040013344'."Account Number
+        gt_head-bank4 = ''."Swift Code
+        gt_head-bank5 = ''."Bank Address
+      WHEN '1'.
+        gt_head-bank1 = '深圳市雷赛智能控制股份有限公司'."Beneficiary Name
+        gt_head-bank2 = '招行深圳南油支行'."Bank Name
+        gt_head-bank3 = '755917430910201'."Account Number
+        gt_head-bank4 = ''."Swift Code
+        gt_head-bank5 = ''."Bank Address
+      WHEN '2'.
+        gt_head-bank1 = 'LAKESIDE AUTOMATION TECHNOLOGY COMPANY LIMITED'."Beneficiary Name
+        gt_head-bank2 = 'Hang Seng Bank Limited'."Bank Name
+        gt_head-bank3 = '228-431276-883'."Account Number
+        gt_head-bank4 = 'HASEHKHH'."Swift Code
+        gt_head-bank5 = '83 Des Voeux Road Cental Hong Kong'."Bank Address
+      WHEN '3'.
+        gt_head-bank1 = 'CHINA LEADSHINE TECHNOLOGY CO.,LTD'."Beneficiary Name
+        gt_head-bank2 = 'SHENZHEN NANYOU SUB-BRANCH BANKING DEPT,CHINA MERCHANTS BANK'."Bank Name
+        gt_head-bank3 = '7559 1743 0932 601'."Account Number
+        gt_head-bank4 = 'CMBCCNBS'."Swift Code
+        gt_head-bank5 = '1/F,NEW ENERGY BUILDING,NANYOU,SHENZHEN,CHINA'."Bank Address
+      WHEN OTHERS.
+    ENDCASE.
+
+    APPEND gt_head.
+
+
+    SELECT vbeln  matnr  vrkme kwmeng kzwi1 waerk
+    INTO CORRESPONDING FIELDS OF TABLE gt_item
+    FROM vbap
+      FOR ALL ENTRIES IN gt_head
+    WHERE vbeln = gt_head-vbeln  .
+    DATA lv TYPE i.
+
+    LOOP AT gt_item.
+      IF gt_item-kzwi1 = 0.
+        DELETE gt_item.
+        CONTINUE.
+      ENDIF.
+      SELECT SINGLE maktx INTO gt_item-arktx FROM makt WHERE matnr = gt_item-matnr AND spras = 'E'.
+      lv = lv + 1.
+      gt_item-num = lv.
+      gt_item-kzwi = gt_item-kzwi1 / gt_item-kwmeng .
+      zje = zje + gt_item-kzwi1 .
+*      zje = zje + gt_head-kbetr.
+      MODIFY gt_item.
+    ENDLOOP.
+
+*************
+    DATA lv_waerk TYPE waers.
+    lv_waerk  = gt_vbak-waerk.
+    zje = zje + gt_head-kbetr.
+    CALL FUNCTION 'Z_CONVERT_NUMERIC_TO_ENGLISH'
+      EXPORTING
+        i_amt      = zje
+        i_waers    = lv_waerk
+      IMPORTING
+        e_saywords = zwje.
+    .
+
+*    PERFORM frm_line.
+    IF gn = 'X'.
+      PERFORM frm_excel.
+    ELSE.
+
+      CALL FUNCTION lv_name
+        EXPORTING
+          control_parameters = gs_control
+          zje                = zje
+          zwje               = zwje
+*      IMPORTING
+*         job_output_info    =
+        EXCEPTIONS
+          formatting_error   = 1
+          internal_error     = 2
+          send_error         = 3
+          user_canceled      = 4
+          OTHERS             = 5.
+      IF sy-subrc <> 0.
+* Implement suitable error handling here
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+               WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      ENDIF.
+    ENDIF.
+
+*    PERFORM frm_addprintsum.
+
+    CLEAR: zje,zwje.
+    REFRESH :gt_head,gt_item.
+  ENDLOOP.
+ENDFORM.
+
+FORM frm_addprintsum .
+  DATA wa LIKE TABLE OF zprintnum WITH HEADER LINE.
+  wa-zpo = gt_head-vbeln.
+  wa-mandt = sy-mandt.
+  wa-zprgname = 'ZSD004'.
+  wa-zernam = sy-uname.
+  wa-zdate = sy-datum.
+  wa-ztime = sy-uzeit.
+
+  SELECT SINGLE * FROM zprintnum WHERE zpo = wa-zpo AND zprgname = 'ZSD004'.
+  IF sy-subrc EQ 0.
+    .
+    UPDATE zprintnum SET
+     zernam = @sy-uname,
+     zdate = @sy-datum,
+     ztime = @sy-uzeit,
+     zsum = zsum + 1
+     WHERE zpo = @wa-zpo
+  .
+  ELSE.
+    wa-zsum = 1.
+    INSERT INTO zprintnum VALUES @wa.
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  CREATLIST
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_creatlist .
+
+  w_line-key = '0'.
+  w_line-text = '农业银行'.
+  APPEND w_line.
+  w_line-key = '1'.
+  w_line-text = '招商银行'.
+  APPEND w_line.
+  w_line-key = '2'.
+  w_line-text = '香港账号'.
+  APPEND w_line.
+  w_line-key = '3'.
+  w_line-text = '其他'.
+  APPEND w_line.
+  CALL FUNCTION 'VRM_SET_VALUES'
+    EXPORTING
+      id     = 'P_ZPRINT'
+      values = w_line[].
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_AUTH
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_auth .
+  CHECK sy-ucomm = 'ONLI'.
+
+  AUTHORITY-CHECK OBJECT 'V_VBAK_VKO'
+           ID 'VKORG' FIELD s_vkorg
+           ID 'VTWEG' DUMMY
+           ID 'SPART' DUMMY
+           ID 'ACTVT' FIELD '03'.
+  IF sy-subrc <> 0.
+    MESSAGE '没有销售组织的权限' TYPE 'E'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_EXCEL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_excel .
+  DATA:ls_key   TYPE wwwdatatab,
+       lv_subrc TYPE sy-subrc.
+  DATA lv_file LIKE rlgrap-filename.
+
+  DATA: fullpath    TYPE string,
+        filename    TYPE string,
+        path        TYPE string,
+        user_action TYPE i,
+        encoding    TYPE abap_encoding.
+
+  CALL METHOD cl_gui_frontend_services=>file_save_dialog
+    EXPORTING
+      window_title      = '下载到本地文件'
+      default_extension = 'XLS'           "缺省文件类型
+      default_file_name = 'PI.XLS'
+      file_filter       = 'Excel 文件 (*.XLS)|*.XLS;*.XLSX|'
+      with_encoding     = 'X'
+      initial_directory = 'D:\'
+    CHANGING
+      filename          = filename    "获得用户输入文件名
+      path              = path        "获得用户所选路径
+      fullpath          = fullpath    "路径加文件名
+      user_action       = user_action
+      file_encoding     = encoding.
+
+  MOVE fullpath TO lv_file.
+  CONSTANTS:gcst_excel_template TYPE w3objid VALUE 'ZSD004'.
+  ls_key-relid = 'MI'.
+  ls_key-objid = gcst_excel_template.
+  CALL FUNCTION 'DOWNLOAD_WEB_OBJECT'
+    EXPORTING
+      key         = ls_key
+      destination = lv_file
+    IMPORTING
+      rc          = lv_subrc.
+  IF lv_subrc <> 0.
+    MESSAGE '下载模板出错，请检查，谢谢' TYPE 'E'.
+    EXIT.
+  ENDIF.
+
+
+***填充EXCEL数据
+  PERFORM frm_filldata_excel USING lv_file.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FILLDATA_EXCEL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LV_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_filldata_excel  USING iv_file TYPE rlgrap-filename.
+*******数据定义*******
+  DATA:lo_excel     TYPE ole2_object,
+       lo_workbooks TYPE ole2_object,
+       lo_workbook  TYPE ole2_object,
+       rows         TYPE ole2_object,
+       lo_sheet     TYPE ole2_object,
+       lo_range     TYPE ole2_object,
+       lo_cell      TYPE ole2_object,
+       lo_cell1     TYPE ole2_object.
+  DATA lv_file LIKE rlgrap-filename.
+
+  DATA lv_row TYPE i.
+  DATA lv_col TYPE i.
+
+  DEFINE mac_fill_cell.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+      EXPORTING
+        #1 = &1
+        #2 = &2.
+    SET PROPERTY OF lo_cell 'VALUE' = &3.
+  END-OF-DEFINITION.
+
+  DATA : lv_tabix TYPE char1, tmp TYPE char15.
+  DATA: lstring(25) TYPE c,
+        lv_kzwi     TYPE char16,
+        lv_kzwi1    TYPE char16.
+
+*****程序主体*******
+
+*填充excel
+  CREATE OBJECT lo_excel 'EXCEL.APPLICATION'.
+  CALL METHOD OF lo_excel 'WORKBOOKS' = lo_workbooks.
+  CALL METHOD OF lo_workbooks 'OPEN' = lo_workbook EXPORTING #1 = iv_file.
+  CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = 1.
+  lv_row = 4.
+  READ TABLE gt_head INDEX 1.
+  mac_fill_cell lv_row 2 gt_head-name.
+  lv_row = lv_row + 1.
+  mac_fill_cell lv_row 2 gt_head-addr.
+  lv_row = lv_row + 1.
+  mac_fill_cell lv_row 2 gt_head-tel_number.
+  mac_fill_cell lv_row 6 gt_head-tel.
+  lv_row = lv_row + 1.
+  mac_fill_cell lv_row 2 gt_head-fax_number.
+  mac_fill_cell lv_row 6 gt_head-fax.
+  lv_row = lv_row + 1.
+  mac_fill_cell lv_row 2 gt_head-extension1.
+  mac_fill_cell lv_row 6 gt_head-bezei3.
+  lv_row = lv_row + 3.
+  mac_fill_cell lv_row 8 gt_head-erdat.
+  lv_row = lv_row + 1.
+  mac_fill_cell lv_row 8 gt_head-vbeln.
+
+  DATA:lv_line TYPE i.
+  DESCRIBE TABLE gt_item LINES lv_line.
+  lv_line = lv_line - 3.
+  IF lv_line > 0.
+    DO lv_line TIMES.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell EXPORTING #1 = 14 #2 = 1.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell1 EXPORTING #1 = 14 #2 = 8.
+      CALL METHOD OF lo_sheet 'Range' = lo_range EXPORTING #1 = lo_cell #2 = lo_cell1.
+      CALL METHOD OF lo_range 'Select' .
+      CALL METHOD OF lo_range 'Copy'.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell EXPORTING #1 = 15 #2 = 1.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell1 EXPORTING #1 = 15 #2 = 8.
+      CALL METHOD OF lo_sheet 'Range' = lo_range EXPORTING #1 = lo_cell #2 = lo_cell1.
+      CALL METHOD OF lo_range 'Insert'.
+    ENDDO.
+  ENDIF.
+
+  lv_row = 14.
+  LOOP AT gt_item.
+    mac_fill_cell lv_row 1 gt_item-arktx.
+    lv_kzwi = gt_item-kzwi.
+    SHIFT lv_kzwi LEFT DELETING LEADING space.
+    CONCATENATE gt_item-waerk lv_kzwi INTO lstring.
+    mac_fill_cell lv_row 5 lstring.
+    mac_fill_cell lv_row 7 gt_item-kwmeng.
+    lv_kzwi1 = gt_item-kzwi1.
+    SHIFT lv_kzwi1 LEFT DELETING LEADING space.
+    CONCATENATE gt_item-waerk lv_kzwi1 INTO lstring.
+    mac_fill_cell lv_row 8 lstring.
+    lv_row = lv_row + 1.
+    CLEAR: lstring.
+  ENDLOOP.
+  IF lv_line  > 0.
+    lv_row = 17 + lv_line  .
+  ELSE.
+    lv_row = 17.
+  ENDIF.
+
+  lv_kzwi1 = gt_head-kbetr.
+  SHIFT lv_kzwi1 LEFT DELETING LEADING space.
+  CONCATENATE gt_item-waerk lv_kzwi1 INTO lstring.
+  mac_fill_cell lv_row 8 lstring.
+  lv_row = lv_row + 1.
+  lv_kzwi1 = zje.
+  SHIFT lv_kzwi1 LEFT DELETING LEADING space.
+  CONCATENATE gt_item-waerk lv_kzwi1 INTO lstring.
+  mac_fill_cell lv_row 8 lstring.
+  lv_row = lv_row + 1.
+  CONCATENATE 'Total:' zwje INTO zwje SEPARATED BY ' '.
+  mac_fill_cell lv_row 1 zwje.
+
+  lv_row = lv_row + 1.
+  CONCATENATE 'Shipping Terms :' gt_head-inco INTO zwje.
+  mac_fill_cell lv_row 1 zwje.
+
+  lv_row = lv_row + 1.
+  CONCATENATE 'Payment:' gt_head-vtext INTO zwje.
+  mac_fill_cell lv_row 1 zwje.
+
+  lv_row = lv_row + 1.
+  CONCATENATE 'Delivery Date : ' gt_head-vdatu INTO zwje.
+  mac_fill_cell lv_row 1 zwje.
+
+  lv_row = lv_row + 2.
+  CONCATENATE 'Beneficiary Name:' gt_head-bank1 INTO zwje.
+  mac_fill_cell lv_row 1 zwje.
+  lv_row = lv_row + 1.
+  CONCATENATE 'Bank Name: ' gt_head-bank2 INTO zwje.
+  mac_fill_cell lv_row 1 zwje.
+  lv_row = lv_row + 1.
+  CONCATENATE 'Account Number: ' gt_head-bank3 INTO zwje.
+  mac_fill_cell lv_row 1 zwje.
+  lv_row = lv_row + 1.
+  CONCATENATE 'Swift Code: ' gt_head-bank4 INTO zwje.
+  mac_fill_cell lv_row 1 zwje.
+  lv_row = lv_row + 1.
+  CONCATENATE 'Bank Address:' gt_head-bank5 INTO zwje.
+  mac_fill_cell lv_row 1 zwje.
+
+  lv_row = lv_row + 1.
+  mac_fill_cell lv_row 5 gt_head-bezei3.
+
+  CALL METHOD OF lo_sheet 'CELLS' = lo_cell EXPORTING #1 = 1 #2 = 1.
+  CALL METHOD OF lo_cell 'SELECT'.
+  SET PROPERTY OF lo_excel 'CutCopyMode' = 0.
+
+  CALL METHOD OF lo_workbook 'SAVE'.
+  SET PROPERTY OF lo_excel 'VISIBLE' = 1.
+  FREE OBJECT:lo_excel,lo_workbooks,lo_workbook,lo_sheet,lo_range,lo_cell.
+ENDFORM.

@@ -1,0 +1,915 @@
+*&---------------------------------------------------------------------*
+*& Report  ZRPFI031
+*& 创建者(公司)/日期： PFT/20170906
+*& 程序描述：多条件查询会计凭证清单
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    PFT           20170906      创建程序
+*&---------------------------------------------------------------------*
+REPORT zfir_001 NO STANDARD PAGE HEADING.
+*---------------------------------------------------------------------------------
+*                                INCLUDES
+*---------------------------------------------------------------------------------
+INCLUDE: <icon>,
+<symbol>.
+*---------------------------------------------------------------------------------
+*                                TYPE-POOLS
+*---------------------------------------------------------------------------------
+TYPE-POOLS: slis. "ALV
+*---------------------------------------------------------------------------------
+*                                TABLES
+*---------------------------------------------------------------------------------
+TABLES:bseg, "会计核算凭证段
+       bkpf,                 "会计核算凭证标题
+       skat,                 "总帐科目主记录（科目表：说明）
+       cskt,                 "成本中心说明文本
+       t001,                 "公司代码
+       kna1,                 "客户主文件的一般数据
+       prps,
+       ccr1s,
+*       ztha011_bkpf,
+       lfa1.                 "供应商主数据 (一般地区)
+*---------------------------------------------------------------------------------
+* 内表定义
+*---------------------------------------------------------------------------------
+DATA:BEGIN OF itab_bkpf OCCURS 0, "*凭证抬头*
+       bukrs     LIKE bkpf-bukrs,
+       belnr     LIKE bseg-belnr,          "财务凭证编号
+       gjahr     LIKE bkpf-gjahr,          "年度
+       monat     LIKE bkpf-monat,          "期间
+       xblnr     LIKE bkpf-xblnr,          "交货 参考凭证号
+       ppnam     LIKE bkpf-ppnam,          "预制此凭证的用户名
+       blart     LIKE bkpf-blart,          "凭证类型
+       bktxt     LIKE bkpf-bktxt,          "凭证抬头文本
+       waers     LIKE bkpf-waers,          "货币代码
+       kursf     LIKE bkpf-kursf,          "汇率
+       usnam     LIKE bkpf-usnam,          "用户名
+       budat     LIKE bkpf-budat,          "凭证中的过帐日期
+       bldat     LIKE bkpf-bldat,          "凭证中的凭证日期
+       xreversal LIKE bkpf-xreversal,   "指定是否凭证被冲销或已被冲销
+       tcode     LIKE bkpf-tcode,
+       prtno     TYPE bkpf-xblnr_alt,     "
+     END OF itab_bkpf.
+
+DATA:BEGIN OF itab_bseg OCCURS 0, "*会计核算凭证段*
+       bukrs     LIKE bseg-bukrs,          "公司代码
+       belnr     LIKE bseg-belnr,          "会计凭证号码
+       gjahr     LIKE bseg-gjahr,          "会计年度
+       buzei     LIKE bseg-buzei,          "会计凭证中的行项目数
+       bschl     LIKE bseg-bschl,          "记帐代码
+       koart     LIKE bseg-koart,          "科目类型
+       shkzg     LIKE bseg-shkzg,          "借/贷标志
+       dmbtr     LIKE bseg-dmbtr,          "按本位币计的金额
+       wrbtr     LIKE bseg-wrbtr,          "凭证货币金额
+       pswsl     LIKE bseg-pswsl,          "凭证货币币别
+       sgtxt     LIKE bseg-sgtxt,          "项目文本
+       kostl     LIKE bseg-kostl,          "成本中心
+       prctr     LIKE bseg-prctr,          "利润中心
+       anln1     LIKE bseg-anln1,          "主资产号
+       anln2     LIKE bseg-anln2,          "资产次级编号
+       hkont     LIKE bseg-hkont,          "总帐科目
+       kunnr     LIKE bseg-kunnr,          "购货方编号
+       lifnr     LIKE bseg-lifnr,          "供应商或债权人帐户号
+       matnr     LIKE bseg-matnr,          "物料号码
+       umskz     LIKE bseg-zumsk,           "特别总账
+       fkber     LIKE bseg-fkber,            "功能范围
+       vbel2     LIKE bseg-vbel2,
+       posn2     LIKE bseg-posn2,
+       mcod1     LIKE skat-mcod1,          "科目名称
+       kname1    LIKE kna1-name1,         "客户名称
+       lname1    LIKE lfa1-name1,         "供应商名称
+       bldat     LIKE bkpf-bldat,
+       budat     LIKE bkpf-budat,
+       monat     LIKE bkpf-monat,
+       bktxt     LIKE bkpf-bktxt,         "抬头文本
+       waers     LIKE bkpf-waers,         "货币代码
+       xblnr     LIKE bkpf-xblnr,         "参照
+       ltext     LIKE cskt-ltext,         "成本中心名称
+       ltext1    LIKE cepct-ltext,        "利润中心名称
+       blart     LIKE bkpf-blart,         "凭证类型
+       usnam     TYPE c LENGTH 100,          "用户名
+       xreversal LIKE bkpf-xreversal,  "指定是否凭证被冲销或已被冲销
+       tcode     LIKE bkpf-tcode,
+       zuonr     LIKE bseg-zuonr,       "分配
+       zfbdt     LIKE bseg-zfbdt,          "票据到期日
+       wdate     LIKE bsed-wdate,          "签发日期
+       xref1     LIKE bseg-xref1,
+       xname1    LIKE lfa1-name1,
+       xref2     LIKE bseg-xref2,
+       xref3     LIKE bseg-xref3,
+       aufnr     LIKE bseg-aufnr,         "内部订单号
+       ktext     LIKE coas-ktext,         "内部订单描述
+       menge     LIKE bseg-menge,
+       ebeln     LIKE bseg-ebeln,
+       rstgr     LIKE bseg-rstgr,         "付款原因代码
+       txt20     LIKE t053s-txt20,        "原因代码描述
+       maktx     LIKE makt-maktx,
+       projk     LIKE bseg-projk,
+       post1     LIKE prps-post1,
+       vbund     LIKE bseg-vbund,
+       ppnam     LIKE bkpf-ppnam,
+       prtno     TYPE bkpf-xblnr_alt,     "
+     END OF itab_bseg.
+
+DATA: BEGIN OF itab_t030k OCCURS 0, "*确定税务科目*
+        ktopl LIKE t030k-ktopl,         "会计科目表
+        ktosl LIKE t030k-ktosl,         "事务码
+        mwskz LIKE t030k-mwskz,         "销售/购买税代码
+        konts LIKE t030k-konts,         "总帐科目编号
+      END OF itab_t030k.
+
+DATA: BEGIN OF itab_cskt OCCURS 0, "--成本中心主数据--
+        kokrs LIKE cskt-kokrs,          "控制范围
+        kostl LIKE csks-kostl,          "成本中心
+        datbi LIKE cskt-datbi,          "有效截至日期
+        ltext LIKE cskt-ltext,
+      END OF itab_cskt.
+
+DATA: BEGIN OF itab_cepct OCCURS 0, "--利润中心主数据--
+        kokrs LIKE cepct-kokrs,          "控制范围
+        prctr LIKE cepct-prctr,          "利润中心
+        datbi LIKE cepct-datbi,          "有效截至日期
+        ltext LIKE cepct-ltext,
+      END OF itab_cepct.
+
+DATA: BEGIN OF itab_coas OCCURS 0,
+        aufnr LIKE coas-aufnr,
+        ktext LIKE coas-ktext,
+      END OF itab_coas.
+
+DATA:BEGIN OF itab_skat OCCURS 0, "--总帐科目主记录（科目表：说明）
+       saknr LIKE skat-saknr,         "总帐科目号
+       mcod1 LIKE skat-mcod1,         "总帐科目名称
+     END OF itab_skat.
+
+DATA: BEGIN OF itab_kna1 OCCURS 0, "*客户主文件的一般数据
+        kunnr LIKE kna1-kunnr,                              "客户编号1
+        name1 LIKE kna1-name1,                              "名称 1
+      END OF itab_kna1.
+DATA: BEGIN OF itab_lfa1 OCCURS 0, "*供应商主数据 (一般地区)
+        lifnr LIKE lfa1-lifnr,         "供应商或债权人的帐号
+        name1 LIKE lfa1-name1,                              "名称 1
+      END OF itab_lfa1.
+
+DATA: BEGIN OF itab_vbap OCCURS 0, "--销售凭证:项目数据--
+        vbeln LIKE vbap-vbeln,        "销售凭证
+        matnr LIKE vbap-matnr,        "物料号码
+      END OF itab_vbap.
+
+DATA: BEGIN OF itab_tfkbt OCCURS 0, "*功能范围的名称*
+        fkber LIKE tfkbt-fkber,      "功能范围
+        fkbtx LIKE tfkbt-fkbtx,      "功能范围的名称
+        spras LIKE tfkbt-spras,      "语言代码
+      END OF itab_tfkbt.
+
+DATA: BEGIN OF itab_obzn OCCURS 0,
+        bukrs LIKE bseg-bukrs,             "公司代码
+        hkont LIKE bseg-hkont,             "总分类帐帐目
+        fkber LIKE bseg-fkber,             "功能范围
+        kostl LIKE bseg-kostl,             "成本中心
+      END OF itab_obzn.
+
+DATA: BEGIN OF itab_zuonr OCCURS 0, "*会计核算凭证段
+        zuonr LIKE bseg-zuonr,             "分配编号
+        zuotx LIKE skat-txt50,             "总帐科目名称
+      END OF itab_zuonr.
+
+DATA:BEGIN OF itab_output OCCURS 0, "*会计核算凭证段*
+*       BUKRS LIKE BSEG-BUKRS,          "公司代码
+       belnr     LIKE bseg-belnr,          "会计凭证号码
+       gjahr     LIKE bseg-gjahr,          "会计年度
+       buzei     LIKE bseg-buzei,          "会计凭证中的行项目数
+       umskz     LIKE bseg-zumsk,          "特别总账
+       bschl     LIKE bseg-bschl,          "记帐代码
+       koart     LIKE bseg-koart,          "科目类型
+       shkzg     LIKE bseg-shkzg,          "借/贷标志
+       dmbtr     LIKE bseg-dmbtr,          "按本位币计的金额
+       wrbtr     LIKE bseg-wrbtr,          "凭证货币金额
+       pswsl     LIKE bseg-pswsl,          "凭证货币币别
+       sgtxt     LIKE bseg-sgtxt,          "项目文本
+       kostl     LIKE bseg-kostl,          "成本中心
+       anln1     LIKE bseg-anln1,          "主资产号
+       anln2     LIKE bseg-anln2,          "资产次级编号
+       hkont     LIKE bseg-hkont,          "总帐科目
+       mcod1     LIKE skat-mcod1,
+
+       kunnr     LIKE bseg-kunnr,          "购货方编号
+       kname1    LIKE kna1-name1,
+       lifnr     LIKE bseg-lifnr,          "供应商或债权人帐户号
+       lname1    LIKE lfa1-name1,
+       xreversal LIKE bkpf-xreversal,
+       matnr     LIKE bseg-matnr,          "物料号码
+       ppnam     LIKE bkpf-ppnam,
+     END OF itab_output.
+
+DATA : BEGIN OF i_bsed OCCURS 0,
+         bukrs LIKE bsed-bukrs,        "公司代码
+         belnr LIKE bsed-belnr,        "会计凭证编号
+         gjahr LIKE bsed-gjahr,        "会计年度
+         buzei LIKE bsed-buzei,        "会计凭证中的行项目数
+         wdate LIKE bsed-wdate,        "签发日期
+       END OF i_bsed.
+
+DATA: gt_t001      LIKE t001 OCCURS 0 WITH HEADER LINE.
+*&---Begin---------------------------------------------------------------&*
+*&    增加凭证打印号字段，d
+*&    2014.04.24 by 04459
+
+
+*TYPES: BEGIN OF typ_ha011_bkpf,
+*         bukrs TYPE ztha011_bkpf-bukrs,
+*         pzzt  TYPE ztha011_bkpf-pzzt,
+*         belnr TYPE ztha011_bkpf-belnr,
+*         gjahr TYPE ztha011_bkpf-gjahr,
+*         prtno TYPE ztha011_bkpf-prtno,
+*       END OF typ_ha011_bkpf.
+*DATA: t_ha011_bkpf TYPE SORTED TABLE OF typ_ha011_bkpf WITH NON-UNIQUE KEY bukrs belnr gjahr.
+
+*&---End-----------------------------------------------------------------&*
+*---------------------------------------------------------------------------------
+* data define
+*---------------------------------------------------------------------------------
+*DATA: TMPNAME1 LIKE KNA1-NAME1,                             "名称 1
+*      TMPNAME2 LIKE LFA1-NAME1,                             "名称 1
+*      TMPNAME3(6) TYPE C,
+*      TMPNAME4(6) TYPE C.
+*
+*DATA:MEMO(50) TYPE C,                      "摘要
+*     MEMO1(40) TYPE C,                     "摘要
+*---------------------------------------------------------------------------------
+* Data parameters for alv report use
+*---------------------------------------------------------------------------------
+DATA: gw_alv_fieldcat_wa TYPE slis_fieldcat_alv. "Fieldcat workarea
+
+DATA: g_alv_repid          LIKE sy-repid,
+      g_alv_structure_name LIKE dd02l-tabname,
+      g_alv_grid_title     TYPE lvc_title,
+      gw_alv_layout        TYPE slis_layout_alv,
+      gt_alv_fieldcat      TYPE slis_t_fieldcat_alv  WITH HEADER LINE,
+      gt_alv_sort          TYPE slis_t_sortinfo_alv  WITH HEADER LINE,
+      gt_alv_events        TYPE slis_t_event         WITH HEADER LINE.
+*&-----------------------------------------------------------------------------*
+*&   SELECT-OPTIONS
+*&-----------------------------------------------------------------------------*
+SELECTION-SCREEN: BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-010.
+*PARAMETERS:P_BUKRS LIKE BSEG-BUKRS OBLIGATORY DEFAULT '1010',           "公司代码
+*           P_GJAHR LIKE BSEG-GJAHR OBLIGATORY DEFAULT  SY-DATUM+0(4).   "会计年度
+SELECT-OPTIONS: s_bukrs FOR bseg-bukrs ,
+s_gjahr FOR bseg-gjahr DEFAULT  sy-datum+0(4),
+s_monat FOR bkpf-monat,
+s_bldat FOR bkpf-bldat,                                 "凭证中的凭证日期
+s_budat FOR bkpf-budat,                "日期和时间,当前(应用服务器)日期
+s_cpudt FOR bkpf-cpudt,                "凭证输入日期
+*20130205 by chenqch.
+*增加输入时间
+s_cputm FOR bkpf-cputm,                "凭证输入时间
+s_belnr FOR bseg-belnr,                                 "会计凭证号码
+s_hkont FOR bseg-hkont,                                 "会计科目
+s_xblnr FOR bkpf-xblnr,
+s_koart FOR bseg-koart,                                 "账户类型
+s_rstgr FOR bseg-rstgr,                                 "原因代码
+s_blart FOR bkpf-blart,                                 "凭证类型
+s_usnam FOR bkpf-usnam MATCHCODE OBJECT user_comp,                                 "用户名O
+s_kunnr FOR bseg-kunnr,                               "BY LAURY 100130 客户
+s_lifnr FOR bseg-lifnr,                               "BY LAURY 100130 供应商
+*                S_PPNAM FOR BKPF-PPNAM.                                 "预制此凭证的用户名
+s_wrbtr FOR bseg-wrbtr,                               "BY LAURY 100130 原币
+s_pswsl FOR bseg-pswsl,                               "BY LAURY 100130 币种
+s_xrever FOR bkpf-xreversal, "指定是否凭证被冲销或已被冲销
+s_tcode FOR bkpf-tcode,
+s_zuonr FOR bseg-zuonr,
+s_sgtxt FOR bseg-sgtxt,
+s_bktxt FOR bkpf-bktxt,
+s_prctr FOR bseg-prctr,
+s_kostl FOR cskt-kostl,
+s_aufnr FOR ccr1s-aufnr, "bseg-aufnr ,
+s_projk FOR bseg-projk,            "项目号
+s_anln1 FOR bseg-anln1,
+s_anln2 FOR bseg-anln2,
+s_vbund FOR bseg-vbund,
+s_fkber FOR ccr1s-pfkber.
+*                s_prtno FOR ztha011_bkpf-prtno.
+SELECTION-SCREEN: END OF BLOCK b1.
+SELECTION-SCREEN BEGIN OF BLOCK b2 WITH FRAME.
+PARAMETERS: p_all  RADIOBUTTON GROUP act DEFAULT 'X',
+            p_nowo RADIOBUTTON GROUP act.
+SELECTION-SCREEN END OF BLOCK b2.
+
+*&--------------------------------------------------------------------------------
+*&      AT LINE-SELECTION
+*&--------------------------------------------------------------------------------
+AT LINE-SELECTION.
+*&--------------------------------------------------------------------------------
+* INITIALIZATION.
+*&--------------------------------------------------------------------------------
+INITIALIZATION.
+*=================================================================================
+*                                MAIN PROGRAM
+*=================================================================================
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_projk-low .
+  PERFORM get_sale USING  'S_PROJK-LOW' .
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_projk-high .
+  PERFORM get_sale USING  'S_PROJK-HIGH' .
+
+AT SELECTION-SCREEN.
+  CHECK sy-ucomm EQ 'ONLI'.
+*  取出公司代码主数据
+  SELECT * INTO TABLE gt_t001 FROM t001 WHERE bukrs IN s_bukrs.
+  LOOP AT gt_t001.
+    AUTHORITY-CHECK OBJECT 'F_BKPF_BUK'
+                  ID 'BUKRS' FIELD gt_t001-bukrs
+                  ID 'ACTVT' FIELD '03'.
+    IF sy-subrc <> 0.
+      DELETE gt_t001.
+      CONTINUE.
+    ENDIF.
+  ENDLOOP.
+  IF gt_t001[] IS INITIAL.
+    MESSAGE '没有公司代码的权限' TYPE 'E'.
+  ENDIF.
+
+START-OF-SELECTION.
+  PERFORM frm_get_data.
+  PERFORM frm_take_data.
+  PERFORM frm_output.
+*&--------------------------------------------------------------------------------
+* END-OF-SELECTION.
+*&--------------------------------------------------------------------------------
+END-OF-SELECTION.
+*  PERFORM FRM_PRINT.
+*-------------------------------------------------------------------------------- *
+*       FORM frm_get_data
+*-------------------------------------------------------------------------------- *
+*       ........
+*-------------------------------------------------------------------------------- *
+FORM get_sale USING p_retf.
+  DATA: BEGIN OF  lt_sale  OCCURS 0 ,
+          pspnr TYPE prps-pspnr,
+
+          post1 TYPE prps-post1,
+        END OF lt_sale .
+  DATA: retfield    TYPE dfies-fieldname,
+        dynprofield TYPE help_info-dynprofld.
+  dynprofield  =  p_retf .
+  retfield =   'PSPNR'.
+  SELECT  pspnr
+
+  post1  INTO TABLE lt_sale FROM prps .
+
+
+  IF lt_sale[] IS NOT INITIAL.
+    CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+      EXPORTING
+        retfield    = retfield      "表格要显示的字段
+        dynpprog    = sy-repid        "返回才程序
+        dynpnr      = sy-dynnr        "屏幕
+        dynprofield = dynprofield          "往页面回填值的地方
+        value_org   = 'S'             "显示类型
+      TABLES
+        value_tab   = lt_sale.     "传进去的表格 帮助的内表
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+      WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ENDIF.
+
+  ENDIF.
+
+ENDFORM. " GET_SALE
+*&---------------------------------------------------------------------*
+*&      Form  frm_get_data
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+FORM frm_get_data.
+  DATA itab_bseg2 LIKE LINE OF itab_bseg OCCURS 0 WITH HEADER LINE.
+
+****************** 凭证表头 BKPF **************************
+  IF p_all = 'X'.
+    SELECT bukrs
+    belnr                  "会计凭证号码
+    gjahr                  "会计年度
+    monat
+    xblnr                  "参考凭证号
+    ppnam                  "预制此凭证的用户名
+    blart                  "凭证类型
+    bktxt                  "凭证抬头文本
+    waers                  "货币代码
+    kursf                  "汇率
+    usnam                  "用户名
+    budat                  "凭证中的记帐日期
+    bldat                  "凭证中的凭证日期
+    xreversal              "指定是否凭证被冲销或已被冲销
+    tcode
+    xblnr_alt AS prtno
+    INTO TABLE itab_bkpf FROM bkpf
+      FOR ALL ENTRIES IN gt_t001
+    WHERE bukrs EQ gt_t001-bukrs
+    AND monat IN s_monat
+    AND blart IN s_blart
+    AND belnr IN s_belnr
+    AND gjahr IN s_gjahr
+    AND bldat IN s_bldat
+    AND budat IN s_budat
+    AND cpudt IN s_cpudt
+    AND usnam IN s_usnam
+    AND xblnr IN s_xblnr
+    AND bstat = ' '
+    AND xreversal IN s_xrever
+    AND tcode IN s_tcode            "凭证状态=常规文本
+    AND bktxt IN s_bktxt.
+  ELSE.
+    SELECT bukrs
+    belnr                  "会计凭证号码
+    gjahr                  "会计年度
+    monat
+    xblnr                  "参考凭证号
+    ppnam                  "预制此凭证的用户名
+    blart                  "凭证类型
+    bktxt                  "凭证抬头文本
+    waers                  "货币代码
+    kursf                  "汇率
+    usnam                  "用户名
+    budat                  "凭证中的记帐日期
+    bldat                  "凭证中的凭证日期
+    xreversal              "指定是否凭证被冲销或已被冲销
+    tcode
+    xblnr_alt AS prtno
+    INTO TABLE itab_bkpf FROM bkpf
+      FOR ALL ENTRIES IN gt_t001
+    WHERE bukrs EQ gt_t001-bukrs
+    AND monat IN s_monat
+    AND blart IN s_blart
+    AND belnr IN s_belnr
+    AND gjahr IN s_gjahr
+    AND bldat IN s_bldat
+    AND budat IN s_budat
+    AND cpudt IN s_cpudt
+    AND cputm IN s_cputm
+    AND usnam IN s_usnam
+    AND xblnr IN s_xblnr
+    AND bstat = ' '
+    AND xreversal = ''
+    AND tcode IN s_tcode            "凭证状态=常规文本
+    AND bktxt IN s_bktxt.
+  ENDIF.
+
+
+  CHECK sy-subrc = 0.
+***************** 凭证行项目 BSEG **************************
+  SELECT bukrs           "公司代码
+  belnr             "会计凭证号码
+  gjahr             "会计年度
+  buzei             "会计凭证中的行项目数
+  bschl             "记帐代码
+  koart             "科目类型
+  shkzg             "借/贷标志
+  dmbtr             "按本位币计的金额
+  wrbtr             "凭证货币金额
+  pswsl             "凭证货币币别
+  sgtxt             "项目文本
+  kostl             "成本中心
+  prctr             "利润中心
+  anln1             "主资产号
+  anln2             "资产次级编号
+  hkont             "总帐科目
+  kunnr             "购货方编号
+  lifnr             "供应商或债权人帐户号
+  matnr             "物料号码
+  umskz             "特别总账
+  fkber
+  vbel2
+  posn2
+  zuonr
+  zfbdt
+  xref1
+  xref2
+  xref3
+  aufnr
+  menge
+  ebeln
+  rstgr
+  projk
+  vbund
+  INTO
+  CORRESPONDING FIELDS OF TABLE itab_bseg
+  FROM bseg
+  FOR ALL ENTRIES IN itab_bkpf
+  WHERE
+  gjahr EQ itab_bkpf-gjahr
+  AND bukrs EQ itab_bkpf-bukrs
+  AND belnr EQ itab_bkpf-belnr
+  AND koart IN s_koart
+  AND hkont IN s_hkont
+  AND wrbtr IN s_wrbtr
+  AND pswsl IN s_pswsl
+  AND lifnr IN s_lifnr
+  AND kunnr IN s_kunnr
+  AND anln1 IN s_anln1
+  AND anln2 IN s_anln2
+  AND vbund IN s_vbund
+  AND zuonr IN s_zuonr
+  AND sgtxt IN s_sgtxt
+  AND prctr IN s_prctr
+  AND rstgr IN s_rstgr
+  AND kostl IN s_kostl
+  AND aufnr IN s_aufnr
+  AND projk IN s_projk
+  AND fkber IN s_fkber.
+  IF NOT itab_bseg[] IS INITIAL.
+    TYPES: BEGIN OF ta_werks,
+             prctr LIKE mseg-prctr,
+             bukrs LIKE bseg-bukrs,
+           END OF ta_werks.
+    DATA: wa_werks TYPE                   ta_werks,
+          it_werks TYPE STANDARD TABLE OF ta_werks.
+
+
+    LOOP AT itab_bseg.
+      MOVE-CORRESPONDING itab_bseg  TO wa_werks .
+      APPEND wa_werks TO it_werks .
+
+    ENDLOOP.
+
+    IF sy-subrc = 0.
+      SORT it_werks.
+      DELETE ADJACENT DUPLICATES FROM it_werks.
+      LOOP AT it_werks INTO wa_werks.
+**利润中心权限对象
+*        AUTHORITY-CHECK OBJECT 'Z_PRCTR'
+*                 ID 'PRCTR' FIELD WA_WERKS-PRCTR.
+*        IF SY-SUBRC <> 0.
+*          MESSAGE E006(ZMSG_QX) WITH WA_WERKS-PRCTR.
+*        ENDIF.
+*
+*        AUTHORITY-CHECK OBJECT 'Z_BUKRS'
+*              ID 'BUKRS' FIELD WA_WERKS-BUKRS.
+*        IF SY-SUBRC <> 0.
+*          MESSAGE E002(ZMSG_QX) WITH WA_WERKS-BUKRS.
+*        ENDIF.
+      ENDLOOP.
+    ENDIF.
+****成本中心主数据************
+    SELECT kokrs
+    kostl
+    datbi
+    ltext
+    INTO TABLE itab_cskt
+    FROM cskt
+    FOR ALL ENTRIES IN itab_bseg
+    WHERE kokrs = '1000'
+    AND kostl = itab_bseg-kostl.
+    SORT itab_cskt BY kostl.
+****内部订单数据************
+    SELECT
+    aufnr
+    ktext
+    INTO TABLE itab_coas
+    FROM coas
+    FOR ALL ENTRIES IN itab_bseg
+    WHERE kokrs = '8000'
+    AND aufnr = itab_bseg-aufnr.
+    SORT itab_coas BY aufnr.
+*****************总帐科目主记录（科目表：说明）*****
+    SELECT saknr
+    mcod1
+    INTO TABLE itab_skat
+    FROM skat
+    FOR ALL ENTRIES IN itab_bseg
+    WHERE saknr = itab_bseg-hkont
+    AND spras = sy-langu
+    AND ktopl = '1000'.
+    SORT itab_skat BY saknr.
+******************客户主文件的一般数据***************
+    SELECT kunnr
+    name1
+    INTO TABLE itab_kna1
+    FROM kna1
+    FOR ALL ENTRIES IN itab_bseg
+    WHERE kunnr = itab_bseg-kunnr.
+    SORT itab_kna1 BY kunnr.
+******************供应商主数据的一般数据***************
+    SELECT lifnr name1
+    INTO TABLE itab_lfa1
+    FROM lfa1
+    FOR ALL ENTRIES IN itab_bseg
+    WHERE lifnr = itab_bseg-lifnr.
+    SORT itab_lfa1 BY lifnr.
+*******************BSED取值**************************
+    SELECT bukrs belnr gjahr buzei wdate
+    INTO  TABLE i_bsed
+    FROM bsed
+    FOR ALL ENTRIES IN itab_bseg
+    WHERE bukrs = itab_bseg-bukrs AND belnr = itab_bseg-belnr AND gjahr = itab_bseg-gjahr AND buzei = itab_bseg-buzei .
+  ENDIF.   "End of CHECK ITAB_LIPS[] IS INITIAL
+ENDFORM. "FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*&      Form  FRM_TAKE_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_take_data .
+*  DATA: lw_ha011_bkpf TYPE typ_ha011_bkpf.
+  DATA: l_kunnr LIKE kna1-kunnr,
+        l_lifnr LIKE lfa1-lifnr.
+  DATA: lv_pernr     LIKE usr21-persnumber,
+        lv_namelast  LIKE adrp-name_last,
+        lv_namefirst LIKE adrp-name_first.
+
+* 加上科目名称
+  SORT itab_skat BY saknr.
+  SORT itab_bseg BY hkont.
+  LOOP AT itab_bseg.
+    READ TABLE itab_skat WITH KEY saknr = itab_bseg-hkont BINARY SEARCH.
+    IF sy-subrc = 0.
+      itab_bseg-mcod1 = itab_skat-mcod1.
+    ELSE.
+      itab_bseg-mcod1 = ''.
+    ENDIF.
+    IF NOT itab_bseg-projk IS INITIAL.
+      SELECT SINGLE post1
+      INTO itab_bseg-post1
+      FROM prps
+      WHERE pspnr = itab_bseg-projk.
+    ENDIF.
+
+    MODIFY itab_bseg.
+  ENDLOOP.
+
+
+  SORT itab_bkpf BY gjahr bukrs belnr.
+  SORT itab_bseg BY gjahr bukrs belnr.
+
+  LOOP AT itab_bseg.
+*< modify by Ken  2010.03.24 ******************************************
+    READ TABLE itab_kna1 WITH KEY kunnr = itab_bseg-kunnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      itab_bseg-kname1 = itab_kna1-name1.
+    ENDIF.
+* 加上供应商名称
+    READ TABLE itab_lfa1 WITH KEY lifnr = itab_bseg-lifnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      itab_bseg-lname1 = itab_lfa1-name1.
+    ENDIF.
+* 加上科目名称
+    READ TABLE itab_skat WITH KEY saknr = itab_bseg-hkont BINARY SEARCH.
+    IF sy-subrc = 0.
+      itab_bseg-mcod1 = itab_skat-mcod1.
+    ENDIF.
+    MODIFY itab_bseg.
+
+    READ TABLE itab_bkpf WITH KEY belnr = itab_bseg-belnr gjahr = itab_bseg-gjahr bukrs = itab_bseg-bukrs BINARY SEARCH.
+    IF sy-subrc = 0.
+      itab_bseg-pswsl = itab_bkpf-waers.
+      itab_bseg-ppnam = itab_bkpf-ppnam.
+      MODIFY itab_bseg.
+    ENDIF.
+
+    IF itab_bseg-shkzg = 'H'.                      "modify by ken 2010.03.24 当借贷项标志为H时,金额转为负值
+      itab_bseg-dmbtr = itab_bseg-dmbtr * -1.
+      itab_bseg-wrbtr = itab_bseg-wrbtr * -1.
+    ENDIF.
+
+    IF itab_bkpf-xreversal = '2' AND itab_bseg-shkzg = 'S'.
+      itab_bseg-shkzg = 'H'.
+    ELSEIF itab_bkpf-xreversal = '2' AND itab_bseg-shkzg = 'H'.
+      itab_bseg-shkzg = 'S'.
+    ENDIF.
+*成本中心主数据
+
+    READ TABLE itab_cskt WITH KEY kostl = itab_bseg-kostl BINARY SEARCH.
+    IF sy-subrc = 0.
+      itab_bseg-ltext = itab_cskt-ltext.
+      MODIFY itab_bseg.
+    ENDIF.
+*利润中心主数据
+    READ TABLE itab_cepct WITH KEY prctr = itab_bseg-prctr BINARY SEARCH.
+    IF sy-subrc = 0.
+      itab_bseg-ltext1 = itab_cepct-ltext.
+      MODIFY itab_bseg.
+    ENDIF.
+*内部订单数据
+    READ TABLE itab_coas WITH KEY aufnr = itab_bseg-aufnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      itab_bseg-ktext = itab_coas-ktext.
+      MODIFY itab_bseg.
+    ENDIF.
+
+    READ TABLE i_bsed WITH KEY bukrs = itab_bseg-bukrs  belnr = itab_bseg-belnr  gjahr = itab_bseg-gjahr  buzei = itab_bseg-buzei.
+    IF sy-subrc = 0.
+      itab_bseg-wdate = i_bsed-wdate.
+      MODIFY itab_bseg.
+    ENDIF.
+***modify by Ken***************************** >
+    READ TABLE itab_bkpf WITH KEY gjahr = itab_bseg-gjahr bukrs = itab_bseg-bukrs belnr = itab_bseg-belnr   BINARY SEARCH.
+    IF sy-subrc = 0.
+      itab_bseg-bldat = itab_bkpf-bldat.
+      itab_bseg-budat = itab_bkpf-budat.
+      itab_bseg-monat = itab_bkpf-monat.
+      itab_bseg-bktxt = itab_bkpf-bktxt.
+      itab_bseg-waers = itab_bkpf-waers.
+      itab_bseg-xblnr = itab_bkpf-xblnr.
+      itab_bseg-blart = itab_bkpf-blart.
+      itab_bseg-usnam = itab_bkpf-usnam.
+      itab_bseg-xreversal = itab_bkpf-xreversal.
+      itab_bseg-tcode = itab_bkpf-tcode.
+      itab_bseg-ppnam = itab_bkpf-ppnam.
+      itab_bseg-prtno = itab_bkpf-prtno.
+    ELSE.
+      itab_bseg-xreversal = itab_bkpf-xreversal.
+      itab_bseg-tcode = itab_bkpf-tcode.
+      CLEAR itab_bseg-usnam.
+    ENDIF.
+** 加上用户名
+
+    CLEAR: lv_pernr,lv_namelast,lv_namefirst.
+    SELECT SINGLE persnumber INTO lv_pernr FROM usr21 WHERE bname = itab_bseg-usnam.
+    IF sy-subrc = 0.
+      SELECT SINGLE name_first name_last INTO (lv_namefirst,lv_namelast)
+      FROM  adrp
+      WHERE persnumber = lv_pernr.
+      CONCATENATE lv_namelast lv_namefirst INTO itab_bseg-usnam.
+      CONDENSE itab_bseg-usnam NO-GAPS.
+    ENDIF.
+
+    DATA tmp_xref1 TYPE lifnr.
+
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+      EXPORTING
+        input  = itab_bseg-xref1
+      IMPORTING
+        output = itab_bseg-xref1.
+    MOVE itab_bseg-xref1+2(10) TO tmp_xref1 .
+
+    SELECT SINGLE name1 FROM lfa1 INTO itab_bseg-xname1 WHERE lifnr = tmp_xref1.
+
+    MODIFY itab_bseg.
+  ENDLOOP.
+
+  SORT itab_bseg BY budat belnr buzei.
+
+  DATA : it_makt  LIKE TABLE OF makt WITH HEADER LINE,
+         it_t053s LIKE TABLE OF t053s WITH HEADER LINE.
+
+  SELECT * FROM makt INTO CORRESPONDING FIELDS OF TABLE it_makt
+  FOR ALL ENTRIES IN itab_bseg
+  WHERE matnr = itab_bseg-matnr
+  AND spras = sy-langu .
+  SORT it_makt BY matnr .
+
+  SELECT * FROM t053s INTO CORRESPONDING FIELDS OF TABLE it_t053s
+  FOR ALL ENTRIES IN itab_bseg
+  WHERE rstgr = itab_bseg-rstgr
+  AND spras = sy-langu.
+  SORT it_t053s BY rstgr.
+
+  LOOP AT itab_bseg.
+    READ TABLE it_makt WITH KEY matnr = itab_bseg-matnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      itab_bseg-maktx = it_makt-maktx.
+      MODIFY itab_bseg TRANSPORTING maktx.
+      CLEAR: it_makt.
+    ENDIF.
+
+    READ TABLE it_t053s WITH KEY rstgr = itab_bseg-rstgr BINARY SEARCH.
+    IF sy-subrc = 0.
+      itab_bseg-txt20 = it_t053s-txt20.
+      MODIFY itab_bseg TRANSPORTING txt20.
+      CLEAR: it_t053s.
+    ENDIF.
+
+  ENDLOOP.
+*  IF s_prtno[] IS NOT INITIAL.
+*    DELETE itab_bseg WHERE prtno NOT IN s_prtno.
+*  ENDIF.
+ENDFORM. " FRM AKE_DATA
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output .
+  DEFINE add_to_fieldcat.   "最多可以包含九个占位符 （&1，&2， …，&9）
+    CLEAR gw_alv_fieldcat_wa.
+    gw_alv_fieldcat_wa-fieldname   =  &1.
+    gw_alv_fieldcat_wa-seltext_l   =  &2.
+    gw_alv_fieldcat_wa-outputlen   =  &3.
+    gw_alv_fieldcat_wa-col_pos     =  &4.
+    gw_alv_fieldcat_wa-lzero       =  ''.
+    IF &1 = 'BSCHL'.
+      gw_alv_fieldcat_wa-no_zero     =  ''.
+    ELSE.
+      gw_alv_fieldcat_wa-no_zero     =  'X'.
+    ENDIF.
+    APPEND gw_alv_fieldcat_wa TO gt_alv_fieldcat.
+  END-OF-DEFINITION.
+
+  DATA: l_title_lines TYPE lvc_title.
+
+  CLEAR: g_alv_repid, g_alv_structure_name, g_alv_grid_title,
+  gt_alv_fieldcat, gt_alv_sort, gt_alv_events.
+  REFRESH: gt_alv_fieldcat, gt_alv_sort, gt_alv_events.
+
+  g_alv_repid = sy-repid.
+
+  add_to_fieldcat   'BUKRS'       '公司代码'       4   1.
+  add_to_fieldcat   'BELNR'       '凭证编号'       10   2.
+  add_to_fieldcat   'BLART'       '凭证类型'       2    3.
+  add_to_fieldcat   'KOART'       '科目类型'       1    4.
+  add_to_fieldcat   'BLDAT'       '凭证日期'       8    5.
+  add_to_fieldcat   'BUDAT'       '过账日期'       8    6.
+  add_to_fieldcat   'XREVERSAL'   '冲销标识'       4    7.
+  add_to_fieldcat   'MONAT'       '期间'           8    7.
+  add_to_fieldcat   'FKBER'       '功能范围'       8    8.
+  add_to_fieldcat   'USNAM'       '用户名称'       12    9.
+  add_to_fieldcat   'BUZEI'       '项目数'         3    10.
+  add_to_fieldcat   'BSCHL'       '记账码'         2    11.
+  add_to_fieldcat   'UMSKZ'       '特别总账'       2    12.
+  add_to_fieldcat   'HKONT'       '科目编号'       10   13.
+  add_to_fieldcat   'MCOD1'       '科目名称'       13   14.
+  add_to_fieldcat   'SHKZG'       '借贷别'         1    15.
+  add_to_fieldcat   'WRBTR'       '原币金额'       13   16.
+  add_to_fieldcat   'PSWSL'       '币别'           13   17.
+  add_to_fieldcat   'DMBTR'       '本币金额'       13   18.
+  add_to_fieldcat   'KUNNR'       '客户编号'       10   19.
+  add_to_fieldcat   'KNAME1'      '客户名称'       35   20.
+  add_to_fieldcat   'LIFNR'       '供应商编号'     10   21.
+  add_to_fieldcat   'LNAME1'      '供应商名称'     35   22.
+  add_to_fieldcat   'VBEL2'      '销售订单号'     10   23.
+  add_to_fieldcat   'POSN2'      '销售订单行项目号'     10   24.
+  add_to_fieldcat   'KOSTL'       '成本中心编号'   10   25.
+  add_to_fieldcat   'LTEXT'       '成本中心名称'   40   26.
+  add_to_fieldcat   'SGTXT'       '行项目文本'       50   27.
+  add_to_fieldcat   'BKTXT'       '抬头文本'       25   28.
+  add_to_fieldcat   'XBLNR'       '参照'           16   29.
+  add_to_fieldcat   'XREVERSAL'   '标记删除'        1   30.
+  add_to_fieldcat   'TCODE'       '事务代码'       20   31.
+  add_to_fieldcat   'ZUONR'       '分配编号'       18   32.
+  add_to_fieldcat   'WDATE'       '签发日期'       18   32.
+  add_to_fieldcat   'ZFBDT'       '票据到期日'       18   32.
+  add_to_fieldcat   'XREF1'       '参考码1'         12   35.
+  add_to_fieldcat   'XNAME1'      '员工'   12   36.
+  add_to_fieldcat   'XREF2'       '参考码2'          12  37.
+  add_to_fieldcat   'XREF3'       '参考码3'          12  39.
+  add_to_fieldcat   'AUFNR'       '订单号'     12  40.
+  add_to_fieldcat   'KTEXT'       '订单描述'    40    41.
+  add_to_fieldcat   'MATNR'       '物料号'         18    42.
+  add_to_fieldcat   'MAKTX'       '物料描述'        30   42.
+  add_to_fieldcat   'PROJK'       'WBS名称'        30   42.
+  add_to_fieldcat   'POST1'       'WBS描述'        30   42.
+  add_to_fieldcat   'MENGE'       '数量'    13    43.
+  add_to_fieldcat   'EBELN'       '采购凭证号'    10    44.
+  add_to_fieldcat   'RSTGR'       '原因代码'    10    45.
+  add_to_fieldcat   'TXT20'       '原因代码描述' 20 46.
+  add_to_fieldcat   'ANLN1'       '主资产号'    13    46.
+  add_to_fieldcat   'ANLN2'       '资产次级编号'   13   47.
+  add_to_fieldcat   'VBUND'       '贸易伙伴'     10  48.
+  add_to_fieldcat   'PPNAM'       '预制人'       20  49.
+  add_to_fieldcat   'PRTNO'       '凭证打印号'       16  50.
+  g_alv_structure_name = 'ITAB_BSEG'.
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+      i_callback_program      = g_alv_repid
+      i_structure_name        = g_alv_structure_name
+      i_grid_title            = g_alv_grid_title
+      is_layout               = gw_alv_layout
+      it_fieldcat             = gt_alv_fieldcat[]
+      i_save                  = 'A'
+      i_callback_user_command = 'USER_COMMAND'
+    TABLES
+      t_outtab                = itab_bseg
+    EXCEPTIONS
+      program_error           = 1
+      OTHERS                  = 2.
+
+ENDFORM. " FRM_OUTPUT
+*&---------------------------------------------------------------------*
+*&      Form  USER_COMMAND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->UCOMM      text
+*      -->SELFIELD   text
+*----------------------------------------------------------------------*
+FORM user_command USING ucomm LIKE sy-ucomm
+      selfield TYPE slis_selfield.
+  READ TABLE itab_bseg INDEX selfield-tabindex.
+  CHECK sy-subrc = 0.
+  CASE ucomm.
+    WHEN '&IC1'."双击
+      CASE selfield-sel_tab_field.
+        WHEN  '1-BELNR'.
+          SET  PARAMETER  ID  'BLN'  FIELD  itab_bseg-belnr.
+          SET  PARAMETER  ID  'BUK'  FIELD  itab_bseg-bukrs.
+          SET  PARAMETER  ID  'GJR'  FIELD  itab_bseg-gjahr.
+          CALL  TRANSACTION  'FB03'  AND  SKIP  FIRST  SCREEN.
+      ENDCASE.
+  ENDCASE.
+ENDFORM . "USER_COMMAND

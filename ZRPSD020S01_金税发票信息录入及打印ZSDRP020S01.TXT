@@ -1,0 +1,37 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZSDRP014S01
+*&---------------------------------------------------------------------*
+***选择屏幕
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+PARAMETERS:p_r1 RADIOBUTTON GROUP r1 DEFAULT 'X' USER-COMMAND r0,
+           p_r2 RADIOBUTTON GROUP r1.
+SELECTION-SCREEN END OF BLOCK b1.
+
+SELECTION-SCREEN BEGIN OF BLOCK b2 WITH FRAME TITLE TEXT-002.
+SELECT-OPTIONS: s_vkorg FOR vbak-vkorg OBLIGATORY ,
+                s_kunnr FOR knvv-kunnr,"客户
+                s_kvgr1 FOR vbak-kvgr1,"业务员
+                s_kvgr2 FOR vbak-kvgr2,"商务
+                s_zjhdh FOR ztsd005-zjhdh MODIF ID p2,"计划号
+                s_zjhrq FOR ztsd005-zjhrq MODIF ID p2,"计划日期
+                s_zjsrq FOR ztsd006-invoicedate ,"金税开票日期
+                s_vgbel FOR vbrp-vgbel,"交货单号
+                s_fkdat FOR vbrk-fkdat."开票日期
+
+SELECTION-SCREEN BEGIN OF LINE.	"行
+*SELECTION-SCREEN:COMMENT 1(20) TEXT-003 FOR p_1.
+SELECTION-SCREEN POSITION 1.   "定位 33列
+PARAMETERS: p_1 RADIOBUTTON GROUP r2.
+SELECTION-SCREEN:COMMENT 5(5) TEXT-003 FOR FIELD p_1.
+SELECTION-SCREEN POSITION 10.
+PARAMETERS: p_2 RADIOBUTTON GROUP r2.
+SELECTION-SCREEN:COMMENT 15(5) TEXT-004 FOR FIELD p_2.
+SELECTION-SCREEN POSITION 20.
+PARAMETERS: p_3 RADIOBUTTON GROUP r2.
+SELECTION-SCREEN:COMMENT 25(5) TEXT-005 FOR FIELD p_3.
+SELECTION-SCREEN END   OF LINE.
+
+*PARAMETERS: p_1 RADIOBUTTON GROUP r2,
+*            p_2 RADIOBUTTON GROUP r2,
+*            p_3 RADIOBUTTON GROUP r2..
+SELECTION-SCREEN END OF BLOCK b2.

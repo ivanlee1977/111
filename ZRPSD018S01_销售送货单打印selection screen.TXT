@@ -1,0 +1,14 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM013S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-002.
+PARAMETERS:    p_werks LIKE likp-werks OBLIGATORY DEFAULT '1000'."工厂
+SELECT-OPTIONS:s_lgort FOR lips-lgort,"仓库
+               s_vkorg FOR likp-vkorg,"销售组织
+               s_kunnr FOR likp-kunag,"客户
+               s_vbeln FOR likp-vbeln,"交货单
+               s_matnr FOR lips-matnr,"产品编码
+               s_wadat FOR likp-wadat_ist,"交货日期
+               s_bldat FOR likp-bldat,"交货单创建日期
+               s_wbstk FOR vbuk-wbstk MODIF ID r1."交货单状态
+SELECTION-SCREEN END OF BLOCK blc.

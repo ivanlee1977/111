@@ -1,0 +1,275 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM007_F01
+*&---------------------------------------------------------------------*
+FORM frm_show."ALV显示界面
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'SET_PF_STATUS'
+      i_callback_user_command  = 'ALV_USER_COMMAND'
+      is_layout                = gs_layout
+      it_fieldcat              = gt_fcat[]
+    TABLES
+      t_outtab                 = gt_mm[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+           WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+ENDFORM.
+
+FORM set_pf_status USING rt_extab TYPE slis_t_extab.
+
+  DATA: wa_extab TYPE slis_extab.
+
+  SET PF-STATUS '0100' EXCLUDING rt_extab.
+
+ENDFORM.                    "set_pf_status1
+
+FORM alv_user_command USING r_ucomm LIKE sy-ucomm  rs_selfield TYPE slis_selfield.
+
+
+
+  r_ucomm = sy-ucomm.
+  save_ok =  r_ucomm .
+  CASE r_ucomm.
+
+    WHEN 'ZPRINT'.
+      PERFORM frm_output_data.
+  ENDCASE.
+
+
+ENDFORM.                    "alv_user_command
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GETDATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_getdata .
+
+  CLEAR:gt_mm[].
+  SELECT
+       matnr
+       ersda
+       ernam
+       laeda
+       aenam
+       spart
+       mtart
+       matkl
+       bismt
+       meins
+       kznfm
+       mstae
+       mfrpn
+       mfrnr
+       bmatn
+       XCHPF
+       INTO CORRESPONDING FIELDS OF TABLE gt_mm
+        FROM mara
+        WHERE ersda IN s_ersda
+         AND  spart IN s_spart
+         AND  matkl IN s_matkl
+         AND  mtart IN s_mtart
+.
+
+  LOOP AT gt_mm.
+    SELECT SINGLE maktx INTO gt_mm-maktx FROM makt WHERE matnr = gt_mm-matnr AND spras = 1.
+    SELECT SINGLE vtext INTO gt_mm-vtext FROM tspat WHERE spart = gt_mm-spart AND spras = 1.
+    SELECT SINGLE wgbez INTO gt_mm-wgbez FROM t023t WHERE matkl = gt_mm-matkl AND spras = 1.
+    SELECT SINGLE mtstb INTO gt_mm-mtstb FROM t141t WHERE mmsta = gt_mm-mstae AND spras = 1.
+    SELECT SINGLE HRKFT INTO gt_mm-HRKFT FROM MBEW WHERE MATNR = gt_mm-matnr .
+    SELECT SINGLE HRKTX INTO gt_mm-HRKTX FROM TKKH2 WHERE HRKFT = gt_mm-HRKFT .
+    MODIFY gt_mm.
+  ENDLOOP.
+
+ENDFORM.
+
+FORM frm_getfact .
+  g_fieldfcat:
+    'MATNR' '物料编码' 'MATNR' 'MARA' ,
+    'MAKTX' '型号/规格' 'MAKTX' 'MAKT' ,
+    'ERSDA' '创建日期' 'ERSDA' 'MARA',
+    'ERNAM' '创建者' 'ERNAM' 'MARA',
+    'LAEDA' '上次更改' 'LAEDA' 'MARA',
+    'AENAM' '更改者' 'AENAM' 'MARA',
+    'SPART' '产品组' 'SPART' 'MARA',
+    'VTEXT' '产品组名称' '' '',
+    'MTART' '物料类型' 'MTART' 'MARA',
+    'MATKL' '物料组' 'MATKL' 'MARA',
+    'WGBEZ' '物料组名称' '' '',
+    'BISMT' '旧物料号' 'BISMT' 'MARA',
+    'MEINS' '基本计量单位' 'MEINS' 'MARA',
+    'KZNFM' '后继的物料' 'KZNFM' 'MARA',
+    'MSTAE' '跨工厂物料状态' 'MSTAE' 'MARA',
+    'MTSTB' '跨工厂物料状态名称' '' '',
+    'MFRPN' '制造商零件编号' 'MFRPN' 'MARA',
+    'MFRNR' '制造商' 'MFRNR' 'MARA',
+    'BMATN' '内部物料编号' 'BMATN' 'MARA',
+    'XCHPF' '批次' 'XCHPF' 'MARA',
+    'HRKFT' '原始组' 'HRKFT' 'MBEW',
+    'HRKTX' '原始组名称' 'HRKTX' 'TKKH2'
+  .
+  gs_layout-colwidth_optimize = 'X'.
+  gs_layout-box_fieldname = 'CHK'.
+  gs_layout-box_tabname = 'gt_mm'.
+*  gs_layout-edit = 'X'.
+  gs_layout-zebra = 'X'.
+
+ENDFORM.
+
+FORM frm_output_data .
+  DATA:ls_key   TYPE wwwdatatab,
+       lv_subrc TYPE sy-subrc.
+  DATA lv_file LIKE rlgrap-filename.
+
+  DATA: fullpath    TYPE string,
+        filename    TYPE string,
+        path        TYPE string,
+        user_action TYPE i,
+        encoding    TYPE abap_encoding.
+
+  CALL METHOD cl_gui_frontend_services=>file_save_dialog
+    EXPORTING
+      window_title      = '下载到本地文件'
+      default_extension = 'XLS'           "缺省文件类型
+      default_file_name = '物料申购计划表.XLS'
+      file_filter       = 'Excel 文件 (*.XLS)|*.XLS;*.XLSX|'
+      with_encoding     = 'X'
+      initial_directory = 'D:\'
+    CHANGING
+      filename          = filename    "获得用户输入文件名
+      path              = path        "获得用户所选路径
+      fullpath          = fullpath    "路径加文件名
+      user_action       = user_action
+      file_encoding     = encoding.
+
+*  CONCATENATE 'C:\MM\' sy-title '-'   sy-datum '.xls' INTO lv_file.
+  MOVE fullpath TO lv_file.
+
+  ls_key-relid = 'MI'.
+  ls_key-objid = gcst_excel_template.
+  CALL FUNCTION 'DOWNLOAD_WEB_OBJECT'
+    EXPORTING
+      key         = ls_key
+      destination = lv_file
+    IMPORTING
+      rc          = lv_subrc.
+  IF lv_subrc <> 0.
+    MESSAGE '下载模板出错，请检查，谢谢' TYPE 'E'.
+    EXIT.
+  ENDIF.
+
+
+***填充EXCEL数据
+  PERFORM frm_filldata_excel USING lv_file.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FILLDATA_EXCEL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LV_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_filldata_excel  USING iv_file TYPE rlgrap-filename.
+*******数据定义*******
+  DATA:lo_excel     TYPE ole2_object,
+       lo_workbooks TYPE ole2_object,
+       lo_workbook  TYPE ole2_object,
+       rows         TYPE ole2_object,
+       lo_sheet     TYPE ole2_object,
+       lo_range     TYPE ole2_object,
+       lo_cell      TYPE ole2_object,
+       lo_cell1     TYPE ole2_object.
+  DATA lv_file LIKE rlgrap-filename.
+
+  DATA lv_row TYPE i.
+  DATA lv_col TYPE i.
+
+  DEFINE mac_fill_cell.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+      EXPORTING
+        #1 = &1
+        #2 = &2.
+    SET PROPERTY OF lo_cell 'VALUE' = &3.
+  END-OF-DEFINITION.
+
+  DATA:lv_srzb  TYPE p DECIMALS 2,
+       lv_ml    TYPE p DECIMALS 2,
+       lv_ml_hj TYPE p DECIMALS 2,
+       lv_mlzb  TYPE p DECIMALS 2.
+  DATA:ls_data LIKE LINE OF gt_mm.
+
+  DATA:lv_text_ny TYPE string,
+       lv_text_dw TYPE string.
+  DATA:lv_butxt LIKE t001-butxt.
+*******程序主体*******
+
+*填充excel
+  CREATE OBJECT lo_excel 'EXCEL.APPLICATION'.
+  CALL METHOD OF lo_excel 'WORKBOOKS' = lo_workbooks.
+  CALL METHOD OF lo_workbooks 'OPEN' = lo_workbook EXPORTING #1 = iv_file.
+  CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = 1.
+
+***年月
+*  IF s_perde-high IS INITIAL.
+*    CONCATENATE p_gjahr '年' s_perde-low+1(2) '月' INTO lv_text_ny.
+*  ELSE.
+*    CONCATENATE p_gjahr '年' s_perde-low+1(2) '月 到 ' p_gjahr '年' s_perde-high+1(2) '月' INTO lv_text_ny.
+*  ENDIF.
+  DATA l_datum TYPE char10.
+  CALL FUNCTION 'CONVERT_DATE_TO_EXTERNAL'
+    EXPORTING
+      date_internal = sy-datum
+    IMPORTING
+      date_external = l_datum.
+
+  CONCATENATE '制单日期:' l_datum INTO lv_text_ny.
+  mac_fill_cell 3 5 lv_text_ny.
+
+  DATA l_meins TYPE char3.
+  lv_row = 7.
+  LOOP AT gt_mm.
+    IF lv_row >= 20.
+      CALL METHOD OF lo_sheet 'Rows' = lo_range EXPORTING #1 = lv_row.
+      CALL METHOD OF lo_range 'Copy'.
+      CALL METHOD OF lo_sheet 'Rows' = lo_range EXPORTING #1 = lv_row.
+      CALL METHOD OF lo_range 'Insert'.
+    ENDIF.
+*    mac_fill_cell lv_row 1  gt_mm-znum.
+*    mac_fill_cell lv_row 2  gt_mm-banfn.
+*    mac_fill_cell lv_row 3  gt_mm-matnr.
+*    mac_fill_cell lv_row 4  gt_mm-txz01.
+*    mac_fill_cell lv_row 5  gt_mm-plifz.
+*    mac_fill_cell lv_row 6  gt_mm-bstmi.
+
+*    CALL FUNCTION 'CONVERSION_EXIT_CUNIT_OUTPUT'
+*      EXPORTING
+*        input    = gt_mm-meins
+*        language = sy-langu
+*      IMPORTING
+*        output   = l_meins.
+*    mac_fill_cell lv_row 7  l_meins.
+*
+*    mac_fill_cell lv_row 8  gt_mm-menge.
+*    mac_fill_cell lv_row 9  gt_mm-lfdat.
+*    lv_row = lv_row + 1.
+
+  ENDLOOP.
+
+  CALL METHOD OF lo_sheet 'CELLS' = lo_cell EXPORTING #1 = 1 #2 = 1.
+  CALL METHOD OF lo_cell 'SELECT'.
+  SET PROPERTY OF lo_excel 'CutCopyMode' = 0.
+
+  CALL METHOD OF lo_workbook 'SAVE'.
+  SET PROPERTY OF lo_excel 'VISIBLE' = 1.
+  FREE OBJECT:lo_excel,lo_workbooks,lo_workbook,lo_sheet,lo_range,lo_cell.
+ENDFORM.

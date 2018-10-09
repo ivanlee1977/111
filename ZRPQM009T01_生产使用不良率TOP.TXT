@@ -1,0 +1,166 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPQM009T01
+*&---------------------------------------------------------------------*
+TABLES:mseg,mara,mkpf.
+
+DATA:BEGIN OF gw_mseg,
+       mblnr      LIKE mseg-mblnr,
+       mjahr      LIKE mseg-mjahr,
+       zeile      LIKE mseg-zeile,
+       matnr      LIKE mseg-matnr,
+       werks      LIKE mseg-werks,
+       lgort      LIKE mseg-lgort,
+       bwart      LIKE mseg-bwart,
+       menge      LIKE mseg-menge,
+       sjahr      LIKE mseg-sjahr,
+       smbln      LIKE mseg-smbln,
+       smblp      LIKE mseg-smblp,
+       aufnr      LIKE mseg-aufnr,
+       budat_mkpf LIKE mseg-budat_mkpf,
+       mtart      LIKE mara-mtart,
+       ebeln      like mseg-ebeln,"20180109 add 543\544,考虑委外业务 by chenhg
+     END OF gw_mseg.
+
+DATA:BEGIN OF gw_mara,
+       matnr LIKE mara-matnr,
+       matkl LIKE mara-matkl,
+       wgbez LIKE t023t-wgbez,
+     END OF gw_mara.
+
+DATA:BEGIN OF gw_stpu OCCURS 0,
+       matnr LIKE mast-matnr,
+       werks LIKE mast-werks,
+       idnrk LIKE stpo-idnrk.
+    INCLUDE STRUCTURE stpu.
+DATA:END OF gw_stpu.
+
+DATA:BEGIN OF gw_qmfe OCCURS 0,
+       qmnum     LIKE qmfe-qmnum,
+       fenum     LIKE qmfe-fenum,
+       werks     LIKE qmfe-werks,
+       bautl     LIKE qmfe-bautl,
+       fcoaufnr  LIKE qmfe-fcoaufnr,
+       anzfehler LIKE qmfe-anzfehler,
+     END OF gw_qmfe.
+
+DATA:BEGIN OF gw_qmur OCCURS 0,
+       qmnum     LIKE qmur-qmnum,
+       fenum     LIKE qmur-fenum,
+       werks     LIKE qmfe-werks,
+       bautl     LIKE qmfe-bautl,
+       fcoaufnr  LIKE qmfe-fcoaufnr,
+       prueflinr LIKE qmfe-prueflinr,
+       urnum     LIKE qmur-urnum,
+       urtxt     LIKE qmur-urtxt,
+     END OF gw_qmur.
+
+DATA:BEGIN OF gw_bom_data OCCURS 0.
+DATA:matnr_f LIKE mara-matnr,
+     werks_f LIKE marc-werks.
+    INCLUDE STRUCTURE stpox.
+DATA:END OF gw_bom_data.
+
+DATA:BEGIN OF gt_sxsy_detail OCCURS 0,
+       werks LIKE mseg-werks,
+       matkl LIKE mara-matkl,   "物料组
+       wgbez LIKE t023t-wgbez,  "物料组描述
+       matnr LIKE mseg-matnr,   "物料编码
+       maktx LIKE makt-maktx,   "物料名称
+       aufnr LIKE mseg-aufnr,   "生产订单
+       ztrs  TYPE p DECIMALS 3, "投入数
+       zbls  TYPE p DECIMALS 3, "不良数
+       zblv  TYPE p DECIMALS 2, "不良率
+     END OF gt_sxsy_detail.
+
+DATA:BEGIN OF gt_sxbl_wlfl OCCURS 0,
+       werks     LIKE mseg-werks,
+*      zwlfl         LIKE ztqm009b-zwlfl, "物料分类代码
+*      zwlfl_txt(20) TYPE c,              "物料类别描述
+       matkl     LIKE mara-matkl,   "物料组
+       wgbez     LIKE t023t-wgbez,  "物料组描述
+       ztrs      TYPE p DECIMALS 3,   "投入数
+       zbls      TYPE p DECIMALS 3,   "不良数
+       zblv      TYPE p DECIMALS 2,   "不良率
+       zmbz      TYPE p DECIMALS 2,   "目标值
+       zmbdb(10) TYPE c,              "与目标对比
+       zblv_sy   TYPE p DECIMALS 2,   "上月不良率
+       zblv_db   TYPE p DECIMALS 2,   "与上月份对比%
+     END OF gt_sxbl_wlfl.
+
+DATA:BEGIN OF gt_sxbl_vendor OCCURS 0,
+       werks     LIKE lfa1-werks,
+       txt30     LIKE t077y-txt30,  "供应商类别
+       lifnr     LIKE lfa1-lifnr,   "供应商
+       sortl     LIKE lfa1-sortl,   "供应商简称
+       ztrs      TYPE p DECIMALS 3, "投入数
+       zbls      TYPE p DECIMALS 3, "不良数
+       zblv      TYPE p DECIMALS 2, "不良率
+       zmbz      TYPE p DECIMALS 2, "目标值
+       zmbdb(10) TYPE c,            "与目标对比
+       ztrs_sy   TYPE p DECIMALS 3, "上月投入数
+       zbls_sy   TYPE p DECIMALS 3, "上月不良数
+       zblv_sy   TYPE p DECIMALS 2, "上月不良率
+       zblv_db   TYPE p DECIMALS 2, "与上月份对比%
+     END OF gt_sxbl_vendor.
+
+DATA:BEGIN OF gt_phg_detail OCCURS 0,
+       werks LIKE mseg-werks,
+       matkl LIKE mara-matkl,   "物料组
+       wgbez LIKE t023t-wgbez,  "物料组描述
+       matnr LIKE mseg-matnr,   "物料编码
+       maktx LIKE makt-maktx,   "物料名称
+       aufnr LIKE mseg-aufnr,   "生产订单
+       ztrp  TYPE i,            "投入批
+       zblp  TYPE i,            "不良批
+       zblv  TYPE p DECIMALS 2, "不良率
+     END OF gt_phg_detail.
+
+DATA:BEGIN OF gt_phg_wlfl OCCURS 0,
+       werks     LIKE mseg-werks,
+*      zwlfl         LIKE ztqm009b-zwlfl, "物料分类代码
+*      zwlfl_txt(20) TYPE c,              "物料类别描述
+       matkl     LIKE mara-matkl,   "物料组
+       wgbez     LIKE t023t-wgbez,  "物料组描述
+       ztrp      TYPE i,              "投入批
+       zblp      TYPE i,              "不良批
+       zblv      TYPE p DECIMALS 2,   "不良率
+       zmbz      LIKE ztqm009d-zmbz,  "目标值
+       zmbdb(10) TYPE c,              "与目标对比
+     END OF gt_phg_wlfl.
+
+DATA:BEGIN OF gt_phg_vendor OCCURS 0,
+       werks     LIKE lfa1-werks,     "工厂
+       txt30     LIKE t077y-txt30,    "供应商类别
+       lifnr     LIKE lfa1-lifnr,     "供应商
+       sortl     LIKE lfa1-sortl,     "供应商简称
+       ztrp      TYPE i,              "投入批
+       zblp      TYPE i,              "不良批
+       zblv      TYPE p DECIMALS 2,   "不良率
+       zmbz      LIKE ztqm009d-zmbz,  "目标值
+       zmbdb(10) TYPE c,              "与目标对比
+     END OF gt_phg_vendor.
+
+
+CONSTANTS:c_dzl(10)   TYPE c VALUE '电子料',
+          c_wjjgj(10) TYPE c VALUE '五金结构件',
+          c_bc(10)    TYPE c  VALUE '包材',
+          c_fl(10)    TYPE c  VALUE '辅料'.
+
+
+***ALV DATA DEFINE
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  gt_fcat-inttype = &5.
+  gt_fcat-intlen = &6.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

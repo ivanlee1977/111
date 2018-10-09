@@ -1,0 +1,328 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM001_F01
+*&---------------------------------------------------------------------*
+
+
+FORM frm_show."ALV显示界面
+
+
+  SORT gt_item BY prueflos DESCENDING.
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'SET_PF_STATUS'
+      i_callback_user_command  = 'ALV_USER_COMMAND'
+      is_layout                = gs_layout
+      it_fieldcat              = gt_fcat[]
+    TABLES
+      t_outtab                 = gt_item[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+           WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+ENDFORM.
+
+FORM set_pf_status USING rt_extab TYPE slis_t_extab.
+
+  DATA: wa_extab TYPE slis_extab.
+
+  SET PF-STATUS '0100' EXCLUDING rt_extab.
+
+ENDFORM.                    "set_pf_status1
+
+FORM alv_user_command USING r_ucomm LIKE sy-ucomm  rs_selfield TYPE slis_selfield.
+*   获取ALV中的鼠标勾选记录
+  DATA: l_grid TYPE REF TO cl_gui_alv_grid.
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = l_grid.
+  CALL METHOD l_grid->check_changed_data.
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  r_ucomm = sy-ucomm.
+  save_ok =  r_ucomm .
+  CASE r_ucomm.
+    WHEN 'SELECT'.
+      LOOP AT gt_item .
+        gt_item-chk = 'X'.
+        MODIFY gt_item.
+      ENDLOOP.
+      rs_selfield-refresh = 'X'.
+    WHEN 'DESELECT'.
+      LOOP AT gt_item .
+        gt_item-chk = ' '.
+        MODIFY gt_item.
+      ENDLOOP.
+      rs_selfield-refresh = 'X'.
+      "打印
+    WHEN 'ZPRINT'.
+      PERFORM frm_print.
+
+    WHEN '&OUP' OR '&ODN'.
+      SORT gt_item BY prueflos.
+  ENDCASE.
+  rs_selfield-refresh = 'X' .
+
+ENDFORM.                    "alv_user_command
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GETDATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_getdata .
+  CLEAR:gt_item[].
+  SELECT
+       b~aufnr
+       a~objnr
+       a~prueflos
+       a~matnr
+       a~ktextmat
+       a~charg
+       a~losmenge
+       a~mengeneinh
+       a~lagortchrg
+       b~psmng
+       b~wemng
+       c~sgtxt
+       INTO CORRESPONDING FIELDS OF TABLE gt_item
+        FROM qals AS a INNER JOIN afpo AS b ON a~aufnr = b~aufnr
+        INNER JOIN mseg AS c ON a~mblnr = c~mblnr AND a~mjahr = c~mjahr AND a~zeile = c~zeile
+        WHERE a~aufnr  IN s_aufnr
+         AND  a~prueflos IN s_pruef
+         AND  a~ersteldat IN s_erstel
+*         AND a~aufnr <> ''
+.
+  DATA lv_objnr LIKE aufk-objnr.
+  DATA lt_status LIKE TABLE OF jstat WITH HEADER LINE.
+*  DATA lt_status1 LIKE TABLE OF BSVX WITH HEADER LINE .
+  DATA lt_status1 LIKE  bsvx-sttxt .
+  LOOP AT gt_item.
+    IF gt_item-prueflos+1(1) <> 4.
+      DELETE gt_item.
+      CONTINUE.
+    ENDIF.
+*    SELECT SINGLE objnr INTO lv_objnr   FROM aufk WHERE aufnr = gt_item-aufnr.
+*    CALL FUNCTION 'STATUS_READ'
+*      EXPORTING
+*        client           = sy-mandt
+*        objnr            = lv_objnr
+*        only_active      = 'X'
+*      TABLES
+*        status           = lt_status
+*      EXCEPTIONS
+*        object_not_found = 1
+*        OTHERS           = 2.
+*    IF sy-subrc <> 0.
+** Implement suitable error handling here
+*    ENDIF.
+*通过查询bs23表，可以得知REL 状态值为 I0002.
+
+    CALL FUNCTION 'STATUS_TEXT_EDIT'
+      EXPORTING
+        client           = sy-mandt
+*       FLG_USER_STAT    = ' '
+        objnr            = gt_item-objnr
+        only_active      = 'X'
+        spras            = sy-langu
+*       BYPASS_BUFFER    = ' '
+      IMPORTING
+*       ANW_STAT_EXISTING       =
+*       E_STSMA          =
+        line             = lt_status1
+*       user_line        =
+*       STONR            =
+      EXCEPTIONS
+        object_not_found = 1
+        OTHERS           = 2.
+    IF sy-subrc <> 0.
+* Implement suitable error handling here
+    ENDIF.
+    IF p_chk <> 'X'.
+      IF lt_status1 NS 'REL'.
+        DELETE gt_item .
+        CONTINUE.
+      ENDIF.
+      IF lt_status1 CS 'LTCA'.
+        DELETE gt_item .
+        CONTINUE.
+      ENDIF.
+    ENDIF.
+    CLEAR lt_status1.
+  ENDLOOP.
+
+
+
+ENDFORM.
+
+FORM frm_getfact .
+  gt_fcat-fieldname   = 'CHK'.
+  gt_fcat-seltext_l = '选择'.
+  gt_fcat-checkbox = 'X'.
+  gt_fcat-edit = 'X'.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+  g_fieldfcat:
+    'AUFNR' '生产订单' 'AUFNR' 'QALS' '',
+    'PRUEFLOS' '检验批次' 'PRUEFLOS' 'QALS' '',
+    'MATNR' '料号' 'MATNR' 'QALS' '',
+    'KTEXTMAT' '物料描述' 'KTEXTMAT' 'QALS' '',
+    'CHARG' '版本' 'CHARG' 'QALS' '',
+    'MENGENEINH' '单位' 'MENGENEINH' 'QALS' '',
+    'PSMNG' '订单数量' 'PSMNG' 'AFPO' '',
+    'WEMNG' '订单累计入库数量' 'WEMNG' 'AFPO' '',
+    'LOSMENGE' '送检数量' 'LOSMENGE' 'QALS' '',
+    'LAGORTCHRG' '仓码' 'LAGORTCHRG' 'QALS' '',
+    'ZCJSL' '抽检数量' '' '' '',
+    'ZJYHGSL' '检验合格数量' '' '' '',
+    'ZPDJG' '判定结果 ' '' '' '',
+    'ZBLXX' '不良现象' '' '' '',
+    'SGTXT' '备注' 'SGTXT' 'MSEG' ''
+  .
+
+  gs_layout-colwidth_optimize = 'X'.
+*  gs_layout-box_fieldname = 'CHK'.
+*  gs_layout-box_tabname = 'gt_item'.
+  gs_layout-zebra = 'X'.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PRINT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_print .
+  PERFORM frm_chkprint.
+
+  LOOP AT gt_item WHERE chk NE 'X'.
+    DELETE gt_item.
+  ENDLOOP.
+
+
+  CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
+    EXPORTING
+      formname           = 'ZSFPP_001'
+    IMPORTING
+      fm_name            = lv_name
+    EXCEPTIONS
+      no_form            = 1
+      no_function_module = 2
+      OTHERS             = 3.
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+       WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+
+  ENDIF.
+*  SORT gt_item BY prueflos.
+  CALL FUNCTION lv_name
+    EXCEPTIONS
+      formatting_error = 1
+      internal_error   = 2
+      send_error       = 3
+      user_canceled    = 4
+      OTHERS           = 5.
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+       WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHKPRINT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_chkprint .
+  READ TABLE gt_item WITH KEY chk = 'X' TRANSPORTING NO FIELDS.
+  IF sy-subrc NE 0.
+    MESSAGE '请至少选择一行进行打印' TYPE 'E'.
+    EXIT.
+  ENDIF.
+*  SORT gt_item BY aufnr.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OPEN_PRINT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_open_print .
+*  gs_control-no_open = 'X'.
+*  gs_control-no_close = 'X'.
+  gs_option-tdimmed  = 'X'.
+  gs_option-tddelete = 'X'.
+
+  CALL FUNCTION 'SSF_OPEN'
+*    EXPORTING
+*      control_parameters = gs_control
+    EXCEPTIONS
+      formatting_error = 1
+      internal_error   = 2
+      send_error       = 3
+      user_canceled    = 4
+      OTHERS           = 5.
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+   WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+* Implement suitable error handling here
+  ENDIF.
+
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_LOOPPRINT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_loopprint .
+
+
+*    PERFORM frm_addprintsum.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SSF_CLOSE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_ssf_close .
+  CALL FUNCTION 'SSF_CLOSE'
+*    IMPORTING
+*      job_output_info  =
+    EXCEPTIONS
+      formatting_error = 1
+      internal_error   = 2
+      send_error       = 3
+      OTHERS           = 4.
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+   WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.

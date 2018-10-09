@@ -1,0 +1,12 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPMM007_S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+
+SELECT-OPTIONS: s_ERSDA FOR MARA-ERSDA OBLIGATORY DEFAULT sy-datum,
+                s_SPART FOR MARA-SPART,
+                s_MATKL FOR MARA-MATKL,
+                s_MTART FOR MARA-MTART
+       .
+SELECTION-SCREEN END OF BLOCK b1.

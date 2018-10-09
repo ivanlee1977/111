@@ -1,0 +1,1669 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM008F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FILENAME_FIND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      <--P_P_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_filename_find  CHANGING xc_file.
+  CALL FUNCTION 'WS_FILENAME_GET'
+    EXPORTING
+      def_filename     = xc_file
+      def_path         = 'C:\'
+      mask             = ',*.XLS.'
+      mode             = 'O'
+      title            = '文件名'
+    IMPORTING
+      filename         = xc_file
+    EXCEPTIONS
+      inv_winsys       = 1
+      no_batch         = 2
+      selection_cancel = 3
+      selection_error  = 4
+      OTHERS           = 5.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_INITIAL_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_initial_data .
+*******数据定义*******
+  INCLUDE <icon>.
+  DATA ls_functxt TYPE smp_dyntxt.
+  DATA:gt_exbut TYPE TABLE OF sy-ucomm.
+*******初始化*******
+*******程序主体*******
+  "屏幕工具栏中按饼
+  "启用自定义工具
+  CLEAR ls_functxt.
+  ls_functxt-icon_text = '模板下载'."'Download Template'.
+  ls_functxt-icon_id   = '@49@'.
+  ls_functxt-quickinfo =  '模板下载'.
+  sscrfields-functxt_01 = ls_functxt.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DOWNLOAD_TEMPLATE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0040   text
+*      <--P_P_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_download_template  USING u_objid LIKE wwwdatatab-objid CHANGING ic_file.
+  DATA:l_path   TYPE string.
+
+  CALL METHOD zcl_ole_excel=>download_templet
+    EXPORTING
+      iv_objid        = u_objid
+      iv_win_title    = '请指定下载路径'
+      iv_df_extension = 'XLS'
+    IMPORTING
+      ev_fullpath     = l_path.
+
+  CALL METHOD cl_gui_frontend_services=>execute
+    EXPORTING
+      document = l_path
+    EXCEPTIONS
+      OTHERS   = 10.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_UPLOAD_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_upload_data .
+  DATA:ls_header LIKE LINE OF gt_header.
+  DATA:ls_table_field LIKE  tabfield,
+       lv_string      TYPE string.
+  FIELD-SYMBOLS:<fs_field>    TYPE any..
+
+  CALL FUNCTION 'ALSM_EXCEL_TO_INTERNAL_TABLE'
+    EXPORTING
+      filename                = p_file
+      i_begin_col             = 1
+      i_begin_row             = 4
+      i_end_col               = 100
+      i_end_row               = 9999
+    TABLES
+      intern                  = gt_upload
+    EXCEPTIONS
+      inconsistent_parameters = 1
+      upload_ole              = 2
+      OTHERS                  = 3.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+  CASE 'X'.
+    WHEN r1.
+      gv_structure = 'ZSMM_MAT_MASTER_DATA'.
+      ASSIGN gt_basic_data TO <fs_tab_line>.
+      ASSIGN gt_basic_data[] TO <fs_tab>.
+    WHEN r2.
+      gv_structure = 'ZSMM_MAT_SALES_DATA'.
+      ASSIGN gt_sales_data TO <fs_tab_line>.
+      ASSIGN gt_sales_data[] TO <fs_tab>.
+    WHEN r3.  "
+      gv_structure = 'ZSMM_MAT_PURCHASE_DATA'.
+      ASSIGN gt_purchase_data TO <fs_tab_line>.
+      ASSIGN gt_purchase_data[] TO <fs_tab>.
+    WHEN r4.
+      gv_structure = 'ZSMM_MAT_PRODUCT_DATA'.
+      ASSIGN gt_product_data TO <fs_tab_line>.
+      ASSIGN gt_product_data[] TO <fs_tab>.
+    WHEN r5.
+      gv_structure = 'ZSMM_MAT_QM_DATA'.
+      ASSIGN gt_qm_data TO <fs_tab_line>.
+      ASSIGN gt_qm_data[] TO <fs_tab>.
+    WHEN r6.
+      gv_structure = 'ZSMM_MAT_FI_DATA'.
+      ASSIGN gt_fi_data TO <fs_tab_line>.
+      ASSIGN gt_fi_data[] TO <fs_tab>.
+    WHEN r7.
+      gv_structure = 'ZSMM_MAT_MPN_DATA'.
+      ASSIGN gt_mpn_data TO <fs_tab_line>.
+      ASSIGN gt_mpn_data[] TO <fs_tab>.
+    WHEN r8.
+      gv_structure = 'ZSMM_MAT_CLASS_DATA'.
+      ASSIGN gt_class_data TO <fs_tab_line>.
+      ASSIGN gt_class_data[] TO <fs_tab>.
+    WHEN r9.
+      gv_structure = 'ZSMM_MAT_STORAGE_DATA'.
+      ASSIGN gt_storage_data TO <fs_tab_line>.
+      ASSIGN gt_storage_data[] TO <fs_tab>.
+    WHEN r10.
+      gv_structure = 'ZSMM_MAT_FI_DATA'.
+      ASSIGN gt_fi_data TO <fs_tab_line>.
+      ASSIGN gt_fi_data[] TO <fs_tab>.
+    WHEN OTHERS.
+  ENDCASE.
+
+***将数据整理到内表中
+  LOOP AT gt_upload ASSIGNING <fs_data>.
+    IF <fs_data>-row EQ 1.
+      MOVE-CORRESPONDING <fs_data> TO gt_header.
+      APPEND gt_header.
+      CONTINUE.
+    ENDIF.
+    CLEAR ls_header.
+    READ TABLE gt_header INTO ls_header WITH KEY col = <fs_data>-col.
+    IF <fs_data>-value NE '/' AND ls_header-value IS NOT INITIAL.
+      ls_table_field-tabname = gv_structure.
+      ls_table_field-fieldname  = ls_header-value.
+*& 字段校验
+      CALL FUNCTION 'RS_CHECK_CONV_EX_2_IN'
+        EXPORTING
+          input_external               = <fs_data>-value
+          table_field                  = ls_table_field
+        EXCEPTIONS
+          input_not_numerical          = 1
+          too_many_decimals            = 2
+          more_than_one_sign           = 3
+          ill_thousand_separator_dist  = 4
+          too_many_digits              = 5
+          sign_for_unsigned            = 6
+          too_large                    = 7
+          too_small                    = 8
+          invalid_date_format          = 9
+          invalid_date                 = 10
+          invalid_time_format          = 11
+          invalid_time                 = 12
+          invalid_hex_digit            = 13
+          unexpected_error             = 14
+          invalid_fieldname            = 15
+          field_and_descr_incompatible = 16
+          input_too_long               = 17
+          no_decimals                  = 18
+          invalid_float                = 19
+          conversion_exit_error        = 20
+          OTHERS                       = 21.
+      IF sy-subrc <> 0.
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4 INTO lv_string.
+        MESSAGE e001(00) WITH |ROW,COL{ <fs_data>-row } { <fs_data>-col }{ lv_string } |.
+      ENDIF.
+    ENDIF.
+    CONDENSE <fs_data>-value.
+    ASSIGN COMPONENT ls_header-value OF STRUCTURE <fs_tab_line> TO <fs_field>.
+    IF sy-subrc = 0.
+      <fs_field> = <fs_data>-value.
+    ENDIF.
+    AT END OF row.              "新的一行EXCEL数据_结束
+      PERFORM frm_check_data.
+      APPEND <fs_tab_line> TO <fs_tab>.     "收集一行EXCEL数据
+      CLEAR <fs_tab_line>.
+    ENDAT.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_DATA_BASIC_VIEW
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_data.
+  DATA:lv_matnr LIKE mara-matnr.
+  IF r1 = 'X'.
+***check必输字段
+    IF gt_basic_data-matnr IS INITIAL OR
+       gt_basic_data-mtart IS INITIAL OR
+       gt_basic_data-maktx_zh IS INITIAL OR
+       gt_basic_data-meins IS INITIAL OR
+       gt_basic_data-matkl IS INITIAL OR
+       gt_basic_data-bismt IS INITIAL.
+      mcr_add_msg:gt_basic_data  '请输入必输字段'.
+    ENDIF.
+
+    IF gt_basic_data-matnr IS NOT INITIAL.
+      mcr_add_zero:gt_basic_data-matnr.
+    ENDIF.
+
+    IF gt_basic_data-meins IS NOT INITIAL.
+      mcr_convert_unit_input:gt_basic_data-meins.
+    ENDIF.
+
+    IF gt_basic_data-zmsg IS NOT INITIAL.
+      gt_basic_data-zicon = icon_led_red.
+      gt_basic_data-msgty = 'E'.
+    ENDIF.
+
+  ELSEIF r2 = 'X'.
+    IF gt_sales_data-matnr IS INITIAL OR
+       gt_sales_data-werks IS INITIAL OR
+       gt_sales_data-vkorg IS INITIAL OR
+       gt_sales_data-vtweg IS INITIAL OR
+       gt_sales_data-taxkm IS INITIAL OR
+       gt_sales_data-dwerk IS INITIAL OR
+       gt_sales_data-mtpos IS INITIAL OR
+*       gt_sales_data-mvgr1 IS INITIAL OR
+       gt_sales_data-ladgr IS INITIAL OR
+       gt_sales_data-tragr IS INITIAL OR
+       gt_sales_data-mtvfp IS INITIAL .
+      mcr_add_msg:gt_sales_data  '请输入必输字段'.
+    ENDIF.
+    IF gt_sales_data-matnr IS NOT INITIAL.
+      mcr_add_zero:gt_sales_data-matnr.
+      SELECT SINGLE matnr INTO lv_matnr FROM mara WHERE matnr = gt_sales_data-matnr.
+      IF sy-subrc NE 0.
+        mcr_add_msg:gt_sales_data  '物料不存在'.
+      ENDIF.
+    ENDIF.
+    IF gt_sales_data-vrkme IS NOT INITIAL.
+      mcr_convert_unit_input:gt_sales_data-vrkme.
+    ENDIF.
+
+    IF gt_sales_data-zmsg IS NOT INITIAL.
+      gt_sales_data-zicon = icon_led_red.
+      gt_sales_data-msgty = 'E'.
+    ENDIF.
+  ELSEIF r3 = 'X'.
+    IF gt_purchase_data-matnr IS INITIAL OR
+       gt_purchase_data-werks IS INITIAL.
+*       gt_purchase_data-ekgrp IS INITIAL.
+*       gt_purchase_data-kautb IS INITIAL.
+      mcr_add_msg:gt_purchase_data  '请输入必输字段'.
+    ENDIF.
+    IF gt_purchase_data-matnr IS NOT INITIAL.
+      mcr_add_zero:gt_purchase_data-matnr.
+      SELECT SINGLE matnr INTO lv_matnr FROM mara WHERE matnr = gt_purchase_data-matnr.
+      IF sy-subrc NE 0.
+        mcr_add_msg:gt_purchase_data  '物料不存在'.
+      ENDIF.
+    ENDIF.
+    IF gt_purchase_data-zmsg IS NOT INITIAL.
+      gt_purchase_data-zicon = icon_led_red.
+      gt_purchase_data-msgty = 'E'.
+    ENDIF.
+  ELSEIF r4 = 'X'.
+*    IF gt_product_data-matnr IS INITIAL OR
+*       gt_product_data-werks IS INITIAL OR
+*       gt_product_data-disgr IS INITIAL OR
+*       gt_product_data-dismm IS INITIAL OR
+*       gt_product_data-dispo IS INITIAL OR
+*       gt_product_data-disls IS INITIAL OR
+*       gt_product_data-beskz IS INITIAL OR
+*       gt_product_data-fhori IS INITIAL OR
+*       gt_product_data-plifz IS INITIAL OR
+*       gt_product_data-lgpro IS INITIAL OR
+*       gt_product_data-lgfsb IS INITIAL OR
+*       gt_product_data-mtvfp IS INITIAL OR
+*       gt_product_data-sfcpf IS INITIAL.
+*      mcr_add_msg:gt_product_data  '请输入必输字段'.
+*    ENDIF.
+    IF gt_product_data-matnr IS NOT INITIAL.
+      mcr_add_zero:gt_product_data-matnr.
+      SELECT SINGLE matnr INTO lv_matnr FROM mara WHERE matnr = gt_product_data-matnr.
+      IF sy-subrc NE 0.
+        mcr_add_msg:gt_product_data  '物料不存在'.
+      ENDIF.
+    ENDIF.
+    IF gt_product_data-zmsg IS NOT INITIAL.
+      gt_product_data-zicon = icon_led_red.
+      gt_product_data-msgty = 'E'.
+    ENDIF.
+    IF gt_product_data-nfmat IS NOT INITIAL.
+      mcr_add_zero:gt_product_data-nfmat.
+    ENDIF.
+  ELSEIF r5 = 'X'.
+    IF gt_qm_data-matnr IS INITIAL OR
+       gt_qm_data-werks IS INITIAL.
+      mcr_add_msg:gt_qm_data  '请输入必输字段'.
+    ENDIF.
+    IF gt_qm_data-matnr IS NOT INITIAL.
+      mcr_add_zero:gt_qm_data-matnr.
+      SELECT SINGLE matnr INTO lv_matnr FROM mara WHERE matnr = gt_qm_data-matnr.
+      IF sy-subrc NE 0.
+        mcr_add_msg:gt_qm_data  '物料不存在'.
+      ENDIF.
+    ENDIF.
+    IF gt_qm_data-zmsg IS NOT INITIAL.
+      gt_qm_data-zicon = icon_led_red.
+      gt_qm_data-msgty = 'E'.
+    ENDIF.
+  ELSEIF r6 = 'X'.
+    IF gt_fi_data-matnr IS INITIAL OR
+       gt_fi_data-werks IS INITIAL OR
+       gt_fi_data-bklas IS INITIAL OR
+       gt_fi_data-vprsv IS INITIAL OR
+       gt_fi_data-mlast IS INITIAL OR
+       gt_fi_data-ekalr IS INITIAL OR
+       gt_fi_data-hkmat IS INITIAL OR
+       gt_fi_data-hrkft IS INITIAL OR
+       gt_fi_data-awsls IS INITIAL OR
+       gt_fi_data-prctr IS INITIAL OR
+       gt_fi_data-peinh IS INITIAL.
+      mcr_add_msg:gt_qm_data  '请输入必输字段'.
+    ENDIF.
+    IF gt_fi_data-matnr IS NOT INITIAL.
+      mcr_add_zero:gt_fi_data-matnr.
+      SELECT SINGLE matnr INTO lv_matnr FROM mara WHERE matnr = gt_fi_data-matnr.
+      IF sy-subrc NE 0.
+        mcr_add_msg:gt_fi_data  '物料不存在'.
+      ENDIF.
+    ENDIF.
+    IF gt_fi_data-zmsg IS NOT INITIAL.
+      gt_fi_data-zicon = icon_led_red.
+      gt_fi_data-msgty = 'E'.
+    ENDIF.
+  ELSEIF r7 = 'X'.
+    IF gt_mpn_data-matnr    IS INITIAL OR
+       gt_mpn_data-maktx_zh IS INITIAL OR
+       gt_mpn_data-bmatn    IS INITIAL OR
+       gt_mpn_data-mfrnr    IS INITIAL OR
+       gt_mpn_data-matkl    IS INITIAL.
+      mcr_add_msg:gt_mpn_data  '请输入必输字段'.
+    ENDIF.
+    IF gt_mpn_data-matnr IS NOT INITIAL.
+      mcr_add_zero:gt_mpn_data-matnr.
+    ENDIF.
+    IF gt_mpn_data-bmatn IS NOT INITIAL.
+      mcr_add_zero:gt_mpn_data-bmatn.
+    ENDIF.
+    IF gt_mpn_data-mfrnr IS NOT INITIAL.
+      mcr_add_zero:gt_mpn_data-mfrnr.
+    ENDIF.
+    IF gt_mpn_data-zmsg IS NOT INITIAL.
+      gt_mpn_data-zicon = icon_led_red.
+      gt_mpn_data-msgty = 'E'.
+    ENDIF.
+  ELSEIF r8 = 'X'.
+    IF gt_class_data-matnr IS INITIAL OR
+       gt_class_data-klart IS INITIAL OR
+       gt_class_data-klasse IS INITIAL.
+      mcr_add_msg:gt_class_data  '请输入必输字段'.
+    ENDIF.
+    IF gt_class_data-matnr IS NOT INITIAL.
+      mcr_add_zero:gt_class_data-matnr.
+      SELECT SINGLE matnr INTO lv_matnr FROM mara WHERE matnr = gt_class_data-matnr.
+      IF sy-subrc NE 0.
+        mcr_add_msg:gt_class_data  '物料不存在'.
+      ENDIF.
+    ENDIF.
+    IF gt_class_data-zmsg IS NOT INITIAL.
+      gt_class_data-zicon = icon_led_red.
+      gt_class_data-msgty = 'E'.
+    ENDIF.
+  ELSEIF r9 = 'X'.
+    IF gt_storage_data-matnr IS INITIAL OR
+       gt_storage_data-werks IS INITIAL OR
+       gt_storage_data-lgort IS INITIAL.
+      mcr_add_msg:gt_storage_data  '请输入必输字段'.
+    ENDIF.
+    IF gt_storage_data-matnr IS NOT INITIAL.
+      mcr_add_zero:gt_storage_data-matnr.
+      SELECT SINGLE matnr INTO lv_matnr FROM mara WHERE matnr = gt_storage_data-matnr.
+      IF sy-subrc NE 0.
+        mcr_add_msg:gt_storage_data  '物料不存在'.
+      ENDIF.
+    ENDIF.
+    IF gt_storage_data-werks IS NOT INITIAL AND gt_storage_data-lgort IS NOT INITIAL.
+      SELECT SINGLE * FROM t001l WHERE werks = gt_storage_data-werks AND lgort = gt_storage_data-lgort.
+      IF sy-subrc NE 0.
+        mcr_add_msg:gt_storage_data  '工厂库位不存在'.
+      ENDIF.
+    ENDIF.
+  ELSEIF r10 = 'X'.
+    IF gt_fi_data-matnr IS INITIAL OR
+       gt_fi_data-werks IS INITIAL OR
+*       gt_fi_data-bklas IS INITIAL OR
+*       gt_fi_data-vprsv IS INITIAL OR
+*       gt_fi_data-mlast IS INITIAL OR
+*       gt_fi_data-ekalr IS INITIAL OR
+*       gt_fi_data-hkmat IS INITIAL OR
+       gt_fi_data-hrkft IS INITIAL .
+*       gt_fi_data-awsls IS INITIAL OR
+*       gt_fi_data-prctr IS INITIAL OR
+*       gt_fi_data-peinh IS INITIAL.
+      mcr_add_msg:gt_qm_data  '请输入必输字段'.
+    ENDIF.
+    IF gt_fi_data-matnr IS NOT INITIAL.
+      mcr_add_zero:gt_fi_data-matnr.
+      SELECT SINGLE matnr INTO lv_matnr FROM mara WHERE matnr = gt_fi_data-matnr.
+      IF sy-subrc NE 0.
+        mcr_add_msg:gt_fi_data  '物料不存在'.
+      ENDIF.
+    ENDIF.
+    IF gt_fi_data-zmsg IS NOT INITIAL.
+      gt_fi_data-zicon = icon_led_red.
+      gt_fi_data-msgty = 'E'.
+    ENDIF.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
+    EXPORTING
+*     I_BUFFER_ACTIVE        =
+      i_structure_name       = gv_structure
+*     I_CLIENT_NEVER_DISPLAY = 'X'
+*     I_BYPASSING_BUFFER     =
+*     I_INTERNAL_TABNAME     =
+    CHANGING
+      ct_fieldcat            = gt_fcat[]
+    EXCEPTIONS
+      inconsistent_interface = 1
+      program_error          = 2
+      OTHERS                 = 3.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+  gt_fcat-fieldname = 'ZICON'.
+  gt_fcat-coltext  = '状态'.
+  gt_fcat-scrtext_l = '状态'.
+  gt_fcat-scrtext_m = '状态'.
+  gt_fcat-scrtext_s = '状态'.
+  gt_fcat-inttype = 'C'.
+  gt_fcat-intlen = '30'.
+  INSERT gt_fcat INDEX 1.
+  CLEAR gt_fcat.
+
+  gt_fcat-fieldname = 'ZMSG'.
+  gt_fcat-coltext  = '消息'.
+  gt_fcat-scrtext_l = '消息'.
+  gt_fcat-scrtext_m = '消息'.
+  gt_fcat-scrtext_s = '消息'.
+  gt_fcat-inttype = 'C'.
+  gt_fcat-intlen = '200'.
+  APPEND gt_fcat..
+  CLEAR gt_fcat.
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+  gs_layout-no_toolbar = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK        = ' '
+*     I_BYPASSING_BUFFER       =
+*     I_BUFFER_ACTIVE          =
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'FRM_SET_PF_STATUS'
+      i_callback_user_command  = 'FRM_USER_COMMAND'
+*     I_CALLBACK_TOP_OF_PAGE   = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME         =
+*     I_BACKGROUND_ID          = ' '
+*     I_GRID_TITLE             =
+*     I_GRID_SETTINGS          =
+      is_layout_lvc            = gs_layout
+      it_fieldcat_lvc          = gt_fcat[]
+*     IT_EXCLUDING             =
+*     IT_SPECIAL_GROUPS_LVC    =
+*     IT_SORT_LVC              =
+*     IT_FILTER_LVC            =
+*     IT_HYPERLINK             =
+*     IS_SEL_HIDE              =
+      i_default                = 'X'
+      i_save                   = 'A'
+*     IS_VARIANT               =
+*     IT_EVENTS                =
+*     IT_EVENT_EXIT            =
+*     IS_PRINT_LVC             =
+*     IS_REPREP_ID_LVC         =
+*     I_SCREEN_START_COLUMN    = 0
+*     I_SCREEN_START_LINE      = 0
+*     I_SCREEN_END_COLUMN      = 0
+*     I_SCREEN_END_LINE        = 0
+*     I_HTML_HEIGHT_TOP        =
+*     I_HTML_HEIGHT_END        =
+*     IT_ALV_GRAPHICS          =
+*     IT_EXCEPT_QINFO_LVC      =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER  =
+*     ES_EXIT_CAUSED_BY_USER   =
+    TABLES
+      t_outtab                 = <fs_tab>
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PF_STATUS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_set_pf_status USING rt_extab TYPE slis_t_extab.
+  SET PF-STATUS 'PF_1000'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_USER_COMMAND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_user_command USING r_ucomm LIKE sy-ucomm
+                            rs_selfield TYPE slis_selfield..
+
+  DATA:lv_grid TYPE REF TO cl_gui_alv_grid.
+
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = lv_grid.
+
+  CASE r_ucomm.
+    WHEN 'ZUPLOAD'.  "导入数据
+      PERFORM frm_create_material.
+      CALL METHOD lv_grid->set_frontend_layout
+        EXPORTING
+          is_layout = gs_layout.
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CREATE_MATERIAL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_create_material .
+  CASE 'X'.
+    WHEN r1.
+      PERFORM frm_create_mat_basic_data.
+    WHEN r2.
+      PERFORM frm_create_mat_sales_data.
+    WHEN r3.
+      PERFORM frm_create_mat_purchase_data.
+    WHEN r4.
+      PERFORM frm_create_mat_product_data.
+    WHEN r5.
+      PERFORM frm_create_mat_qm_data.
+    WHEN r6.
+      PERFORM frm_create_mat_finance_data.
+    WHEN r7.
+      PERFORM frm_create_mat_mpn_data.
+    WHEN r8.
+      PERFORM frm_create_mat_class_data.
+    WHEN r9.
+      PERFORM frm_create_mat_storage_data.
+    WHEN r10.
+      PERFORM frm_create_mat_finance_data1.
+    WHEN OTHERS.
+  ENDCASE.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CREATE_MATERIAL_BASIC_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_create_mat_basic_data .
+  DATA:ls_headdata    LIKE bapimathead,
+       ls_clientdata  LIKE bapi_mara,
+       ls_clientdatax LIKE bapi_marax.
+  DATA:lt_matdes LIKE bapi_makt OCCURS 0 WITH HEADER LINE,
+       lt_return LIKE bapi_matreturn2 OCCURS 0 WITH HEADER LINE.
+
+  READ TABLE gt_basic_data WITH KEY msgty = 'E'.
+  IF sy-subrc = 0.
+    MESSAGE '导入数据有错误，请先修正' TYPE 'E'.
+  ENDIF.
+  LOOP AT gt_basic_data WHERE msgty IS INITIAL.
+    CLEAR:ls_headdata,ls_clientdata,ls_clientdatax,lt_matdes,lt_return.
+    REFRESH:lt_matdes,lt_return.
+
+    ls_headdata-material = gt_basic_data-matnr.
+    ls_headdata-ind_sector = 'M'.
+    ls_headdata-matl_type = gt_basic_data-mtart.
+    ls_headdata-basic_view = con_x.
+
+    ls_clientdata-old_mat_no = gt_basic_data-bismt.
+    ls_clientdata-matl_group = gt_basic_data-matkl.
+    ls_clientdata-base_uom   = gt_basic_data-meins.
+    ls_clientdata-division   = gt_basic_data-spart.
+
+    ls_clientdatax-old_mat_no = con_x.
+    ls_clientdatax-matl_group = con_x.
+    ls_clientdatax-base_uom   = con_x.
+    ls_clientdatax-division   = con_x.
+
+***物料描述
+    IF gt_basic_data-maktx_zh IS NOT INITIAL.
+      lt_matdes-langu = '1'.
+      lt_matdes-matl_desc = gt_basic_data-maktx_zh.
+      APPEND lt_matdes.
+      CLEAR lt_matdes.
+    ENDIF.
+    IF gt_basic_data-maktx_en IS NOT INITIAL.
+      lt_matdes-langu = 'E'.
+      lt_matdes-matl_desc = gt_basic_data-maktx_en.
+      APPEND lt_matdes.
+      CLEAR lt_matdes.
+    ENDIF.
+
+    CALL FUNCTION 'BAPI_MATERIAL_SAVEDATA'
+      EXPORTING
+        headdata            = ls_headdata
+        clientdata          = ls_clientdata
+        clientdatax         = ls_clientdatax
+      TABLES
+        materialdescription = lt_matdes
+        returnmessages      = lt_return.
+    LOOP AT lt_return WHERE type = 'E' OR type = 'A'.
+      EXIT.
+    ENDLOOP.
+    IF sy-subrc = 0.
+      CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+      PERFORM frm_get_msg TABLES lt_return CHANGING gt_basic_data-zmsg.
+      gt_basic_data-zicon = icon_led_red.
+      gt_basic_data-msgty = 'E'.
+    ELSE.
+      CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+        EXPORTING
+          wait = 'X'.
+      gt_basic_data-zicon = icon_led_green.
+      gt_basic_data-msgty = 'S'.
+      gt_basic_data-zmsg  = '创建物料成功'.
+***创建分类特性数据
+      PERFORM frm_create_class_character CHANGING gt_basic_data.
+    ENDIF.
+    MODIFY gt_basic_data.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_MSG
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LT_RETURN  text
+*      <--P_GT_BASIC_DATA_ZMSG  text
+*----------------------------------------------------------------------*
+FORM frm_get_msg  TABLES  lt_return STRUCTURE bapi_matreturn2
+                  CHANGING c_zmsg TYPE bapi_msg.
+  DATA:lv_msg TYPE string.
+  CLEAR c_zmsg.
+  LOOP AT lt_return WHERE type  = 'E' OR type = 'A'.
+    CLEAR lv_msg.
+    CALL FUNCTION 'MESSAGE_TEXT_BUILD'
+      EXPORTING
+        msgid               = lt_return-id
+        msgnr               = lt_return-number
+        msgv1               = lt_return-message_v1
+        msgv2               = lt_return-message_v2
+        msgv3               = lt_return-message_v3
+        msgv4               = lt_return-message_v4
+      IMPORTING
+        message_text_output = lv_msg.
+    IF c_zmsg IS INITIAL.
+      c_zmsg = lv_msg.
+    ELSE.
+      CONCATENATE c_zmsg lv_msg INTO c_zmsg.
+    ENDIF.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CREATE_CLASS_CHARACTER
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_GT_BASIC_DATA  text
+*----------------------------------------------------------------------*
+FORM frm_create_class_character  CHANGING c_basic_data STRUCTURE gt_basic_data.
+  DATA:cl_descr TYPE REF TO cl_abap_structdescr.
+  FIELD-SYMBOLS:<fs_comp> TYPE abap_compdescr.
+  FIELD-SYMBOLS <fs_name> TYPE any.
+  FIELD-SYMBOLS:<fs_field> TYPE any.
+  DATA: lt_char_roh TYPE TABLE OF bapi1003_alloc_values_char WITH HEADER LINE,
+        lt_char_hal TYPE TABLE OF bapi1003_alloc_values_char WITH HEADER LINE,
+        lt_char_fer TYPE TABLE OF bapi1003_alloc_values_char WITH HEADER LINE.
+  DATA:lt_allocvalueschar LIKE bapi1003_alloc_values_char OCCURS 0 WITH HEADER LINE,
+       lt_allocvaluesnum  LIKE bapi1003_alloc_values_num  OCCURS 0 WITH HEADER LINE,
+       lt_allocvaluescurr LIKE bapi1003_alloc_values_curr OCCURS 0 WITH HEADER LINE.
+  DATA:lv_object       LIKE bapi1003_key-object,
+       lt_return       LIKE bapiret2 OCCURS 0 WITH HEADER LINE,
+       lt_return_total LIKE bapiret2 OCCURS 0 WITH HEADER LINE.
+  DATA: lv_status TYPE bapi1003_key-status.
+
+
+  cl_descr   ?= cl_abap_typedescr=>describe_by_name( 'ZSMM_MAT_MASTER_DATA' ).
+  LOOP AT cl_descr->components ASSIGNING <fs_comp>.
+    IF <fs_comp>-name(5) = 'ZROH_'.
+      ASSIGN COMPONENT <fs_comp>-name OF STRUCTURE c_basic_data TO <fs_field>.
+      IF sy-subrc = 0 AND <fs_field> IS NOT INITIAL.
+        lt_char_roh-charact = <fs_comp>-name.
+        lt_char_roh-value_char = <fs_field>.
+        APPEND lt_char_roh.
+        CLEAR lt_char_roh.
+      ENDIF.
+    ELSEIF <fs_comp>-name(5) = 'ZHAL_'.
+      ASSIGN COMPONENT <fs_comp>-name OF STRUCTURE c_basic_data TO <fs_field>.
+      IF sy-subrc = 0 AND <fs_field> IS NOT INITIAL.
+        lt_char_hal-charact = <fs_comp>-name.
+        lt_char_hal-value_char = <fs_field>.
+        APPEND lt_char_hal.
+        CLEAR lt_char_hal.
+      ENDIF.
+    ELSEIF <fs_comp>-name(5) = 'ZFER_'.
+      ASSIGN COMPONENT <fs_comp>-name OF STRUCTURE c_basic_data TO <fs_field>.
+      IF sy-subrc = 0 AND <fs_field> IS NOT INITIAL.
+        lt_char_fer-charact = <fs_comp>-name.
+        lt_char_fer-value_char = <fs_field>.
+        APPEND lt_char_fer.
+        CLEAR lt_char_fer.
+      ENDIF.
+    ENDIF.
+  ENDLOOP.
+
+  CHECK lt_char_roh[] IS NOT INITIAL OR lt_char_hal[] IS NOT INITIAL OR lt_char_fer[] IS NOT INITIAL.
+
+  lv_object = c_basic_data-matnr.
+
+  IF lt_char_roh[] IS NOT INITIAL.
+    PERFORM frm_get_mat_character TABLES lt_allocvaluesnum lt_allocvalueschar lt_allocvaluescurr USING lv_object 'Z_ROH_CLASS' CHANGING lv_status.
+    REFRESH:lt_return.
+    IF lv_status IS INITIAL.
+      PERFORM frm_create_mat_character TABLES lt_char_roh lt_return USING lv_object 'Z_ROH_CLASS'.
+    ELSE.
+      PERFORM frm_change_mat_character TABLES lt_allocvaluesnum lt_char_roh lt_allocvaluescurr lt_return
+                                       USING  lv_object 'Z_ROH_CLASS'.
+    ENDIF.
+    APPEND LINES OF lt_return TO lt_return_total.
+  ENDIF.
+  IF lt_char_hal[] IS NOT INITIAL.
+    PERFORM frm_get_mat_character TABLES lt_allocvaluesnum lt_allocvalueschar lt_allocvaluescurr USING lv_object 'Z_HAL_CLASS' CHANGING lv_status .
+    REFRESH:lt_return.
+    IF lv_status IS INITIAL.
+      PERFORM frm_create_mat_character TABLES lt_char_hal lt_return USING lv_object 'Z_HAL_CLASS'.
+    ELSE.
+      PERFORM frm_change_mat_character TABLES lt_allocvaluesnum lt_char_hal lt_allocvaluescurr lt_return
+                                       USING  lv_object 'Z_HAL_CLASS'.
+    ENDIF.
+    APPEND LINES OF lt_return TO lt_return_total.
+  ENDIF.
+  IF lt_char_fer[] IS NOT INITIAL.
+    PERFORM frm_get_mat_character TABLES lt_allocvaluesnum lt_allocvalueschar lt_allocvaluescurr USING lv_object 'Z_FER_CLASS' CHANGING lv_status .
+    REFRESH:lt_return.
+    IF lv_status IS INITIAL.
+      PERFORM frm_create_mat_character TABLES lt_char_fer lt_return USING lv_object 'Z_FER_CLASS'.
+    ELSE.
+      PERFORM frm_change_mat_character TABLES lt_allocvaluesnum lt_char_fer lt_allocvaluescurr lt_return
+                                       USING  lv_object 'Z_FER_CLASS'.
+    ENDIF.
+    APPEND LINES OF lt_return TO lt_return_total.
+  ENDIF.
+
+  LOOP AT lt_return_total WHERE type = 'E' OR type = 'A'.
+    EXIT.
+  ENDLOOP.
+  IF sy-subrc = 0.
+    CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+    c_basic_data-zicon = icon_led_red.
+    c_basic_data-msgty = 'E'.
+    c_basic_data-zmsg = '创建物料成功，但是导入特性失败'.
+  ELSE.
+    CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+      EXPORTING
+        wait = 'X'.
+    c_basic_data-zicon = icon_led_green.
+    c_basic_data-msgty = 'S'.
+    c_basic_data-zmsg = '物料创建成功'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CREATE_MATERIAL_SALES_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_create_mat_sales_data .
+  DATA:ls_headdata    LIKE bapimathead,
+       ls_clientdata  LIKE bapi_mara,
+       ls_clientdatax LIKE bapi_marax,
+       ls_plantdata   LIKE bapi_marc,
+       ls_plantdatax  LIKE bapi_marcx,
+       ls_salesdata   LIKE bapi_mvke,
+       ls_salesdatax  LIKE bapi_mvkex.
+  DATA:lt_taxclass LIKE bapi_mlan OCCURS 0 WITH HEADER LINE,
+       lt_return   LIKE bapi_matreturn2 OCCURS 0 WITH HEADER LINE.
+
+  LOOP AT gt_sales_data WHERE msgty IS INITIAL.
+    CLEAR:ls_headdata,ls_clientdata,ls_clientdatax,ls_plantdata,ls_plantdatax,
+          ls_salesdata,ls_salesdatax,lt_taxclass,lt_return.
+    REFRESH:lt_taxclass,lt_return.
+
+    ls_headdata-material = gt_sales_data-matnr.
+    ls_headdata-basic_view = con_x.
+    ls_headdata-storage_view = con_x.
+    ls_headdata-sales_view = con_x.
+
+    ls_clientdata-trans_grp = gt_sales_data-tragr.
+    ls_clientdatax-trans_grp = con_x.
+
+    ls_salesdata-sales_org  = gt_sales_data-vkorg.
+    ls_salesdata-distr_chan = gt_sales_data-vtweg.
+    ls_salesdata-sales_unit = gt_sales_data-vrkme.
+    ls_salesdata-delyg_plnt = gt_sales_data-dwerk.
+    ls_salesdata-item_cat   = gt_sales_data-mtpos.
+    ls_salesdata-matl_grp_1 = gt_sales_data-mvgr1.
+
+    ls_salesdatax-sales_org  = gt_sales_data-vkorg.
+    ls_salesdatax-distr_chan = gt_sales_data-vtweg.
+    ls_salesdatax-sales_unit = con_x.
+    ls_salesdatax-delyg_plnt = con_x.
+    ls_salesdatax-item_cat   = con_x.
+    ls_salesdatax-matl_grp_1 = con_x.
+
+    ls_plantdata-plant      = gt_sales_data-werks.
+    ls_plantdata-loadinggrp = gt_sales_data-ladgr.
+    ls_plantdata-availcheck = gt_sales_data-mtvfp.
+
+    ls_plantdatax-plant      = gt_sales_data-werks.
+    ls_plantdatax-loadinggrp = con_x.
+    ls_plantdatax-availcheck = con_x.
+
+***税
+    lt_taxclass-depcountry = 'CN'.
+    lt_taxclass-tax_type_1 = 'MWST'.
+    lt_taxclass-taxclass_1 = gt_sales_data-taxkm.
+    APPEND lt_taxclass.
+    CLEAR lt_taxclass.
+
+    CALL FUNCTION 'BAPI_MATERIAL_SAVEDATA'
+      EXPORTING
+        headdata           = ls_headdata
+        clientdata         = ls_clientdata
+        clientdatax        = ls_clientdatax
+        plantdata          = ls_plantdata
+        plantdatax         = ls_plantdatax
+        salesdata          = ls_salesdata
+        salesdatax         = ls_salesdatax
+      TABLES
+        taxclassifications = lt_taxclass
+        returnmessages     = lt_return.
+    LOOP AT lt_return WHERE type = 'E' OR type = 'A'.
+      EXIT.
+    ENDLOOP.
+    IF sy-subrc = 0.
+      CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+      gt_sales_data-zicon = icon_led_red.
+      gt_sales_data-msgty = 'E'.
+      PERFORM frm_get_msg TABLES lt_return CHANGING gt_sales_data-zmsg.
+    ELSE.
+      CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+        EXPORTING
+          wait = 'X'.
+      gt_sales_data-zicon = icon_led_green.
+      gt_sales_data-msgty = 'S'.
+      gt_sales_data-zmsg = '导入成功'.
+    ENDIF.
+    MODIFY gt_sales_data.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CREATE_MAT_PURCHASE_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_create_mat_purchase_data .
+  DATA:ls_headdata    LIKE bapimathead,
+       ls_clientdata  LIKE bapi_mara,
+       ls_clientdatax LIKE bapi_marax,
+       ls_plantdata   LIKE bapi_marc,
+       ls_plantdatax  LIKE bapi_marcx.
+  DATA:lt_return   LIKE bapi_matreturn2 OCCURS 0 WITH HEADER LINE.
+
+  LOOP AT gt_purchase_data WHERE msgty IS INITIAL.
+    CLEAR:ls_headdata,ls_clientdata,ls_clientdatax,ls_plantdata,ls_plantdatax,lt_return.
+    REFRESH:lt_return.
+
+    ls_headdata-material = gt_purchase_data-matnr.
+    ls_headdata-basic_view = con_x.
+    ls_headdata-storage_view = con_x.
+    ls_headdata-purchase_view = con_x.
+
+    ls_clientdata-po_unit = gt_purchase_data-bstme.
+    ls_clientdata-manuf_prof = gt_purchase_data-mprof.
+    ls_clientdata-period_ind_expiration_date = gt_purchase_data-iprkz.
+    ls_clientdata-minremlife = gt_purchase_data-mhdrz.
+    ls_clientdata-shelf_life = gt_purchase_data-mhdhb.
+
+    ls_clientdatax-po_unit = con_x.
+    ls_clientdatax-manuf_prof = con_x.
+    ls_clientdatax-period_ind_expiration_date = con_x.
+    ls_clientdatax-minremlife = con_x.
+    ls_clientdatax-shelf_life = con_x.
+
+    ls_plantdata-plant      = gt_purchase_data-werks.
+    ls_plantdata-pur_group  = gt_purchase_data-ekgrp.
+    ls_plantdata-auto_p_ord = gt_purchase_data-kautb.
+    ls_plantdata-quotausage = gt_purchase_data-usequ.
+    ls_plantdata-sourcelist = gt_purchase_data-kordb.
+
+    ls_plantdatax-plant      = gt_purchase_data-werks.
+    ls_plantdatax-pur_group  = con_x.
+    ls_plantdatax-auto_p_ord = con_x.
+    ls_plantdatax-quotausage = con_x.
+    ls_plantdatax-sourcelist = con_x.
+
+    CALL FUNCTION 'BAPI_MATERIAL_SAVEDATA'
+      EXPORTING
+        headdata       = ls_headdata
+        clientdata     = ls_clientdata
+        clientdatax    = ls_clientdatax
+        plantdata      = ls_plantdata
+        plantdatax     = ls_plantdatax
+      TABLES
+        returnmessages = lt_return.
+    LOOP AT lt_return WHERE type = 'E' OR type = 'A'.
+      EXIT.
+    ENDLOOP.
+    IF sy-subrc = 0.
+      CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+      gt_purchase_data-zicon = icon_led_red.
+      gt_purchase_data-msgty = 'E'.
+      PERFORM frm_get_msg TABLES lt_return CHANGING gt_purchase_data-zmsg.
+    ELSE.
+      CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+        EXPORTING
+          wait = 'X'.
+      gt_purchase_data-zicon = icon_led_green.
+      gt_purchase_data-msgty = 'S'.
+      gt_purchase_data-zmsg = '导入成功'.
+    ENDIF.
+    MODIFY gt_purchase_data.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CREATE_MAT_PRODUCT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_create_mat_product_data .
+  DATA:ls_headdata    LIKE bapimathead,
+       ls_clientdata  LIKE bapi_mara,
+       ls_clientdatax LIKE bapi_marax,
+       ls_plantdata   LIKE bapi_marc,
+       ls_plantdatax  LIKE bapi_marcx.
+  DATA:lt_return   LIKE bapi_matreturn2 OCCURS 0 WITH HEADER LINE.
+
+  LOOP AT gt_product_data WHERE msgty IS INITIAL.
+    CLEAR:ls_headdata,ls_clientdata,ls_clientdatax,ls_plantdata,ls_plantdatax,lt_return.
+    REFRESH:lt_return.
+
+    ls_headdata-material = gt_product_data-matnr.
+    ls_headdata-basic_view = con_x.
+    ls_headdata-storage_view = con_x.
+    ls_headdata-mrp_view     = con_x.
+    ls_headdata-work_sched_view = con_x.
+
+    ls_plantdata-plant      = gt_product_data-werks.
+    ls_plantdata-mrp_group  = gt_product_data-disgr.
+    ls_plantdata-abc_id   = gt_product_data-maabc."ABC标识
+    ls_plantdata-mrp_type   = gt_product_data-dismm.
+    ls_plantdata-mrp_ctrler = gt_product_data-dispo.
+    ls_plantdata-lotsizekey = gt_product_data-disls.
+*    ls_plantdata-fixed_lot  = gt_product_data-bstfe.
+    ls_plantdata-minlotsize = gt_product_data-bstmi.
+    ls_plantdata-round_val  = gt_product_data-bstrf.
+    ls_plantdata-proc_type  = gt_product_data-beskz.
+    ls_plantdata-spproctype = gt_product_data-sobsl.
+    ls_plantdata-inhseprodt = gt_product_data-dzeit.
+    ls_plantdata-sm_key     = gt_product_data-fhori.
+    ls_plantdata-backflush  = gt_product_data-rgekz.
+    ls_plantdata-plnd_delry = gt_product_data-plifz.
+    ls_plantdata-safety_stk = gt_product_data-eisbe.
+    ls_plantdata-covprofile = gt_product_data-rwpro. "供货天数参数文件
+    ls_plantdata-iss_st_loc = gt_product_data-lgpro.
+    ls_plantdata-sloc_exprc = gt_product_data-lgfsb.
+    ls_plantdata-availcheck = gt_product_data-mtvfp.
+    ls_plantdata-alt_bom_id = gt_product_data-altsl.
+    ls_plantdata-comp_scrap = gt_product_data-kausf."部件废品
+    ls_plantdata-discontinu = gt_product_data-kzaus.
+    ls_plantdata-eff_o_day  = gt_product_data-ausdt.
+    ls_plantdata-follow_up  = gt_product_data-nfmat.
+    ls_plantdata-prodprof   = gt_product_data-sfcpf.
+
+    ls_plantdatax-plant      = gt_product_data-werks.
+    ls_plantdatax-mrp_group  = con_x.
+    ls_plantdatax-abc_id     = con_x.
+    ls_plantdatax-mrp_type   = con_x.
+    ls_plantdatax-mrp_ctrler = con_x.
+    ls_plantdatax-lotsizekey = con_x.
+*   ls_plantdatax-fixed_lot  = con_x.
+    ls_plantdatax-minlotsize = con_x.
+    ls_plantdatax-round_val  = con_x.
+    ls_plantdatax-proc_type  = con_x.
+    ls_plantdatax-spproctype = con_x.
+    ls_plantdatax-inhseprodt = con_x.
+    ls_plantdatax-sm_key     = con_x.
+    ls_plantdatax-backflush  = con_x.
+    ls_plantdatax-plnd_delry = con_x.
+    ls_plantdatax-safety_stk = con_x.
+    ls_plantdatax-covprofile = con_x.
+    ls_plantdatax-iss_st_loc = con_x.
+    ls_plantdatax-sloc_exprc = con_x.
+    ls_plantdatax-availcheck = con_x.
+    ls_plantdatax-alt_bom_id = con_x.
+    ls_plantdatax-comp_scrap = con_x.
+    ls_plantdatax-discontinu = con_x.
+    ls_plantdatax-eff_o_day  = con_x.
+    ls_plantdatax-follow_up  = con_x.
+    ls_plantdatax-prodprof   = con_x.
+
+    CALL FUNCTION 'BAPI_MATERIAL_SAVEDATA'
+      EXPORTING
+        headdata       = ls_headdata
+        plantdata      = ls_plantdata
+        plantdatax     = ls_plantdatax
+      TABLES
+        returnmessages = lt_return.
+    LOOP AT lt_return WHERE type = 'E' OR type = 'A'.
+      EXIT.
+    ENDLOOP.
+    IF sy-subrc = 0.
+      CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+      gt_product_data-zicon = icon_led_red.
+      gt_product_data-msgty = 'E'.
+      PERFORM frm_get_msg TABLES lt_return CHANGING gt_product_data-zmsg.
+    ELSE.
+      CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+        EXPORTING
+          wait = 'X'.
+      gt_product_data-zicon = icon_led_green.
+      gt_product_data-msgty = 'S'.
+      gt_product_data-zmsg = '导入成功'.
+    ENDIF.
+    MODIFY gt_product_data.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CREATE_MAT_QM_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_create_mat_qm_data .
+  DATA:ls_headdata    LIKE bapimathead,
+       ls_clientdata  LIKE bapi_mara,
+       ls_clientdatax LIKE bapi_marax,
+       ls_plantdata   LIKE bapi_marc,
+       ls_plantdatax  LIKE bapi_marcx.
+  DATA:lt_return   LIKE bapi_matreturn2 OCCURS 0 WITH HEADER LINE.
+
+  LOOP AT gt_qm_data WHERE msgty IS INITIAL.
+    CLEAR:ls_headdata,ls_clientdata,ls_clientdatax,ls_plantdata,ls_plantdatax,lt_return.
+    REFRESH:lt_return.
+
+    ls_headdata-material = gt_qm_data-matnr.
+    ls_headdata-basic_view = con_x.
+    ls_headdata-storage_view = con_x.
+    ls_headdata-quality_view = con_x.
+
+    ls_clientdata-stor_conds = gt_qm_data-raube.
+    ls_clientdata-qm_procmnt = gt_qm_data-qmpur.
+    ls_clientdata-batch_mgmt = gt_qm_data-xchpf.
+
+    ls_clientdatax-stor_conds = con_x.
+    ls_clientdatax-qm_procmnt = con_x.
+    ls_clientdatax-batch_mgmt = con_x.
+
+    ls_plantdata-plant       = gt_qm_data-werks.
+    ls_plantdata-batch_mgmt  = gt_qm_data-xchpf.
+    ls_plantdata-gr_pr_time  = gt_qm_data-webaz.
+    ls_plantdata-insp_int    = gt_qm_data-prfrq.
+    ls_plantdata-ctrl_key    = gt_qm_data-ssqss.
+
+    ls_plantdatax-plant      = gt_qm_data-werks.
+    ls_plantdatax-batch_mgmt = con_x.
+    ls_plantdatax-gr_pr_time = con_x.
+    ls_plantdatax-insp_int   = con_x.
+    ls_plantdatax-ctrl_key   = con_x.
+
+    CALL FUNCTION 'BAPI_MATERIAL_SAVEDATA'
+      EXPORTING
+        headdata       = ls_headdata
+        clientdata     = ls_clientdata
+        clientdatax    = ls_clientdatax
+        plantdata      = ls_plantdata
+        plantdatax     = ls_plantdatax
+      TABLES
+        returnmessages = lt_return.
+    LOOP AT lt_return WHERE type = 'E' OR type = 'A'.
+      EXIT.
+    ENDLOOP.
+    IF sy-subrc = 0.
+      CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+      gt_qm_data-zicon = icon_led_red.
+      gt_qm_data-msgty = 'E'.
+      PERFORM frm_get_msg TABLES lt_return CHANGING gt_qm_data-zmsg.
+    ELSE.
+      CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+        EXPORTING
+          wait = 'X'.
+      gt_qm_data-zicon = icon_led_green.
+      gt_qm_data-msgty = 'S'.
+      gt_qm_data-zmsg = '导入成功'.
+    ENDIF.
+    MODIFY gt_qm_data.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CREATE_MAT_FINANCE_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_create_mat_finance_data .
+  DATA:ls_headdata       LIKE bapimathead,
+       ls_clientdata     LIKE bapi_mara,
+       ls_clientdatax    LIKE bapi_marax,
+       ls_plantdata      LIKE bapi_marc,
+       ls_plantdatax     LIKE bapi_marcx,
+       ls_valuationdata  LIKE bapi_mbew,
+       ls_valuationdatax LIKE bapi_mbewx.
+  DATA:lt_return   LIKE bapi_matreturn2 OCCURS 0 WITH HEADER LINE.
+
+  LOOP AT gt_fi_data WHERE msgty IS INITIAL.
+    CLEAR:ls_headdata,ls_clientdata,ls_clientdatax,ls_plantdata,ls_plantdatax,ls_valuationdata,ls_valuationdatax,lt_return.
+    REFRESH:lt_return.
+
+    ls_headdata-material = gt_fi_data-matnr.
+    ls_headdata-basic_view = con_x.
+    ls_headdata-storage_view = con_x.
+    ls_headdata-account_view = con_x.
+    ls_headdata-cost_view    = con_x.
+
+    ls_plantdata-plant          = gt_fi_data-werks.
+    ls_plantdata-variance_key   = gt_fi_data-awsls.
+    ls_plantdata-profit_ctr     = gt_fi_data-prctr.
+    ls_plantdata-lot_size       = gt_fi_data-peinh.
+
+    ls_plantdatax-plant         = gt_fi_data-werks.
+    ls_plantdatax-variance_key  = con_x.
+    ls_plantdatax-profit_ctr    = con_x.
+    ls_plantdatax-lot_size      = con_x.
+
+    ls_valuationdata-val_area   = gt_fi_data-werks.
+    ls_valuationdata-val_class  = gt_fi_data-bklas.
+    ls_valuationdata-price_ctrl = gt_fi_data-vprsv.
+    ls_valuationdata-ml_settle  = gt_fi_data-mlast.
+    ls_valuationdata-qty_struct = gt_fi_data-ekalr.
+    ls_valuationdata-orig_mat   = gt_fi_data-hkmat.
+    ls_valuationdata-orig_group = gt_fi_data-hrkft.
+    ls_valuationdata-price_unit = gt_fi_data-peinh.
+
+    ls_valuationdatax-val_area   = gt_fi_data-werks.
+    ls_valuationdatax-val_class  = con_x.
+    ls_valuationdatax-price_ctrl = con_x.
+    ls_valuationdatax-ml_settle  = con_x.
+    ls_valuationdatax-qty_struct = con_x.
+    ls_valuationdatax-orig_mat   = con_x.
+    ls_valuationdatax-orig_group = con_x.
+    ls_valuationdatax-price_unit = con_x.
+
+    CALL FUNCTION 'BAPI_MATERIAL_SAVEDATA'
+      EXPORTING
+        headdata       = ls_headdata
+        clientdata     = ls_clientdata
+        clientdatax    = ls_clientdatax
+        plantdata      = ls_plantdata
+        plantdatax     = ls_plantdatax
+        valuationdata  = ls_valuationdata
+        valuationdatax = ls_valuationdatax
+      TABLES
+        returnmessages = lt_return.
+    LOOP AT lt_return WHERE type = 'E' OR type = 'A'.
+      EXIT.
+    ENDLOOP.
+    IF sy-subrc = 0.
+      CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+      gt_fi_data-zicon = icon_led_red.
+      gt_fi_data-msgty = 'E'.
+      PERFORM frm_get_msg TABLES lt_return CHANGING gt_fi_data-zmsg.
+    ELSE.
+      CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+        EXPORTING
+          wait = 'X'.
+      gt_fi_data-zicon = icon_led_green.
+      gt_fi_data-msgty = 'S'.
+      gt_fi_data-zmsg = '导入成功'.
+    ENDIF.
+    MODIFY gt_fi_data.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_MAT_CHARACTER
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_1627   text
+*----------------------------------------------------------------------*
+FORM frm_get_mat_character  TABLES lt_allocvaluesnum  STRUCTURE bapi1003_alloc_values_num
+                                    lt_allocvalueschar STRUCTURE bapi1003_alloc_values_char
+                                    lt_allocvaluescurr STRUCTURE bapi1003_alloc_values_curr
+                             USING  u_objectkey LIKE bapi1003_key-object
+                                    u_classnum LIKE bapi1003_key-classnum
+                             CHANGING lv_status TYPE bapi1003_key-status.
+  DATA:lt_return          LIKE bapiret2 OCCURS 0 WITH HEADER LINE.
+
+  CLEAR: lv_status.
+  REFRESH:lt_allocvaluesnum,lt_allocvalueschar,lt_allocvaluescurr.
+  CALL FUNCTION 'BAPI_OBJCL_GETDETAIL'
+    EXPORTING
+      objectkey       = u_objectkey
+      objecttable     = 'MARA'
+      classnum        = u_classnum
+      classtype       = '001'
+*     KEYDATE         = SY-DATUM
+*     UNVALUATED_CHARS       = ' '
+*     LANGUAGE        = SY-LANGU
+*     OBJECTKEY_LONG  =
+    IMPORTING
+      status          = lv_status
+*     STANDARDCLASS   =
+    TABLES
+      allocvaluesnum  = lt_allocvaluesnum
+      allocvalueschar = lt_allocvalueschar
+      allocvaluescurr = lt_allocvaluescurr
+      return          = lt_return.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CREATE_MAT_CHARACTER
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LT_CHAR_ROH  text
+*      -->P_LT_RETURN  text
+*      -->P_LV_OBJECT  text
+*      -->P_1673   text
+*----------------------------------------------------------------------*
+FORM frm_create_mat_character  TABLES  lt_char_value STRUCTURE bapi1003_alloc_values_char
+                                       lt_return   STRUCTURE bapiret2
+                               USING   u_object    LIKE bapi1003_key-object
+                                       u_classnum  LIKE bapi1003_key-classnum.
+  REFRESH:lt_return.
+  CALL FUNCTION 'BAPI_OBJCL_CREATE'
+    EXPORTING
+      objectkeynew    = u_object
+      objecttablenew  = 'MARA'
+      classnumnew     = u_classnum
+      classtypenew    = '001'
+    TABLES
+      allocvalueschar = lt_char_value
+      return          = lt_return.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHANGE_MAT_CHARACTER
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LT_ALLOCVALUESNUM  text
+*      -->P_LT_CHAR_ROH  text
+*      -->P_LT_ALLOCVALUESCURR  text
+*      -->P_LT_RETURN  text
+*      -->P_LV_OBJECT  text
+*      -->P_1684   text
+*----------------------------------------------------------------------*
+FORM frm_change_mat_character  TABLES   lt_allocvaluesnum STRUCTURE bapi1003_alloc_values_num
+                                        lt_char_value STRUCTURE bapi1003_alloc_values_char
+                                        lt_allocvaluescurr STRUCTURE bapi1003_alloc_values_curr
+                                        lt_return STRUCTURE bapiret2
+                               USING    u_object LIKE bapi1003_key-object
+                                        u_classnum  LIKE bapi1003_key-classnum..
+  REFRESH:lt_return.
+  CALL FUNCTION 'BAPI_OBJCL_CHANGE'
+    EXPORTING
+      objectkey          = u_object
+      objecttable        = 'MARA'
+      classnum           = u_classnum
+      classtype          = '001'
+    TABLES
+      allocvaluesnumnew  = lt_allocvaluesnum
+      allocvaluescharnew = lt_char_value
+      allocvaluescurrnew = lt_allocvaluescurr
+      return             = lt_return.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CREATE_MAT_MPN_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_create_mat_mpn_data .
+  DATA:ls_headdata    LIKE bapimathead,
+       ls_clientdata  LIKE bapi_mara,
+       ls_clientdatax LIKE bapi_marax.
+  DATA:lt_matdes LIKE bapi_makt OCCURS 0 WITH HEADER LINE,
+       lt_return LIKE bapi_matreturn2 OCCURS 0 WITH HEADER LINE.
+  DATA:ls_return1    TYPE bapireturn1,
+       lt_bapimatinr LIKE bapimatinr OCCURS 0 WITH HEADER LINE,
+       lv_matnr      TYPE mara-matnr.
+
+
+  READ TABLE gt_mpn_data WITH KEY msgty = 'E'.
+  IF sy-subrc = 0.
+    MESSAGE '导入数据有错误，请先修正' TYPE 'E'.
+  ENDIF.
+  BREAK xul.
+  LOOP AT gt_mpn_data WHERE msgty IS INITIAL.
+    CLEAR:ls_headdata,ls_clientdata,ls_clientdatax,lt_matdes,lt_return,ls_return1,lv_matnr.
+    REFRESH:lt_matdes,lt_return,lt_bapimatinr.
+*    CALL FUNCTION 'BAPI_MATERIAL_GETINTNUMBER'
+*      EXPORTING
+*        material_type    = 'Z006'
+*        industry_sector  = 'M'
+*        required_numbers = 1
+*      IMPORTING
+*        return           = ls_return1
+*      TABLES
+*        material_number  = lt_bapimatinr.
+*    IF ls_return1-type EQ 'S'.
+*      READ TABLE lt_bapimatinr INDEX 1.
+*      IF sy-subrc = 0.
+*        lv_matnr = lt_bapimatinr-material.
+*      ENDIF.
+*      ls_headdata-material = lv_matnr.
+    ls_headdata-material = gt_mpn_data-matnr.
+    ls_headdata-ind_sector = 'M'.
+    ls_headdata-matl_type = 'Z006'.
+    ls_headdata-basic_view = con_x.
+    ls_headdata-purchase_view = con_x.
+
+
+    ls_clientdata-inv_mat_no = gt_mpn_data-bmatn.
+    ls_clientdata-mfr_no     = gt_mpn_data-mfrnr.
+    ls_clientdata-manu_mat   = gt_mpn_data-mfrpn.
+    ls_clientdata-matl_group = gt_mpn_data-matkl.
+
+    ls_clientdatax-inv_mat_no = con_x.
+    ls_clientdatax-mfr_no     = con_x.
+    ls_clientdatax-manu_mat   = con_x.
+    ls_clientdatax-matl_group = con_x.
+
+***物料描述
+    IF gt_mpn_data-maktx_zh IS NOT INITIAL.
+      lt_matdes-langu = '1'.
+      lt_matdes-matl_desc = gt_mpn_data-maktx_zh.
+      APPEND lt_matdes.
+      CLEAR lt_matdes.
+    ENDIF.
+    IF gt_mpn_data-maktx_en IS NOT INITIAL.
+      lt_matdes-langu = 'E'.
+      lt_matdes-matl_desc = gt_mpn_data-maktx_en.
+      APPEND lt_matdes.
+      CLEAR lt_matdes.
+    ENDIF.
+
+    CALL FUNCTION 'BAPI_MATERIAL_SAVEDATA'
+      EXPORTING
+        headdata            = ls_headdata
+        clientdata          = ls_clientdata
+        clientdatax         = ls_clientdatax
+      TABLES
+        materialdescription = lt_matdes
+        returnmessages      = lt_return.
+    LOOP AT lt_return WHERE type = 'E' OR type = 'A'.
+      EXIT.
+    ENDLOOP.
+    IF sy-subrc = 0.
+      CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+      PERFORM frm_get_msg TABLES lt_return CHANGING gt_mpn_data-zmsg.
+      gt_mpn_data-zicon = icon_led_red.
+      gt_mpn_data-msgty = 'E'.
+    ELSE.
+      CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+        EXPORTING
+          wait = 'X'.
+      gt_mpn_data-zicon = icon_led_green.
+      gt_mpn_data-msgty = 'S'.
+      gt_mpn_data-zmsg  = '创建物料成功'.
+    ENDIF.
+*    ELSE.
+*      gt_mpn_data-msgty = 'E'.
+*      gt_mpn_data-zmsg  = '物料编码创建失败'.
+*    ENDIF.
+    MODIFY gt_mpn_data.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CREATE_MAT_CLASS_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_create_mat_class_data .
+  DATA:lv_object LIKE bapi1003_key-object.
+  DATA:lt_return LIKE bapiret2 OCCURS 0 WITH HEADER LINE.
+
+  LOOP AT gt_class_data WHERE msgty IS INITIAL.
+    REFRESH lt_return.
+    lv_object = gt_class_data-matnr.
+    CALL FUNCTION 'BAPI_OBJCL_CREATE'
+      EXPORTING
+        objectkeynew   = lv_object
+        objecttablenew = 'MARA'
+        classnumnew    = gt_class_data-klasse
+        classtypenew   = gt_class_data-klart
+        keydate        = sy-datum
+      TABLES
+        return         = lt_return.
+    LOOP AT lt_return WHERE type = 'E' OR type = 'A'.
+      EXIT.
+    ENDLOOP.
+    IF sy-subrc EQ 0.
+      CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+      gt_class_data-zicon = icon_led_red.
+      gt_class_data-msgty = 'E'.
+      LOOP AT lt_return WHERE type = 'E' OR type = 'A'.
+        IF gt_class_data-zmsg IS INITIAL.
+          gt_class_data-zmsg = lt_return-message.
+        ELSE.
+          CONCATENATE gt_class_data-zmsg lt_return-message INTO gt_class_data-zmsg SEPARATED BY ','.
+        ENDIF.
+      ENDLOOP.
+    ELSE.
+      CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+        EXPORTING
+          wait = 'X'.
+      gt_class_data-zicon = icon_led_green.
+      gt_class_data-msgty = 'S'.
+      gt_class_data-zmsg = '导入成功'.
+    ENDIF.
+    MODIFY gt_class_data.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CREATE_MAT_STORAGE_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_create_mat_storage_data .
+  DATA:ls_headdata     LIKE bapimathead,
+       ls_storagedata  LIKE bapi_mard,
+       ls_storagedatax LIKE bapi_mardx.
+  DATA:lt_return LIKE bapi_matreturn2 OCCURS 0 WITH HEADER LINE.
+  DATA:ls_return1    TYPE bapireturn1,
+       lt_bapimatinr LIKE bapimatinr OCCURS 0 WITH HEADER LINE,
+       lv_matnr      TYPE mara-matnr.
+
+  READ TABLE gt_storage_data WITH KEY msgty = 'E'.
+  IF sy-subrc = 0.
+    MESSAGE '导入数据有错误，请先修正' TYPE 'E'.
+  ENDIF.
+
+  LOOP AT gt_storage_data WHERE msgty IS INITIAL.
+    CLEAR:ls_headdata,ls_storagedata,ls_storagedatax,lt_return.
+    REFRESH:lt_return.
+
+    ls_headdata-material = gt_storage_data-matnr.
+    ls_headdata-storage_view = 'X'.
+
+    ls_storagedata-plant    = gt_storage_data-werks.
+    ls_storagedata-stge_loc = gt_storage_data-lgort.
+    ls_storagedatax-plant    = gt_storage_data-werks.
+    ls_storagedatax-stge_loc = gt_storage_data-lgort.
+
+    CALL FUNCTION 'BAPI_MATERIAL_SAVEDATA'
+      EXPORTING
+        headdata             = ls_headdata
+        storagelocationdata  = ls_storagedata
+        storagelocationdatax = ls_storagedatax
+      TABLES
+        returnmessages       = lt_return.
+    LOOP AT lt_return WHERE type = 'E' OR type = 'A'.
+      EXIT.
+    ENDLOOP.
+    IF sy-subrc = 0.
+      CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+      PERFORM frm_get_msg TABLES lt_return CHANGING gt_storage_data-zmsg.
+      gt_storage_data-zicon = icon_led_red.
+      gt_storage_data-msgty = 'E'.
+    ELSE.
+      CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+        EXPORTING
+          wait = 'X'.
+      gt_storage_data-zicon = icon_led_green.
+      gt_storage_data-msgty = 'S'.
+      gt_storage_data-zmsg  = '扩充库存地点成功'.
+    ENDIF.
+    MODIFY gt_storage_data.
+  ENDLOOP.
+ENDFORM.
+
+FORM frm_create_mat_finance_data1 .
+  DATA:ls_headdata       LIKE bapimathead,
+       ls_clientdata     LIKE bapi_mara,
+       ls_clientdatax    LIKE bapi_marax,
+       ls_plantdata      LIKE bapi_marc,
+       ls_plantdatax     LIKE bapi_marcx,
+       ls_valuationdata  LIKE bapi_mbew,
+       ls_valuationdatax LIKE bapi_mbewx.
+  DATA:lt_return   LIKE bapi_matreturn2 OCCURS 0 WITH HEADER LINE.
+
+  LOOP AT gt_fi_data WHERE msgty IS INITIAL.
+    CLEAR:ls_headdata,ls_clientdata,ls_clientdatax,ls_plantdata,ls_plantdatax,ls_valuationdata,ls_valuationdatax,lt_return.
+    REFRESH:lt_return.
+
+    ls_headdata-material = gt_fi_data-matnr.
+    ls_headdata-basic_view = con_x.
+    ls_headdata-storage_view = con_x.
+    ls_headdata-account_view = con_x.
+    ls_headdata-cost_view    = con_x.
+
+    ls_plantdata-plant          = gt_fi_data-werks.
+*    ls_plantdata-variance_key   = gt_fi_data-awsls.
+*    ls_plantdata-profit_ctr     = gt_fi_data-prctr.
+*    ls_plantdata-lot_size       = gt_fi_data-peinh.
+
+    ls_plantdatax-plant         = gt_fi_data-werks.
+*    ls_plantdatax-variance_key  = con_x.
+*    ls_plantdatax-profit_ctr    = con_x.
+*    ls_plantdatax-lot_size      = con_x.
+
+    ls_valuationdata-val_area   = gt_fi_data-werks.
+*    ls_valuationdata-val_class  = gt_fi_data-bklas.
+*    ls_valuationdata-price_ctrl = gt_fi_data-vprsv.
+*    ls_valuationdata-ml_settle  = gt_fi_data-mlast.
+*    ls_valuationdata-qty_struct = gt_fi_data-ekalr.
+*    ls_valuationdata-orig_mat   = gt_fi_data-hkmat.
+    ls_valuationdata-orig_group = gt_fi_data-hrkft.
+*    ls_valuationdata-price_unit = gt_fi_data-peinh.
+
+    ls_valuationdatax-val_area   = gt_fi_data-werks.
+*    ls_valuationdatax-val_class  = con_x.
+*    ls_valuationdatax-price_ctrl = con_x.
+*    ls_valuationdatax-ml_settle  = con_x.
+*    ls_valuationdatax-qty_struct = con_x.
+*    ls_valuationdatax-orig_mat   = con_x.
+    ls_valuationdatax-orig_group = con_x.
+*    ls_valuationdatax-price_unit = con_x.
+
+    CALL FUNCTION 'BAPI_MATERIAL_SAVEDATA'
+      EXPORTING
+        headdata       = ls_headdata
+        clientdata     = ls_clientdata
+        clientdatax    = ls_clientdatax
+        plantdata      = ls_plantdata
+        plantdatax     = ls_plantdatax
+        valuationdata  = ls_valuationdata
+        valuationdatax = ls_valuationdatax
+      TABLES
+        returnmessages = lt_return.
+    LOOP AT lt_return WHERE type = 'E' OR type = 'A'.
+      EXIT.
+    ENDLOOP.
+    IF sy-subrc = 0.
+      CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+      gt_fi_data-zicon = icon_led_red.
+      gt_fi_data-msgty = 'E'.
+      PERFORM frm_get_msg TABLES lt_return CHANGING gt_fi_data-zmsg.
+    ELSE.
+      CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+        EXPORTING
+          wait = 'X'.
+      gt_fi_data-zicon = icon_led_green.
+      gt_fi_data-msgty = 'S'.
+      gt_fi_data-zmsg = '导入成功'.
+    ENDIF.
+    MODIFY gt_fi_data.
+  ENDLOOP.
+ENDFORM.

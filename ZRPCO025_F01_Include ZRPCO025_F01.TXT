@@ -1,0 +1,834 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPCO025_F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GETDATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_getdata .
+  DATA:
+    lt_d TYPE char8,
+    lt_y TYPE numc4,
+    lt_m TYPE numc2.
+  DATA: BEGIN OF lt_ckmlpp OCCURS 0,
+          kalnr LIKE ckmlpp-kalnr,
+          lbkum LIKE ckmlpp-lbkum,
+        END OF lt_ckmlpp.
+  DATA:BEGIN OF lt_ckmlprkeph OCCURS 0,
+         kalnr  TYPE ckmlprkeph-kalnr,
+         kst001 TYPE p DECIMALS 6,
+         kst002 TYPE p DECIMALS 6,
+         kst004 TYPE p DECIMALS 6,
+         kst006 TYPE p DECIMALS 6,
+         kst008 TYPE p DECIMALS 6,
+         kst010 TYPE p DECIMALS 6,
+         kst014 TYPE p DECIMALS 6,
+         kst015 TYPE p DECIMALS 6,
+         kst016 TYPE p DECIMALS 6,
+         kst018 TYPE p DECIMALS 6,
+         kst020 TYPE p DECIMALS 6,
+         kst022 TYPE p DECIMALS 6,
+         kst024 TYPE p DECIMALS 6,
+         kst026 TYPE p DECIMALS 6,
+         kst    TYPE p DECIMALS 6,
+         kst1   TYPE p DECIMALS 6,
+         lbkum  LIKE ckmlpp-lbkum,
+         hrkft  TYPE mbew-hrkft,
+         matnr  TYPE mbew-matnr,
+       END OF lt_ckmlprkeph .
+  DATA lt_ckmlprkeph1 LIKE TABLE OF lt_ckmlprkeph WITH HEADER LINE.
+  DATA lt_ckmlhd TYPE TABLE OF ckmlhd WITH HEADER LINE.
+  DATA: BEGIN OF lt_ckmlprkeko OCCURS 0,
+          kalnr TYPE  ckmlprkeko-kalnr,
+          losgr TYPE ckmlprkeko-losgr,
+        END OF lt_ckmlprkeko.
+
+  DATA : BEGIN OF lt_mbew OCCURS 0,
+           kalnr TYPE  ckmlprkeko-kalnr,
+           hrkft TYPE mbew-hrkft,
+           matnr TYPE mbew-matnr,
+         END OF lt_mbew.
+  CALL FUNCTION 'BKK_GET_MONTH_LASTDAY'
+    EXPORTING
+      i_date = p_budat   "输入日期
+    IMPORTING
+      e_date = date.
+  MOVE date+0(4) TO lt_y.
+  MOVE date+4(2) TO lt_m.
+
+  SELECT kalnr lbkum INTO CORRESPONDING FIELDS OF TABLE lt_ckmlpp FROM ckmlpp WHERE bdatj = lt_y AND poper = lt_m.
+
+  SELECT  *
+     INTO CORRESPONDING FIELDS OF TABLE lt_ckmlprkeph FROM ckmlprkeph
+    FOR ALL ENTRIES IN lt_ckmlpp
+    WHERE kalnr = lt_ckmlpp-kalnr
+    AND bdatj = lt_y
+    AND poper = lt_m
+    AND prtyp = 'V'
+    AND curtp = '10'
+    AND kkzst = ''
+    .
+  SORT lt_ckmlprkeph BY kalnr.
+  LOOP AT lt_ckmlprkeph.
+    lt_ckmlprkeph-kst = lt_ckmlprkeph-kst001 + lt_ckmlprkeph-kst002 + lt_ckmlprkeph-kst004 + lt_ckmlprkeph-kst006 + lt_ckmlprkeph-kst008 + lt_ckmlprkeph-kst010
+     + lt_ckmlprkeph-kst014 + lt_ckmlprkeph-kst015 + lt_ckmlprkeph-kst016 + lt_ckmlprkeph-kst018 + lt_ckmlprkeph-kst020 + + lt_ckmlprkeph-kst022  + lt_ckmlprkeph-kst024
+      + lt_ckmlprkeph-kst026 .
+    MODIFY   lt_ckmlprkeph.
+    COLLECT lt_ckmlprkeph INTO lt_ckmlprkeph1.
+  ENDLOOP.
+  REFRESH lt_ckmlprkeph.
+  lt_ckmlprkeph[] = lt_ckmlprkeph1[].
+
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_ckmlprkeko FROM ckmlprkeko
+      FOR ALL ENTRIES IN lt_ckmlpp
+      WHERE kalnr = lt_ckmlpp-kalnr
+      AND bdatj = lt_y
+      AND poper = lt_m
+      AND prtyp = 'V'
+      AND curtp = '10'
+      .
+  SELECT matnr bwkey kalnr INTO CORRESPONDING FIELDS OF  TABLE lt_ckmlhd FROM ckmlhd
+    FOR ALL ENTRIES IN lt_ckmlpp
+    WHERE kalnr = lt_ckmlpp-kalnr  .
+
+  SELECT b~kalnr a~hrkft a~matnr INTO CORRESPONDING FIELDS OF TABLE lt_mbew FROM mbew AS a INNER JOIN ckmlhd AS b ON a~matnr = b~matnr AND a~bwkey = b~bwkey
+    FOR ALL ENTRIES IN lt_ckmlhd
+    WHERE b~matnr = lt_ckmlhd-matnr AND b~bwkey = lt_ckmlhd-bwkey.
+
+
+  LOOP AT lt_ckmlprkeph.
+    READ TABLE lt_ckmlprkeko WITH  KEY kalnr = lt_ckmlprkeph-kalnr.
+    lt_ckmlprkeph-kst =  lt_ckmlprkeph-kst / lt_ckmlprkeko-losgr.
+
+    READ TABLE lt_ckmlpp WITH  KEY kalnr = lt_ckmlprkeph-kalnr.
+    lt_ckmlprkeph-lbkum = lt_ckmlpp-lbkum.
+
+    READ TABLE lt_mbew  WITH  KEY kalnr = lt_ckmlprkeph-kalnr.
+    lt_ckmlprkeph-hrkft = lt_mbew-hrkft.
+    lt_ckmlprkeph-matnr = lt_mbew-matnr.
+
+    lt_ckmlprkeph-kst1 = lt_ckmlprkeph-kst . "单价
+    lt_ckmlprkeph-kst = lt_ckmlprkeph-kst * lt_ckmlprkeph-lbkum. "金额
+    MODIFY lt_ckmlprkeph.
+  ENDLOOP.
+  DATA lt_co LIKE TABLE OF gt_co WITH HEADER LINE.
+  LOOP AT lt_ckmlprkeph.
+    MOVE-CORRESPONDING lt_ckmlprkeph TO gt_zje.
+    APPEND gt_zje.
+    MOVE-CORRESPONDING lt_ckmlprkeph TO lt_co.
+    APPEND lt_co.
+    COLLECT lt_co INTO gt_co.
+  ENDLOOP.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PROCESSDATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_processdata .
+  DATA lv_hrkft TYPE bseg-hkont.
+  DATA zfi_bseg_fifo TYPE TABLE OF zsfi_bseg WITH HEADER LINE.
+
+  CALL FUNCTION 'ZF_CO_BSEG_FIFO'
+    EXPORTING
+      zdate         = date
+    TABLES
+      zfi_bseg_fifo = zfi_bseg_fifo.
+
+  DATA : lv_menge TYPE bseg-menge,lv TYPE bseg-menge,lv_total TYPE bseg-menge.
+  CLEAR gt_zlsj.
+  REFRESH gt_zlsj.
+
+  LOOP AT zfi_bseg_fifo.
+    READ TABLE gt_zje WITH  KEY matnr = zfi_bseg_fifo-matnr.
+    IF sy-subrc = 0.
+      IF zfi_bseg_fifo-zdays >= 0 AND zfi_bseg_fifo-zdays <= 90.
+        MOVE-CORRESPONDING zfi_bseg_fifo TO gt_zlsj.
+        MOVE zfi_bseg_fifo-menge TO gt_zlsj-menge1.
+        gt_zlsj-kst1 = gt_zje-kst1 * gt_zlsj-menge1.
+        APPEND gt_zlsj.
+      ENDIF.
+      IF zfi_bseg_fifo-zdays >= 91 AND zfi_bseg_fifo-zdays <= 180.
+        MOVE-CORRESPONDING zfi_bseg_fifo TO gt_zlsj.
+        MOVE zfi_bseg_fifo-menge TO gt_zlsj-menge2.
+        gt_zlsj-kst2 = gt_zje-kst1 * gt_zlsj-menge2.
+        APPEND gt_zlsj.
+      ENDIF.
+      IF zfi_bseg_fifo-zdays >= 181 AND zfi_bseg_fifo-zdays <= 270.
+        MOVE-CORRESPONDING zfi_bseg_fifo TO gt_zlsj.
+        MOVE zfi_bseg_fifo-menge TO gt_zlsj-menge3.
+        gt_zlsj-kst3 = gt_zje-kst1 * gt_zlsj-menge3.
+        APPEND gt_zlsj.
+      ENDIF.
+      IF zfi_bseg_fifo-zdays >= 271 AND zfi_bseg_fifo-zdays <= 360.
+        MOVE-CORRESPONDING zfi_bseg_fifo TO gt_zlsj.
+        MOVE zfi_bseg_fifo-menge TO gt_zlsj-menge4.
+        gt_zlsj-kst4 = gt_zje-kst1 * gt_zlsj-menge4.
+        APPEND gt_zlsj.
+      ENDIF.
+*      MOVE-CORRESPONDING zfi_bseg_fifo TO gt_zlsj.
+*      gt_zlsj-menge5 = gt_zje-lbkum.
+*      gt_zlsj-kst5 = gt_zje-kst.
+*      APPEND gt_zlsj.
+    ENDIF.
+  ENDLOOP.
+
+  DATA lt_zlsj LIKE TABLE OF gt_zlsj WITH HEADER LINE.
+  LOOP AT gt_zlsj.
+
+    COLLECT gt_zlsj INTO lt_zlsj.
+  ENDLOOP.
+  CLEAR gt_zlsj.
+  REFRESH gt_zlsj.
+  gt_zlsj[] = lt_zlsj[].
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_TODBS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_todbs .
+  DATA:lo_excel     TYPE ole2_object,
+       lo_workbooks TYPE ole2_object,
+       lo_workbook  TYPE ole2_object,
+       rows         TYPE ole2_object,
+       lo_sheet     TYPE ole2_object,
+       lo_range     TYPE ole2_object,
+       lo_cell      TYPE ole2_object,
+       lo_cell1     TYPE ole2_object.
+  DATA lv_file LIKE rlgrap-filename.
+
+  DATA lv_row TYPE i.
+  DATA lv_col TYPE i.
+
+  DEFINE mac_fill_cell.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+      EXPORTING
+        #1 = &1
+        #2 = &2.
+    SET PROPERTY OF lo_cell 'VALUE' = &3.
+  END-OF-DEFINITION.
+
+  DATA :  tmp TYPE char15.
+  DATA:
+    lv_srzb  TYPE p DECIMALS 2,
+    lv_ml    TYPE p DECIMALS 2,
+    lv_ml_hj TYPE p DECIMALS 2,
+    lv_mlzb  TYPE p DECIMALS 2.
+  DATA:ls_data LIKE LINE OF gt_co.
+
+  DATA:lv_text_ny TYPE string,
+       lv_text_dw TYPE string.
+  DATA:lv_butxt LIKE t001-butxt.
+*******程序主体*******
+  SORT gt_co BY hrkft .
+  DATA: la1    TYPE p DECIMALS 6, la2 TYPE p DECIMALS 6, la3 TYPE p DECIMALS 6, la4 TYPE p DECIMALS 6,la5 TYPE p DECIMALS 6, lv(16) TYPE p DECIMALS 6.
+  DATA: lb1 TYPE p DECIMALS 6, lb2 TYPE p DECIMALS 6, lb3 TYPE p DECIMALS 6, lb4 TYPE p DECIMALS 6,lb5 TYPE p DECIMALS 6.
+  DATA: lv_total TYPE ckmlpp-lbkum.
+  FIELD-SYMBOLS: <f1> TYPE any .
+  FIELD-SYMBOLS: <f2> TYPE any .
+  FIELD-SYMBOLS: <f3> TYPE any .
+  FIELD-SYMBOLS: <f4> TYPE any .
+  DATA : lv_tabix TYPE char1, tmp1 TYPE char13,tmp2 TYPE char11.
+  LOOP AT gt_co.
+    CASE gt_co-hrkft.
+      WHEN '40'.
+        lv_row = 6.
+        lv_total = gt_co-lbkum.
+        READ TABLE gt_zlsj WITH  KEY hrkft = '40'.
+        gt_co1-lbkum = gt_co-lbkum.
+        gt_co1-kst = gt_co-kst.
+        DO 4 TIMES.
+          lv_tabix = sy-index .
+          CONCATENATE 'GT_ZLSJ-MENGE' lv_tabix INTO tmp.
+          ASSIGN (tmp) TO <f1>.
+          CONCATENATE 'GT_CO1-LBKUM' lv_tabix INTO tmp1.
+          ASSIGN (tmp1) TO <f2>.
+          <f2> = <f1>.
+          CONCATENATE 'GT_CO1-KST' lv_tabix INTO tmp2.
+          ASSIGN (tmp2) TO <f3>.
+          CONCATENATE 'GT_ZLSJ-KST' lv_tabix INTO tmp.
+          ASSIGN (tmp) TO <f4>.
+          <f3> = <f4>.
+        ENDDO.
+        gt_co1-lbkum5 = gt_co1-lbkum - gt_co1-lbkum1 - gt_co1-lbkum2 - gt_co1-lbkum3 - gt_co1-lbkum4 .
+        gt_co1-kst5 = gt_co1-kst - gt_co1-kst1 - gt_co1-kst2 - gt_co1-kst3 - gt_co1-kst4 .
+        gt_co1-zdate = date.
+        gt_co1-hrkft = gt_co-hrkft.
+        CONCATENATE date gt_co-hrkft INTO gt_co1-zno.
+        INSERT INTO ztco025 VALUES gt_co1.
+      WHEN '30'.
+        lv_row = 7.
+        lv_total = gt_co-lbkum.
+        READ TABLE gt_zlsj WITH  KEY hrkft = '30'.
+        gt_co1-lbkum = gt_co-lbkum.
+        gt_co1-kst = gt_co-kst.
+        DO 4 TIMES.
+          lv_tabix = sy-index .
+          CONCATENATE 'GT_ZLSJ-MENGE' lv_tabix INTO tmp.
+          ASSIGN (tmp) TO <f1>.
+          CONCATENATE 'GT_CO1-LBKUM' lv_tabix INTO tmp1.
+          ASSIGN (tmp1) TO <f2>.
+          <f2> = <f1>.
+          CONCATENATE 'GT_CO1-KST' lv_tabix INTO tmp2.
+          ASSIGN (tmp2) TO <f3>.
+          CONCATENATE 'GT_ZLSJ-KST' lv_tabix INTO tmp.
+          ASSIGN (tmp) TO <f4>.
+          <f3> = <f4>.
+        ENDDO.
+        gt_co1-lbkum5 = gt_co1-lbkum - gt_co1-lbkum1 - gt_co1-lbkum2 - gt_co1-lbkum3 - gt_co1-lbkum4 .
+        gt_co1-kst5 = gt_co1-kst - gt_co1-kst1 - gt_co1-kst2 - gt_co1-kst3 - gt_co1-kst4 .
+        gt_co1-zdate = date.
+        gt_co1-hrkft = gt_co-hrkft.
+        CONCATENATE date gt_co-hrkft INTO gt_co1-zno.
+        INSERT INTO ztco025 VALUES gt_co1.
+      WHEN '60'.
+        lv_row = 8.
+        lv_total = gt_co-lbkum.
+        READ TABLE gt_zlsj WITH  KEY hrkft = '60'.
+        gt_co1-lbkum = gt_co-lbkum.
+        gt_co1-kst = gt_co-kst.
+        DO 4 TIMES.
+          lv_tabix = sy-index .
+          CONCATENATE 'GT_ZLSJ-MENGE' lv_tabix INTO tmp.
+          ASSIGN (tmp) TO <f1>.
+          CONCATENATE 'GT_CO1-LBKUM' lv_tabix INTO tmp1.
+          ASSIGN (tmp1) TO <f2>.
+          <f2> = <f1>.
+          CONCATENATE 'GT_CO1-KST' lv_tabix INTO tmp2.
+          ASSIGN (tmp2) TO <f3>.
+          CONCATENATE 'GT_ZLSJ-KST' lv_tabix INTO tmp.
+          ASSIGN (tmp) TO <f4>.
+          <f3> = <f4>.
+        ENDDO.
+        gt_co1-lbkum5 = gt_co1-lbkum - gt_co1-lbkum1 - gt_co1-lbkum2 - gt_co1-lbkum3 - gt_co1-lbkum4 .
+        gt_co1-kst5 = gt_co1-kst - gt_co1-kst1 - gt_co1-kst2 - gt_co1-kst3 - gt_co1-kst4 .
+        gt_co1-zdate = date.
+        gt_co1-hrkft = gt_co-hrkft.
+        CONCATENATE date gt_co-hrkft INTO gt_co1-zno.
+        INSERT INTO ztco025 VALUES gt_co1.
+      WHEN '10'.
+        lv_row = 9.
+        lv_total = gt_co-lbkum.
+        READ TABLE gt_zlsj WITH  KEY hrkft = '10'.
+        gt_co1-lbkum = gt_co-lbkum.
+        gt_co1-kst = gt_co-kst.
+        DO 4 TIMES.
+          lv_tabix = sy-index .
+          CONCATENATE 'GT_ZLSJ-MENGE' lv_tabix INTO tmp.
+          ASSIGN (tmp) TO <f1>.
+          CONCATENATE 'GT_CO1-LBKUM' lv_tabix INTO tmp1.
+          ASSIGN (tmp1) TO <f2>.
+          <f2> = <f1>.
+          CONCATENATE 'GT_CO1-KST' lv_tabix INTO tmp2.
+          ASSIGN (tmp2) TO <f3>.
+          CONCATENATE 'GT_ZLSJ-KST' lv_tabix INTO tmp.
+          ASSIGN (tmp) TO <f4>.
+          <f3> = <f4>.
+        ENDDO.
+        gt_co1-lbkum5 = gt_co1-lbkum - gt_co1-lbkum1 - gt_co1-lbkum2 - gt_co1-lbkum3 - gt_co1-lbkum4 .
+        gt_co1-kst5 = gt_co1-kst - gt_co1-kst1 - gt_co1-kst2 - gt_co1-kst3 - gt_co1-kst4 .
+        gt_co1-zdate = date.
+        gt_co1-hrkft = gt_co-hrkft.
+        CONCATENATE date gt_co-hrkft INTO gt_co1-zno.
+        INSERT INTO ztco025 VALUES gt_co1.
+      WHEN '50'.
+        lv_row = 10.
+        lv_total = gt_co-lbkum.
+        READ TABLE gt_zlsj WITH  KEY hrkft = '50'.
+        gt_co1-lbkum = gt_co-lbkum.
+        gt_co1-kst = gt_co-kst.
+        DO 4 TIMES.
+          lv_tabix = sy-index .
+          CONCATENATE 'GT_ZLSJ-MENGE' lv_tabix INTO tmp.
+          ASSIGN (tmp) TO <f1>.
+          CONCATENATE 'GT_CO1-LBKUM' lv_tabix INTO tmp1.
+          ASSIGN (tmp1) TO <f2>.
+          <f2> = <f1>.
+          CONCATENATE 'GT_CO1-KST' lv_tabix INTO tmp2.
+          ASSIGN (tmp2) TO <f3>.
+          CONCATENATE 'GT_ZLSJ-KST' lv_tabix INTO tmp.
+          ASSIGN (tmp) TO <f4>.
+          <f3> = <f4>.
+        ENDDO.
+        gt_co1-lbkum5 = gt_co1-lbkum - gt_co1-lbkum1 - gt_co1-lbkum2 - gt_co1-lbkum3 - gt_co1-lbkum4 .
+        gt_co1-kst5 = gt_co1-kst - gt_co1-kst1 - gt_co1-kst2 - gt_co1-kst3 - gt_co1-kst4 .
+        gt_co1-zdate = date.
+        gt_co1-hrkft = gt_co-hrkft.
+        CONCATENATE date gt_co-hrkft INTO gt_co1-zno.
+        INSERT INTO ztco025 VALUES gt_co1.
+      WHEN '99' OR '20'.
+        la1 = la1 + gt_co-lbkum .
+        lb1 = lb1 + gt_co-kst.
+      WHEN '1000' OR '1001' OR '1002' OR '1003'.
+        la2 = la2 + gt_co-lbkum .
+        lb2 = lb2 + gt_co-kst.
+      WHEN '1004' OR '1005' OR  '1006' OR '1007' OR '1008'..
+        la3 = la3 + gt_co-lbkum .
+        lb3 = lb3 + gt_co-kst.
+      WHEN '1009'.
+        lv_row = 15.
+        lv_total = gt_co-lbkum.
+        READ TABLE gt_zlsj WITH  KEY hrkft = '1009'.
+        gt_co1-lbkum = gt_co-lbkum.
+        gt_co1-kst = gt_co-kst.
+        DO 4 TIMES.
+          lv_tabix = sy-index .
+          CONCATENATE 'GT_ZLSJ-MENGE' lv_tabix INTO tmp.
+          ASSIGN (tmp) TO <f1>.
+          CONCATENATE 'GT_CO1-LBKUM' lv_tabix INTO tmp1.
+          ASSIGN (tmp1) TO <f2>.
+          <f2> = <f1>.
+          CONCATENATE 'GT_CO1-KST' lv_tabix INTO tmp2.
+          ASSIGN (tmp2) TO <f3>.
+          CONCATENATE 'GT_ZLSJ-KST' lv_tabix INTO tmp.
+          ASSIGN (tmp) TO <f4>.
+          <f3> = <f4>.
+        ENDDO.
+        gt_co1-lbkum5 = gt_co1-lbkum - gt_co1-lbkum1 - gt_co1-lbkum2 - gt_co1-lbkum3 - gt_co1-lbkum4 .
+        gt_co1-kst5 = gt_co1-kst - gt_co1-kst1 - gt_co1-kst2 - gt_co1-kst3 - gt_co1-kst4 .
+        gt_co1-zdate = date.
+        gt_co1-hrkft = gt_co-hrkft.
+        CONCATENATE date gt_co-hrkft INTO gt_co1-zno.
+        INSERT INTO ztco025 VALUES gt_co1.
+      WHEN '1010'.
+        lv_row = 16.
+        lv_total = gt_co-lbkum.
+        READ TABLE gt_zlsj WITH  KEY hrkft = '1010'.
+        gt_co1-lbkum = gt_co-lbkum.
+        gt_co1-kst = gt_co-kst.
+        DO 4 TIMES.
+          lv_tabix = sy-index .
+          CONCATENATE 'GT_ZLSJ-MENGE' lv_tabix INTO tmp.
+          ASSIGN (tmp) TO <f1>.
+          CONCATENATE 'GT_CO1-LBKUM' lv_tabix INTO tmp1.
+          ASSIGN (tmp1) TO <f2>.
+          <f2> = <f1>.
+          CONCATENATE 'GT_CO1-KST' lv_tabix INTO tmp2.
+          ASSIGN (tmp2) TO <f3>.
+          CONCATENATE 'GT_ZLSJ-KST' lv_tabix INTO tmp.
+          ASSIGN (tmp) TO <f4>.
+          <f3> = <f4>.
+        ENDDO.
+        gt_co1-lbkum5 = gt_co1-lbkum - gt_co1-lbkum1 - gt_co1-lbkum2 - gt_co1-lbkum3 - gt_co1-lbkum4 .
+        gt_co1-kst5 = gt_co1-kst - gt_co1-kst1 - gt_co1-kst2 - gt_co1-kst3 - gt_co1-kst4 .
+        gt_co1-zdate = date.
+        gt_co1-hrkft = gt_co-hrkft.
+        CONCATENATE date gt_co-hrkft INTO gt_co1-zno.
+        INSERT INTO ztco025 VALUES gt_co1.
+      WHEN '1099' OR   '1011' OR  '1012' OR  '1013'.
+        la4 = la4 + gt_co-lbkum .
+        lb4 = lb4 + gt_co-kst.
+      WHEN '1098' OR  '1094' OR  '1095' OR  '1096' OR '1097'.
+        la5 = la5 + gt_co-lbkum .
+        lb5 = lb5 + gt_co-kst.
+      WHEN OTHERS.
+    ENDCASE.
+    CLEAR: lv,lv_total,tmp,tmp1,tmp2,gt_co1.
+  ENDLOOP.
+  DATA: lv1 TYPE bseg-menge,lv2 TYPE bseg-menge,lv3 TYPE bseg-menge,lv4 TYPE bseg-menge,lv5 TYPE bseg-menge.
+  DATA: lf1 TYPE bseg-menge,lf2 TYPE bseg-menge,lf3 TYPE bseg-menge,lf4 TYPE bseg-menge,lf5 TYPE bseg-menge.
+*****************************************************************半成品
+  CLEAR gt_co1.
+  gt_co1-lbkum =  la5.
+  gt_co1-kst = lb5.
+  lv_total = la5.
+  LOOP AT gt_zlsj .
+    CASE gt_zlsj-hrkft.
+      WHEN '1098' OR  '1094' OR  '1095' OR  '1096' OR '1097'.
+        lv1 = lv1 + gt_zlsj-menge1.
+        lv2 = lv2 + gt_zlsj-menge2.
+        lv3 = lv3 + gt_zlsj-menge3.
+        lv4 = lv4 + gt_zlsj-menge4.
+        lv5 = lv5 + gt_zlsj-menge5.
+        lf1 = lf1 + gt_zlsj-kst1.
+        lf2 = lf2 + gt_zlsj-kst2.
+        lf3 = lf3 + gt_zlsj-kst3.
+        lf4 = lf4 + gt_zlsj-kst4.
+        lf5 = lf5 + gt_zlsj-kst5.
+      WHEN OTHERS.
+    ENDCASE.
+  ENDLOOP.
+  DO 4 TIMES.
+    lv_tabix = sy-index.
+    CONCATENATE 'LV' lv_tabix INTO tmp.
+    ASSIGN (tmp) TO <f1>.
+    CONCATENATE 'GT_CO1-LBKUM' lv_tabix INTO tmp1.
+    ASSIGN (tmp1) TO <f2>.
+    <f2> = <f1>.
+    CONCATENATE 'LF' lv_tabix INTO tmp.
+    ASSIGN (tmp) TO <f4>.
+    CONCATENATE 'GT_CO1-KST' lv_tabix INTO tmp2.
+    ASSIGN (tmp2) TO <f3>.
+    <f3> = <f4>.
+  ENDDO.
+  gt_co1-lbkum5 = gt_co1-lbkum - gt_co1-lbkum1 - gt_co1-lbkum2 - gt_co1-lbkum3 - gt_co1-lbkum4 .
+  gt_co1-kst5 = gt_co1-kst - gt_co1-kst1 - gt_co1-kst2 - gt_co1-kst3 - gt_co1-kst4 .
+  gt_co1-zdate = date.
+  gt_co1-hrkft = '1098'.
+  CONCATENATE date gt_co1-hrkft INTO gt_co1-zno.
+  INSERT INTO ztco025 VALUES gt_co1.
+
+  CLEAR: lv,lv1,lv2,lv3,lv4,lv5,lv_total,tmp1,tmp2,gt_co1.
+  CLEAR: lf1,lf2,lf3,lf4,lf5.
+
+
+*****************************************************************原材料其他
+  lv_row = 11.
+
+  gt_co1-lbkum =  la1.
+  gt_co1-kst = lb1.
+  lv_total = la1.
+
+  LOOP AT gt_zlsj .
+    CASE gt_zlsj-hrkft.
+      WHEN '99' OR '20'.
+        lv1 = lv1 + gt_zlsj-menge1.
+        lv2 = lv2 + gt_zlsj-menge2.
+        lv3 = lv3 + gt_zlsj-menge3.
+        lv4 = lv4 + gt_zlsj-menge4.
+        lv5 = lv5 + gt_zlsj-menge5.
+        lf1 = lf1 + gt_zlsj-kst1.
+        lf2 = lf2 + gt_zlsj-kst2.
+        lf3 = lf3 + gt_zlsj-kst3.
+        lf4 = lf4 + gt_zlsj-kst4.
+        lf5 = lf5 + gt_zlsj-kst5.
+      WHEN OTHERS.
+    ENDCASE.
+  ENDLOOP.
+  DO 4 TIMES.
+    lv_tabix = sy-index.
+    CONCATENATE 'LV' lv_tabix INTO tmp.
+    ASSIGN (tmp) TO <f1>.
+    CONCATENATE 'GT_CO1-LBKUM' lv_tabix INTO tmp1.
+    ASSIGN (tmp1) TO <f2>.
+    <f2> = <f1>.
+    CONCATENATE 'LF' lv_tabix INTO tmp.
+    ASSIGN (tmp) TO <f4>.
+    CONCATENATE 'GT_CO1-KST' lv_tabix INTO tmp2.
+    ASSIGN (tmp2) TO <f3>.
+    <f3> = <f4>.
+  ENDDO.
+  gt_co1-lbkum5 = gt_co1-lbkum - gt_co1-lbkum1 - gt_co1-lbkum2 - gt_co1-lbkum3 - gt_co1-lbkum4 .
+  gt_co1-kst5 = gt_co1-kst - gt_co1-kst1 - gt_co1-kst2 - gt_co1-kst3 - gt_co1-kst4 .
+  gt_co1-zdate = date.
+  gt_co1-hrkft = '99'.
+  CONCATENATE date gt_co1-hrkft INTO gt_co1-zno.
+  INSERT INTO ztco025 VALUES gt_co1.
+   CLEAR: lv,lv1,lv2,lv3,lv4,lv5,lv_total,tmp1,tmp2,gt_co1.
+  CLEAR: lf1,lf2,lf3,lf4,lf5.
+*****************************************************************驱动器
+  lv_row = 13.
+  gt_co1-lbkum =  la2.
+  gt_co1-kst = lb2.
+  lv_total = la2.
+
+  LOOP AT gt_zlsj .
+    CASE gt_zlsj-hrkft.
+      WHEN '1000' OR '1001' OR '1002' OR '1003'.
+        lv1 = lv1 + gt_zlsj-menge1.
+        lv2 = lv2 + gt_zlsj-menge2.
+        lv3 = lv3 + gt_zlsj-menge3.
+        lv4 = lv4 + gt_zlsj-menge4.
+        lv5 = lv5 + gt_zlsj-menge5.
+        lf1 = lf1 + gt_zlsj-kst1.
+        lf2 = lf2 + gt_zlsj-kst2.
+        lf3 = lf3 + gt_zlsj-kst3.
+        lf4 = lf4 + gt_zlsj-kst4.
+        lf5 = lf5 + gt_zlsj-kst5.
+      WHEN OTHERS.
+    ENDCASE.
+  ENDLOOP.
+  DO 4 TIMES.
+    lv_tabix = sy-index.
+    CONCATENATE 'LV' lv_tabix INTO tmp.
+    ASSIGN (tmp) TO <f1>.
+    CONCATENATE 'GT_CO1-LBKUM' lv_tabix INTO tmp1.
+    ASSIGN (tmp1) TO <f2>.
+    <f2> = <f1>.
+    CONCATENATE 'LF' lv_tabix INTO tmp.
+    ASSIGN (tmp) TO <f4>.
+    CONCATENATE 'GT_CO1-KST' lv_tabix INTO tmp2.
+    ASSIGN (tmp2) TO <f3>.
+    <f3> = <f4>.
+  ENDDO.
+  gt_co1-lbkum5 = gt_co1-lbkum - gt_co1-lbkum1 - gt_co1-lbkum2 - gt_co1-lbkum3 - gt_co1-lbkum4 .
+  gt_co1-kst5 = gt_co1-kst - gt_co1-kst1 - gt_co1-kst2 - gt_co1-kst3 - gt_co1-kst4 .
+  gt_co1-zdate = date.
+  gt_co1-hrkft = '1000'.
+  CONCATENATE date gt_co1-hrkft INTO gt_co1-zno.
+  INSERT INTO ztco025 VALUES gt_co1.
+
+  CLEAR: lv,lv1,lv2,lv3,lv4,lv5,lv_total,tmp1,tmp2,gt_co1.
+  CLEAR: lf1,lf2,lf3,lf4,lf5.
+*
+*****************************************************************电机
+*  lv_row = 14.
+  gt_co1-lbkum =  la3.
+  gt_co1-kst = lb3.
+  lv_total = la3.
+
+  LOOP AT gt_zlsj .
+    CASE gt_zlsj-hrkft.
+      WHEN '1004' OR '1005' OR  '1006' OR '1007' OR '1008'.
+        lv1 = lv1 + gt_zlsj-menge1.
+        lv2 = lv2 + gt_zlsj-menge2.
+        lv3 = lv3 + gt_zlsj-menge3.
+        lv4 = lv4 + gt_zlsj-menge4.
+        lv5 = lv5 + gt_zlsj-menge5.
+        lf1 = lf1 + gt_zlsj-kst1.
+        lf2 = lf2 + gt_zlsj-kst2.
+        lf3 = lf3 + gt_zlsj-kst3.
+        lf4 = lf4 + gt_zlsj-kst4.
+        lf5 = lf5 + gt_zlsj-kst5.
+      WHEN OTHERS.
+    ENDCASE.
+  ENDLOOP.
+  DO 4 TIMES.
+    lv_tabix = sy-index.
+    CONCATENATE 'LV' lv_tabix INTO tmp.
+    ASSIGN (tmp) TO <f1>.
+    CONCATENATE 'GT_CO1-LBKUM' lv_tabix INTO tmp1.
+    ASSIGN (tmp1) TO <f2>.
+    <f2> = <f1>.
+    CONCATENATE 'LF' lv_tabix INTO tmp.
+    ASSIGN (tmp) TO <f4>.
+    CONCATENATE 'GT_CO1-KST' lv_tabix INTO tmp2.
+    ASSIGN (tmp2) TO <f3>.
+    <f3> = <f4>.
+  ENDDO.
+  gt_co1-lbkum5 = gt_co1-lbkum - gt_co1-lbkum1 - gt_co1-lbkum2 - gt_co1-lbkum3 - gt_co1-lbkum4 .
+  gt_co1-kst5 = gt_co1-kst - gt_co1-kst1 - gt_co1-kst2 - gt_co1-kst3 - gt_co1-kst4 .
+  gt_co1-zdate = date.
+  gt_co1-hrkft = '1008'.
+  CONCATENATE date gt_co1-hrkft INTO gt_co1-zno.
+  INSERT INTO ztco025 VALUES gt_co1.
+
+  CLEAR: lv,lv1,lv2,lv3,lv4,lv5,lv_total,tmp1,tmp2,gt_co1.
+  CLEAR: lf1,lf2,lf3,lf4,lf5.
+*****************************************************************库存其他
+*  lv_row = 17.
+  gt_co1-lbkum =  la4.
+  gt_co1-kst = lb4.
+  lv_total = la4.
+  LOOP AT gt_zlsj .
+    CASE gt_zlsj-hrkft.
+      WHEN '1099' OR   '1011' OR  '1012' OR  '1013'.
+        lv1 = lv1 + gt_zlsj-menge1.
+        lv2 = lv2 + gt_zlsj-menge2.
+        lv3 = lv3 + gt_zlsj-menge3.
+        lv4 = lv4 + gt_zlsj-menge4.
+        lv5 = lv5 + gt_zlsj-menge5.
+        lf1 = lf1 + gt_zlsj-kst1.
+        lf2 = lf2 + gt_zlsj-kst2.
+        lf3 = lf3 + gt_zlsj-kst3.
+        lf4 = lf4 + gt_zlsj-kst4.
+        lf5 = lf5 + gt_zlsj-kst5.
+      WHEN OTHERS.
+    ENDCASE.
+  ENDLOOP.
+  DO 4 TIMES.
+    lv_tabix = sy-index.
+    CONCATENATE 'LV' lv_tabix INTO tmp.
+    ASSIGN (tmp) TO <f1>.
+    CONCATENATE 'GT_CO1-LBKUM' lv_tabix INTO tmp1.
+    ASSIGN (tmp1) TO <f2>.
+    <f2> = <f1>.
+    CONCATENATE 'LF' lv_tabix INTO tmp.
+    ASSIGN (tmp) TO <f4>.
+    CONCATENATE 'GT_CO1-KST' lv_tabix INTO tmp2.
+    ASSIGN (tmp2) TO <f3>.
+    <f3> = <f4>.
+  ENDDO.
+  gt_co1-lbkum5 = gt_co1-lbkum - gt_co1-lbkum1 - gt_co1-lbkum2 - gt_co1-lbkum3 - gt_co1-lbkum4 .
+  gt_co1-kst5 = gt_co1-kst - gt_co1-kst1 - gt_co1-kst2 - gt_co1-kst3 - gt_co1-kst4 .
+  gt_co1-zdate = date.
+  gt_co1-hrkft = '1099'.
+  CONCATENATE date gt_co1-hrkft INTO gt_co1-zno.
+  INSERT INTO ztco025 VALUES gt_co1.
+  CLEAR: lv,lv1,lv2,lv3,lv4,lv5,lv_total,tmp1,tmp2,gt_co1.
+  CLEAR: lf1,lf2,lf3,lf4,lf5.
+*****************************************************************差异
+*
+  DATA gt_cya LIKE TABLE OF zsfi_bseg_dmbtr WITH HEADER LINE.
+  CALL FUNCTION 'ZF_CO_BSEG_DMBTR'
+    EXPORTING
+      zdate       = date
+      bukrs       = p_bukrs
+    TABLES
+      zf_co_dmbtr = gt_cya.
+
+  lv_row = 20.
+  CLEAR gt_co1.
+  LOOP AT gt_cya.
+    CASE gt_cya-hrkft.
+      WHEN '10'.
+        gt_co1-kst = gt_cya-dmbtr.
+        gt_co1-kst1 = gt_cya-dmbtr.
+        gt_co1-zdate = date.
+        gt_co1-hrkft = '9920'.
+        CONCATENATE date gt_co1-hrkft INTO gt_co1-zno.
+        INSERT INTO ztco025 VALUES gt_co1.
+
+      WHEN '1000'.
+        gt_co1-kst = gt_cya-dmbtr.
+        gt_co1-kst1 = gt_cya-dmbtr.
+        gt_co1-zdate = date.
+        gt_co1-hrkft = '9930'.
+        CONCATENATE date gt_co1-hrkft INTO gt_co1-zno.
+        INSERT INTO ztco025 VALUES gt_co1.
+
+      WHEN '1098'.
+        gt_co1-kst = gt_cya-dmbtr.
+        gt_co1-kst1 = gt_cya-dmbtr.
+        gt_co1-zdate = date.
+        gt_co1-hrkft = '9940'.
+        CONCATENATE date gt_co1-hrkft INTO gt_co1-zno.
+        INSERT INTO ztco025 VALUES gt_co1.
+      WHEN OTHERS.
+    ENDCASE.
+    lv_row = lv_row + 1.
+    CLEAR gt_co1.
+  ENDLOOP.
+*****************************************************************在产品
+  clear gt_co1.
+  PERFORM frm_zcp.
+  READ TABLE gt_zcp INDEX 1.
+*  lv_row = 24.
+  gt_co1-lbkum = gt_zcp-wemng.
+  gt_co1-kst = gt_zcp-dmbtr.
+  gt_co1-lbkum1 = gt_zcp-wemng.
+  gt_co1-kst1 = gt_zcp-dmbtr.
+  gt_co1-zdate = date.
+  gt_co1-hrkft = '9999'.
+  CONCATENATE date gt_co1-hrkft INTO gt_co1-zno.
+  INSERT INTO ztco025 VALUES gt_co1.
+
+
+
+ENDFORM.
+
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_ZCP
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_zcp .
+  DATA:BEGIN OF lt_zcpa OCCURS 0,
+         shkzg TYPE bseg-shkzg,
+         dmbtr TYPE bseg-dmbtr,
+       END OF lt_zcpa.
+  DATA:BEGIN OF lt_zcpa1 OCCURS 0,
+         dmbtr TYPE bseg-dmbtr,
+       END OF lt_zcpa1.
+  DATA lt_zcpa2 LIKE TABLE OF lt_zcpa1 WITH HEADER LINE.
+  DATA: lv  TYPE bsis-dmbtr,lv1 TYPE bsis-dmbtr.
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_zcpa FROM bsis WHERE bukrs = p_bukrs AND  budat <= date AND ( hkont BETWEEN '1406000000' AND '149906000' ).
+  LOOP AT lt_zcpa.
+    IF lt_zcpa-shkzg = 'H'.
+      lt_zcpa-dmbtr = lt_zcpa-dmbtr * -1.
+      MODIFY lt_zcpa.
+    ENDIF.
+    MOVE-CORRESPONDING lt_zcpa TO lt_zcpa1.
+    APPEND lt_zcpa1.
+  ENDLOOP.
+  LOOP AT lt_zcpa1.
+    COLLECT lt_zcpa1 INTO lt_zcpa2.
+  ENDLOOP.
+  READ TABLE lt_zcpa2 INDEX 1.
+  lv = lt_zcpa2-dmbtr.
+  DATA: BEGIN OF lt_afpo OCCURS 0,
+          wemng TYPE afpo-wemng,
+          psmng TYPE afpo-psmng,
+          matnr TYPE afpo-matnr,
+          werks TYPE bsis-werks,
+        END OF lt_afpo.
+  DATA: BEGIN OF lt_bsis OCCURS 0,
+          matnr TYPE afpo-matnr,
+          werks TYPE bsis-werks,
+        END OF lt_bsis.
+  DATA: BEGIN OF lt_bsis1 OCCURS 0,
+          zuonr TYPE bsis-zuonr,
+          werks TYPE bsis-werks,
+        END OF lt_bsis1.
+  DATA: lv_aufnr TYPE afpo-aufnr,lv_wemng TYPE afpo-wemng,lv_psmng TYPE afpo-psmng,lv_werks TYPE bsis-werks.
+  SELECT zuonr werks INTO CORRESPONDING FIELDS OF TABLE lt_bsis1 FROM bsis  WHERE hkont = '1406000000'.
+
+  LOOP AT lt_bsis1.
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'   "前缀补零
+      EXPORTING
+        input  = lt_bsis1-zuonr
+      IMPORTING
+        output = lv_aufnr.
+
+    SELECT  psmng wemng  matnr  APPENDING CORRESPONDING FIELDS OF  TABLE  lt_afpo FROM afpo WHERE aufnr = lv_aufnr.
+
+
+  ENDLOOP.
+
+  LOOP AT lt_afpo.
+    lv1 = lv1 + lt_afpo-wemng - lt_afpo-psmng.
+  ENDLOOP.
+
+
+  DATA: BEGIN OF lt_ckmlpp OCCURS 0,
+          kalnr LIKE ckmlpp-kalnr,
+*          lbkum LIKE ckmlpp-lbkum,
+        END OF lt_ckmlpp.
+  DATA:BEGIN OF lt_ckmlprkeph OCCURS 0,
+         kalnr  TYPE ckmlprkeph-kalnr,
+         kst012 TYPE p DECIMALS 6,
+         kst    TYPE p DECIMALS 6,
+         lbkum  LIKE ckmlpp-lbkum,
+       END OF lt_ckmlprkeph .
+  DATA lt_ckmlprkeph1 LIKE TABLE OF lt_ckmlprkeph WITH HEADER LINE.
+
+  DATA: lt_y TYPE numc4,    lt_m TYPE numc2.
+  DATA: BEGIN OF lt_last OCCURS 0,
+          kst TYPE p DECIMALS 6,
+        END OF lt_last.
+  SORT lt_afpo BY matnr.
+  SELECT kalnr INTO CORRESPONDING FIELDS OF TABLE lt_ckmlpp FROM ckmlhd
+    FOR ALL ENTRIES IN lt_afpo
+    WHERE matnr = lt_afpo-matnr AND bwkey = '1000'.
+  lt_y = date+0(4).
+  lt_m = date+4(2).
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_ckmlprkeph FROM ckmlprkeph
+    FOR ALL ENTRIES IN lt_ckmlpp
+    WHERE kalnr = lt_ckmlpp-kalnr
+    AND bdatj = lt_y
+    AND poper = lt_m
+    AND prtyp = 'V'
+    AND curtp = '10'
+    AND kkzst = ''.
+
+  LOOP AT lt_ckmlprkeph.
+    MOVE lt_ckmlprkeph-kst012 TO lt_last-kst.
+    APPEND lt_last.
+  ENDLOOP.
+
+  LOOP AT lt_last.
+    lv = lv - lt_last-kst.
+  ENDLOOP.
+
+  gt_zcp-dmbtr = lv.
+  gt_zcp-wemng = lv1.
+  APPEND gt_zcp.
+ENDFORM.

@@ -1,0 +1,442 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPQM001_F01
+*&---------------------------------------------------------------------*
+
+FORM get_data."取数据
+
+  SELECT
+
+       a~prueflos
+       a~werk
+       a~aufnr
+       a~matnr
+       a~matnr AS objek
+       a~matnr AS objkt
+       a~ktextmat
+       a~pastrterm
+       c~vornr
+       c~vorktxt
+       c~vorglfnr
+       c~arbid
+    INTO CORRESPONDING FIELDS OF TABLE gt_item
+    FROM qals AS a
+    INNER JOIN v_qapo AS c ON a~aufpl = c~aufpl
+    WHERE
+       a~werk  =  p_werk  "工厂
+      AND a~aufnr IN  s_aufnr
+      AND a~matnr IN  s_matnr
+    .
+
+  CHECK gt_item[] IS NOT INITIAL .
+  SORT gt_item BY prueflos.
+ENDFORM.
+
+FORM process_data."处理数据
+  DATA lv_spart LIKE mara-spart.
+  DATA lv_datuv TYPE sy-datum .
+**********************************************begin 检验结束日期取最大，处理投入数和合格数
+  DATA:BEGIN OF lt_qamr OCCURS 0,
+*         pruefdatub LIKE qamr-pruefdatub,
+         prueflos   LIKE qamr-prueflos,
+         vorglfnr   LIKE qamr-vorglfnr,
+         merknr     LIKE qamr-merknr,
+         mittelwert TYPE qamr-mittelwert,
+         ntrs       TYPE p DECIMALS 3,
+         nhgs       TYPE p DECIMALS 3,
+         verwmerkm  LIKE qamv-verwmerkm,
+         ppsortkey  TYPE qapp-ppsortkey,
+       END OF lt_qamr.
+
+  SELECT
+           a~prueflos
+           a~vorglfnr
+           a~merknr
+           a~mittelwert
+*          a~pastrterm AS  pruefdatub
+           a~pruefdatub
+           b~verwmerkm
+          c~ppsortkey
+  INTO CORRESPONDING FIELDS OF TABLE lt_qamr
+     FROM qasr AS a INNER JOIN qamv AS b ON a~prueflos = b~prueflos AND a~vorglfnr = b~vorglfnr AND a~merknr = b~merknr
+    INNER JOIN qapp AS c ON a~prueflos = c~prueflos AND a~vorglfnr = c~vorglfnr AND a~probenr = c~probenr
+    FOR ALL ENTRIES IN gt_item
+    WHERE  a~pruefdatub IN s_pdatub
+    AND a~prueflos = gt_item-prueflos
+    .
+  SORT lt_qamr BY prueflos  vorglfnr merknr DESCENDING  .
+**************************************************************end 1
+  DATA:BEGIN OF lt_ausp OCCURS 0,     "特征值
+         objek LIKE ausp-objek,
+         atwrt LIKE ausp-atwrt,
+         atinn LIKE ausp-atinn,
+       END OF lt_ausp.
+  DATA: l1 LIKE cabn-atnam,
+        l2 LIKE cabn-atnam,
+        l3 LIKE cabn-atnam,
+        l4 LIKE cabn-atnam,
+        l5 LIKE cabn-atnam,
+        l6 LIKE cabn-atnam.
+  CALL FUNCTION 'CONVERSION_EXIT_ATINN_INPUT'
+    EXPORTING
+      input  = 'ZFER_XL'
+    IMPORTING
+      output = l1.
+  CALL FUNCTION 'CONVERSION_EXIT_ATINN_INPUT'
+    EXPORTING
+      input  = 'ZFER_ZXL'
+    IMPORTING
+      output = l2.
+  CALL FUNCTION 'CONVERSION_EXIT_ATINN_INPUT'
+    EXPORTING
+      input  = 'ZFER_CPX'
+    IMPORTING
+      output = l3.
+  CALL FUNCTION 'CONVERSION_EXIT_ATINN_INPUT'
+    EXPORTING
+      input  = 'ZFER_DYZXH'
+    IMPORTING
+      output = l4.
+  CALL FUNCTION 'CONVERSION_EXIT_ATINN_INPUT'
+    EXPORTING
+      input  = 'ZFER_CPMC'
+    IMPORTING
+      output = l5.
+  CALL FUNCTION 'CONVERSION_EXIT_ATINN_INPUT'
+    EXPORTING
+      input  = 'ZFER_CPXH'
+    IMPORTING
+      output = l6.
+  CLEAR lt_ausp.
+
+  SELECT objek atinn atwrt INTO CORRESPONDING FIELDS OF TABLE lt_ausp FROM ausp
+    FOR ALL ENTRIES IN gt_item
+    WHERE objek = gt_item-objek AND atinn IN ( l1,l2,l3,l4,l5,l6 ).
+**********************************************************end begin 版本
+  DATA: BEGIN OF lt_aenr OCCURS 0,  "版本
+          aennr LIKE aeoi-aennr,
+          objkt LIKE aeoi-objkt,
+          revlv LIKE aeoi-revlv,
+          datuv LIKE aenr-datuv,
+
+        END OF lt_aenr.
+  SELECT a~aennr a~objkt a~revlv b~datuv INTO CORRESPONDING FIELDS OF TABLE lt_aenr
+        FROM aeoi AS a INNER JOIN aenr AS b ON a~aennr = b~aennr
+        FOR ALL ENTRIES IN gt_item
+        WHERE objkt = gt_item-objkt.
+
+  DATA lt_qapp LIKE TABLE OF qapp WITH HEADER LINE.
+  SELECT ppsortkey prueflos vorglfnr INTO CORRESPONDING FIELDS OF TABLE lt_qapp FROM qapp
+    FOR ALL ENTRIES IN gt_item
+    WHERE prueflos = gt_item-prueflos AND vorglfnr = gt_item-vorglfnr.
+
+*****************************************************************
+  DATA :lt_item LIKE TABLE OF gt_item WITH HEADER LINE.
+  LOOP AT gt_item.
+    READ TABLE lt_ausp WITH KEY objek = gt_item-objek atinn = l1.
+    IF sy-subrc = 0.
+      gt_item-xl = lt_ausp-atwrt.
+    ENDIF.
+    READ TABLE lt_ausp WITH KEY objek = gt_item-objek atinn = l2.
+    IF  sy-subrc = 0.
+      gt_item-zxl = lt_ausp-atwrt.
+    ENDIF.
+    READ TABLE lt_ausp WITH KEY objek = gt_item-objek atinn = l3.
+    IF sy-subrc = 0.
+      gt_item-cpx = lt_ausp-atwrt.
+    ENDIF.
+    READ TABLE lt_ausp WITH KEY objek = gt_item-objek atinn = l4.
+    IF sy-subrc = 0.
+      gt_item-dyzxh = lt_ausp-atwrt.
+    ENDIF.
+    READ TABLE lt_ausp WITH KEY objek = gt_item-objek atinn = l5.
+    IF sy-subrc = 0.
+      gt_item-cpmc = lt_ausp-atwrt.
+    ENDIF.
+    READ TABLE lt_ausp WITH KEY objek = gt_item-objek atinn = l6.
+    IF sy-subrc = 0.
+      gt_item-cpxh = lt_ausp-atwrt.
+    ENDIF.
+    IF gt_item-xl NOT IN s_xl AND s_xl IS NOT INITIAL.
+      DELETE gt_item.
+      CONTINUE.
+    ENDIF.
+    IF gt_item-zxl NOT IN s_zxl AND s_zxl IS NOT INITIAL.
+      DELETE gt_item.
+      CONTINUE.
+    ENDIF.
+    IF gt_item-cpx NOT IN s_cpx AND s_cpx IS NOT INITIAL.
+      DELETE gt_item.
+      CONTINUE.
+    ENDIF.
+    SELECT SINGLE dauat INTO gt_item-dauat FROM afpo WHERE aufnr = gt_item-aufnr.
+    SELECT SINGLE spart INTO lv_spart FROM mara WHERE matnr = gt_item-matnr.
+    SELECT SINGLE vtext INTO gt_item-vtext FROM tspat WHERE spart = lv_spart AND spras = 1.
+
+    LOOP AT lt_aenr WHERE objkt = gt_item-objkt.
+      AT FIRST.
+        lv_datuv = lt_aenr-datuv .
+      ENDAT.
+      IF lv_datuv LT lt_aenr-datuv .
+        lv_datuv = lt_aenr-datuv .
+      ENDIF.
+    ENDLOOP.
+    READ TABLE lt_aenr WITH KEY datuv = lv_datuv.
+    gt_item-revlv = lt_aenr-revlv.
+
+    SELECT SINGLE arbpl INTO gt_item-arbpl FROM crhd WHERE objid = gt_item-arbid AND objty = 'A'.
+    SELECT SINGLE zmbz INTO gt_item-zmbz FROM ztqm006 WHERE werks = gt_item-werk AND matnr = gt_item-matnr AND arbpl = gt_item-arbpl.
+
+    CASE gt_item-arbpl.
+      WHEN 'Q204'.
+      WHEN 'Q205'.
+      WHEN 'Q206'.
+      WHEN 'Q207'.
+      WHEN 'Q208'.
+      WHEN 'Q209'.
+      WHEN 'Q210'.
+*      WHEN 'Q211'.
+      WHEN 'Q214'.
+      WHEN 'Q213'.
+      WHEN 'Q202'.
+      WHEN 'Q203'.
+      WHEN 'Q217'.
+      WHEN 'Q301'.
+      WHEN OTHERS.
+        DELETE gt_item.
+        CONTINUE.
+    ENDCASE.
+
+    MODIFY gt_item.
+    CLEAR: lv_datuv,lv_spart.
+  ENDLOOP.
+  DATA:BEGIN OF lt_total OCCURS 0,
+         matnr TYPE qals-matnr,
+         total TYPE qamr-mittelwert,
+       END OF lt_total.
+  SORT lt_qamr BY ppsortkey verwmerkm.
+  DATA:lv_ntrs      TYPE qasr-mittelwert,lv_nhgs TYPE qasr-mittelwert,lv_ppsortkey TYPE qapp-ppsortkey,lv_tabix TYPE sy-tabix,lv_end TYPE qasr-mittelwert.
+  LOOP AT gt_item.
+    lv_tabix = sy-tabix.
+    READ TABLE lt_qamr WITH KEY  prueflos = gt_item-prueflos   vorglfnr = gt_item-vorglfnr .
+    IF sy-subrc = 0.
+      LOOP AT lt_qamr WHERE  prueflos = gt_item-prueflos AND  vorglfnr = gt_item-vorglfnr .
+        IF lt_qamr-verwmerkm = 'NTRS' .
+          lv_ntrs = lt_qamr-mittelwert.
+          IF gt_item-arbpl = 'Q214'.
+            lt_total-total = lt_qamr-mittelwert.
+            lt_total-matnr = gt_item-matnr.
+            APPEND lt_total.
+          ENDIF.
+        ELSEIF  lt_qamr-verwmerkm = 'NBLS' .
+          lv_nhgs = lt_qamr-mittelwert.
+        ENDIF.
+        IF lv_ntrs <> 0  .
+          MOVE-CORRESPONDING gt_item TO lt_item.
+          lt_item-ntrs = lv_ntrs.
+          lt_item-nhgs = lv_nhgs.
+          lt_item-ppsortkey = lt_qamr-ppsortkey .
+          APPEND lt_item.
+          CLEAR: lv_ntrs,lv_nhgs,lt_item,lv_ppsortkey.
+        ENDIF.
+
+      ENDLOOP.
+    ELSE.
+      MOVE-CORRESPONDING gt_item TO lt_item.
+      lt_item-ntrs = lv_ntrs.
+      lt_item-nhgs = lv_nhgs.
+      lt_item-ppsortkey = lv_ppsortkey.
+      APPEND lt_item.
+      CLEAR: lv_ntrs,lv_nhgs,lt_item,lv_ppsortkey.
+    ENDIF.
+
+    CLEAR :lt_total.
+  ENDLOOP.
+
+  CLEAR gt_item.
+  REFRESH gt_item.
+  gt_item[] = lt_item[].
+  LOOP AT gt_item.
+    IF gt_item-ntrs <> 0.
+      gt_item-zhgl =  ( 1 - ( gt_item-nhgs / gt_item-ntrs ) ) * 100 .
+
+    ENDIF.
+    gt_item-zhgs = gt_item-ntrs - gt_item-nhgs.
+    MODIFY gt_item.
+  ENDLOOP.
+  SORT gt_item BY pruefdatub vornr.
+  REFRESH: lt_ausp[],lt_aenr[].
+  DATA: lt_total1 LIKE TABLE OF lt_total WITH HEADER LINE.
+
+  IF p_r2 = 'X'.
+    LOOP AT lt_total.
+      COLLECT lt_total INTO lt_total1.
+    ENDLOOP.
+    LOOP AT gt_item.
+      MOVE-CORRESPONDING gt_item TO gt_item1.
+      COLLECT gt_item1.
+    ENDLOOP.
+    DELETE ADJACENT DUPLICATES FROM gt_item1 COMPARING ALL FIELDS.
+    LOOP AT gt_item1.
+      READ TABLE lt_total1 WITH  KEY matnr = gt_item1-matnr.
+      IF sy-subrc = 0.
+        gt_item1-ntrs = lt_total1-total.
+      ENDIF.
+
+      SELECT SINGLE zmbz INTO gt_item1-zmbhgl  FROM ztqm007 WHERE werks = gt_item1-werk AND matnr = gt_item1-matnr.
+      IF gt_item1-ntrs <> 0.
+        gt_item1-zsjhgl = ( 1 - ( gt_item1-nhgs / gt_item1-ntrs ) ) * 100 .
+      ENDIF.
+      gt_item1-zhgs = gt_item1-ntrs - gt_item1-nhgs.
+      MODIFY gt_item1.
+    ENDLOOP.
+  ENDIF.
+ENDFORM.
+
+
+FORM get_alv."ALV显示界面
+  DATA : col_pos TYPE i VALUE 1.
+
+  CLEAR:it_fieldcat,wa_fieldcat.
+
+  gs_layout-zebra = 'X'.
+  gs_layout-cwidth_opt = 'X'."
+  gs_layout-stylefname = 'FIELD_STYLE'. " 将内表中的字段名存入显示格式
+  gs_layout-box_fname        = 'SEL'.
+  i_grid_settings-edt_cll_cb = 'X'.
+
+*  PERFORM fieldcat_int USING col_pos  'PRUEFLOS' '批号'    'QALS' .
+*  PERFORM fieldcat_int USING col_pos  'VORGLFNR' '节点'    'QAMR' .
+
+  PERFORM fieldcat_int USING col_pos  'PASTRTERM' '日期' 'PASTRTERM'   'QALS' .
+*  PERFORM fieldcat_int USING col_pos  'PRUEFDATUB' '日期' 'PRUEFDATUB'   'QAMR' .
+  PERFORM fieldcat_int USING col_pos  'WERK'   '工厂' 'WERK'  'QALS'  .
+  PERFORM fieldcat_int USING col_pos  'DAUAT' '生产订单类型' 'DAUAT' 'AFPO'    .
+  IF p_r1 = 'X'.
+    PERFORM fieldcat_int USING col_pos  'AUFNR' '生产订单' 'AUFNR' 'QALS'    .
+  ENDIF.
+  PERFORM fieldcat_int USING col_pos  'VTEXT' '产品种类' 'VTEXT' 'TSPAT'    .
+  PERFORM fieldcat_int USING col_pos  'CPX'   '产品线'  '' '' .
+  PERFORM fieldcat_int USING col_pos  'XL'   '产品系列'  '' '' .
+  PERFORM fieldcat_int USING col_pos  'ZXL'   '产品子系列'  '' '' .
+  PERFORM fieldcat_int USING col_pos  'DYZXH'   '产品主型号'  ''  ''.
+*  PERFORM fieldcat_int USING col_pos  'CPZXH'   '产品子型号'  '' '' .
+  PERFORM fieldcat_int USING col_pos  'CPXH'   '产品子型号'  '' '' .
+  PERFORM fieldcat_int USING col_pos  'CPMC'   '产品名称'  '' '' .
+  PERFORM fieldcat_int USING col_pos  'CPXH'   '产品型号'  ''  ''.
+  PERFORM fieldcat_int USING col_pos  'MATNR'   '物料编码' 'MATNR'  'QALS'  .
+  PERFORM fieldcat_int USING col_pos  'KTEXTMAT'   '物料名称' 'KTEXTMAT'  'QALS'  .
+  PERFORM fieldcat_int USING col_pos  'REVLV'   'SAP版本' 'REVLV'   'AEOI'  .
+  PERFORM fieldcat_int USING col_pos  'REVLV'   'K3版本'  'REVLV'  'AEOI'  .
+  IF p_r1 = 'X'.
+    PERFORM fieldcat_int USING col_pos  'VORNR'   '工序' 'VORNR'  'V_QAPO'  .
+    PERFORM fieldcat_int USING col_pos 'VORKTXT'   '工序名称' 'VORKTXT' 'V_QAPO'  .
+    PERFORM fieldcat_int USING col_pos  'PPSORTKEY'   '检验点'  'PPSORTKEY' 'QAPP' .
+  ENDIF.
+  PERFORM fieldcat_int USING col_pos  'NTRS'   '投入数'  'LOSMENGE' 'QALS' .
+  PERFORM fieldcat_int USING col_pos  'NHGS'   '不良数'  'LOSMENGE'  'QALS'.
+  PERFORM fieldcat_int USING col_pos  'ZHGS' '合格数' '' ''    .
+  IF p_r1 = 'X'.
+    PERFORM fieldcat_int USING col_pos  'ZHGL'   '合格率 %'  '' '' .
+    PERFORM fieldcat_int USING col_pos  'ZMBZ'   '目标值 %'  '' '' .
+  ENDIF.
+  IF p_r2 = 'X'.
+    PERFORM fieldcat_int USING col_pos  'ZSJHGL'   '实际直通率 %'  ''  ''.
+    PERFORM fieldcat_int USING col_pos  'ZMBHGL'   '直通率目标值 %'  ''  ''.
+  ENDIF.
+
+  IF p_r2 = 'X'.
+    CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+      EXPORTING
+        i_callback_program       = sy-repid
+        is_layout_lvc            = gs_layout
+        it_fieldcat_lvc          = it_fieldcat
+        it_events                = it_events
+*       i_save                   = 'A'
+        i_callback_pf_status_set = 'SET_PF_STATUS'
+        i_callback_user_command  = 'ALV_USER_COMMAND'
+        i_grid_settings          = i_grid_settings
+      TABLES
+        t_outtab                 = gt_item1[]
+      EXCEPTIONS
+        program_error            = 1
+        OTHERS                   = 2.
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+              WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ENDIF.
+  ELSE.
+    CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+      EXPORTING
+        i_callback_program       = sy-repid
+        is_layout_lvc            = gs_layout
+        it_fieldcat_lvc          = it_fieldcat
+        it_events                = it_events
+        i_save                   = 'U'
+        i_callback_pf_status_set = 'SET_PF_STATUS'
+        i_callback_user_command  = 'ALV_USER_COMMAND'
+        i_grid_settings          = i_grid_settings
+      TABLES
+        t_outtab                 = gt_item[]
+      EXCEPTIONS
+        program_error            = 1
+        OTHERS                   = 2.
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+              WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ENDIF.
+  ENDIF.
+
+ENDFORM.
+
+
+FORM set_pf_status USING rt_extab TYPE slis_t_extab.
+
+  DATA: wa_extab TYPE slis_extab.
+
+*  SET PF-STATUS '0100' EXCLUDING rt_extab.
+  SET PF-STATUS '0100'.
+
+ENDFORM.                    "set_pf_status1
+
+FORM alv_user_command USING r_ucomm LIKE sy-ucomm  rs_selfield TYPE slis_selfield.
+*   获取ALV中的鼠标勾选记录
+  DATA: l_grid TYPE REF TO cl_gui_alv_grid.
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = l_grid.
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  r_ucomm = sy-ucomm.
+  save_ok =  r_ucomm .
+  CASE r_ucomm.
+      "打印
+    WHEN 'C_PRINT'.
+*      PERFORM print_report.
+  ENDCASE.
+
+
+ENDFORM.                    "alv_user_command
+
+FORM fieldcat_int  USING   p_col_pos         " 1
+                            p_fieldname       " 2
+                            p_seltext_l       " 4
+                            p_refname
+                           p_talbename
+                            .
+
+  wa_fieldcat-col_pos       = p_col_pos.
+  wa_fieldcat-fieldname     = p_fieldname.
+*  wa_fieldcat-key           = p_key.
+  wa_fieldcat-coltext     = p_seltext_l.
+*  wa_fieldcat-no_zero        = p_zero.
+*  wa_fieldcat-ref_field   = p_fieldname.
+  wa_fieldcat-ref_field   = p_refname.
+  wa_fieldcat-ref_table    = p_talbename.
+  wa_fieldcat-tipddictxt       = 'L'.
+*  wa_fieldcat-edit           = p_edit  .
+  APPEND wa_fieldcat TO it_fieldcat.
+  p_col_pos = p_col_pos + 1.
+  CLEAR: wa_fieldcat.
+ENDFORM.                    " FIELDCAT_INT

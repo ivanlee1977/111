@@ -1,0 +1,14 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPFI023S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK b2 WITH FRAME TITLE TEXT-001.
+PARAMETERS: p_bukrs TYPE t001-bukrs DEFAULT '1000' MODIF ID mr1 OBLIGATORY .
+SELECT-OPTIONS:s_zskrq FOR zficotskt-zskrq MODIF ID mr1,
+               s_zkhbm FOR bsid-kunnr MODIF ID mr1.
+PARAMETERS: p_zbb   TYPE zficotskt-zbb MODIF ID mr1,
+            p_zhkr  TYPE zficotskt-zhkr MODIF ID mr1,
+            p_zskze TYPE zficotskt-zskze MODIF ID mr1.
+SELECT-OPTIONS:s_zdjhm FOR zficotskt-zdjhm MODIF ID mr1 .
+SELECT-OPTIONS:s_bzirk FOR knvv-bzirk MODIF ID mr1,
+               s_vkbur FOR knvv-vkbur MODIF ID mr1.
+SELECTION-SCREEN END OF BLOCK b2.

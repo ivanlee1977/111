@@ -1,0 +1,15 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPPP019S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_werks FOR marc-werks OBLIGATORY DEFAULT '1000',
+               s_matnr FOR marc-matnr,
+               s_beskz FOR marc-beskz  DEFAULT 'F',
+               s_sobsl FOR marc-sobsl,
+               s_mtart FOR mara-mtart,
+               s_dispo FOR marc-dispo,
+               s_date1 FOR sy-datum OBLIGATORY NO-EXTENSION,
+               s_date2 FOR sy-datum OBLIGATORY NO-EXTENSION,
+               s_date3 FOR sy-datum OBLIGATORY NO-EXTENSION.
+SELECTION-SCREEN END OF BLOCK blc.

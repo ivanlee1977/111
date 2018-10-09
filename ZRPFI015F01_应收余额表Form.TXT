@@ -1,0 +1,341 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI015F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:BEGIN OF lt_bsid OCCURS 0,
+         bukrs LIKE bsid-bukrs,
+         kunnr LIKE bsid-kunnr,
+         kkber LIKE bsid-kkber,
+         umsks LIKE bsid-umsks,
+         umskz LIKE bsid-umskz,
+         augdt LIKE bsid-augdt,
+         augbl LIKE bsid-augbl,
+         zuonr LIKE bsid-zuonr,
+         gjahr LIKE bsid-gjahr,
+         blart LIKE bsid-blart,
+         belnr LIKE bsid-belnr,
+         buzei LIKE bsid-buzei,
+         budat LIKE bsid-budat,
+         monat LIKE bsid-monat,
+         hkont LIKE bsid-hkont,
+         shkzg LIKE bsid-shkzg,
+         dmbtr LIKE bsid-dmbtr,
+         wrbtr LIKE bsid-wrbtr,
+         waers LIKE bsid-waers,
+       END OF lt_bsid.
+
+  DATA: lv_begin_date LIKE sy-datum,
+        lv_last_date  LIKE sy-datum.
+
+  DATA:BEGIN OF lt_kna1 OCCURS 0,
+         kunnr LIKE kna1-kunnr,
+         name1 LIKE kna1-name1,
+       END OF lt_kna1.
+
+  DATA:BEGIN OF lt_knvv OCCURS 0,
+         kunnr LIKE knvv-kunnr,
+         vkorg LIKE knvv-vkorg,
+         vtweg LIKE knvv-vtweg,
+         spart LIKE knvv-spart,
+         bzirk LIKE knvv-bzirk,
+         vkbur LIKE knvv-vkbur,
+         kvgr1 LIKE knvv-kvgr1,
+       END OF lt_knvv.
+
+  DATA:lt_t171t LIKE t171t OCCURS 0 WITH HEADER LINE,
+       lt_tvkbt LIKE tvkbt OCCURS 0 WITH HEADER LINE,
+       lt_tvv1t LIKE tvv1t OCCURS 0 WITH HEADER LINE.
+
+  CONCATENATE p_gjahr p_monat '01' INTO lv_begin_date.
+  CALL FUNCTION 'BKK_GET_MONTH_LASTDAY'
+    EXPORTING
+      i_date = lv_begin_date
+    IMPORTING
+      e_date = lv_last_date.
+
+***抓取BSID数据
+  SELECT  bukrs
+          kunnr
+          kkber
+          umsks
+          umskz
+          augdt
+          augbl
+          zuonr
+          gjahr
+          blart
+          belnr
+          buzei
+          budat
+          monat
+          hkont
+          shkzg
+          dmbtr
+          wrbtr
+          waers
+    INTO CORRESPONDING FIELDS OF TABLE lt_bsid
+    FROM bsid
+    WHERE bukrs IN r_bukrs
+      AND prctr IN s_prctr
+      AND kunnr IN s_kunnr
+      AND hkont IN s_hkont
+      AND kkber IN s_kkber
+      AND budat <= lv_last_date.
+
+  SELECT  bukrs
+          kunnr
+          kkber
+          umsks
+          umskz
+          augdt
+          augbl
+          zuonr
+          gjahr
+          blart
+          belnr
+          buzei
+          budat
+          monat
+          hkont
+          shkzg
+          dmbtr
+          wrbtr
+          waers
+    APPENDING CORRESPONDING FIELDS OF TABLE lt_bsid
+    FROM bsad
+    WHERE bukrs IN r_bukrs
+      AND prctr IN s_prctr
+      AND kunnr IN s_kunnr
+      AND hkont IN s_hkont
+      AND kkber IN s_kkber
+      AND budat <= lv_last_date.
+
+  CHECK lt_bsid[] IS NOT INITIAL.
+***客户名称
+  SELECT kunnr name1
+    INTO CORRESPONDING FIELDS OF TABLE lt_kna1
+    FROM kna1
+    FOR ALL ENTRIES IN lt_bsid
+    WHERE kunnr = lt_bsid-kunnr.
+***获取大区、部门、业务员数据
+  SELECT kunnr
+         vkorg
+         vtweg
+         spart
+         bzirk
+         vkbur
+         kvgr1
+    INTO CORRESPONDING FIELDS OF TABLE lt_knvv
+    FROM knvv
+    FOR ALL ENTRIES IN lt_bsid
+    WHERE kunnr = lt_bsid-kunnr
+      AND vkorg = lt_bsid-kkber.
+
+***大区描述
+  SELECT * INTO TABLE lt_t171t FROM t171t WHERE spras = sy-langu.
+***行办描述
+  SELECT * INTO TABLE lt_tvkbt FROM tvkbt WHERE spras = sy-langu.
+***业务员描述
+  SELECT * INTO TABLE lt_tvv1t FROM tvv1t WHERE spras = sy-langu.
+
+  SORT lt_kna1 BY kunnr.
+  SORT lt_knvv BY kunnr vkorg.
+  SORT lt_t171t BY bzirk.
+  SORT lt_tvkbt BY vkbur.
+  SORT lt_tvv1t BY kvgr1.
+
+  LOOP AT lt_bsid.
+    gt_out-kkber = lt_bsid-kkber.
+    gt_out-kunnr = lt_bsid-kunnr.
+    READ TABLE lt_kna1 WITH KEY kunnr = lt_bsid-kunnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-name1 = lt_kna1-name1.
+    ENDIF.
+
+    IF r1 = 'X'.  "本币显示
+      gt_out-waers = 'CNY'.
+    ELSEIF r2 = 'X'.
+      gt_out-waers = lt_bsid-waers.
+      lt_bsid-dmbtr = lt_bsid-wrbtr.
+    ENDIF.
+
+    IF lt_bsid-shkzg = 'H'.
+      lt_bsid-dmbtr = -1 * lt_bsid-dmbtr.
+    ENDIF.
+
+    READ TABLE lt_knvv WITH KEY kunnr = lt_bsid-kunnr vkorg = lt_bsid-kkber BINARY SEARCH.
+    IF sy-subrc = 0.
+***大区描述
+      READ TABLE lt_t171t WITH KEY bzirk = lt_knvv-bzirk BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_out-bztxt = lt_t171t-bztxt.
+      ENDIF.
+***行办描述
+      READ TABLE lt_tvkbt WITH KEY vkbur = lt_knvv-vkbur BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_out-bezei = lt_tvkbt-bezei.
+      ENDIF.
+***业务员描述
+      READ TABLE lt_tvv1t WITH KEY kvgr1 = lt_knvv-kvgr1 BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_out-ztext = lt_tvv1t-bezei.
+      ENDIF.
+    ENDIF.
+***期初数
+    IF lt_bsid-budat < lv_begin_date.
+      gt_out-zqcye = lt_bsid-dmbtr.
+    ENDIF.
+***本期应收
+    IF ( lt_bsid-blart NE 'Z1' AND lt_bsid-blart NE 'Z2' ) AND lt_bsid-budat BETWEEN lv_begin_date AND lv_last_date.
+      gt_out-zbqys = lt_bsid-dmbtr.
+    ENDIF.
+***本期实收
+    IF ( lt_bsid-blart EQ 'Z1' OR lt_bsid-blart EQ 'Z2' ) AND lt_bsid-budat BETWEEN lv_begin_date AND lv_last_date.
+      gt_out-zbqss = -1 * lt_bsid-dmbtr.
+    ENDIF.
+***本年累计应收
+    IF ( lt_bsid-blart NE 'Z1' AND lt_bsid-blart NE 'Z2' ) AND lt_bsid-budat(4) = p_gjahr.
+      gt_out-zbnys = lt_bsid-dmbtr.
+    ENDIF.
+***本年累计实收
+    IF ( lt_bsid-blart EQ 'Z1' OR lt_bsid-blart EQ 'Z2' ) AND lt_bsid-budat(4) = p_gjahr.
+      gt_out-zbnss = -1 * lt_bsid-dmbtr.
+    ENDIF.
+***期末余额
+    gt_out-zqmye = gt_out-zqcye + gt_out-zbqys - gt_out-zbqss.
+    COLLECT gt_out.
+    CLEAR gt_out.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  mcr_build_fieldcat:'KKBER'   '控制范围'     'KKBER'   'BSID'  ''  '',
+                     'KUNNR'   '客户号码'     'KUNNR'   'BSID'  ''  '',
+                     'NAME1'   '客户名称'     'NAME1'   'KNA1'  ''  '',
+                     'BZTXT'   '大区描述'     'BZTXT'   'T171T'  ''  '',
+                     'BEZEI'   '部门描述'     'BEZEI'   'TVKBT'  ''  '',
+                     'ZTEXT'   '业务员描述'   'BEZEI'   'TVV1T'  ''  '',
+                     'WAERS'   '币别'         'WAERS'   'BSID'  ''  '',
+                     'ZQCYE'   '期初余额'     ''        ''      'P' '15',
+                     'ZBQYS'   '本期应收'     ''        ''      'P' '15',
+                     'ZBQSS'   '本期实收'     ''        ''      'P' '15',
+                     'ZBNYS'   '本年应收'     ''        ''      'P' '15',
+                     'ZBNSS'   '本年实收'     ''        ''      'P' '15',
+                     'ZQMYE'   '期末余额'     ''        ''      'P' '15'.
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK  = ' '
+*     I_BYPASSING_BUFFER =
+*     I_BUFFER_ACTIVE    =
+      i_callback_program = sy-repid
+*     I_CALLBACK_PF_STATUS_SET          = ' '
+*     I_CALLBACK_USER_COMMAND           = ' '
+*     I_CALLBACK_TOP_OF_PAGE            = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME   =
+*     I_BACKGROUND_ID    = ' '
+*     I_GRID_TITLE       =
+*     I_GRID_SETTINGS    =
+      is_layout_lvc      = gs_layout
+      it_fieldcat_lvc    = gt_fcat[]
+*     IT_EXCLUDING       =
+*     IT_SPECIAL_GROUPS_LVC             =
+*     IT_SORT_LVC        =
+*     IT_FILTER_LVC      =
+*     IT_HYPERLINK       =
+*     IS_SEL_HIDE        =
+      i_default          = 'X'
+      i_save             = 'A'
+*     IS_VARIANT         =
+*     IT_EVENTS          =
+*     IT_EVENT_EXIT      =
+*     IS_PRINT_LVC       =
+*     IS_REPREP_ID_LVC   =
+*     I_SCREEN_START_COLUMN             = 0
+*     I_SCREEN_START_LINE               = 0
+*     I_SCREEN_END_COLUMN               = 0
+*     I_SCREEN_END_LINE  = 0
+*     I_HTML_HEIGHT_TOP  =
+*     I_HTML_HEIGHT_END  =
+*     IT_ALV_GRAPHICS    =
+*     IT_EXCEPT_QINFO_LVC               =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER           =
+*     ES_EXIT_CAUSED_BY_USER            =
+    TABLES
+      t_outtab           = gt_out[]
+    EXCEPTIONS
+      program_error      = 1
+      OTHERS             = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_AUTH
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_auth .
+  DATA:BEGIN OF lt_bukrs OCCURS 0,
+         bukrs LIKE t001-bukrs,
+       END OF lt_bukrs.
+  CHECK sy-ucomm = 'ONLI'.
+  REFRESH r_bukrs.
+
+  SELECT bukrs INTO TABLE lt_bukrs FROM t001 WHERE bukrs IN s_bukrs.
+  IF sy-subrc NE 0.
+    MESSAGE '输入公司代码无效' TYPE 'E'.
+  ELSE.
+    LOOP AT lt_bukrs.
+      AUTHORITY-CHECK OBJECT 'F_BKPF_BUK'
+                    ID 'BUKRS' FIELD lt_bukrs-bukrs
+                    ID 'ACTVT' FIELD '03'.
+      IF sy-subrc <> 0.
+        DELETE lt_bukrs.
+      ELSE.
+        r_bukrs = 'IEQ'.
+        r_bukrs-low = lt_bukrs-bukrs.
+        APPEND r_bukrs.
+        CLEAR r_bukrs.
+      ENDIF.
+    ENDLOOP.
+    IF r_bukrs[] IS INITIAL.
+      MESSAGE '你没有公司代码的权限' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+ENDFORM.

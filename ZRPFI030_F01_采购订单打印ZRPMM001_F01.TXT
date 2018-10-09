@@ -1,0 +1,253 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM001_F01
+*&---------------------------------------------------------------------*
+
+
+FORM frm_show."ALV显示界面
+
+
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'SET_PF_STATUS'
+      i_callback_user_command  = 'ALV_USER_COMMAND'
+      is_layout                = gs_layout
+      it_fieldcat              = gt_fcat[]
+    TABLES
+      t_outtab                 = gt_item[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+           WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+ENDFORM.
+
+FORM set_pf_status USING rt_extab TYPE slis_t_extab.
+
+  DATA: wa_extab TYPE slis_extab.
+
+  SET PF-STATUS '0100' EXCLUDING rt_extab.
+
+ENDFORM.                    "set_pf_status1
+
+FORM alv_user_command USING r_ucomm LIKE sy-ucomm  rs_selfield TYPE slis_selfield.
+*   获取ALV中的鼠标勾选记录
+*  DATA: l_grid TYPE REF TO cl_gui_alv_grid.
+*  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+*    IMPORTING
+*      e_grid = l_grid.
+*  rs_selfield-refresh = 'X'.
+*  rs_selfield-col_stable = 'X'.
+*  rs_selfield-row_stable = 'X'.
+*
+*  r_ucomm = sy-ucomm.
+*  save_ok =  r_ucomm .
+*  CASE r_ucomm.
+*      "打印
+*    WHEN 'C_PRINT'.
+**      PERFORM print_report.
+*  ENDCASE.
+
+
+ENDFORM.                    "alv_user_command
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GETDATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_getdata .
+  PERFORM frm_createdate.
+
+  SELECT
+        lifnr
+        zskrq
+        zskze
+        zbb
+    zskfs
+       INTO CORRESPONDING FIELDS OF TABLE gt_fi
+        FROM zficotfkt
+       FOR ALL ENTRIES IN gt_t001
+        WHERE zgsdm EQ gt_t001-bukrs
+         AND  prctr IN s_prctr
+         AND  zskrq IN s_zskrq
+         AND  lifnr IN s_lifnr
+        AND zdjzt = 3
+.
+
+  DATA: lv1 TYPE char4, lv2 TYPE char4.
+  lv1 = s_zskrq-low+0(4).
+  LOOP AT gt_fi.
+    lv2 = gt_fi-zskrq+0(4).
+    IF  lv1 EQ lv2 .
+      gt_fi-zskze1 = gt_fi-zskze * -1.
+      gt_fi-zskze = 0.
+    ENDIF.
+    MODIFY gt_fi.
+    MOVE-CORRESPONDING gt_fi TO  gt_fi1.
+    APPEND gt_fi1.
+  ENDLOOP.
+
+  SELECT
+        zbsgys AS lifnr
+        zskrq
+        zskze
+        zbb
+    zskfs
+       INTO CORRESPONDING FIELDS OF TABLE gt_fi2
+        FROM zficotskt
+           FOR ALL ENTRIES IN gt_t001
+        WHERE zgsdm EQ gt_t001-bukrs
+         AND  prctr IN s_prctr
+         AND  zskrq IN s_zskrq
+         AND zpjzt = 1
+
+         AND zbsgys <> ''
+.
+
+  LOOP AT gt_fi2.
+    lv2 = gt_fi2-zskrq+0(4).
+    IF  lv1 EQ lv2 .
+      gt_fi2-zskze1 = gt_fi2-zskze * -1.
+      gt_fi2-zskze = 0.
+    ENDIF.
+    MODIFY gt_fi2.
+    MOVE-CORRESPONDING gt_fi2 TO  gt_fi1.
+    APPEND gt_fi1.
+  ENDLOOP.
+
+  LOOP AT gt_fi1.
+    COLLECT gt_fi1 INTO gt_item.
+  ENDLOOP.
+
+  LOOP AT gt_item.
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+      EXPORTING
+        input  = gt_item-lifnr
+      IMPORTING
+        output = gt_item-lifnr.
+
+    SELECT SINGLE name1 INTO gt_item-name1 FROM lfa1 WHERE lifnr = gt_item-lifnr.
+
+    gt_item-zskze2 = gt_item-zskze + gt_item-zskze1.
+    CASE gt_item-zskfs.
+      WHEN '1'.
+        gt_item-zskfs = '银行转账'.
+      WHEN '2'.
+        gt_item-zskfs = '现金支付'.
+      WHEN '3'.
+        gt_item-zskfs = '银行承兑汇票'.
+      WHEN '4'.
+        gt_item-zskfs = '商业承兑汇票'.
+      WHEN '5'.
+        gt_item-zskfs = '信用证'.
+      WHEN '6'.
+        gt_item-zskfs = '支票'.
+      WHEN '7'.
+        gt_item-zskfs = 'POS机刷卡'.
+      WHEN OTHERS.
+    ENDCASE.
+    MODIFY gt_item.
+  ENDLOOP.
+  SORT gt_item BY lifnr.
+
+
+
+ENDFORM.
+
+FORM frm_getfact .
+  g_fieldfcat:
+    'LIFNR' '供应商代码' 'LIFNR' 'EKKO' '',
+    'NAME1' '供应商名称' 'NAME1' 'LFA1' '',
+    'ZSKZE' '当期实付数' 'ZSKZE' 'ZFICOTFKT' '',
+    'ZSKZE1' '上年同期实付数' 'ZSKZE' 'ZFICOTFKT' '',
+    'ZSKZE2' '增减额' 'ZSKZE' 'ZFICOTFKT' '',
+    'ZBB' '币别' 'ZBB' 'ZFICOTFKT' '',
+    'ZSKFS' '支付方式' '' '' ''
+  .
+
+
+
+  gs_layout-colwidth_optimize = 'X'.
+*  gs_layout-box_fieldname = 'CHK'.
+*  gs_layout-box_tabname = 'gt_item'.
+*  gs_layout-edit = 'X'.
+  gs_layout-zebra = 'X'.
+
+
+
+
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CREATE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CREATEDATE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_createdate .
+  DATA: date   TYPE vtbbewe-dvalut,
+        flag   TYPE trff_flg,
+        ldate1 LIKE sy-datum,
+        ldate2 LIKE sy-datum,
+        date1  LIKE sy-datum,
+        date2  LIKE sy-datum,
+        days   TYPE trff_type_n_2.
+
+  ldate1 = s_zskrq-low.
+  ldate2 = s_zskrq-high.
+
+  IF s_zskrq-low NE '00000000'.
+    CALL FUNCTION 'FIMA_DATE_CREATE'
+      EXPORTING
+        i_date  = ldate1 "输入日期
+*       i_flg_end_of_month      = ' '
+        i_years = -1       "两年后的日期. 即输入日期的年加2所得日期，可为负数，表示前两年
+*       i_months                = 1       "一个月后的日期.即输入日期的月加1所得日期，可为负数，表示前一个月
+*       i_days  = 23      "23天后的日期。可为负数，表示23天前的日期
+*       i_calendar_days         = 10      "10天后的日历。同I_DAYS参数。
+*       i_set_last_day_of_month = 'X'     "返回的日期为当前月份的最后一天
+      IMPORTING
+        e_date  = date1.  "返回的日期为当前月份的最后一天
+*    e_flg_end_of_month      = flag    "如果输入参数I_SET_LAST_DAY_OF_MONTH设置’X’了，则返回值为’X’。
+*    e_days_of_i_date        = days.   "返回输入日期的i_calendar_days字段与I_DAYS字段的和。
+  ENDIF.
+  IF s_zskrq-high NE '00000000'.
+    CALL FUNCTION 'FIMA_DATE_CREATE'
+      EXPORTING
+        i_date  = ldate2 "输入日期
+*       i_flg_end_of_month      = ' '
+        i_years = -1       "两年后的日期. 即输入日期的年加2所得日期，可为负数，表示前两年
+*       i_months                = 1       "一个月后的日期.即输入日期的月加1所得日期，可为负数，表示前一个月
+*       i_days  = 23      "23天后的日期。可为负数，表示23天前的日期
+*       i_calendar_days         = 10      "10天后的日历。同I_DAYS参数。
+*       i_set_last_day_of_month = 'X'     "返回的日期为当前月份的最后一天
+      IMPORTING
+        e_date  = date2.  "返回的日期为当前月份的最后一天
+  ENDIF.
+  IF s_zskrq-low NE '00000000'.
+    s_zskrq-low = date1.
+    s_zskrq-high = date2.
+    APPEND s_zskrq.
+  ENDIF.
+
+ENDFORM.

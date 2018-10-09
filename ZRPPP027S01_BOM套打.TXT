@@ -1,0 +1,10 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPPP010S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_matnr FOR mast-matnr ,
+               s_werks FOR mast-werks,
+               s_mtart FOR mara-mtart,
+               s_matkl FOR mara-matkl
+               .
+SELECTION-SCREEN END OF BLOCK blc.

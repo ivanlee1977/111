@@ -1,0 +1,564 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPSD024_F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GETDATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_getdata .
+
+  IF p_p1 = 'X'.
+
+    SELECT
+           a~vkorg "销售组织
+           a~vtweg "分销渠道
+           a~auart "订单类型
+           a~kunnr "客户编码
+           a~erdat "创建日期
+           a~vkbur "行办代码
+           a~vkgrp "销售组代码
+           a~kvgr1 "销售工程师/代表代码
+           a~kvgr2 "商务代码
+
+           b~vbeln "销售订单号
+           b~spart "产品组
+           b~posnr "订单项目
+           b~matnr ""物料号
+           b~arktx "物料描述
+           b~kwmeng "订单数量
+           b~kzwi1 "金额
+           b~matkl
+           b~werks
+           c~bzirk "销售大区代码
+           c~ihrez "试用期
+           b~matnr AS objek""物料号
+           e~wadat_ist
+      INTO CORRESPONDING FIELDS OF TABLE gt_out FROM vbak AS a INNER JOIN vbap AS b ON a~vbeln = b~vbeln
+      INNER JOIN vbkd AS c ON b~vbeln = c~vbeln
+      INNER JOIN lips AS d ON d~vgbel = b~vbeln AND d~vgpos = b~posnr  "关联交货单项目 add by wusk 20180117
+      INNER JOIN likp AS e ON d~vbeln = e~vbeln "关联交货单项目 add by wusk 20180117
+*      INNER JOIN knvv as d on kunnr = kunnr
+      WHERE a~erdat IN s_erdat
+      AND a~vbeln IN s_vbeln
+      AND a~vkorg IN s_vkorg
+      AND a~vtweg IN s_vtweg
+      AND c~bzirk IN s_bzirk
+      AND a~vkbur IN s_vkbur
+      AND a~vkgrp IN s_vkgrp
+      AND a~kvgr1 IN s_kvgr1
+      AND a~kvgr2 IN s_kvgr2
+      AND a~kunnr IN s_kunnr
+      AND b~matnr IN s_matnr
+      AND b~matkl IN s_matkl
+      AND b~spart IN s_spart
+      AND e~wadat_ist IN s_date1. "关联交货日期 add by wusk 20180117
+
+  ELSE.
+    SELECT
+           a~vkorg "销售组织
+           a~vtweg "分销渠道
+           a~auart "订单类型
+           a~kunnr "客户编码
+           a~erdat "创建日期
+           a~vkbur "行办代码
+           a~vkgrp "销售组代码
+           a~kvgr1 "销售工程师/代表代码
+           a~kvgr2 "商务代码
+
+           b~vbeln "销售订单号
+           b~spart "产品组
+           b~posnr "订单项目
+           b~matnr ""物料号
+           b~arktx "物料描述
+           b~kwmeng "订单数量
+           b~kzwi1 "金额
+           b~matkl
+           b~werks
+           c~bzirk "销售大区代码
+           c~ihrez "试用期
+           b~matnr AS objek""物料号
+           e~wadat_ist
+      INTO CORRESPONDING FIELDS OF TABLE gt_out FROM vbak AS a INNER JOIN vbap AS b ON a~vbeln = b~vbeln
+      INNER JOIN vbkd AS c ON a~vbeln = c~vbeln
+      INNER JOIN lips AS d ON d~vgbel = b~vbeln AND d~vgpos = b~posnr  "关联交货单项目 add by wusk 20180117
+      INNER JOIN likp AS e ON d~vbeln = e~vbeln "关联交货单项目 add by wusk 20180117
+      WHERE
+       a~vkorg IN s_vkorg
+      and a~erdat IN s_erdat
+      AND a~vtweg IN s_vtweg
+      AND c~bzirk IN s_bzirk
+      AND a~vkbur IN s_vkbur
+      AND a~vkgrp IN s_vkgrp
+      AND a~kvgr1 IN s_kvgr1
+      AND a~kvgr2 IN s_kvgr2
+      AND a~kunnr IN s_kunnr
+      AND b~matnr IN s_matnr
+      AND b~matkl IN s_matkl
+      AND b~spart IN s_spart
+      AND e~wadat_ist IN s_date1. "关联交货日期 add by wusk 20180117
+
+  ENDIF.
+  SORT gt_out BY vbeln posnr.
+  DELETE ADJACENT DUPLICATES FROM gt_out COMPARING vbeln posnr." add by wusk 20180117
+
+
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PROCESSDATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_processdata .
+  DATA:lv_name  LIKE thead-tdname.
+  DATA : lt_lips LIKE TABLE OF lips WITH HEADER LINE.
+  DATA : lt_msku LIKE TABLE OF msku WITH HEADER LINE.
+  DATA: l1 LIKE cabn-atnam,l2 LIKE cabn-atnam,l3 LIKE cabn-atnam,l4 LIKE cabn-atnam.
+  DATA: zihrez   TYPE string,lv_bwart LIKE vbfa-bwart, lt_kulab LIKE msku-kulab.
+  DATA: date TYPE vtbbewe-dvalut,
+        day  TYPE int4,
+        flag TYPE trff_flg,
+        days TYPE trff_type_n_2.
+  DATA : lt_mbew LIKE TABLE OF mbew WITH HEADER LINE.
+
+  SELECT kulab matnr werks kunnr INTO CORRESPONDING FIELDS OF TABLE lt_msku FROM msku
+    FOR ALL ENTRIES IN gt_out
+    WHERE matnr = gt_out-matnr AND  werks = gt_out-werks AND kunnr = gt_out-kunnr AND sobkz = 'W'.
+
+  SELECT vgbel vgpos INTO CORRESPONDING FIELDS OF TABLE lt_lips FROM lips AS a INNER JOIN likp AS  b ON a~vbeln = b~vbeln
+    FOR ALL ENTRIES IN gt_out
+    WHERE a~vgbel = gt_out-vbeln AND a~vgpos = gt_out-posnr AND b~lfart = 'ZLF3'.
+
+  DATA:lv_kvgr11 LIKE knvv-kvgr1.
+  LOOP AT gt_out.
+********************************************************权限检查
+    IF gt_out-kunnr = 'A000' OR gt_out-kunnr = 'C000'.
+      AUTHORITY-CHECK OBJECT 'Z_KVGR1'
+               ID 'KVGR1' FIELD gt_out-kvgr1.
+    ELSE.
+      CLEAR lv_kvgr11.
+      SELECT SINGLE kvgr1 INTO lv_kvgr11 FROM knvv WHERE kunnr = gt_out-kunnr AND vkorg = gt_out-vkorg.
+      AUTHORITY-CHECK OBJECT 'Z_KVGR1'
+               ID 'KVGR1' FIELD lv_kvgr11.
+    ENDIF.
+    IF sy-subrc <> 0.
+      DELETE gt_out.
+      CONTINUE.
+* Implement a suitable exception handling here
+    ENDIF.
+
+    AUTHORITY-CHECK OBJECT 'V_VBAK_VKO'
+             ID 'VKORG' FIELD gt_out-vkorg
+             ID 'VTWEG' DUMMY
+             ID 'SPART' DUMMY
+             ID 'ACTVT' FIELD '03'.
+    IF sy-subrc <> 0.
+      DELETE gt_out.
+      CONTINUE.
+* Implement a suitable exception handling here
+    ENDIF.
+
+    READ TABLE lt_lips WITH KEY vgbel = gt_out-vbeln  vgpos = gt_out-posnr.
+    IF sy-subrc <> 0.
+      DELETE gt_out.
+      CONTINUE.
+    ENDIF.
+*******************************************************特征码处理
+    CALL FUNCTION 'CONVERSION_EXIT_ATINN_INPUT'
+      EXPORTING
+        input  = 'ZFER_XL'
+      IMPORTING
+        output = l1.
+    CALL FUNCTION 'CONVERSION_EXIT_ATINN_INPUT'
+      EXPORTING
+        input  = 'ZFER_DYZXH'
+      IMPORTING
+        output = l2.
+    CALL FUNCTION 'CONVERSION_EXIT_ATINN_INPUT'
+      EXPORTING
+        input  = 'ZFER_CPX'
+      IMPORTING
+        output = l3.
+    CALL FUNCTION 'CONVERSION_EXIT_ATINN_INPUT'
+      EXPORTING
+        input  = 'ZFER_CPXH'
+      IMPORTING
+        output = l4.
+    CLEAR gt_ausp.
+    SELECT objek atinn atwrt INTO CORRESPONDING FIELDS OF TABLE gt_ausp FROM ausp
+      FOR ALL ENTRIES IN gt_out
+      WHERE objek = gt_out-objek AND atinn IN ( l1,l2,l3,l4 ).
+    READ TABLE gt_ausp WITH KEY objek = gt_out-objek atinn = l4.
+    IF sy-subrc = 0.
+      gt_out-atwrt = gt_ausp-atwrt.
+    ENDIF.
+    READ TABLE gt_ausp WITH KEY objek = gt_out-objek atinn = l1.
+    IF sy-subrc = 0.
+      gt_out-atwrt_xl = gt_ausp-atwrt.
+    ENDIF.
+    READ TABLE gt_ausp WITH KEY objek = gt_out-objek atinn = l2.
+    IF  sy-subrc = 0.
+      gt_out-atwrt_zxl = gt_ausp-atwrt.
+    ENDIF.
+    READ TABLE gt_ausp WITH KEY objek = gt_out-objek atinn = l3.
+    IF sy-subrc = 0.
+      gt_out-atwrt_cpx = gt_ausp-atwrt.
+    ENDIF.
+    IF gt_out-atwrt_xl NOT IN s_xl AND s_xl IS NOT INITIAL.
+      DELETE gt_out.
+      CONTINUE.
+    ENDIF.
+
+    IF gt_out-atwrt_cpx NOT IN s_cpx AND s_cpx IS NOT INITIAL.
+      DELETE gt_out.
+      CONTINUE.
+    ENDIF.
+*********************************************************************
+
+    SELECT SINGLE vtext INTO gt_out-vtext_xstxt FROM tvkot WHERE vkorg = gt_out-vkorg AND spras = 1 .
+    SELECT SINGLE vtext INTO gt_out-vtext_fxtxt FROM tvtwt WHERE vtweg = gt_out-vtweg AND spras = 1 .
+    SELECT SINGLE vtext INTO gt_out-vtext_sptxt FROM tspat WHERE spart = gt_out-spart AND spras = 1 .
+    SELECT SINGLE bezei INTO gt_out-bezei_ddtxt FROM tvakt WHERE auart = gt_out-auart AND spras = 1 .
+*    SELECT SINGLE vtext INTO gt_out-vtext_jhtxt FROM tvlst WHERE lifsp = gt_out-lifsk AND spras = 1 .
+    SELECT SINGLE bezei INTO gt_out-bezei_hbtxt FROM tvkbt WHERE vkbur = gt_out-vkbur AND spras = 1 .
+    SELECT SINGLE bezei INTO gt_out-bezei_xstxt FROM tvgrt WHERE vkgrp = gt_out-vkgrp AND spras = 1 .
+    SELECT SINGLE bezei INTO gt_out-bezei_dbtxt FROM tvv1t WHERE kvgr1 = gt_out-kvgr1 AND spras = 1 .
+    SELECT SINGLE bezei INTO gt_out-bezei_swtxt FROM tvv2t WHERE kvgr2 = gt_out-kvgr2 AND spras = 1 .
+*    SELECT SINGLE bezei INTO gt_out-bezei_ystxt FROM tvv3t WHERE kvgr3 = gt_out-kvgr3 AND spras = 1 .
+*    SELECT SINGLE bezei INTO gt_out-bezei_fbtxt FROM tvv4t WHERE kvgr4 = gt_out-kvgr4 AND spras = 1 .
+*    SELECT SINGLE vtext INTO gt_out-vtext_zhtxt FROM tvktt WHERE ktgrd = gt_out-ktgrd AND spras = 1 .
+*    SELECT SINGLE bezei INTO gt_out-bezei FROM tvaut WHERE augru = gt_out-augru AND spras = 1 .
+    SELECT SINGLE bztxt INTO gt_out-bztxt FROM t171t WHERE bzirk = gt_out-bzirk  .
+*    SELECT SINGLE bezei INTO gt_out-bezei_abgru FROM tvagt WHERE abgru = gt_out-abgru AND spras = 1 .
+    SELECT SINGLE wgbez INTO gt_out-wgbez FROM t023t WHERE matkl = gt_out-matkl AND spras = 1.
+    SELECT SINGLE name1 name2 sortl INTO ( gt_out-name1,gt_out-name2,gt_out-sortl ) FROM kna1 WHERE kunnr = gt_out-kunnr.
+    CONCATENATE gt_out-name1 gt_out-name2 INTO gt_out-zkhmc .
+    SELECT SINGLE ktgrd  ihrez INTO ( gt_out-ktgrd,gt_out-ihrez ) FROM vbkd WHERE vbeln = gt_out-vbeln AND posnr = gt_out-posnr.
+    PERFORM frm_string USING gt_out-ihrez CHANGING zihrez.
+    MOVE zihrez TO gt_out-zihrez.
+****************************************************************************函数
+
+    CALL FUNCTION 'Z_SD_SAMPLE'
+      EXPORTING
+        i_vbelv = gt_out-vbeln
+        i_posnv = gt_out-posnr
+      IMPORTING
+        zrfmng1 = gt_out-zrfmng1
+        zrfmng2 = gt_out-zrfmng2
+        zrfmng3 = gt_out-zrfmng3
+        zrfmng4 = gt_out-zrfmng4
+        zno1    = gt_out-zno1
+        zno2    = gt_out-zno2
+        zno3    = gt_out-zno3
+        zdate1  = gt_out-zdate1
+        zdate2  = gt_out-zdate2
+        zdate3  = gt_out-zdate3
+        zje     = gt_out-zje
+        zrq     = gt_out-zjyrq.
+*****************************************************************************
+*    LOOP AT lt_msku WHERE matnr = gt_out-matnr AND  werks = gt_out-werks AND kunnr = gt_out-kunnr.
+*      gt_out-kulab = gt_out-kulab + lt_msku-kulab.
+*    ENDLOOP.
+    gt_out-kulab = gt_out-zrfmng1 - gt_out-zrfmng2 - gt_out-zrfmng3 + gt_out-zrfmng4.
+    IF p_p1 NE 'X'.
+      IF gt_out-kulab EQ 0.
+        DELETE gt_out.
+        CONTINUE.
+      ENDIF.
+    ENDIF.
+    SELECT SINGLE vprsv stprs verpr INTO CORRESPONDING   FIELDS OF   lt_mbew FROM mbew
+      WHERE matnr = gt_out-matnr AND bwkey = '1000'.
+    READ TABLE lt_mbew INDEX 1.
+    IF lt_mbew-vprsv = 'S'.
+      gt_out-zje1 = lt_mbew-stprs * gt_out-kulab.
+    ELSEIF lt_mbew-vprsv = 'V'.
+      gt_out-zje1 = lt_mbew-verpr * gt_out-kulab.
+    ENDIF.
+
+
+    MOVE gt_out-zihrez TO day.
+    CALL FUNCTION 'FIMA_DATE_CREATE'
+      EXPORTING
+        i_date = gt_out-zjyrq
+        i_days = day
+      IMPORTING
+        e_date = date.
+    MOVE date TO gt_out-zdqrq .
+*****************************************************************************红绿灯
+    IF sy-datum > gt_out-zdqrq.
+      gt_out-status = icon_led_red.
+    ELSE.
+      gt_out-status = icon_led_green.
+    ENDIF.
+***添加注意事项  add by wusk 20180117
+    lv_name = gt_out-vbeln.
+    PERFORM frm_get_text USING  'Z001' '1'  'VBBK' lv_name CHANGING gt_out-ztext1. "文本-注意事项
+    MODIFY gt_out.
+    CLEAR: gt_out.
+
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_fieldcat .
+  gt_fcat-fieldname = 'STATUS'.
+  gt_fcat-seltext_m = '预警'.
+  gt_fcat-icon = 'X'.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+  g_fieldfcat:
+*  'AUART'       '订单类型'         '' '',
+*  'BEZEI_DDTXT' '订单类型描述'     '' '',
+    'VBELN'       '发放订单'       'VBELN' 'VBAP',
+  'POSNR'       '发放订单行项目号'         'POSNR' 'VBAP',
+    'KUNNR'       '客户编码'         'KUNNR' 'VBAK',
+  'ZKHMC'       '客户名称'         '' '',
+  'SORTL'       '客户简称号'       '' '',
+*    'BZIRK'       '销售大区代码'     '' '',
+  'BZTXT'       '销售大区描述'     '' '',
+*  'VKBUR'       '行办代码'         '' '',
+  'BEZEI_HBTXT' '行办'             '' '',
+*  'VKORG'       '销售组织'         'VKORG' 'VBAK',
+  'VTEXT_XSTXT' '销售组织名称'     '' '',
+*  'VTWEG'       '分销渠道'         '' '',
+  'VTEXT_FXTXT' '分销渠道名称'     'VTEXT' 'TSPAT',
+*  'SPART'       '产品组'           '' '',
+  'VTEXT_SPTXT' '产品组名称'       'VTEXT' 'TSPAT',
+*  'VKGRP'       '销售组代码'       '' '',
+  'BEZEI_XSTXT' '销售组' '' '',
+*  *  'MATKL'       '物料组'           '' '',
+  'WGBEZ'       '物料组描述'       '' '',
+*  'KVGR1'       '销售工程师/代表代码' 'KVGR1' 'LIKP',
+  'BEZEI_DBTXT' '销售工程师/代表'     '' '',
+*  'KVGR2'       '商务代码'            'KVGR2' 'LIKP',
+  'BEZEI_SWTXT' '商务'                '' '',
+*  'ERDAT'       '创建日期'         'ERDAT' 'VBAP',
+  'MATNR'       '物料号'           'MATNR' 'VBAP',
+  'ARKTX'       '物料描述'         'ARKTX' 'VBAP',
+*  'KWMENG'      '数量'             'KWMENG' 'VBAP',
+*  'ZDJ'         '单价'             'KZWI1' 'VBAK',
+*  'KZWI1'       '金额'             'KZWI1' 'VBAP',
+
+*  'BSTKD'       '客户采购订单号'   '' '',
+*  'LIFSK'       '审批状态代码'     '' '',
+*  'VTEXT_JHTXT' '审批状态'         '' '',
+*  'ZTERM'       '付款条件'         '' '',
+*  'ZGJMYTJ'     '国际贸易条件'     '' '',
+*  'AUGRU'       '订单原因代码'     '' '',
+*  'BEZEI'       '订单原因描述'     'BEZEI' 'TVAUT',
+*  'ABGRU'       '拒绝原因代码'     '' '',
+*  'BEZEI_ABGRU' '拒绝原因描述'     'BEZEI' 'TVAKT',
+*  'KVGR3'       '运输方式代码'        '' '',
+*  'BEZEI_YSTXT' '运输方式'            '' '',
+*  'KVGR4'       '发票类型代码'        '' '',
+*  'BEZEI_FBTXT' '发票类型'            '' '',
+*  'KTGRD'       '账户组'              '' '',
+*  'VTEXT_ZHTXT' '账户组描述'          '' '',
+*  'BNAME'       '交货地点'            'BNAME' 'VBAK',
+*  'IHREZ_E'     '订单平台号'          'IHREZ_E' 'VBKD',
+  'ZJYRQ'       '借用日期'              '' '',
+  'ZIHREZ'       '试用天数'              '' '',
+  'ZDQRQ'       '试用到期日'              '' '',
+  'ATWRT'       '产品型号'          'ATWRT' 'AUSP',
+  'ATWRT_ZXL'   '主型号'              'ATWRT' 'AUSP',
+  'ATWRT_XL'    '系列'                'ATWRT' 'AUSP',
+  'ATWRT_CPX'   '产品线'              'ATWRT' 'AUSP',
+  'ZRFMNG1'   '发放数量'              'RFMNG' 'VBFA',
+  'ZRFMNG2'   '转销售数量'              'RFMNG' 'VBFA',
+  'ZRFMNG3'   '转费用数量'             'RFMNG' 'VBFA',
+  'ZRFMNG4'   '转退货数量'              'RFMNG' 'VBFA',
+  'KULAB'    '样品库存'              'RFMNG' 'VBFA',
+  'ZJE1'   '样品库存成本'              'RFMNG' 'VBFA',
+  'ZDATE1'   '转销售日期'              'ERDAT' 'VBFA',
+  'ZDATE2'   '转费用日期'              'ERDAT' 'VBFA',
+  'ZDATE3'   '转退货日期'              'ERDAT' 'VBFA',
+  'ZNO1'   '转销售订单'              '' '',
+  'ZNO2'   '转费用订单'              '' '',
+  'ZNO3'   '退货订单'              '' '',
+  'ZJE'   '转销金额'          'NETWR' 'VBAK',
+  'ZTEXT1'    '注意事项'       'C' '200' ," add by wusk 20180117
+  'WADAT_IST'    '发货日期'       'WADAT_IST' 'LIKP'" add by wusk 20180117
+   .
+
+  gs_layout-colwidth_optimize = 'X'.
+*  gs_layout-box_fieldname = 'CHK'.
+*  gs_layout-box_tabname = 'gt_out'.
+*  gs_layout-edit = 'X'.
+  gs_layout-zebra = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SHOW
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_show .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'FRM_PF_STATUS'
+      i_callback_user_command  = 'FRM_USER_COMMAND'
+      is_layout                = gs_layout
+      it_fieldcat              = gt_fcat[]
+    TABLES
+      t_outtab                 = gt_out[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+           WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+
+ENDFORM.
+
+FORM frm_pf_status USING rt_extab TYPE slis_t_extab.
+  DATA: BEGIN OF tab OCCURS 0,
+          fcode LIKE rsmpe-func,
+        END OF tab.
+
+*  tab-fcode = '&ETA'. APPEND tab.
+*  tab-fcode = '&SL'. APPEND tab.
+*  tab-fcode = '&OL0'. APPEND tab.
+*  tab-fcode = '&INFO'. APPEND tab.
+
+  SET PF-STATUS '0100'
+  EXCLUDING tab IMMEDIATELY.
+ENDFORM.
+
+FORM frm_user_command  USING r_ucomm LIKE sy-ucomm
+                           rs_selfield TYPE slis_selfield.
+
+  DATA: lv_grid TYPE REF TO cl_gui_alv_grid.
+
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = lv_grid.
+
+  CALL METHOD lv_grid->check_changed_data( ).
+
+  CASE r_ucomm.
+    WHEN '&IC1'.
+      IF rs_selfield-fieldname EQ 'VBELN' AND
+          rs_selfield-value IS NOT INITIAL.
+        SET PARAMETER ID 'AUN' FIELD rs_selfield-value.
+        CALL TRANSACTION 'VA03' AND SKIP FIRST SCREEN.
+      ENDIF.
+    WHEN OTHERS.
+  ENDCASE.
+
+ENDFORM.
+
+FORM frm_string USING sent TYPE char12 CHANGING result TYPE string.
+
+  DATA : nums TYPE string VALUE '1234567890'.
+  DATA : len TYPE i.
+  DATA : pos TYPE i.
+
+  result = ''.
+
+  len = strlen( sent ).
+  pos = 0.
+
+  WHILE pos LT len.
+
+    IF sent+pos(1) CA nums.
+      CONCATENATE result sent+pos(1) INTO result.
+      CONDENSE result NO-GAPS.
+    ENDIF.
+    pos = pos + 1.
+  ENDWHILE.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_HIDE_SCREEN
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_hide_screen .
+  DATA:l_group TYPE char3.
+
+  IF p_p1 = 'X'.
+    LOOP AT SCREEN.
+      IF screen-group1 = 'RD1'.
+        screen-active    = con_active.
+        screen-input     = con_active.
+        screen-output    = con_active.
+*        screen-required  =  con_active.
+        MODIFY SCREEN.
+      ENDIF.
+
+    ENDLOOP.
+  ELSE.
+    LOOP AT SCREEN.
+      IF screen-group1 = 'RD1'.
+        screen-active    = con_inactive.
+        screen-input     = con_inactive.
+        screen-output    = con_inactive.
+        MODIFY SCREEN.
+      ENDIF.
+
+    ENDLOOP.
+  ENDIF.
+ENDFORM.
+
+FORM frm_get_text USING u_id LIKE thead-tdid
+                         u_language LIKE thead-tdspras
+                         u_object   LIKE thead-tdobject
+                         u_name     LIKE thead-tdname
+                   CHANGING c_text TYPE c.
+  DATA:lt_lines LIKE tline OCCURS 0 WITH HEADER LINE.
+
+  CLEAR c_text.
+  CALL FUNCTION 'READ_TEXT'
+    EXPORTING
+      client                  = sy-mandt
+      id                      = u_id
+      language                = u_language
+      name                    = u_name
+      object                  = u_object
+    TABLES
+      lines                   = lt_lines
+    EXCEPTIONS
+      id                      = 1
+      language                = 2
+      name                    = 3
+      not_found               = 4
+      object                  = 5
+      reference_check         = 6
+      wrong_access_to_archive = 7
+      OTHERS                  = 8.
+  DELETE lt_lines WHERE tdline IS INITIAL.
+  LOOP AT lt_lines.
+    IF sy-tabix = 1.
+      c_text = lt_lines-tdline.
+    ELSE.
+      CONCATENATE c_text lt_lines-tdline INTO c_text SEPARATED BY space.
+    ENDIF.
+    CONDENSE  c_text.
+  ENDLOOP.
+ENDFORM.

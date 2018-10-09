@@ -1,0 +1,56 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPSD001T01
+*&---------------------------------------------------------------------*
+TABLES:sscrfields,ztsd009,ztsd007,mara,mvke.
+
+DATA: gt_ztsd009 LIKE ztsd009 OCCURS 0 WITH HEADER LINE."维护定价策略
+
+DATA: BEGIN OF gt_alv OCCURS 0,
+        box(1),
+        sel(1),
+        matnr    LIKE mara-matnr, "物料号
+        maktx    LIKE makt-maktx, "物料描述
+        stprs    LIKE mbew-stprs, "产品成本
+        jylsj    LIKE mbew-stprs, "建议零售价
+        zfer_xl  LIKE ztsd009-zfer_xl, "系列
+        zfer_zxl LIKE ausp-atwrt, "子系列
+        zfer_cpx LIKE ausp-atwrt, "产品线
+        mvgr1    LIKE mvke-mvgr1, "产品定位
+        bezei    LIKE tvm1t-bezei, "产品定位描述
+        zjjb     LIKE ztsd009-zjjb, "加价比
+        matkl    LIKE mara-matkl, "物料组
+        wgbez    LIKE t023t-wgbez, "物料组描述
+        objek    LIKE ausp-objek, "特征值
+        zsfsc    LIKE ztsd009-zsfsc, "是否删除
+      END OF gt_alv.
+
+DATA: BEGIN OF gt_mara OCCURS 0 ,
+        matnr LIKE mara-matnr, "物料号
+        matkl LIKE mara-matkl, "物料组
+        mvgr1 LIKE mvke-mvgr1, "产品定位
+        objek LIKE ausp-objek, "特征值
+      END OF gt_mara.
+
+DATA: BEGIN OF gt_ausp OCCURS 0,
+        objek LIKE ausp-objek,
+        atinn LIKE ausp-atinn,
+        atwrt LIKE ausp-atwrt,
+        atnam LIKE cabn-atnam,
+      END OF gt_ausp.
+
+*  系列内表
+DATA:BEGIN OF gt_xl OCCURS 0,
+       atwrt LIKE ausp-atwrt,
+     END OF gt_xl,
+     gt_zxl LIKE gt_xl OCCURS 0 WITH HEADER LINE. "子系列内表
+*  产品定位内表
+DATA: BEGIN OF gt_mvgr1 OCCURS 0,
+        mvgr1 LIKE mvke-mvgr1, "产品定位
+        bezei LIKE tvm1t-bezei, "产品定位描述
+      END OF gt_mvgr1.
+
+DATA: gt_tvm1t LIKE tvm1t OCCURS 0 WITH HEADER LINE,
+      gt_t023t LIKE t023t OCCURS 0 WITH HEADER LINE,
+      gt_makt  LIKE makt OCCURS 0 WITH HEADER LINE.
+
+DATA: lt_ztsd009 LIKE ztsd009 OCCURS 0 WITH HEADER LINE.

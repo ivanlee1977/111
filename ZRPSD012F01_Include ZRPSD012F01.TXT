@@ -1,0 +1,1636 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPSD012F01
+*&---------------------------------------------------------------------*
+
+  FORM frm_get_data. "获取数据.
+
+    IF p_wdz EQ 'X'."未对账
+      SELECT
+        a~vbeln "交货单
+        a~posnr "行项目
+        a~matnr "物料
+        a~werks "工厂
+        a~arktx "物料描述
+        a~lfimg "交货数量
+        a~vrkme "单位
+        a~netpr "单价
+        a~vgbel "销售订单
+        a~vgpos "销售订单项次
+        a~spart
+        a~pstyv
+
+        b~kunag "客户
+*        b~bolnr "物流单号
+*        b~vsart "运输方式
+        b~lfart "类型
+        b~wadat_ist
+
+        c~bzirk "大区
+        c~kdgrp "行业
+
+        d~waerk "币别
+        d~bstnk "客户订单号
+        d~kvgr2 "商务人员
+        d~vkorg "销售组织
+        d~vtweg "分销渠道
+        d~vkbur "行办
+        d~kvgr1 "业务员
+        d~knumv "条件记录号
+        d~vkgrp  "销售组
+        d~augru "订单原因
+        d~kvgr4
+        INTO CORRESPONDING FIELDS OF TABLE gt_item
+        FROM lips AS a
+        JOIN likp AS b ON a~vbeln EQ b~vbeln
+        JOIN vbkd AS c ON a~vgbel EQ c~vbeln "AND a~vgpos EQ c~posnr
+        JOIN vbak AS d ON a~vgbel EQ d~vbeln
+        JOIN vbuk AS e ON a~vbeln EQ e~vbeln
+        WHERE a~vbeln IN s_vbeln
+          AND b~wadat_ist IN s_wadat
+          AND b~vkorg EQ p_vkorg
+          AND b~kunag IN s_kunag
+          AND b~lfart IN ('ZLF1','ZLF4','ZLR1','ZLR4')
+          AND c~bzirk IN s_bzirk
+          AND d~kvgr1 IN s_kvgr1
+          AND d~kvgr2 IN s_kvgr2
+          AND e~wbstk EQ 'C'
+          AND c~zterm IN s_zterm
+          AND c~posnr EQ space.
+
+*** ADD BY PFT 20171215
+*   新增借贷项销售订单部分
+      SELECT a~vgbel AS vbeln a~vgpos AS posnr
+             a~vbeln AS vbeln_fp
+             a~matnr a~arktx a~fklmg AS lfimg a~meins AS vrkme
+             a~aubel AS vgbel a~aupos AS vgpos
+             c~bzirk c~kdgrp
+             b~kunag b~fkdat AS wadat_ist b~fkart AS lfart b~sfakn
+             d~waerk d~bstnk d~kvgr2 d~vkorg d~vtweg d~vkbur d~kvgr1 d~knumv d~vkgrp d~augru
+        APPENDING CORRESPONDING FIELDS OF TABLE gt_item
+        FROM vbrp AS a INNER JOIN vbrk AS b ON a~vbeln = b~vbeln
+                       INNER JOIN vbkd AS c ON a~aubel = c~vbeln
+                       INNER JOIN vbak AS d ON a~aubel = d~vbeln
+        WHERE a~vbeln IN s_vbeln
+          AND b~fkdat IN s_wadat
+          AND b~kunag IN s_kunag
+          AND b~fkart IN ('ZG8','ZF8','ZG8S','ZF8S')
+          AND c~bzirk IN s_bzirk
+          AND d~kvgr1 IN s_kvgr1
+          AND d~kvgr2 IN s_kvgr2
+          AND c~zterm IN s_zterm
+          AND c~posnr EQ space.
+*** END BY PFT 20171215
+    ELSE."已对账
+      SELECT
+        a~vbeln "交货单
+        a~posnr "行项目
+        a~matnr "物料
+        a~werks "工厂
+        a~arktx "物料描述
+        a~lfimg "交货数量
+        a~vrkme "单位
+        a~netpr "单价
+        a~vgbel "销售订单
+        a~vgpos "销售订单项次
+        a~spart
+        a~pstyv
+
+        b~kunag "客户
+*        b~bolnr "物流单号
+*        b~vsart "运输方式
+        b~lfart "类型
+        b~wadat_ist
+
+        c~bzirk "大区
+        c~kdgrp "行业
+
+        d~waerk "币别
+        d~bstnk "客户订单号
+        d~kvgr2 "商务人员
+        d~vkorg "销售组织
+        d~vtweg "分销渠道
+        d~vkbur "行办
+        d~kvgr1 "业务员
+        d~knumv "条件记录号
+        d~vkgrp  "销售组
+        d~augru  "订单原因
+        d~kvgr4
+        e~dzdhm
+        e~zdate
+        e~zstatus
+        INTO CORRESPONDING FIELDS OF TABLE gt_item
+        FROM lips AS a
+        JOIN likp AS b ON a~vbeln EQ b~vbeln
+        JOIN vbkd AS c ON a~vgbel EQ c~vbeln "AND a~vgpos EQ c~posnr
+        JOIN vbak AS d ON a~vgbel EQ d~vbeln
+        JOIN ztsd004 AS e ON b~vbeln EQ e~vbeln AND b~kunag EQ e~kunag
+        WHERE a~vbeln IN s_vbeln
+          AND b~wadat_ist IN s_wadat
+          AND b~vkorg EQ p_vkorg
+          AND b~kunag IN s_kunag
+          AND b~lfart IN ('ZLF1','ZLF4','ZLR1','ZLR4')
+          AND c~bzirk IN s_bzirk
+          AND d~kvgr1 IN s_kvgr1
+          AND d~kvgr2 IN s_kvgr2
+          AND e~dzdhm IN s_dzdhm
+          AND e~zdate IN s_zdate2
+          AND c~zterm IN s_zterm
+          AND c~posnr EQ space.
+*** ADD BY PFT 20171215
+*   新增借贷项销售订单部分
+      SELECT a~vgbel AS vbeln a~vgpos AS posnr
+             a~vbeln AS vbeln_fp
+             a~matnr a~arktx a~fklmg AS lfimg a~meins AS vrkme
+             a~aubel AS vgbel a~aupos AS vgpos
+             b~kunag b~fkdat AS wadat_ist b~fkart AS lfart b~sfakn
+             c~bzirk c~kdgrp
+             d~waerk d~bstnk d~kvgr2 d~vkorg d~vtweg d~vkbur d~kvgr1 d~knumv d~vkgrp d~augru
+             e~dzdhm e~zdate e~zstatus
+        APPENDING CORRESPONDING FIELDS OF TABLE gt_item
+        FROM vbrp AS a INNER JOIN vbrk AS b ON a~vbeln = b~vbeln
+                       INNER JOIN vbkd AS c ON a~aubel = c~vbeln
+                       INNER JOIN vbak AS d ON a~aubel = d~vbeln
+                       INNER JOIN ztsd004 AS e ON a~vgbel EQ e~vbeln AND a~vbeln = e~vbeln_fp "AND b~kunag EQ e~kunag
+        WHERE a~vbeln IN s_vbeln
+          AND b~fkdat IN s_wadat
+          AND b~kunag IN s_kunag
+          AND b~fkart IN ('ZG8','ZF8','ZG8S','ZF8S')
+          AND c~bzirk IN s_bzirk
+          AND d~kvgr1 IN s_kvgr1
+          AND d~kvgr2 IN s_kvgr2
+          AND e~dzdhm IN s_dzdhm
+          AND e~zdate IN s_zdate2
+          AND c~zterm IN s_zterm
+          AND c~posnr EQ space.
+*** END BY PFT 20171215
+    ENDIF.
+
+    PERFORM frm_process_data_ydz."处理数据
+  ENDFORM.
+
+
+  FORM frm_output_data."输出数据
+    DATA : col_pos TYPE i VALUE 1.
+
+    CLEAR:it_fieldcat,wa_fieldcat.
+
+    gs_layout-zebra = 'X'.
+    gs_layout-cwidth_opt = 'X'."
+    gs_layout-stylefname = 'FIELD_STYLE'. " 将内表中的字段名存入显示格式
+    gs_layout-box_fname        = 'SEL'.
+    i_grid_settings-edt_cll_cb = 'X'.
+
+
+
+
+
+    PERFORM fieldcat_int USING col_pos  'ZSTATUS_TXT'   ' '   '状态'          ''  '' '' '' ''.
+    PERFORM fieldcat_int USING col_pos  'DZDHM'   ' '   '对账单'          ''  '' '' '' ''.
+    PERFORM fieldcat_int USING col_pos  'ZDATE'   ' '   '对账日期'   ''  '' '' '' ''.
+    PERFORM fieldcat_int USING col_pos  'VBELN'   ' '   '交货单'   ''  'VBELN' 'LIPS' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'POSNR'   ' '   '行项目'   ''  'POSNR' 'LIPS' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'KUNAG'   ' '   '客户'   ''  'KUNAG' 'LIKP' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'NAME1'   ' '   '客户名称'   ''  '' '' ''   ''.
+
+    PERFORM fieldcat_int USING col_pos  'WADAT_IST'   ' '   '实际交货日期'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'ZSTATUS'   ' '   '审批状态'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'MATNR'   ' '   '物料编码'   ''  'MATNR' 'MARA' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'ARKTX'   ' '   '物料描述'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'LFIMG'   ' '   '数量'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'VRKME'   ' '   '单位'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'NETPR'   ' '   '单价'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'DMBTR'   ' '   '金额'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'WAERK'   ' '   '币别'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'BSTNK'   ' '   '客户订单号'   ''  '' '' ''   ''.
+
+    PERFORM fieldcat_int USING col_pos  'TITEL_AP'   ' '   '公司地址'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'NAME_LX'   ' '   '联系人'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'TELF1'   ' '   '电话'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'FAX_NUMBER'   ' '   '传真'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'KVGR2'   ' '   '商务人员'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'BEZEI3'   ' '   '商务人员描述'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'TEL_SW'   ' '   '商务人员电话'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'VKORG'   ' '   '销售组织'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'VKGRP'   ' '   '销售组'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'BEZEI2'   ' '   '销售组描述'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'VTWEG'   ' '   '分销渠道'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'BZIRK'   ' '   '大区'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'BZTXT'   ' '   '大区描述'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'VKBUR'   ' '   '行办'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'BEZEI1'   ' '   '行办描述'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'KVGR1'   ' '   '业务员'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'BEZEI4'   ' '   '业务员描述'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'TEL_YW'   ' '   '业务员电话'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'KDGRP'   ' '   '行业'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'KTEXT'   ' '   '行业描述'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'KUKLA'   ' '   '客户等级'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'KULAB'   ' '   '客户样品库存'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'BEIZHU'   ' '   '备注'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'SUM_YS'   ' '   '应收总额'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'DMBTR_YS'   ' '   '本期应收款'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'BOLNR'   ' '   '物流单号'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'VSART'   ' '   '运输方式'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'VSART_BEZEI'   ' '   '运输方式描述'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'KBETR'   ' '   '运费'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'AUGRU'   ' '   '订单原因代码'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'AUGRU_MS'   ' '   '订单原因'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'BEZEI_KVGR4'   ' '   '开票方式'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'ZSLV'   ' '   '实际开票税率'   ''  '' '' ''   ''.
+    PERFORM fieldcat_int USING col_pos  'BRGEW'   ' '   '毛重'          ''  'BRGEW' 'ZTSD003ZXDB' '' ''.
+    PERFORM fieldcat_int USING col_pos  'ZSJYF'   ' '   '实际运费'          ''  'ZSJYF' 'ZTSD003ZXDB' '' ''.
+    PERFORM fieldcat_int USING col_pos  'ZZXNO'   ' '   '装箱单号'          ''  'ZSJYF' 'ZTSD003ZXDB' '' ''.
+
+    CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+      EXPORTING
+        i_callback_program       = sy-repid
+        is_layout_lvc            = gs_layout
+        it_fieldcat_lvc          = it_fieldcat
+        it_events                = it_events
+        i_save                   = 'A'
+        i_callback_pf_status_set = 'SET_PF_STATUS'
+        i_callback_user_command  = 'ALV_USER_COMMAND'
+        i_grid_settings          = i_grid_settings
+      TABLES
+        t_outtab                 = gt_item[]
+      EXCEPTIONS
+        program_error            = 1
+        OTHERS                   = 2.
+
+    IF sy-subrc <> 0.
+* MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+*         WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+    ENDIF.
+
+  ENDFORM .
+
+  FORM set_pf_status USING rt_extab TYPE slis_t_extab.
+
+    DATA: wa_extab TYPE slis_extab.
+
+    IF p_wdz EQ 'X'.
+
+      APPEND 'C_SHENPI' TO  rt_extab.
+      APPEND 'C_QUXIAO' TO  rt_extab.
+      APPEND 'C_PRINT' TO  rt_extab.
+      APPEND 'C_DAOCHU' TO rt_extab.
+      APPEND 'C_DELETE' TO  rt_extab.
+      APPEND 'C_EXCEL' TO  rt_extab.
+    ELSE.
+      IF p_vkorg EQ '1100'.
+        APPEND 'C_SCDZD' TO  rt_extab.
+*        APPEND 'C_DAOCHU' TO rt_extab.
+      ELSEIF p_vkorg EQ '1200' OR p_vkorg EQ '1020'.
+        APPEND 'C_SCDZD' TO  rt_extab.
+*        APPEND 'C_PRINT' TO  rt_extab.
+      ENDIF.
+*      AUTHORITY-CHECK OBJECT 'ZSD012_SP'
+*               ID 'ACTVT' DUMMY.
+*      IF sy-subrc <> 0.
+*        APPEND 'C_SHENPI' TO rt_extab."审批
+*        APPEND 'C_QUXIAO' TO rt_extab."取消审批
+*      ENDIF.
+    ENDIF.
+
+    SET PF-STATUS 'ZRPSD012_STATUS' EXCLUDING rt_extab.
+
+  ENDFORM.                    "set_pf_status1
+
+  FORM alv_user_command USING r_ucomm LIKE sy-ucomm  rs_selfield TYPE slis_selfield.
+*   获取ALV中的鼠标勾选记录
+    DATA: l_grid TYPE REF TO cl_gui_alv_grid.
+
+    rs_selfield-refresh = 'X'.
+    rs_selfield-col_stable = 'X'.
+    rs_selfield-row_stable = 'X'.
+
+    CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+      IMPORTING
+        e_grid = l_grid.
+
+*    CALL METHOD l_grid->check_changed_data.
+
+    CASE r_ucomm.
+
+      WHEN 'C_PRINT' ."打印
+        PERFORM print_report.
+
+      WHEN 'C_SHENPI'."审批对账单
+        PERFORM shenpi_report.
+
+      WHEN 'C_QUXIAO'. "取消审批
+*    ADD BY PFT 20171218
+        LOOP AT gt_item INTO gw_item WHERE sel EQ 'X' AND zstatus EQ 'N'.
+          MESSAGE e031 WITH gw_item-dzdhm DISPLAY LIKE 'E'.
+        ENDLOOP.
+*    END BY PFT 20171218
+        PERFORM quxiao_report.
+
+      WHEN 'C_DELETE'."删除
+        PERFORM delete_report.
+
+      WHEN 'C_SCDZD'."生成对账单
+        PERFORM scdzd_report.
+      WHEN 'C_DAOCHU'.
+        PERFORM daochu_report.
+      WHEN OTHERS.
+    ENDCASE.
+
+*    rs_selfield-refresh = 'X'.
+  ENDFORM.                    "alv_user_command
+
+  FORM fieldcat_int  USING   p_col_pos         " 1
+                              p_fieldname       " 2
+                              p_key             " 3
+                              p_seltext_l       " 4
+                              p_zero
+                              p_filename
+                              p_talbename
+                              p_outputlen
+                              p_edit .
+
+    wa_fieldcat-col_pos       = p_col_pos.
+    wa_fieldcat-fieldname     = p_fieldname.
+    wa_fieldcat-key           = p_key.
+    wa_fieldcat-coltext     = p_seltext_l.
+    wa_fieldcat-no_zero        = p_zero.
+    wa_fieldcat-ref_field   = p_filename.
+    wa_fieldcat-ref_table    = p_talbename.
+    wa_fieldcat-tipddictxt       = 'L'.
+    wa_fieldcat-edit           = p_edit  .
+    APPEND wa_fieldcat TO it_fieldcat.
+    p_col_pos = p_col_pos + 1.
+    CLEAR: wa_fieldcat.
+  ENDFORM.                    " FIELDCAT_INT
+
+  FORM print_report .
+    DATA fm_name TYPE rs38l_fnam.
+    DATA:xssfctrlop LIKE ssfctrlop.
+    DATA: lt_msku LIKE TABLE OF msku WITH HEADER LINE.
+    DATA: it_head LIKE zszsd012_head OCCURS 0 WITH HEADER LINE.
+    DATA: it_item  LIKE zszsd012_item OCCURS 0 WITH HEADER LINE,
+          it_item1 LIKE zszsd012_item OCCURS 0 WITH HEADER LINE.
+
+    DATA:lv_sum LIKE bseg-dmbtr.
+
+    l_wa_ssfctrlop-no_close  = 'X'.          "关闭假脱机请求
+    l_wa_ssfctrlop-no_open   = 'X'.          "调用smartform
+    l_wa_ssfctrlop-device    = 'PRINTER'.    "PRINTER\MAIL\TELEFAX，缺省是PRINTER
+    l_wa_ssfctrlop-preview   = 'X'.          "预览
+    l_wa_ssfctrlop-no_dialog = 'X'.          "打开对话窗口打开
+    l_wa_ssfcompop-tdimmed   = 'X'.          "设置立即打印标志。
+    l_wa_ssfcompop-tddelete  = 'X'.          "设置输出后删除 。
+
+    ls_composer_param-tdnewid  = 'X'.
+    ls_composer_param-tdimmed  = 'X'.
+    xssfctrlop-preview = 'X'.
+    xssfctrlop-no_open   = 'X'.
+    xssfctrlop-no_close  = 'X'.
+    xssfctrlop-no_dialog = 'X'.
+
+    DATA: option TYPE ssfcresop.""SF使用参数
+    DATA: l_tdsfname TYPE tdsfname.
+
+    DATA: BEGIN OF lt_ypkc OCCURS 0,
+            matnr LIKE mara-matnr,
+            arktx LIKE makt-maktx,
+            kulab LIKE msku-kulab,
+          END OF lt_ypkc.
+
+***调用SSF_OPEN函数设置打印机，
+    CALL FUNCTION 'SSF_OPEN'
+      EXPORTING
+        output_options     = ls_composer_param
+*       control_parameters = l_wa_ssfctrlop
+*       user_settings      = ' '
+      IMPORTING
+        job_output_options = option "option-tdpreview 空为打印，X为预览
+      EXCEPTIONS
+        formatting_error   = 1
+        internal_error     = 2
+        send_error         = 3
+        user_canceled      = 4
+        OTHERS             = 5.
+
+    CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
+      EXPORTING
+        formname           = 'ZSFZSD012'
+      IMPORTING
+        fm_name            = fm_name
+      EXCEPTIONS
+        no_form            = 1
+        no_function_module = 2
+        OTHERS             = 3.
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ENDIF.
+
+    CLEAR:it_head[].
+    "表头数据.
+    LOOP AT gt_item INTO gw_item WHERE sel EQ 'X'.
+      IF gw_item-zstatus EQ 'N'.
+        MESSAGE  '未审批的对账单不能打印！' TYPE 'E'.
+      ENDIF.
+      MOVE-CORRESPONDING gw_item TO it_head.
+      APPEND it_head.
+    ENDLOOP.
+    SORT it_head BY dzdhm.
+    DELETE ADJACENT DUPLICATES FROM it_head COMPARING dzdhm.
+
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_msku FROM msku
+      FOR ALL ENTRIES IN gt_item
+      WHERE kunnr = gt_item-kunag AND kulab <> 0.
+    LOOP AT it_head.
+      AT FIRST.
+        xssfctrlop-no_close = 'X'.
+      ENDAT.
+      AT LAST.
+        xssfctrlop-no_close = ''.
+      ENDAT.
+      DATA:l_num TYPE i .
+      CLEAR:l_num,lv_sum.
+      REFRESH:it_item,lt_ypkc.
+      CLEAR:lv_tel,lv_bezei,lv_fax.
+      IF it_head-bezei4 IS NOT INITIAL .
+        IF it_head-bezei3 IS NOT INITIAL.
+          CONCATENATE it_head-bezei4 '/' it_head-bezei3 INTO lv_bezei.
+        ELSE.
+          lv_bezei = it_head-bezei4.
+        ENDIF.
+      ELSE.
+        lv_bezei = it_head-bezei3.
+      ENDIF.
+
+
+      IF it_head-fax_yw IS NOT INITIAL .
+        IF it_head-fax_sw IS NOT INITIAL.
+          CONCATENATE it_head-fax_yw '/' it_head-fax_sw INTO lv_fax.
+        ELSE.
+          lv_fax = it_head-fax_yw.
+        ENDIF.
+      ELSE.
+        lv_fax = it_head-fax_sw.
+      ENDIF.
+
+      IF it_head-tel_yw IS NOT INITIAL .
+        IF it_head-tel_sw IS NOT INITIAL.
+          CONCATENATE it_head-tel_yw '/' it_head-tel_sw INTO lv_tel.
+        ELSE.
+          lv_tel = it_head-tel_yw.
+        ENDIF.
+      ELSE.
+        lv_tel = it_head-tel_sw.
+      ENDIF.
+
+*  逻辑新增20171011： 根据交货单、客户采购订单（BSTNK）、单价、型号，将数量\金额自动汇总
+      LOOP AT gt_item INTO gw_item WHERE dzdhm EQ it_head-dzdhm.
+*        l_num = l_num + 1.
+        lv_sum = lv_sum + gw_item-dmbtr.
+        MOVE-CORRESPONDING gw_item TO it_item.
+        it_item-netpr_c = gw_item-netpr.
+*        it_item-zxuhao = l_num.
+        COLLECT it_item.
+
+*     ADD BY PFT 20171018
+*        IF gw_item-kulab NE 0.
+*          MOVE-CORRESPONDING gw_item TO lt_ypkc.
+*          APPEND lt_ypkc.
+*        ENDIF.
+*    END BY PFT 20171018
+      ENDLOOP.
+
+      LOOP AT it_item.
+        it_item-netpr = it_item-netpr_c.
+*   ADD BY PFT 20171218
+*   判断交货单为9开头的，将订单原因放入备注
+        IF it_item-vbeln+(3) = '007'.
+          READ TABLE gt_item INTO gw_item WITH KEY vbeln = it_item-vbeln kunag = it_item-kunag
+                                                   arktx = it_item-arktx .
+          IF sy-subrc = 0.
+            it_item-beizhu = gw_item-augru_ms.
+          ENDIF.
+        ENDIF.
+*   END BY PFT 20171218
+        MODIFY it_item TRANSPORTING netpr beizhu.
+        CLEAR: it_item.
+      ENDLOOP.
+
+*    ADD BY PFT 20171018
+      SORT lt_ypkc BY matnr.
+      DELETE ADJACENT DUPLICATES FROM lt_ypkc COMPARING ALL FIELDS.
+*    END BY PFT 20171018
+
+*      LOOP AT lt_ypkc .
+*        it_item-arktx = lt_ypkc-arktx.
+*        it_item-lfimg = lt_ypkc-kulab.
+*        it_item-beizhu = '样品'.
+*        APPEND it_item.
+*      ENDLOOP.
+*        MOVE-CORRESPONDING it_item TO it_item1.
+      LOOP AT lt_msku WHERE  kunnr = it_head-kunag .
+        SELECT SINGLE maktx INTO it_item1-arktx FROM makt WHERE matnr = lt_msku-matnr AND spras = 1.
+        it_item1-lfimg = lt_msku-kulab.
+        it_item1-beizhu = '样品'.
+        it_item1-netpr = ''.
+        it_item1-wadat_ist = ''.
+        it_item1-dmbtr = ''.
+        APPEND it_item1.
+      ENDLOOP.
+      APPEND LINES OF it_item1 TO it_item.
+
+      CALL FUNCTION fm_name
+        EXPORTING
+          control_parameters = xssfctrlop
+          wa_head            = it_head
+          lv_sum             = lv_sum
+          lv_fax             = lv_fax
+          lv_bezei           = lv_bezei
+          lv_tel             = lv_tel
+        TABLES
+          it_item            = it_item[]
+        EXCEPTIONS
+          formatting_error   = 1
+          internal_error     = 2
+          send_error         = 3
+          user_canceled      = 4.
+
+      xssfctrlop-no_open = 'X'.
+      IF sy-subrc <> 0.
+*        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      ELSE.
+        IF option-tdpreview = ''.
+          "更新打印次数
+        ENDIF.
+      ENDIF.
+      CLEAR it_item1.
+      REFRESH it_item1.
+    ENDLOOP.
+    IF sy-subrc NE 0.
+      MESSAGE s000(oo) WITH '请先选择要打印的记录' DISPLAY LIKE 'E'.
+    ENDIF.
+
+****关闭打印机设置***
+
+    CALL FUNCTION 'SSF_CLOSE'
+      IMPORTING
+        job_output_info  = w_job_output_info
+      EXCEPTIONS
+        formatting_error = 1
+        internal_error   = 2
+        send_error       = 3
+        OTHERS           = 4.
+
+    FREE: it_head[],it_item[].
+
+  ENDFORM.
+
+
+  FORM shenpi_report.
+
+    CLEAR:lt_ztsd004[],lt_dzdhm[].
+    LOOP AT gt_item INTO gw_item WHERE sel EQ 'X'.
+      lt_dzdhm-dzdhm = gw_item-dzdhm.
+      APPEND lt_dzdhm.
+    ENDLOOP.
+    SORT lt_dzdhm BY dzdhm.
+    DELETE ADJACENT DUPLICATES FROM lt_dzdhm COMPARING dzdhm.
+
+
+    LOOP AT lt_dzdhm .
+      LOOP AT gt_item INTO gw_item WHERE dzdhm EQ lt_dzdhm-dzdhm.
+        lt_ztsd004-dzdhm = gw_item-dzdhm.
+        lt_ztsd004-kunag = gw_item-kunag.
+        lt_ztsd004-vbeln = gw_item-vbeln.
+        lt_ztsd004-zdate = p_zdate1.
+        lt_ztsd004-zstatus = 'Y'.
+        lt_ztsd004-ernam = sy-uname.
+        lt_ztsd004-erdat = sy-datum.
+        lt_ztsd004-uzeit = sy-uzeit.
+*   ADD BY PFT 20171218
+        lt_ztsd004-vbeln_fp = gw_item-vbeln_fp.
+*   END BY PFT 20171218
+        APPEND  lt_ztsd004.
+
+        "更新内表
+        gw_item-zstatus = 'Y'.
+        gw_item-zstatus_txt = '审批对账单成功'.
+        MODIFY gt_item FROM gw_item.
+      ENDLOOP.
+    ENDLOOP.
+
+*  ADD BY PFT 20171213
+    SORT lt_ztsd004 BY dzdhm kunag vbeln.
+    DELETE ADJACENT DUPLICATES FROM lt_ztsd004 COMPARING dzdhm kunag vbeln.
+*  END BY PFT 20171213
+
+    MODIFY ztsd004 FROM TABLE lt_ztsd004.
+    IF sy-subrc EQ 0.
+*  ADD BY PFT 20171213
+      COMMIT WORK AND WAIT.
+*  END BY PFT 20171213
+      MESSAGE  '审批对账单成功！' TYPE 'S'.
+    ELSE.
+*  ADD BY PFT 20171213
+      ROLLBACK WORK.
+*  END BY PFT 20171213
+      LOOP AT lt_dzdhm .
+        LOOP AT gt_item INTO gw_item WHERE dzdhm EQ lt_dzdhm-dzdhm.
+          gw_item-zstatus = 'N'.
+          gw_item-zstatus_txt = '审批对账单失败'.
+          MODIFY gt_item FROM gw_item.
+        ENDLOOP.
+      ENDLOOP.
+      MESSAGE  '审批对账单失败！' TYPE 'E'.
+    ENDIF.
+    CLEAR lt_ztsd004[].
+  ENDFORM.
+
+  FORM delete_report.
+    DATA lt_ztsd005 LIKE ztsd005 OCCURS 0 WITH HEADER LINE.
+    DATA:lv_dzdhm LIKE ztsd005-dzdhm. "ADD BY WUSK 20180226
+    CLEAR:lt_ztsd004[],lt_dzdhm[].
+    LOOP AT gt_item INTO gw_item WHERE sel EQ 'X'.
+      IF gw_item-zstatus EQ 'Y'.
+        MESSAGE  '已审批的对账单不能删除！' TYPE 'E'.
+      ENDIF.
+
+*** add by wusk 20180226
+      SELECT SINGLE dzdhm INTO lv_dzdhm
+          FROM ztsd005 AS a
+          WHERE dzdhm = gw_item-dzdhm AND zsfqx = ''.
+      IF sy-subrc EQ 0.
+        MESSAGE  '该对账单已生成开票计划，请取消对应的开票计划！' TYPE 'E'.
+      ENDIF.
+
+
+      lt_dzdhm-dzdhm = gw_item-dzdhm.
+      APPEND lt_dzdhm.
+    ENDLOOP.
+    SORT lt_dzdhm BY dzdhm.
+    DELETE ADJACENT DUPLICATES FROM lt_dzdhm COMPARING dzdhm.
+
+    LOOP AT lt_dzdhm .
+      LOOP AT gt_item INTO gw_item WHERE dzdhm EQ lt_dzdhm-dzdhm.
+        lt_ztsd004-dzdhm = gw_item-dzdhm.
+        lt_ztsd004-kunag = gw_item-kunag.
+        lt_ztsd004-vbeln = gw_item-vbeln.
+        lt_ztsd004-zdate = p_zdate1.
+        lt_ztsd004-zstatus = 'N'.
+        lt_ztsd004-ernam = sy-uname.
+        lt_ztsd004-erdat = sy-datum.
+        lt_ztsd004-uzeit = sy-uzeit.
+*   ADD BY pft 20171218
+        lt_ztsd004-vbeln_fp = gw_item-vbeln_fp.
+*   END BY PFT 20171218
+        APPEND  lt_ztsd004.
+
+        "更新内表
+        gw_item-zstatus = 'N'.
+        gw_item-zstatus_txt = '删除对账单成功'.
+        MODIFY gt_item FROM gw_item.
+      ENDLOOP.
+    ENDLOOP.
+
+*  ADD BY PFT 20171213
+    SORT lt_ztsd004 BY dzdhm kunag vbeln.
+    DELETE ADJACENT DUPLICATES FROM lt_ztsd004 COMPARING dzdhm kunag vbeln.
+*  END BY PFT 20171213
+
+    DELETE ztsd004 FROM TABLE lt_ztsd004.
+    IF sy-subrc EQ 0.
+*  ADD BY PFT 20171213
+      COMMIT WORK AND WAIT.
+*  END BY PFT 20171213
+      LOOP AT lt_dzdhm .
+        LOOP AT gt_item INTO gw_item WHERE dzdhm EQ lt_dzdhm-dzdhm.
+          gw_item-zstatus = 'N'.
+          IF gw_item-zstatus_txt = '删除对账单成功'.
+            DELETE gt_item.
+          ENDIF.
+        ENDLOOP.
+      ENDLOOP.
+
+      MESSAGE  '删除对账单号成功！' TYPE 'S'.
+    ELSE.
+*  ADD BY pft 20171213
+      ROLLBACK WORK.
+*  END BY PFT 20171213
+      LOOP AT lt_dzdhm .
+        LOOP AT gt_item INTO gw_item WHERE dzdhm EQ lt_dzdhm-dzdhm.
+          gw_item-zstatus = 'N'.
+          gw_item-zstatus_txt = '删除对账单失败'.
+          MODIFY gt_item FROM gw_item.
+        ENDLOOP.
+      ENDLOOP.
+      MESSAGE  '删除对账单号失败！' TYPE 'E'.
+    ENDIF.
+    CLEAR lt_ztsd004[].
+
+  ENDFORM.
+
+  FORM quxiao_report.
+    DATA:lv_dzdhm LIKE ztsd005-dzdhm. "ADD BY WUSK 20180226
+    CLEAR:lt_ztsd004[],lt_dzdhm[].
+    DATA lt_ztsd005 LIKE ztsd005 OCCURS 0 WITH HEADER LINE.
+    LOOP AT gt_item INTO gw_item WHERE sel EQ 'X'.
+      lt_dzdhm-dzdhm = gw_item-dzdhm.
+      APPEND lt_dzdhm.
+    ENDLOOP.
+    SORT lt_dzdhm BY dzdhm.
+    DELETE ADJACENT DUPLICATES FROM lt_dzdhm COMPARING dzdhm.
+
+    LOOP AT lt_dzdhm .
+      LOOP AT gt_item INTO gw_item WHERE dzdhm EQ lt_dzdhm-dzdhm.
+        lt_ztsd004-dzdhm = gw_item-dzdhm.
+        lt_ztsd004-kunag = gw_item-kunag.
+        lt_ztsd004-vbeln = gw_item-vbeln.
+        lt_ztsd004-zdate = p_zdate1.
+        lt_ztsd004-zstatus = 'N'.
+        lt_ztsd004-ernam = sy-uname.
+        lt_ztsd004-erdat = sy-datum.
+        lt_ztsd004-uzeit = sy-uzeit.
+*   ADD BY pft 20171218
+        lt_ztsd004-vbeln_fp = gw_item-vbeln_fp.
+*   END BY PFT 20171218
+
+*   ADD BY WUSK 20180227
+        SELECT SINGLE dzdhm INTO lv_dzdhm
+       FROM ztsd005 AS a
+       WHERE dzdhm = gw_item-dzdhm AND zsfqx = ''.
+        IF sy-subrc EQ 0.
+          MESSAGE  '该对账单已生成开票计划，请取消对应的开票计划后，取消审批！' TYPE 'E'.
+        ENDIF.
+*   END BY WUSK 20180227
+
+
+
+        APPEND  lt_ztsd004.
+
+        "更新内表
+        gw_item-zstatus = 'N'.
+        gw_item-zstatus_txt = '取消审批对账单成功'.
+        MODIFY gt_item FROM gw_item.
+
+      ENDLOOP.
+    ENDLOOP.
+
+*  ADD BY PFT 20171213
+    SORT lt_ztsd004 BY dzdhm kunag vbeln.
+    DELETE ADJACENT DUPLICATES FROM lt_ztsd004 COMPARING dzdhm kunag vbeln.
+*  END BY PFT 20171213
+
+    MODIFY ztsd004 FROM TABLE lt_ztsd004.
+    IF sy-subrc EQ 0.
+*  ADD BY PFT 20171213
+      COMMIT WORK AND WAIT.
+*  END BY PFT 20171213
+      MESSAGE  '取消审批对账单号成功！' TYPE 'S'.
+    ELSE.
+*  ADD BY PFT 20171213
+      ROLLBACK WORK.
+*  END BY PFT 20171213
+      LOOP AT lt_dzdhm .
+        LOOP AT gt_item INTO gw_item WHERE dzdhm EQ lt_dzdhm.
+          gw_item-zstatus = 'Y'.
+          gw_item-zstatus_txt = '取消审批对账单失败'.
+          MODIFY gt_item FROM gw_item.
+        ENDLOOP.
+      ENDLOOP.
+      MESSAGE  '取消审批对账单号失败！' TYPE 'E'.
+    ENDIF.
+    CLEAR lt_ztsd004[].
+
+  ENDFORM.
+
+  FORM scdzd_report. "保存对账单数据
+    DATA:BEGIN OF it_kunnr OCCURS 0,
+           kunnr LIKE vbak-kunnr,
+         END OF it_kunnr.
+* ADD BY PFT 20171213
+    DATA: lv_dzdhm LIKE ztsd004-dzdhm.
+    REFRESH:lt_vbeln,it_kunnr,lt_ztsd004,gt_post.
+* END BY PFT 20171213
+
+
+    CLEAR:lt_vbeln,gt_post[],it_kunnr[].
+
+    "分类 交货订单和客户号
+    LOOP AT gt_item INTO gw_item WHERE sel EQ 'X'.
+      CLEAR:lv_dzdhm.
+      lt_vbeln-vbeln = gw_item-vbeln.
+      lt_vbeln-kunag = gw_item-kunag.
+      IF gw_item-zstatus EQ 'N'.
+        MESSAGE  '未审批的对账单不能打印！' TYPE 'E'.
+      ENDIF.
+*   ADD BY PFT 20171213
+      SELECT SINGLE dzdhm
+        INTO lv_dzdhm
+        FROM ztsd004
+        WHERE vbeln = gw_item-vbeln
+          AND vbeln_fp = gw_item-vbeln_fp
+          AND kunag = gw_item-kunag.
+*      IF gw_item-dzdhm IS NOT INITIAL.
+      IF lv_dzdhm IS NOT INITIAL.
+*   END BY PFT 20171214
+        MESSAGE  '对账单已经生成，不能再次生成！' TYPE 'E'.
+      ENDIF.
+
+      APPEND lt_vbeln.
+
+      it_kunnr-kunnr = gw_item-kunag.
+      APPEND it_kunnr.
+    ENDLOOP.
+
+    SORT lt_vbeln BY vbeln kunag.
+    DELETE ADJACENT DUPLICATES FROM lt_vbeln COMPARING ALL FIELDS.
+    SORT it_kunnr BY kunnr.
+    DELETE ADJACENT DUPLICATES FROM it_kunnr COMPARING ALL FIELDS.
+
+    LOOP AT lt_vbeln.
+      LOOP AT gt_item INTO gw_item WHERE vbeln EQ lt_vbeln-vbeln AND kunag EQ lt_vbeln-kunag.
+        MOVE-CORRESPONDING gw_item TO gw_post.
+        APPEND gw_post TO gt_post.
+      ENDLOOP.
+    ENDLOOP.
+
+    CLEAR:lt_ztsd004[].
+    LOOP AT it_kunnr.
+      CLEAR lt_ztsd004-dzdhm.
+      PERFORM sc_lsm  CHANGING  lt_ztsd004-dzdhm.
+      LOOP AT gt_post INTO gw_post WHERE kunag EQ it_kunnr-kunnr.
+        lt_ztsd004-kunag = gw_post-kunag.
+        lt_ztsd004-vbeln = gw_post-vbeln.
+        lt_ztsd004-zdate = p_zdate1.
+        lt_ztsd004-zstatus = 'N'.
+        lt_ztsd004-ernam = sy-uname.
+        lt_ztsd004-erdat = sy-datum.
+        lt_ztsd004-uzeit = sy-uzeit.
+*   ADD BY PFT 20171218
+        lt_ztsd004-vbeln_fp = gw_post-vbeln_fp.
+*   END BY PFT 20171218
+        APPEND  lt_ztsd004.
+
+        "更新内表
+        gw_post-dzdhm = lt_ztsd004-dzdhm.
+        gw_post-zstatus_txt = '生成对账单成功'.
+        gw_post-zdate = p_zdate1.
+        MODIFY gt_post FROM gw_post.
+      ENDLOOP.
+    ENDLOOP.
+
+*  ADD BY PFT 20171213
+    SORT lt_ztsd004 BY dzdhm kunag vbeln.
+    DELETE ADJACENT DUPLICATES FROM lt_ztsd004 COMPARING dzdhm kunag vbeln.
+*  END BY PFT 20171213
+
+    MODIFY ztsd004 FROM TABLE lt_ztsd004.
+    IF sy-subrc EQ 0.
+*  ADD BY PFT 20171213
+      COMMIT WORK AND WAIT.
+*  END BY PFT 20171213
+      "更新失败 清空对账单号码
+      LOOP AT lt_vbeln.
+        LOOP AT gt_item INTO gw_item WHERE vbeln EQ lt_vbeln-vbeln AND kunag EQ lt_vbeln-kunag.
+          READ TABLE gt_post INTO gw_post WITH KEY kunag = gw_item-kunag.
+          IF sy-subrc EQ 0.
+            gw_item-dzdhm = gw_post-dzdhm.
+          ENDIF.
+          gw_item-zdate = p_zdate1.
+          gw_item-zstatus_txt = '生成对账单成功'.
+          MODIFY gt_item FROM gw_item.
+        ENDLOOP.
+      ENDLOOP.
+
+      MESSAGE  '生成对账单号成功！' TYPE 'S'.
+    ELSE.
+*  ADD BY PFT 20171213
+      ROLLBACK WORK.
+*  END BY PFT 20171213
+      "更新失败 清空对账单号码
+      LOOP AT lt_vbeln.
+        LOOP AT gt_item INTO gw_item WHERE vbeln EQ lt_vbeln-vbeln AND kunag EQ lt_vbeln-kunag.
+          gw_item-dzdhm = ''.
+          gw_item-zdate = ''.
+          gw_item-zstatus_txt = '生成对账单失败'.
+          MODIFY gt_item FROM gw_item.
+        ENDLOOP.
+      ENDLOOP.
+      MESSAGE  '生成对账单号失败！' TYPE 'E'.
+    ENDIF.
+
+    CLEAR:lt_ztsd004[].
+  ENDFORM.
+
+  FORM sc_lsm CHANGING lv_dzdhm. "生成流水号
+    DATA:nextnum TYPE i.
+    CALL FUNCTION 'NUMBER_RANGE_ENQUEUE'
+      EXPORTING
+        object           = 'ZSD012'
+      EXCEPTIONS
+        foreign_lock     = 1
+        object_not_found = 2
+        system_failure   = 3
+        OTHERS           = 4.
+    IF sy-subrc = 0.
+      CALL FUNCTION 'NUMBER_GET_NEXT'
+        EXPORTING
+          nr_range_nr             = '01'
+          object                  = 'ZSD012'
+*         QUANTITY                = '1'
+*         SUBOBJECT               = ' '
+*         TOYEAR                  = '0000'
+*         IGNORE_BUFFER           = ' '
+        IMPORTING
+          number                  = nextnum
+*         QUANTITY                =
+*         RETURNCODE              =
+        EXCEPTIONS
+          interval_not_found      = 1
+          number_range_not_intern = 2
+          object_not_found        = 3
+          quantity_is_0           = 4
+          quantity_is_not_1       = 5
+          interval_overflow       = 6
+          buffer_overflow         = 7
+          OTHERS                  = 8.
+      IF sy-subrc <> 0.
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      ELSE.
+        lv_dzdhm = nextnum .
+        CALL FUNCTION 'NUMBER_RANGE_DEQUEUE'
+          EXPORTING
+            object           = 'ZSD012'
+          EXCEPTIONS
+            object_not_found = 1
+            OTHERS           = 2.
+        IF sy-subrc <> 0.
+* Implement suitable error handling here
+        ENDIF.
+
+      ENDIF.
+    ENDIF.
+
+  ENDFORM.
+
+
+  FORM daochu_report.
+********数据定义*******
+    DATA:lv_file   TYPE string,
+         lv_result TYPE c. "标识: 空表示文件不存在;否则,表示存在
+    DATA lv_answer TYPE c.
+    DATA:li_lines TYPE i.
+    DATA:ls_key   TYPE wwwdatatab,
+         lv_subrc TYPE sy-subrc.
+    DATA lv_file1 LIKE rlgrap-filename.
+*******初始化*******
+*******程序主体*******
+
+    CONCATENATE 'C:\SD\' sy-title '-'   sy-datum '.xls' INTO lv_file.
+
+    CALL METHOD cl_gui_frontend_services=>file_exist
+      EXPORTING
+        file                 = lv_file
+      RECEIVING
+        result               = lv_result
+      EXCEPTIONS
+        cntl_error           = 1
+        error_no_gui         = 2
+        wrong_parameter      = 3
+        not_supported_by_gui = 4
+        OTHERS               = 5.
+    IF lv_result IS NOT  INITIAL. "文件已经存在
+      CALL FUNCTION 'POPUP_TO_CONFIRM'
+        EXPORTING
+          titlebar              = '请确认'
+          text_question         = '文件已经存在，是否要覆盖?'
+          text_button_1         = '是'
+          text_button_2         = '否'
+          default_button        = '2' "缺省选中按钮: 1 是; 2 否
+          display_cancel_button = ''  "标识: 为空,不显示 取消按钮
+        IMPORTING
+          answer                = lv_answer "标识： 1 是;
+        EXCEPTIONS
+          text_not_found        = 1
+          OTHERS                = 2.
+      IF lv_answer NE '1'.
+        EXIT.
+      ENDIF.
+    ENDIF.
+
+
+    ls_key-relid = 'MI'.
+*    ADD BY PFT 20171221
+*    香港取ZSD012A,深圳取ZSD012
+    IF p_sz EQ 'X'.
+      ls_key-objid = gcst_excel_template.
+    ELSE.
+      ls_key-objid = gcst_excel_template_xg.
+    ENDIF.
+    IF p_vkorg = '1100'.
+      ls_key-objid = 'ZSD012B'.
+    ENDIF.
+*   END BY PFT 20171221
+    lv_file1 = lv_file.
+    CALL FUNCTION 'DOWNLOAD_WEB_OBJECT'
+      EXPORTING
+        key         = ls_key
+        destination = lv_file1
+      IMPORTING
+        rc          = lv_subrc.
+    IF lv_subrc <> 0.
+      MESSAGE '下载模板出错，请检查，谢谢' TYPE 'E'.
+      EXIT.
+    ENDIF.
+
+***填充EXCEL数据
+    PERFORM frm_filldata_excel USING lv_file.
+
+  ENDFORM.
+
+  FORM frm_filldata_excel  USING  iv_file TYPE string.
+    DATA: lt_head LIKE zszsd012_head OCCURS 0 WITH HEADER LINE.
+    DATA: lt_item LIKE zszsd012_item OCCURS 0 WITH HEADER LINE.
+
+    DATA lv_value TYPE char200.
+    DATA:lv_kbetr        TYPE komv-kbetr, "运费
+         lv_vbeln        TYPE char200, "交货单号
+         lv_track        TYPE char200, "物流单号
+         lv_weight       LIKE ztsd003zxdb-brgew,  "毛重
+         lv_zzxno        LIKE ztsd003zxdb-zzxno, "装箱单号
+         sheet_name(200) TYPE c. "EXCEL SHEET NAME
+
+
+    DATA:BEGIN OF it_kbetr OCCURS 0,
+           wadat_ist TYPE likp-wadat_ist, "实际交货日期
+           kbetr     TYPE komv-kbetr, "运费
+         END OF it_kbetr.
+
+    DATA:BEGIN OF it_vbeln OCCURS 0,
+           wadat_ist TYPE likp-wadat_ist, "实际交货日期
+           vbeln     TYPE lips-vbeln, "交货单 vbeln
+         END OF it_vbeln.
+
+    DATA:BEGIN OF it_track OCCURS 0,
+           wadat_ist   TYPE likp-wadat_ist, "实际交货日期
+           bolnr       TYPE likp-bolnr, "物流单号
+           vsart       TYPE likp-vsart, "运输方式
+           vsart_bezei TYPE t173t-bezei, "运输方式描述
+           zzxno       LIKE ztsd003zxdb-zzxno, "装箱单号 "ADD BY WUSK 20180118
+           brgew       LIKE ztsd003zxdb-brgew, "毛重 "ADD BY WUSK 20180118
+           zsjyf       LIKE ztsd003zxdb-zsjyf, "实际运费 "ADD BY WUSK 20180118
+         END OF it_track.
+
+
+    DATA: l_row  TYPE i,
+          l_no   TYPE i,
+          l_num  TYPE i,
+          l_xlh  TYPE i,
+          l_row1 TYPE i,
+          l_row2 TYPE i.
+
+    DATA:lv_lfimg_sum TYPE lips-lfimg,
+         lv_dmbtr_sum TYPE bsid-dmbtr,
+         lv_dmbtr_hk  TYPE bsid-dmbtr,
+         lv_kbetr_sum TYPE komv-kbetr. "运费
+
+
+*  ADD BY PFT 20171221
+*  用来复制行项目
+    DATA:lv_line TYPE i.
+*  END BY PFT 20171221
+
+    DATA lv_row TYPE i.
+    DATA lv_col TYPE i.
+    DATA:
+      row_c   TYPE char4,
+      row_1   TYPE i,
+      row_c_2 TYPE char4,
+      row_2   TYPE i,
+      cell    TYPE char9.
+
+
+    DEFINE mac_fill_cell.
+      CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+        EXPORTING
+          #1 = &1
+          #2 = &2.
+      SET PROPERTY OF lo_cell 'VALUE' = &3.
+    END-OF-DEFINITION.
+
+    DEFINE mac_mer_cell.
+      CALL METHOD OF
+        lo_sheet
+        'RANGE' = lo_cell
+        EXPORTING
+        #1 = &1.
+      CALL METHOD OF
+        lo_cell
+        'MERGE'.
+      FREE OBJECT lo_cell.
+
+    END-OF-DEFINITION.               "mergerange
+
+    DEFINE mac_bord_cell.
+      CALL METHOD OF
+        lo_sheet"lo_workbook
+        'RANGE' = lo_cell
+        EXPORTING
+        #1 = &1.
+      DO 4 TIMES .
+        CALL METHOD OF
+          lo_cell
+          'BORDERS' = borders_obj
+          EXPORTING
+          #1 = sy-index.
+        SET PROPERTY OF borders_obj 'LineStyle' = '1'.
+        SET PROPERTY OF borders_obj 'WEIGHT' = '2'.
+        SET PROPERTY OF borders_obj 'ColorIndex' = '1'.
+        FREE OBJECT borders_obj.
+      ENDDO.
+      FREE OBJECT borders_obj.
+      FREE OBJECT lo_cell.
+    END-OF-DEFINITION.
+
+*填充excel
+    CREATE OBJECT lo_excel 'EXCEL.APPLICATION'.
+    CALL METHOD OF lo_excel 'WORKBOOKS' = lo_workbooks.
+    CALL METHOD OF lo_workbooks 'OPEN' = lo_workbook EXPORTING #1 = iv_file.
+    CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = 1.
+*******程序主体*******
+    CLEAR:lt_head[].
+    "表头数据.
+    LOOP AT gt_item INTO gw_item WHERE sel EQ 'X'.
+      IF gw_item-zstatus EQ 'N'.
+        MESSAGE  '未审批的对账单不能打印！' TYPE 'E'.
+      ENDIF.
+
+      MOVE-CORRESPONDING gw_item TO lt_head.
+      APPEND lt_head.
+    ENDLOOP.
+    SORT lt_head BY dzdhm.
+    DELETE ADJACENT DUPLICATES FROM lt_head COMPARING dzdhm.
+
+*  检查抬头，有几个SHEET，复制N-1个SHEET
+    l_no = lines( lt_head ).
+    IF l_no > 1 .
+      CLEAR: l_row.
+      l_row = l_no - 1.
+      PERFORM sheet_copy USING l_row.
+    ENDIF.
+    DATA: lv_date TYPE char20,lv_bz TYPE char50.
+    DATA: lt_msku LIKE TABLE OF msku WITH HEADER LINE.
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_msku FROM msku
+  FOR ALL ENTRIES IN gt_item
+  WHERE kunnr = gt_item-kunag AND kulab <> 0.
+
+*读取模板数
+    LOOP AT lt_head.
+      l_num = l_num + 1.
+      PERFORM frm_select_sheet USING l_num.
+
+      CONCATENATE '客户号' lt_head-kunag INTO sheet_name. "sheet命名
+      CONDENSE sheet_name.
+      SET PROPERTY OF lo_sheet 'NAME' = sheet_name."命名SHEET.
+
+      CLEAR:lv_tel,lv_bezei,lv_fax.
+      IF lt_head-bezei4 IS NOT INITIAL .
+*    CHANGE BY PFT 20170930  取消IF ELSE判断，如果BEZEI4不为空，取BEZEI4,否则取BEZEI3
+*        IF lt_head-bezei3 IS NOT INITIAL.
+*          CONCATENATE lt_head-bezei4 '/' lt_head-bezei3 INTO lv_bezei.
+*        ELSE.
+*          lv_bezei = lt_head-bezei4.
+*        ENDIF.
+        IF p_vkorg <> '1100'.
+          lv_bezei = lt_head-bezei4.
+        ELSE.
+          CONCATENATE lt_head-bezei4 '/' lt_head-bezei3 INTO lv_bezei.
+        ENDIF.
+*    END BY pft 20170930
+      ELSE.
+        lv_bezei = lt_head-bezei3.
+      ENDIF.
+
+
+      IF lt_head-fax_yw IS NOT INITIAL .
+*     CHANGE BY PFT 20170930  取消IF ELSE判断
+*        IF lt_head-fax_sw IS NOT INITIAL.
+*          CONCATENATE lt_head-fax_yw '/' lt_head-fax_sw INTO lv_fax.
+*        ELSE.
+*          lv_fax = lt_head-fax_yw.
+*        ENDIF.
+        lv_fax = lt_head-fax_yw.
+*     END BY PFT 20170930
+      ELSE.
+        lv_fax = lt_head-fax_sw.
+      ENDIF.
+
+      IF lt_head-tel_yw IS NOT INITIAL .
+*    CHANGE BY PFT 20170930  取消IF ELSE判断，
+*        IF lt_head-tel_sw IS NOT INITIAL.
+*          CONCATENATE lt_head-tel_yw '/' lt_head-tel_sw INTO lv_tel.
+*        ELSE.
+*          lv_tel = lt_head-tel_yw.
+*        ENDIF.
+        lv_tel = lt_head-tel_yw.
+*    END BY PFT 20170930
+      ELSE.
+        lv_tel = lt_head-tel_sw.
+      ENDIF.
+
+*  CHANGE BY PFT 20171221   将行数向上移
+      mac_fill_cell 6 2 lt_head-name1.  "将7改为6
+      mac_fill_cell 7 2 lt_head-name_lx. "将8改为7
+      mac_fill_cell 8 2 lt_head-telf1."将9改为8
+      mac_fill_cell 9 2 lt_head-fax_number.
+      mac_fill_cell 10 2  sy-datum.
+      IF p_vkorg <> '1100'.
+        mac_fill_cell 7 7 lv_bezei. "将8改为7
+        mac_fill_cell 8 7 lv_tel. "将9改为8
+        mac_fill_cell 9 7 lv_fax.
+        mac_fill_cell 10 7  sy-datum.
+      ELSE.
+        mac_fill_cell 7 5 lv_bezei. "将8改为7
+        mac_fill_cell 8 5 lv_tel. "将9改为8
+        mac_fill_cell 9 5 lv_fax.
+        CONCATENATE sy-datum(4) '年' sy-datum+4(2) '月对帐单' INTO lv_date.
+        mac_fill_cell 10 5  lv_date       .
+        lv_bz = lt_head-sum_ys.
+        CONDENSE lv_bz.
+        CONCATENATE '您好！烦请您核对此对账单，截止' lt_head-zdate(4)  '年' lt_head-zdate+4(2) '月' lt_head-zdate+6(2) '日应收账款总额' lv_bz '元，以下为未付款的明细：' INTO lv_bz.
+        mac_fill_cell 13 1 lv_bz.
+        CLEAR lv_bz.
+        CONCATENATE '截止' lt_head-zdate(4)  '年' lt_head-zdate+4(2) '月' lt_head-zdate+6(2) '日已确认应收帐款应额:' INTO lv_bz.
+        mac_fill_cell 15 2 lv_bz.
+        CLEAR lv_bz.
+        lv_bz = lt_head-sum_ys.
+        CONDENSE lv_bz .
+        mac_fill_cell 15 6 lv_bz .
+      ENDIF.
+      CLEAR lv_date.
+*  END BY PFT 20171221
+
+
+      CLEAR: it_kbetr[],it_vbeln[],it_track[],gt_daochu[],lv_lfimg_sum,lv_dmbtr_sum.
+      LOOP AT gt_item INTO gw_item WHERE dzdhm EQ lt_head-dzdhm AND dmbtr NE 0.
+        it_kbetr-wadat_ist  = gw_item-wadat_ist."实际交货日期
+*        it_kbetr-kbetr      = gw_item-kbetr."运费  chaged by wusk 20180118
+        it_kbetr-kbetr = gw_item-zsjyf. "实际运费 "ADD BY WUSK 20180118
+        APPEND it_kbetr.
+
+        it_vbeln-wadat_ist = gw_item-wadat_ist.
+        it_vbeln-vbeln     = gw_item-vbeln. "交货单
+        APPEND it_vbeln.
+
+        it_track-wadat_ist = gw_item-wadat_ist.
+        it_track-bolnr     = gw_item-bolnr ."物流单号
+        it_track-vsart     = gw_item-vsart."运输方式
+        it_track-vsart_bezei = gw_item-vsart_bezei."运输方式描述
+        it_track-zzxno = gw_item-zzxno."装箱单号 "ADD BY WUSK 20180118
+        it_track-brgew = gw_item-brgew."毛重 "ADD BY WUSK 20180118
+        APPEND it_track.
+
+        MOVE-CORRESPONDING gw_item TO gw_daochu.
+        APPEND gw_daochu TO gt_daochu.
+      ENDLOOP.
+      SORT it_kbetr BY wadat_ist kbetr.
+      DELETE ADJACENT DUPLICATES FROM it_kbetr COMPARING ALL FIELDS.
+      SORT it_vbeln BY wadat_ist vbeln.
+      DELETE ADJACENT DUPLICATES FROM it_vbeln COMPARING ALL FIELDS.
+      SORT it_track BY wadat_ist bolnr vsart.
+      DELETE ADJACENT DUPLICATES FROM it_track COMPARING ALL FIELDS.
+
+      IF  p_vkorg = '1100'.    "样品
+        LOOP AT lt_msku WHERE  kunnr = lt_head-kunag .
+          SELECT SINGLE maktx INTO gw_daochu-arktx FROM makt WHERE matnr = lt_msku-matnr AND spras = 1.
+          gw_daochu-lfimg = lt_msku-kulab.
+          gw_daochu-beizhu = '样品'.
+          gw_daochu-netpr = ''.
+          gw_daochu-wadat_ist = ''.
+          gw_daochu-dmbtr = ''.
+          APPEND gw_daochu TO gt_daochu .
+        ENDLOOP.
+      ENDIF.
+
+*  ADD BY PFT 20171221
+*  判断内表GT_DAOCHU中有几个行项目，如果大于1，复制行项目
+      DESCRIBE TABLE gt_daochu LINES lv_line.
+      lv_line = lv_line - 1.
+      IF lv_line > 0.
+        DO lv_line TIMES.
+          IF p_vkorg <> '1100'.
+            CALL METHOD OF lo_sheet 'Cells' = lo_cell EXPORTING #1 = 14 #2 = 1.
+            CALL METHOD OF lo_sheet 'Cells' = lo_cell1 EXPORTING #1 = 14 #2 = 10.
+            CALL METHOD OF lo_sheet 'Range' = lo_range EXPORTING #1 = lo_cell #2 = lo_cell1.
+            CALL METHOD OF lo_range 'Select' .
+            CALL METHOD OF lo_range 'Copy'.
+            CALL METHOD OF lo_sheet 'Cells' = lo_cell EXPORTING #1 = 15 #2 = 1.
+            CALL METHOD OF lo_sheet 'Cells' = lo_cell1 EXPORTING #1 = 15 #2 = 10.
+            CALL METHOD OF lo_sheet 'Range' = lo_range EXPORTING #1 = lo_cell #2 = lo_cell1.
+            CALL METHOD OF lo_range 'Insert'.
+          ELSE.
+            CALL METHOD OF lo_sheet 'Cells' = lo_cell EXPORTING #1 = 16 #2 = 1.
+            CALL METHOD OF lo_sheet 'Cells' = lo_cell1 EXPORTING #1 = 16 #2 = 7.
+            CALL METHOD OF lo_sheet 'Range' = lo_range EXPORTING #1 = lo_cell #2 = lo_cell1.
+            CALL METHOD OF lo_range 'Select' .
+            CALL METHOD OF lo_range 'Copy'.
+            CALL METHOD OF lo_sheet 'Cells' = lo_cell EXPORTING #1 = 17 #2 = 1.
+            CALL METHOD OF lo_sheet 'Cells' = lo_cell1 EXPORTING #1 = 17 #2 = 7.
+            CALL METHOD OF lo_sheet 'Range' = lo_range EXPORTING #1 = lo_cell #2 = lo_cell1.
+            CALL METHOD OF lo_range 'Insert'.
+          ENDIF.
+        ENDDO.
+      ENDIF.
+*  END BY PFT 20171221
+      IF p_vkorg <> '1100'.
+        lv_row = 13.
+      ELSE.
+        lv_row = 15.
+      ENDIF.
+      "数值
+      lv_line = 1.
+      IF p_vkorg <> '1100'.
+        SORT gt_daochu BY wadat_ist.
+      ENDIF.
+      LOOP AT gt_daochu INTO gw_daochu WHERE dzdhm EQ lt_head-dzdhm.
+        "日期 DATE
+        lv_col = lv_col + 1.
+        lv_row = lv_row + 1.
+        AT NEW wadat_ist .
+          row_1 =  lv_row.
+        ENDAT.
+        IF p_vkorg <> '1100'.
+          "对账日期
+          mac_fill_cell lv_row lv_col gw_daochu-wadat_ist.
+          "MODEL NO
+          lv_col = lv_col + 1.
+          mac_fill_cell lv_row lv_col gw_daochu-arktx.
+          "QUANTITY
+          lv_col = lv_col + 1.
+          mac_fill_cell lv_row lv_col gw_daochu-lfimg.
+          ""UNIT PRICE"
+          lv_col = lv_col + 1.
+          mac_fill_cell lv_row lv_col gw_daochu-netpr.
+          "TOTAL PRICE
+          lv_col = lv_col + 1.
+          mac_fill_cell lv_row lv_col gw_daochu-dmbtr.
+          row_c = lv_row.
+          row_c_2  = row_1.
+          CONDENSE row_c NO-GAPS.
+          CONDENSE row_c_2 NO-GAPS.
+          row_obj = row_c.
+          CALL METHOD OF row_obj 'AUTOFIT'."自适应
+          CONCATENATE 'A' row_c_2  ':J' row_c INTO cell.
+          mac_bord_cell cell.
+        ELSE.
+          mac_fill_cell lv_row lv_col lv_line.
+          lv_col = lv_col + 1.
+          IF gw_daochu-wadat_ist <> ''.
+            mac_fill_cell lv_row lv_col gw_daochu-wadat_ist.
+          ENDIF.
+          "MODEL NO
+          lv_col = lv_col + 1.
+          mac_fill_cell lv_row lv_col gw_daochu-arktx.
+          "QUANTITY
+          lv_col = lv_col + 1.
+          mac_fill_cell lv_row lv_col gw_daochu-lfimg.
+          ""UNIT PRICE"
+          lv_col = lv_col + 1.
+          IF gw_daochu-netpr <> 0.
+            mac_fill_cell lv_row lv_col gw_daochu-netpr.
+          ENDIF.
+          "TOTAL PRICE
+          lv_col = lv_col + 1.
+          IF gw_daochu-dmbtr <> 0.
+            mac_fill_cell lv_row lv_col gw_daochu-dmbtr.
+          ENDIF.
+          lv_col = lv_col + 1.
+          mac_fill_cell lv_row lv_col gw_daochu-beizhu.
+
+          lv_line = lv_line + 1.
+        ENDIF.
+
+        AT END OF wadat_ist.
+          IF p_vkorg <> '1100'.
+            LOOP AT it_kbetr WHERE wadat_ist EQ gw_daochu-wadat_ist.
+              lv_kbetr = lv_kbetr + it_kbetr-kbetr."运费 changed by wusk 20180118
+            ENDLOOP.
+
+            LOOP AT it_vbeln WHERE wadat_ist EQ gw_daochu-wadat_ist.
+              CONCATENATE  lv_vbeln it_vbeln-vbeln INTO lv_vbeln SEPARATED BY space."交货单号
+            ENDLOOP.
+
+            LOOP AT it_track WHERE wadat_ist EQ gw_daochu-wadat_ist.
+              CONCATENATE  lv_track it_track-bolnr INTO lv_track SEPARATED BY space."物流单号
+              CONCATENATE  lv_track it_track-vsart_bezei INTO lv_track SEPARATED BY space."物流单号
+              lv_weight = it_track-brgew.
+              lv_zzxno = it_track-zzxno.
+            ENDLOOP.
+
+*          lv_kbetr_sum = lv_kbetr_sum +  gw_daochu-kbetr. "运费 changed by wusk 20170118
+            lv_kbetr_sum = lv_kbetr_sum +  lv_kbetr. "运费 add by wusk 20170118
+            "FREIGHT
+            row_c    = lv_row.
+            row_c_2  = row_1.
+            CONDENSE row_c NO-GAPS.
+            CONDENSE row_c_2 NO-GAPS.
+            row_obj = row_c.
+            CALL METHOD OF row_obj 'AUTOFIT'."自适应
+            CONCATENATE 'F' row_c_2  ':F' row_c INTO cell.
+            mac_mer_cell cell.
+            mac_bord_cell cell.
+            mac_fill_cell row_1 6 lv_kbetr. " changed by wusk20180118
+*          mac_fill_cell row_1 6 lv_kbetr. " changed by wusk20180118
+
+            "Weight (KG)
+            row_c = lv_row.
+            row_c_2  = row_1.
+            CONDENSE row_c NO-GAPS.
+            CONDENSE row_c_2 NO-GAPS.
+            row_obj = row_c.
+            CALL METHOD OF row_obj 'AUTOFIT'."自适应
+            CONCATENATE 'G' row_c_2  ':G' row_c INTO cell.
+            mac_mer_cell cell.
+            mac_bord_cell cell.
+            mac_fill_cell row_1 7 lv_weight.
+*          mac_fill_cell row_1 7 lv_kbetr.
+
+            "INVOICE
+            row_c = lv_row.
+            row_c_2  = row_1.
+            CONDENSE row_c NO-GAPS.
+            CONDENSE row_c_2 NO-GAPS.
+            row_obj = row_c.
+            CALL METHOD OF row_obj 'AUTOFIT'."自适应
+            CONCATENATE 'H' row_c_2  ':H' row_c INTO cell.
+            mac_mer_cell cell.
+            mac_bord_cell cell.
+            mac_fill_cell row_1 8 lv_vbeln.
+
+            "SHIPPING  TRACKING
+            row_c = lv_row.
+            row_c_2  = row_1.
+            CONDENSE row_c NO-GAPS.
+            CONDENSE row_c_2 NO-GAPS.
+            row_obj = row_c.
+            CALL METHOD OF row_obj 'AUTOFIT'."自适应
+            CONCATENATE 'I' row_c_2  ':I' row_c INTO cell.
+            mac_mer_cell cell.
+            mac_bord_cell cell.
+            mac_fill_cell row_1 9 lv_track.
+            "Note
+            row_c = lv_row.
+            row_c_2  = row_1.
+            CONDENSE row_c NO-GAPS.
+            CONDENSE row_c_2 NO-GAPS.
+            row_obj = row_c.
+            CALL METHOD OF row_obj 'AUTOFIT'."自适应
+            CONCATENATE 'J' row_c_2  ':J' row_c INTO cell.
+            mac_mer_cell cell.
+            mac_bord_cell cell.
+*          mac_fill_cell row_1 10 lv_kbetr.
+            mac_fill_cell row_1 10 lv_zzxno.
+            CLEAR:lv_vbeln,lv_track,lv_kbetr. "add by wusk 20180118
+          ENDIF.
+        ENDAT.
+
+        CLEAR:lv_col.
+
+        lv_lfimg_sum = lv_lfimg_sum +  gw_daochu-lfimg.
+        lv_dmbtr_sum = lv_dmbtr_sum +  gw_daochu-dmbtr.
+        lv_dmbtr_hk = gw_daochu-dmbtr_hk.
+
+      ENDLOOP.
+      lv_row  = lv_row  + 1.
+      "TOTAL
+      IF p_vkorg <> '1100'.
+        mac_fill_cell lv_row 1 'Total'.
+        "QUANTITY
+        mac_fill_cell lv_row 3 lv_lfimg_sum.
+        "Total price
+        mac_fill_cell lv_row 5 lv_dmbtr_sum.
+        "FREIGHT
+        mac_fill_cell lv_row 6 lv_kbetr_sum.
+
+        row_c = lv_row.
+        CONDENSE row_c NO-GAPS.
+        row_obj = row_c.
+        CALL METHOD OF row_obj 'AUTOFIT'."自适应
+        CONCATENATE 'A' row_c  ':J' row_c INTO cell.
+        mac_bord_cell cell.
+      ELSE.
+        "Total price
+        mac_fill_cell lv_row 6 lv_dmbtr_sum.
+        lv_row  = lv_row  + 1.
+        mac_fill_cell lv_row 6 lv_dmbtr_hk .
+        lv_row  = lv_row  + 1.
+        lv_dmbtr_hk = lv_dmbtr_hk + lv_dmbtr_sum + lv_bz .
+        CONCATENATE '截止' lt_head-zdate(4)  '年' lt_head-zdate+4(2) '月' lt_head-zdate+6(2) '日双方对账确认应收帐款合计：' INTO lv_bz.
+        mac_fill_cell lv_row 1 lv_bz.
+        mac_fill_cell lv_row 6 lv_dmbtr_hk .
+      ENDIF.
+
+    ENDLOOP.
+    IF p_vkorg = '1100'.
+      lv_row = lv_row + 3.
+      row_c    = lv_row.
+      CONDENSE row_c NO-GAPS.
+      row_obj = row_c.
+      CALL METHOD OF lo_sheet 'CELLS' = lo_cell1 EXPORTING #1 = row_c #2 = 1.
+      CALL METHOD OF lo_sheet 'CELLS' = lo_cell2 EXPORTING #1 = row_c #2 = 7.
+      CALL METHOD OF lo_sheet 'RANGE' = lo_cells EXPORTING #1 = lo_cell1 #2 = lo_cell2.
+      CALL METHOD OF lo_cells 'MERGE' .
+      CALL METHOD OF lo_cells 'SELECT'.
+      GET PROPERTY OF lo_cells  'ROWS' = gs_borders.
+      SET PROPERTY OF gs_borders 'ROWHEIGHT' = 30.
+      IF lv_line GT 2 .
+        row_c    = 22.
+        CONDENSE row_c NO-GAPS.
+        row_obj = row_c.
+        CALL METHOD OF lo_sheet 'CELLS' = lo_cell1 EXPORTING #1 = row_c #2 = 1.
+        CALL METHOD OF lo_sheet 'CELLS' = lo_cell2 EXPORTING #1 = row_c #2 = 7.
+        CALL METHOD OF lo_sheet 'RANGE' = lo_cells EXPORTING #1 = lo_cell1 #2 = lo_cell2.
+*      CALL METHOD OF lo_cells 'MERGE' .
+        CALL METHOD OF lo_cells 'SELECT'.
+        GET PROPERTY OF lo_cells  'ROWS' = gs_borders.
+        SET PROPERTY OF gs_borders 'ROWHEIGHT' = 13.
+      ENDIF.
+    ENDIF.
+
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell EXPORTING #1 = 1 #2 = 1.
+    CALL METHOD OF lo_cell 'SELECT'.
+    SET PROPERTY OF lo_excel 'CutCopyMode' = 0.
+
+    CALL METHOD OF lo_workbook 'SAVE'.
+    SET PROPERTY OF lo_excel 'VISIBLE' = 1.
+    FREE OBJECT:lo_excel,lo_workbooks,lo_workbook,lo_sheet,lo_range,lo_cell.
+  ENDFORM.
+
+  FORM sheet_copy  USING    p_n.
+    DATA: l TYPE i VALUE 0.
+    DO p_n TIMES.
+      l = l + 1.
+      CALL METHOD OF
+      lo_excel
+      'WORKSHEETS' = tmp_sheet
+      EXPORTING
+        #1           = l.
+      PERFORM err_hdl.
+      CALL METHOD OF
+        lo_sheet
+        'COPY'
+        EXPORTING
+          #1 = tmp_sheet.
+      PERFORM err_hdl.
+    ENDDO.
+  ENDFORM.
+
+  FORM err_hdl .
+    IF sy-subrc <> 0.
+      MESSAGE 'OLE error: Return code ='(010) TYPE 'S'.
+      EXIT.
+    ENDIF.
+  ENDFORM.                    " ERR_HDL
+
+  FORM frm_select_sheet  USING    pv_num.
+    CALL METHOD OF lo_excel 'WORKSHEETS' = lo_sheet
+    EXPORTING
+      #1 = pv_num.
+
+    CALL METHOD OF lo_sheet 'SELECT'.
+  ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  sub_search_help
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0054   text
+*      -->P_0055   text
+*      -->P_0056   text
+*----------------------------------------------------------------------*
+  FORM sub_search_help USING lv_field LIKE dfies-fieldname
+                              lv_dynfield LIKE help_info-dynprofld.
+    DATA: lv_pvalkey TYPE ddshpvkey.
+
+    SELECT zterm vtext INTO CORRESPONDING FIELDS OF TABLE gt_tvzbt
+      FROM tvzbt
+      WHERE spras = sy-langu
+        AND zterm LIKE 'Y%'.
+
+    lv_pvalkey = lv_field.
+    CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+      EXPORTING
+        retfield        = lv_field
+        pvalkey         = lv_pvalkey
+        dynpprog        = sy-repid
+        dynpnr          = sy-dynnr
+        dynprofield     = lv_dynfield
+        window_title    = '选择'
+        value           = ' '
+        value_org       = 'S'
+      TABLES
+        value_tab       = gt_tvzbt
+      EXCEPTIONS
+        parameter_error = 1
+        no_values_found = 2
+        OTHERS          = 3.
+  ENDFORM.

@@ -1,0 +1,101 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM023_TOP
+*&---------------------------------------------------------------------*
+TYPE-POOLS:truxs,slis.
+DATA:xlstab TYPE truxs_t_text_data.
+TABLES:mseg,mara.
+********************ALV 事件****************
+DATA:
+  it_fieldcat TYPE lvc_t_fcat,
+  wa_fieldcat LIKE LINE OF it_fieldcat,
+  gs_layout   TYPE lvc_s_layo,
+  it_events   TYPE slis_t_event, ""事件属性
+  wa_events   TYPE slis_alv_event.
+
+
+*DATA:BEGIN OF gw_item,"展示内表
+*       matnr       LIKE ekpo-matnr, "物料编码
+*       maktx       LIKE makt-maktx, "物料描述
+*       werks       LIKE mseg-werks,
+*       lgort       LIKE mseg-lgort, "库存地点
+*       labst       LIKE mard-labst, "当前库存
+*       field_style TYPE lvc_t_styl, " 为内表添加设置编辑状态所需的字段
+*     END OF gw_item.
+*DATA:gt_item LIKE gw_item OCCURS 0.
+
+
+DATA:BEGIN OF gt_mard  OCCURS 0,
+       matnr TYPE mard-matnr,
+       werks TYPE mard-werks,
+       maktx TYPE makt-maktx,
+       lgort TYPE mard-lgort,
+       labst TYPE mard-labst,
+       lvorm TYPE mard-lvorm,
+     END OF gt_mard.
+
+
+DATA:BEGIN OF gt_mseg OCCURS 0,
+       mblnr      LIKE mseg-mblnr,
+       mjahr      LIKE mseg-mjahr,
+       zeile      LIKE mseg-zeile,
+       matnr      LIKE ekpo-matnr, "物料编码
+       maktx      LIKE makt-maktx, "物料描述
+       werks      LIKE mseg-werks,
+       lgort      LIKE mseg-lgort, "库存地点
+       bwart      LIKE mseg-bwart,
+       menge      LIKE mseg-menge, "数量
+       budat_mkpf LIKE mseg-budat_mkpf, "过账日期
+     END OF gt_mseg.
+
+DATA:gt_mchb LIKE mchb OCCURS 0 WITH HEADER LINE.
+
+"日期天数间隔
+DATA:BEGIN OF it_pdate OCCURS 0,
+       lv_date(20) TYPE c,
+       date        TYPE idcn_segm,
+     END OF it_pdate.
+
+
+DATA:BEGIN OF gt_pdate OCCURS 0,
+       matnr       LIKE ekpo-matnr, "物料编码
+       werks       LIKE mseg-werks, "物料描述
+       lgort       LIKE mseg-lgort, "库存地点
+       lv_date(20) TYPE c,
+       menge       LIKE mseg-menge, " 值
+     END OF gt_pdate.
+
+DATA: i_grid_settings TYPE lvc_s_glay.
+
+DATA:lv_bs TYPE char1."标识已分配类标识
+DATA:lt_return  LIKE  bapiret2 OCCURS 0 WITH HEADER LINE .
+**********动态内表定义**************************
+FIELD-SYMBOLS:<dynitab> TYPE STANDARD TABLE, "Dynamic internal table
+              <dynwa>   TYPE any,            "Dynamic work area
+              <field> .           "Field
+DATA: fieldcat        TYPE lvc_t_fcat,
+      fieldcat_ln     TYPE lvc_s_fcat,
+      g_user_command  TYPE slis_formname VALUE 'USER_COMMAND',
+      git_events      TYPE slis_t_event,   "ALV 事件
+      i_list_comments TYPE slis_t_listheader, "用来填充表单标题区域的数据类型
+      ps_layout       TYPE lvc_s_layo.
+
+DATA: cl_stru    TYPE REF TO cl_abap_structdescr,
+      cl_tabl    TYPE REF TO cl_abap_tabledescr,
+      cl_handle  TYPE REF TO data,
+      cl_strue   TYPE REF TO data,
+      compdesc   TYPE abap_componentdescr,
+      components TYPE abap_component_tab.
+
+DATA:
+  wa_flname(30) TYPE c,
+  wa_field(30),
+  t_quan        TYPE p DECIMALS 0,
+  c_quan        TYPE p DECIMALS 2,
+  zmng          TYPE string,
+  box(30)       TYPE c,
+*     hkl TYPE char20,
+  t_style       TYPE lvc_t_styl,
+  t_color       TYPE lvc_t_scol,
+  w_color       TYPE lvc_s_scol,
+  tline(4),
+  stylelin      TYPE lvc_s_styl.

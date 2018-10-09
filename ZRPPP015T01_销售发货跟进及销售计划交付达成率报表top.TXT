@@ -1,0 +1,52 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP015T01
+*&---------------------------------------------------------------------*
+TABLES:marc,mara,mard.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       matnr  LIKE marc-matnr,     "物料号码
+       maktx  LIKE makt-maktx,     "物料描述
+       spart  LIKE mara-spart,     "产品组
+       zbyjh  TYPE p,              "本月销售计划
+       zxsck  TYPE p,              "本月销售出库数
+       zxsdcl TYPE p,              "本月销售发货达成率%
+       zxsbg  TYPE p,              "本月销售计划变更数
+       zxsbgl TYPE p,              "本月销售计划变更率
+       zkcs   TYPE p,              "库存数
+       eisbe  TYPE p,              "安全库存
+       zzzps  TYPE p,              "在制品数
+       zqhsl  TYPE p,              "欠货数量
+     END OF gt_out.
+
+***alv data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  gt_fcat-inttype   = &5.
+  gt_fcat-intlen    = &6.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.
+
+CONSTANTS: cns_bpm TYPE c LENGTH 10 VALUE 'BMP'.
+DATA: exec_ref   TYPE REF TO cx_sy_native_sql_error,
+      error_text TYPE string.
+DATA: g_errorstr(250) TYPE c.
+
+*** 取计划数据（来自于变更通知信息BPM系统）
+DATA: BEGIN OF gt_zbpm_item OCCURS 0,
+        bussno(32), "申请单号
+        htpsdate(20), "合同评审日期
+        matrn(25), "物料号码
+        cuspno(30),"客户代码
+        changenum(50), "数量
+        changeway(10),"变更形式
+      END OF gt_zbpm_item.

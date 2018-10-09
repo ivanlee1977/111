@@ -1,0 +1,62 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPCO025_TOP
+*&---------------------------------------------------------------------*
+
+TABLES : bsis,bseg,bkpf,ztco025.
+
+DATA: BEGIN OF gt_co OCCURS 0,
+        kst   TYPE p DECIMALS 6,
+        hrkft TYPE mbew-hrkft,
+        lbkum TYPE ckmlpp-lbkum,
+      END OF gt_co.
+
+DATA: date TYPE sy-datum.
+
+DATA:BEGIN OF gt_zje OCCURS 0,
+       kalnr TYPE ckmlprkeph-kalnr,
+       kst   TYPE p DECIMALS 6,
+       kst1  TYPE p DECIMALS 6,
+       lbkum LIKE ckmlpp-lbkum,
+       hrkft TYPE mbew-hrkft,
+       matnr TYPE mbew-matnr,
+     END OF gt_zje.
+DATA: BEGIN OF gt_zlsj OCCURS 0,
+*        matnr  TYPE vbap-matnr,
+        hrkft  TYPE bseg-hrkft,
+        menge1 TYPE p DECIMALS 3,
+        menge2 TYPE p DECIMALS 3,
+        menge3 TYPE p DECIMALS 3,
+        menge4 TYPE p DECIMALS 3,
+        menge5 TYPE p DECIMALS 3,
+        kst1   TYPE p DECIMALS 6,
+        kst2   TYPE p DECIMALS 6,
+        kst3   TYPE p DECIMALS 6,
+        kst4   TYPE p DECIMALS 6,
+        kst5   TYPE p DECIMALS 6,
+      END OF gt_zlsj.
+DATA: gt_zlsj1 LIKE TABLE OF gt_zlsj WITH HEADER LINE,
+      gt_zlsj2 LIKE TABLE OF gt_zlsj WITH HEADER LINE,
+      gt_zlsj3 LIKE TABLE OF gt_zlsj WITH HEADER LINE.
+DATA :BEGIN OF gt_bkpf OCCURS 0,
+        belnr TYPE bkpf-belnr,
+        bukrs TYPE bkpf-bukrs,
+        budat TYPE bkpf-budat,
+        gjahr TYPE bkpf-gjahr,
+      END OF gt_bkpf.
+
+*DATA:BEGIN OF gt_cya OCCURS 0,
+*       hrkft  TYPE bseg-hrkft,
+**       shkzg TYPE bseg-shkzg,
+*       dmbtr  TYPE bseg-dmbtr,
+*       dmbtr1 TYPE bseg-dmbtr,
+*     END OF gt_cya.
+*DATA gt_cya1 LIKE TABLE OF gt_cya WITH HEADER LINE.
+
+DATA:BEGIN OF gt_zcp OCCURS 0,
+       dmbtr TYPE bseg-dmbtr,
+       wemng TYPE afpo-wemng,
+     END OF gt_zcp.
+
+DATA gt_co1 TYPE TABLE OF ztco025 WITH HEADER LINE.
+
+DATA zf_co_dmbtr LIKE TABLE OF zsfi_bseg_dmbtr WITH HEADER LINE.

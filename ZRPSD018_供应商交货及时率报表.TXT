@@ -1,0 +1,60 @@
+*&---------------------------------------------------------------------*
+*& 程序名：ZRPSD018
+*& 创建者(公司)/日期： PFT/20170920
+*& 程序描述:销售送货单打印
+*& 备注：该程序有两个TCODE，ZSD018仓库专用,只打印交货单状态为C
+*&                          ZSD030售后专用，不限制交货单状态
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    PFT           20170920        创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpsd018.
+
+INCLUDE zalv.
+INCLUDE zrpsd018t01.
+INCLUDE zrpsd018s01.
+INCLUDE zrpsd018f01.
+INCLUDE zrpsd018m01.
+************************************************************************
+*INITIALIZATION.
+************************************************************************
+INITIALIZATION.
+  s_bldat-sign = 'I'.
+  s_bldat-option = 'BT'.
+  s_bldat-low = sy-datum - 3.
+  s_bldat-high = sy-datum.
+  APPEND s_bldat.
+
+  IF sy-tcode EQ 'ZSD018'.
+    s_wbstk-sign = 'I'.
+    s_wbstk-option = 'EQ'.
+    s_wbstk-low = 'C'.
+    APPEND s_wbstk.
+  ENDIF.
+************************************************************************
+* AT SELECTION-SCREEN OUTPUT
+************************************************************************
+AT SELECTION-SCREEN OUTPUT.
+*  PERFORM frm_get_zwxzt.
+  IF sy-tcode EQ 'ZSD018'.
+    LOOP AT SCREEN.
+      IF screen-group1 = 'R1'.
+        screen-active = 0.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+************************************************************************
+* AT SELECTION-SCREEN
+************************************************************************
+AT SELECTION-SCREEN.
+************************************************************************
+* START-OF-SELECTION
+************************************************************************
+START-OF-SELECTION.
+
+  PERFORM frm_get_data.
+  PERFORM frm_process_data.
+  PERFORM sub_build_fieldcat.
+  PERFORM sub_build_layout.
+  PERFORM sub_display_alv TABLES gt_alv USING 'ALV_USER_COMMAND' 'PF_STATUS_SET'.

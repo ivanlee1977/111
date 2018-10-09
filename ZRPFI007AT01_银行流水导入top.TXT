@@ -1,0 +1,35 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI007AT01
+*&---------------------------------------------------------------------*
+TABLES:ztfi002,sscrfields.
+
+DATA:gt_upload LIKE alsmex_tabline OCCURS 0 WITH HEADER LINE.
+
+DATA:BEGIN OF gt_data OCCURS 0.
+DATA:zstat(30) TYPE c.
+    INCLUDE STRUCTURE ztfi002.
+DATA:zmsg(200) TYPE c,
+     check     TYPE c.
+DATA:END OF gt_data.
+
+"常量定义
+CONSTANTS:gcst_excel_template      LIKE wwwdatatab-objid VALUE 'ZFI007A'. "数据模板
+
+CONSTANTS:c_pf_status    TYPE slis_formname VALUE 'FRM_SET_PF_STATUS',
+          c_user_command TYPE slis_formname VALUE 'FRM_USER_COMMAND'.
+
+***ALV data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-inttype   = &3.
+  gt_fcat-intlen    = &4.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

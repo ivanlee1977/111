@@ -1,0 +1,40 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI038T01
+*&---------------------------------------------------------------------*
+TABLES:bkpf,bseg,ztfi002.
+
+DATA:BEGIN OF gt_data1 OCCURS 0.
+    INCLUDE STRUCTURE ztfi002.
+DATA:check TYPE c.
+DATA:END OF gt_data1.
+
+DATA:BEGIN OF gt_data2 OCCURS 0.
+    INCLUDE STRUCTURE ztfi003.
+DATA:dmbtr LIKE bseg-dmbtr,
+     shkzg LIKE bseg-shkzg,
+     zuonr LIKE bseg-zuonr,
+     sgtxt LIKE bseg-sgtxt,
+     USNAM LIKE bkpf-USNAM,
+     zname(100) TYPE c,   "中文名字
+     check TYPE c,
+     END OF gt_data2.
+
+DATA:BEGIN OF gw_t001,
+       bukrs LIKE t001-bukrs,
+       butxt LIKE t001-butxt,
+     END OF gw_t001.
+
+DATA:gv_okcode LIKE sy-ucomm,
+     ok_code   LIKE sy-ucomm.
+
+*&SPWIZARD: DECLARATION OF TABLECONTROL 'ZTDATA1' ITSELF
+CONTROLS: ztdata1 TYPE TABLEVIEW USING SCREEN 0100.
+
+*&SPWIZARD: LINES OF TABLECONTROL 'ZTDATA1'
+DATA:     g_ztdata1_lines  LIKE sy-loopc.
+
+*&SPWIZARD: DECLARATION OF TABLECONTROL 'ZTDATA2' ITSELF
+CONTROLS: ztdata2 TYPE TABLEVIEW USING SCREEN 0100.
+
+*&SPWIZARD: LINES OF TABLECONTROL 'ZTDATA2'
+DATA:     g_ztdata2_lines  LIKE sy-loopc.

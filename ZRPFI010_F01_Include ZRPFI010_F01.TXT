@@ -1,0 +1,856 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI010_F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&  包含                ZFNB332_F01
+*&---------------------------------------------------------------------*
+FORM frm_get_data.
+  DATA:lv_erdat LIKE anla-erdat.
+  CONCATENATE p_zujhr p_zuper+1(2) '01'INTO lv_erdat.
+  CALL FUNCTION 'BKK_GET_MONTH_LASTDAY'
+    EXPORTING
+      i_date = lv_erdat
+    IMPORTING
+      e_date = lv_erdat.
+
+
+  SELECT     a~anln1  "资产编号
+             a~anln2  "资产次级编号
+             a~txt50  "资产描述
+             a~bukrs  "公司
+             a~zujhr  "会计年度
+             a~zuper  "会计期间
+             a~anlkl  "资产类别
+             a~txa50  "规格型号
+             a~sernr  "序列号
+             a~menge  "数量
+             a~meins  "单位
+             a~aktiv  "资本化日期
+             a~deakt  "不活动日期
+             a~ord41  "增加方式
+             a~ord42  "使用状况
+             a~invnr "存货号
+             a~ord43 "专项资产
+             a~ord44 "低值易耗品细类
+
+
+             b~kostl  "成本中心
+             b~kostlv "责任成本中心
+             b~caufn  "内部订单
+             b~raumn  "使用人
+             b~kfzkz  "存放位置
+
+
+             c~prctr  "利润中心
+             c~kokrs
+             c~datbi
+    INTO CORRESPONDING FIELDS OF TABLE gt_item FROM anla AS a
+    JOIN anlz AS b ON a~bukrs EQ b~bukrs AND a~anln1 EQ b~anln1 AND a~anln2 EQ b~anln2
+    JOIN csks AS c ON b~kostl EQ c~kostl
+    WHERE a~bukrs IN r_bukrs
+*      AND a~zujhr EQ p_zujhr
+*      AND a~zuper LE p_zuper
+      AND a~zujhr NE '0000'
+      AND a~aktiv LE lv_erdat
+      AND c~prctr IN s_prctr"利润中心
+      AND c~kokrs EQ '1000'
+      AND a~anlkl IN s_anlkl
+      AND a~anln1 IN s_anln1.
+*  ADD BY PFT 20180123
+  SELECT     a~anln1  "资产编号
+             a~anln2  "资产次级编号
+             a~txt50  "资产描述
+             a~bukrs  "公司
+             a~zujhr  "会计年度
+             a~zuper  "会计期间
+             a~anlkl  "资产类别
+             a~txa50  "规格型号
+             a~sernr  "序列号
+             a~menge  "数量
+             a~meins  "单位
+             a~aktiv  "资本化日期
+             a~deakt  "不活动日期
+             a~ord41  "增加方式
+             a~ord42  "使用状况
+             a~invnr "存货号
+             a~ord43 "专项资产
+             a~ord44 "低值易耗品细类
+
+
+             b~kostl  "成本中心
+             b~kostlv "责任成本中心
+             b~caufn  "内部订单
+             b~raumn  "使用人
+             b~kfzkz  "存放位置
+
+
+             c~prctr  "利润中心
+             c~kokrs
+             c~datbi
+    APPENDING CORRESPONDING FIELDS OF TABLE gt_item FROM anla AS a
+    JOIN anlz AS b ON a~bukrs EQ b~bukrs AND a~anln1 EQ b~anln1 AND a~anln2 EQ b~anln2
+    JOIN csks AS c ON b~kostl EQ c~kostl
+    WHERE a~bukrs IN r_bukrs
+      AND a~aktiv LE lv_erdat
+      AND c~prctr IN s_prctr"利润中心
+      AND c~kokrs EQ '1000'
+      AND a~anlkl IN s_anlkl AND a~anlkl LIKE '00005%'
+      AND a~anln1 IN s_anln1.
+*  END BY PFT 20180123
+  SORT gt_item BY bukrs anln1 anln2 datbi DESCENDING.
+  DELETE ADJACENT DUPLICATES FROM gt_item COMPARING bukrs anln1 anln2.
+ENDFORM.
+
+FORM frm_process_data .
+  DATA:lv_num   TYPE i VALUE 0,
+       lv_tabix TYPE i VALUE 0.
+
+  DATA:BEGIN OF it_anlc OCCURS 0,
+         bukrs LIKE anlc-bukrs,
+         anln1 LIKE anlc-anln1,
+         anln2 LIKE anlc-anln2,
+         gjahr LIKE anlc-gjahr,
+         afabe LIKE anlc-afabe,
+         zujhr LIKE anlc-zujhr,
+         zucod LIKE anlc-zucod,
+
+         kansw LIKE anlc-kansw,
+         knafa LIKE anlc-knafa,
+         kaafa LIKE anlc-kaafa,
+         nafag LIKE anlc-nafag,
+         aafag LIKE anlc-aafag,
+       END OF it_anlc.
+
+  DATA:BEGIN OF it_anep OCCURS 0,
+         bukrs LIKE anep-bukrs,
+         anln1 LIKE anep-anln1,
+         anln2 LIKE anep-anln2,
+         gjahr LIKE anep-gjahr,
+         lnran LIKE anep-lnran,
+         afabe LIKE anep-afabe,
+         zujhr LIKE anep-zujhr,
+         zucod LIKE anep-zucod,
+
+         anbtr LIKE  anep-anbtr,
+         bwasl LIKE  anep-bwasl,
+         nafav LIKE  anea-nafav,
+         nafal LIKE  anea-nafal,
+         aafav LIKE  anea-aafav,
+         aafal LIKE  anea-aafal,
+
+         budat LIKE  anek-budat,
+       END OF it_anep.
+
+  DATA:BEGIN OF it_siganep OCCURS 0,
+         bukrs LIKE anep-bukrs,
+         anln1 LIKE anep-anln1,
+         anln2 LIKE anep-anln2,
+         gjahr LIKE anep-gjahr,
+         lnran LIKE anep-lnran,
+         afabe LIKE anep-afabe,
+         zujhr LIKE anep-zujhr,
+         zucod LIKE anep-zucod,
+
+         anbtr LIKE  anep-anbtr,
+         bwasl LIKE  anep-bwasl,
+       END OF it_siganep  .
+
+
+  DATA:BEGIN OF it_anlp OCCURS 0,
+         bukrs  LIKE anlp-bukrs,
+         gjahr  LIKE anlp-gjahr,
+         peraf  LIKE anlp-peraf,
+         afbnr  LIKE anlp-afbnr,
+         anln1  LIKE anlp-anln1,
+         anln2  LIKE anlp-anln2,
+         afaber LIKE anlp-afaber,
+         zujhr  LIKE anlp-zujhr,
+         zucod  LIKE anlp-zucod,
+
+         nafag  LIKE anlp-nafag,
+         nafaz  LIKE anlp-nafaz,
+         aafag  LIKE anlp-aafag,
+         aafaz  LIKE anlp-aafaz,
+       END OF it_anlp.
+
+
+  "资产类别描述
+  DATA:BEGIN OF it_ankt OCCURS 0,
+         anlkl TYPE ankt-anlkl, "资产类别
+         txk20 TYPE ankt-txk20, "资产类别描述
+       END OF it_ankt.
+
+  "成本中心描述
+  DATA:BEGIN OF it_cskt OCCURS 0,
+         kostl TYPE cskt-kostl,
+         kokrs TYPE cskt-kokrs,
+         ktext TYPE cskt-ktext,
+       END OF it_cskt.
+
+  ""利润中心描述
+  DATA:BEGIN OF it_cepct OCCURS 0,
+         prctr TYPE cepct-prctr,
+         kokrs TYPE cskt-kokrs,
+         ktext TYPE cepct-ltext,
+       END OF it_cepct.
+
+  DATA:BEGIN OF it_anlb OCCURS 0,
+         bukrs TYPE anlb-bukrs,
+         anln1 TYPE anlb-anln1,
+         anln2 TYPE anlb-anln2,
+         afabe TYPE anlb-afabe,
+         bdatu TYPE anlb-bdatu,
+         ndjar TYPE anlb-ndjar, "使用年限
+         ndper TYPE anlb-ndper, "使用期间
+         afabg TYPE anlb-afabg, "折旧开始日期
+       END OF it_anlb.
+
+  DATA:BEGIN OF it_t087t OCCURS 0,
+         spras TYPE t087t-spras,
+         ordnr TYPE t087t-ordnr,
+         ord4x TYPE t087t-ord4x,
+         ordtx TYPE t087t-ordtx,
+       END OF it_t087t.
+
+  DATA:BEGIN OF it_aufk OCCURS 0,
+         aufnr TYPE aufk-aufnr,
+         ktext TYPE aufk-ktext,
+       END OF it_aufk.
+
+
+
+  IF gt_item[] IS NOT INITIAL .
+    "ANLC
+    SELECT
+           bukrs
+           anln1
+           anln2
+           gjahr
+           afabe
+           zujhr
+           zucod
+
+           kansw
+           knafa
+           kaafa
+           nafag
+           aafag
+           INTO CORRESPONDING FIELDS OF TABLE it_anlc
+           FROM anlc
+           FOR ALL ENTRIES IN gt_item
+           WHERE bukrs EQ gt_item-bukrs
+             AND anln1 EQ gt_item-anln1
+             AND afabe EQ '01'
+             AND gjahr EQ p_zujhr.
+*             AND gjahr EQ gt_item-zujhr.
+
+
+    "ANEP ANEA ANEK
+    SELECT
+          a~bukrs
+          a~anln1
+          a~anln2
+          a~gjahr
+          a~lnran
+          a~afabe
+          a~zujhr
+          a~zucod
+
+          a~anbtr
+          a~bwasl
+          b~nafav
+          b~nafal
+          b~aafav
+          b~aafal
+
+          c~budat
+          INTO CORRESPONDING FIELDS OF TABLE  it_anep
+          FROM anep  AS a
+          JOIN anea  AS b ON a~bukrs EQ b~bukrs AND a~anln1 EQ b~anln1 AND a~anln2 EQ b~anln2
+    AND a~gjahr EQ b~gjahr AND  a~lnran EQ b~lnran AND  a~afabe EQ b~afabe AND  a~zujhr EQ b~zujhr AND a~zucod  EQ b~zucod
+          JOIN anek  AS c ON  a~bukrs EQ c~bukrs AND  a~gjahr EQ c~gjahr AND a~anln1 EQ c~anln1
+    AND a~anln2 EQ c~anln2 AND a~lnran EQ c~lnran
+
+    FOR ALL ENTRIES IN gt_item
+    WHERE a~bukrs EQ gt_item-bukrs
+     AND  a~anln1 EQ gt_item-anln1
+     AND  a~bwasl IN ('250','400','320','330','200')
+      AND a~afabe EQ '01'
+      AND a~gjahr EQ p_zujhr.
+*     AND  a~gjahr EQ gt_item-zujhr.
+
+    "single anep
+    SELECT
+          a~bukrs
+          a~anln1
+          a~anln2
+          a~gjahr
+          a~lnran
+          a~afabe
+          a~zujhr
+          a~zucod
+          a~anbtr
+          a~bwasl
+          INTO CORRESPONDING FIELDS OF TABLE  it_siganep
+          FROM anep  AS a
+    JOIN anek AS b ON  a~bukrs EQ b~bukrs AND  a~gjahr EQ b~gjahr AND a~belnr EQ b~belnr
+    FOR ALL ENTRIES IN gt_item
+    WHERE a~bukrs EQ gt_item-bukrs
+     AND  a~anln1 EQ gt_item-anln1
+     AND  a~bwasl NOT IN ('640','650','Z64','Z65')
+     AND  b~monat LE p_zuper
+     AND  a~afabe EQ '01'
+     AND a~gjahr EQ p_zujhr.
+
+
+    "ANLP
+    SELECT
+            bukrs
+            gjahr
+            peraf
+            afbnr
+            anln1
+            anln2
+            afaber
+            zujhr
+            zucod
+
+            nafag
+            nafaz
+            aafag
+            aafaz
+          INTO CORRESPONDING FIELDS OF TABLE it_anlp
+          FROM anlp
+          FOR ALL ENTRIES IN gt_item
+          WHERE bukrs EQ gt_item-bukrs
+           AND  anln1 EQ gt_item-anln1
+           AND afaber EQ '01'
+           AND gjahr EQ p_zujhr.
+
+    "资产类别描述
+    SELECT anlkl txk20 INTO CORRESPONDING FIELDS OF  TABLE it_ankt
+      FROM ankt
+      FOR ALL ENTRIES IN gt_item
+       WHERE anlkl EQ gt_item-anlkl
+         AND spras EQ '1'.
+
+    "成本中心描述
+    SELECT  kostl kokrs ktext INTO CORRESPONDING FIELDS OF TABLE it_cskt
+      FROM cskt
+      FOR ALL ENTRIES IN gt_item
+      WHERE kostl EQ gt_item-kostl
+        AND spras EQ '1'
+        AND kokrs EQ gt_item-kokrs
+        AND datbi LE gt_item-datbi.
+
+    "责任成本中心描述
+    SELECT  kostl kokrs ktext APPENDING CORRESPONDING FIELDS OF TABLE it_cskt
+      FROM cskt
+      FOR ALL ENTRIES IN gt_item
+      WHERE kostl EQ gt_item-kostlv
+        AND spras EQ '1'
+        AND kokrs EQ gt_item-kokrs
+        AND datbi LE gt_item-datbi.
+
+
+    "利润中心描述
+    SELECT  prctr kokrs ktext INTO CORRESPONDING FIELDS OF TABLE it_cepct
+      FROM cepct
+      FOR ALL ENTRIES IN gt_item
+      WHERE prctr EQ gt_item-prctr
+        AND spras EQ '1'
+        AND kokrs EQ gt_item-kokrs
+        AND datbi LE gt_item-datbi.
+
+    "ANLB
+    SELECT  bukrs anln1 anln2 afabe bdatu ndjar ndper afabg INTO CORRESPONDING FIELDS OF TABLE it_anlb
+      FROM anlb
+      FOR ALL ENTRIES IN gt_item
+      WHERE bukrs EQ gt_item-bukrs
+       AND  anln1 EQ gt_item-anln1
+       AND  anln2 EQ gt_item-anln2.
+
+    SELECT spras ordnr ord4x ordtx INTO CORRESPONDING FIELDS OF TABLE it_t087t
+      FROM t087t
+      FOR ALL ENTRIES IN gt_item
+      WHERE ord4x EQ gt_item-ord41
+        AND spras EQ '1'.
+
+
+    SELECT spras ordnr ord4x ordtx APPENDING CORRESPONDING FIELDS OF TABLE it_t087t
+      FROM t087t
+      FOR ALL ENTRIES IN gt_item
+      WHERE ord4x EQ gt_item-ord42
+        AND spras EQ '1'.
+
+    SELECT aufnr ktext INTO CORRESPONDING FIELDS OF  TABLE it_aufk
+      FROM aufk
+     FOR ALL ENTRIES IN gt_item
+      WHERE aufnr EQ gt_item-caufn.
+  ENDIF.
+
+  SORT gt_item BY anln1.
+  SORT it_anlp BY bukrs gjahr peraf afbnr.
+
+
+  LOOP AT gt_item INTO gw_item.
+    "序号
+    lv_num = lv_num + 1.
+    gs_lines-znum1 = lv_num.
+    gs_lines-znum2 = lv_num.
+    gs_lines-znum3 = lv_num.
+    "其他字段
+    MOVE:gw_item-anln1 TO gs_lines-anln1,
+         gw_item-anln2 TO gs_lines-anln2,
+*         gw_item-anln1 TO gs_lines-anln3,
+         gw_item-txt50 TO gs_lines-ztxt1,
+         gw_item-txt50 TO gs_lines-ztxt2,
+         gw_item-txt50 TO gs_lines-ztxt3,
+         gw_item-bukrs TO gs_lines-bukrs,
+         gw_item-anlkl TO gs_lines-anlkl,
+         gw_item-txa50 TO gs_lines-txa50,
+         gw_item-sernr TO gs_lines-sernr,
+         gw_item-menge TO gs_lines-menge,
+         gw_item-meins TO gs_lines-meins,
+         gw_item-aktiv TO gs_lines-aktiv,
+         gw_item-deakt TO gs_lines-deakt,
+         gw_item-kostl TO gs_lines-kostl,
+         gw_item-kostlv TO gs_lines-kostlv,
+         gw_item-caufn TO gs_lines-caufn,
+         gw_item-raumn TO gs_lines-raumn,
+         gw_item-kfzkz TO gs_lines-kfzkz,
+         gw_item-ord41 TO gs_lines-ord41, "增加方式
+         gw_item-ord42 TO gs_lines-ord42, "使用状况
+         gw_item-prctr TO gs_lines-prctr,
+         gw_item-invnr TO gs_lines-invnr, "存货号
+         gw_item-ord43 TO gs_lines-ord43, "专项资产
+         gw_item-ord44 TO gs_lines-ord44. "低值易耗品细类
+
+
+    "年初数 原值或者累计折旧 或者净值
+    READ TABLE it_anlc WITH KEY anln1 = gw_item-anln1 anln2 = gw_item-anln2 bukrs = gw_item-bukrs.
+    IF sy-subrc EQ 0.
+      "以前年度发生原值ANLC-KANSW
+      gs_lines-qcs1 = it_anlc-kansw.
+      "以前年度普通折旧ANLC-KNAFA+以前年度计划外折旧ANLC-KAAFA，取出后乘以-1
+      gs_lines-qcs2 = ( it_anlc-knafa + it_anlc-kaafa ) * -1.
+    ENDIF.
+
+    gs_lines-qcs3 = gs_lines-qcs1 - gs_lines-qcs2.
+
+
+    "本期增加数或本期减少数    原值或者累计折旧 或者净值
+
+    LOOP AT it_siganep WHERE  anln1 = gw_item-anln1 AND anln2 = gw_item-anln2 AND  bukrs = gw_item-bukrs.
+      IF it_siganep-anbtr GT 0.
+        gs_lines-bqzj1 =  gs_lines-bqzj1 + it_siganep-anbtr .
+      ELSE.
+        gs_lines-bqjs1 = gs_lines-bqjs1  + it_siganep-anbtr .
+      ENDIF.
+    ENDLOOP.
+    gs_lines-bqjs1 = gs_lines-bqjs1 * -1.
+    "（1）取本年计提折旧
+*判断ANLP表是否有记录：
+*如果有记录，则取：“已记一般折旧
+*（ANLP-NAFAG）”的第一条记录+所有期间“待过帐的正常折旧（ANLP-NAFAZ）”
+*如果ANLP中无记录则： 则取：已记一般折旧（ANLC-NAFAG）
+    CLEAR:lv_tabix.
+    LOOP AT it_anlp WHERE anln1 EQ gw_item-anln1 AND anln2 = gw_item-anln2  AND nafaz IS NOT INITIAL AND bukrs = gw_item-bukrs.
+      lv_tabix = lv_tabix + 1.
+      IF lv_tabix EQ 1.
+        gs_lines-bqzj21 = gs_lines-bqzj21 + it_anlp-nafag.
+      ENDIF.
+      IF  it_anlp-peraf LE p_zuper .
+        gs_lines-bqzj21 = gs_lines-bqzj21 + it_anlp-nafaz.
+      ENDIF.
+    ENDLOOP.
+*    IF it_anlp IS INITIAL.
+    IF sy-subrc NE 0.
+      READ TABLE it_anlc WITH KEY anln1 = gw_item-anln1 anln2 = gw_item-anln2  bukrs = gw_item-bukrs.
+      IF sy-subrc EQ 0.
+        gs_lines-bqzj21 = gs_lines-bqzj21 + it_anlc-nafag.
+      ENDIF.
+    ENDIF.
+    IF gs_lines-bqzj21 LT 0.
+      gs_lines-bqzj21 = gs_lines-bqzj21 * -1.
+      gs_lines-bqjs21 = 0.
+    ELSE.
+      gs_lines-bqjs21 =  gs_lines-bqzj21.
+      gs_lines-bqzj21 = 0.
+    ENDIF.
+
+
+*（2）本年补提折旧
+*判断ANLP表是否有记录：
+*如果有记录，则取：“计划外折旧记帐
+*（ANLP-AAFAG）”的第一条记录+所有期间“计划外折旧TBP（ANLP-AAFAZ）”
+*如果ANLP中无记录则： 则取：“计划外折旧记帐（ANLC-AAFAG）”
+    CLEAR:lv_tabix.
+    LOOP AT it_anlp WHERE anln1 EQ gw_item-anln1 AND anln2 = gw_item-anln2 AND aafaz IS NOT INITIAL AND bukrs = gw_item-bukrs.
+      lv_tabix = lv_tabix + 1.
+      IF lv_tabix EQ 1.
+        gs_lines-bqzj22 = gs_lines-bqzj22 + it_anlp-aafag.
+      ENDIF.
+      IF  it_anlp-peraf LE p_zuper .
+        gs_lines-bqzj22 = gs_lines-bqzj22 + it_anlp-aafaz.
+      ENDIF.
+    ENDLOOP.
+*    IF it_anlp IS INITIAL.
+    IF sy-subrc NE 0.
+      READ TABLE it_anlc WITH KEY anln1 = gw_item-anln1 anln2 = gw_item-anln2 bukrs = gw_item-bukrs.
+      IF sy-subrc EQ 0.
+        gs_lines-bqzj22 = gs_lines-bqzj22 + it_anlc-aafag.
+      ENDIF.
+    ENDIF.
+    IF gs_lines-bqzj22 LT 0.
+      gs_lines-bqzj22 = gs_lines-bqzj22 * -1.
+      gs_lines-bqjs22 = 0.
+    ELSE.
+      gs_lines-bqjs22 = gs_lines-bqzj22.
+      gs_lines-bqzj22 = 0.
+    ENDIF.
+
+
+*(3)其他折旧
+*ANEP表、ANEA表、ANEK表主键关联； 取ANEP中的事务类型（ANEP-BWASL）=“1*、2*、Z2*、Z6*、Z7*”时，
+*则取：比例累积正常折旧（ANEA-NAFAV）+比例正常折旧（ANEA-NAFAL）+比例计划外折旧（
+*ANEA-AAFAV）+比例计划外折旧（ANEA-AAFAL
+    LOOP AT it_anep WHERE  anln1 EQ gw_item-anln1 AND anln2 = gw_item-anln2 AND  bukrs = gw_item-bukrs AND budat+4(2) LE p_zuper.
+      gs_lines-bqzj23 = gs_lines-bqzj23 + it_anep-nafav + it_anep-aafav + it_anep-aafal + it_anep-nafal.
+    ENDLOOP .
+*（4）以上3部分中，金额为负的，乘以-1后放本期增加，金额为正的放本期减少
+    IF gs_lines-bqzj23 LT 0.
+      gs_lines-bqzj23 = gs_lines-bqzj23 * -1.
+      gs_lines-bqjs23 = 0.
+    ELSE.
+      gs_lines-bqjs23 = gs_lines-bqzj23.
+      gs_lines-bqzj23 = 0.
+    ENDIF.
+
+    gs_lines-bqzj2 = gs_lines-bqzj21 + gs_lines-bqzj22 + gs_lines-bqzj23.
+    gs_lines-bqjs2 = gs_lines-bqjs21 + gs_lines-bqjs22 + gs_lines-bqjs23.
+
+    gs_lines-bqzj3 = gs_lines-bqzj1 - gs_lines-bqzj2.
+    gs_lines-bqjs3 = gs_lines-bqjs1 - gs_lines-bqjs2.
+
+***********************************"取本月折旧*********************
+    "（1）取本年计提折旧
+*判断ANLP表是否有记录：
+*如果有记录，则取：“已记一般折旧
+*（ANLP-NAFAG）”的第一条记录+所有期间“待过帐的正常折旧（ANLP-NAFAZ）”
+*如果ANLP中无记录则： 则取：已记一般折旧（ANLC-NAFAG）
+    CLEAR:lv_tabix .
+    LOOP AT it_anlp WHERE anln1 EQ gw_item-anln1 AND anln2 = gw_item-anln2  AND nafaz IS NOT INITIAL AND bukrs = gw_item-bukrs.
+      lv_tabix = lv_tabix + 1.
+*      IF lv_tabix EQ 1.
+*        gs_lines-byzj = gs_lines-byzj + it_anlp-nafag.
+*      ENDIF.
+      IF  it_anlp-peraf EQ p_zuper .
+        gs_lines-byzj = gs_lines-byzj + it_anlp-nafaz.
+      ENDIF.
+    ENDLOOP.
+*    IF sy-subrc NE 0.
+*      READ TABLE it_anlc WITH KEY anln1 = gw_item-anln1 anln2 = gw_item-anln2 bukrs = gw_item-bukrs.
+*      IF sy-subrc EQ 0.
+*        gs_lines-byzj = gs_lines-byzj + it_anlc-nafag.
+*      ENDIF.
+*    ENDIF.
+
+
+*（2）本年补提折旧
+*判断ANLP表是否有记录：
+*如果有记录，则取：“计划外折旧记帐
+*（ANLP-AAFAG）”的第一条记录+所有期间“计划外折旧TBP（ANLP-AAFAZ）”
+*如果ANLP中无记录则： 则取：“计划外折旧记帐（ANLC-AAFAG）”
+    CLEAR:lv_tabix .
+    LOOP AT it_anlp WHERE anln1 EQ gw_item-anln1 AND anln2 = gw_item-anln2  AND aafaz IS NOT INITIAL AND bukrs = gw_item-bukrs.
+      lv_tabix = lv_tabix + 1.
+*      IF lv_tabix EQ 1.
+*        gs_lines-byzj = gs_lines-byzj + it_anlp-aafag.
+*      ENDIF.
+      IF  it_anlp-peraf EQ p_zuper .
+        gs_lines-byzj = gs_lines-byzj + it_anlp-aafaz.
+      ENDIF.
+    ENDLOOP.
+*    IF sy-subrc NE 0.
+*      READ TABLE it_anlc WITH KEY anln1 = gw_item-anln1  anln2 = gw_item-anln2 bukrs = gw_item-bukrs.
+*      IF sy-subrc EQ 0.
+*        gs_lines-byzj = gs_lines-byzj + it_anlc-aafag.
+*      ENDIF.
+*    ENDIF.
+
+*(3)其他折旧
+*ANEP表、ANEA表、ANEK表主键关联； 取ANEP中的事务类型（ANEP-BWASL）=“1*、2*、Z2*、Z6*、Z7*”时，
+*则取：比例累积正常折旧（ANEA-NAFAV）+比例正常折旧（ANEA-NAFAL）+比例计划外折旧（
+*ANEA-AAFAV）+比例计划外折旧（ANEA-AAFAL
+    LOOP AT it_anep WHERE  anln1 EQ gw_item-anln1 AND anln2 = gw_item-anln2 AND  bukrs = gw_item-bukrs AND budat+4(2) EQ p_zuper.
+      gs_lines-byzj = gs_lines-byzj + it_anep-nafav + it_anep-aafav + it_anep-aafal + it_anep-nafal.
+    ENDLOOP .
+
+    "汇总*-1
+    gs_lines-byzj = gs_lines-byzj * -1.
+
+**************取本月折旧end************
+
+    "期末 = 年初+本期增加-本期减少
+    gs_lines-qms1 = gs_lines-qcs1 + gs_lines-bqzj1 - gs_lines-bqjs1.
+    gs_lines-qms2 = gs_lines-qcs2 + gs_lines-bqzj2 - gs_lines-bqjs2.
+    gs_lines-qms3 = gs_lines-qcs3 + gs_lines-bqzj3 - gs_lines-bqjs3.
+
+    "取其他文本信息
+
+    "资产类别描述
+    READ TABLE it_ankt WITH KEY anlkl = gw_item-anlkl.
+    IF sy-subrc EQ 0.
+      gs_lines-txk20 = it_ankt-txk20.
+    ENDIF.
+
+    "成本中心描述
+    READ TABLE it_cskt WITH KEY kostl = gw_item-kostl kokrs = gw_item-kokrs.
+    IF sy-subrc EQ 0.
+      gs_lines-ktext = it_cskt-ktext.
+    ENDIF.
+
+    READ TABLE it_cskt WITH KEY kostl = gw_item-kostlv kokrs = gw_item-kokrs.
+    IF sy-subrc EQ 0.
+      gs_lines-ktext1 = it_cskt-ktext.
+    ENDIF.
+
+
+
+    "利润中心描述
+    READ TABLE it_cepct WITH KEY prctr = gw_item-prctr kokrs = gw_item-kokrs.
+    IF sy-subrc EQ 0.
+      gs_lines-ltext = it_cepct-ktext.
+    ENDIF.
+    "增加方式描述
+    READ TABLE it_t087t WITH KEY  ord4x = gw_item-ord41 ordnr = '1'.
+    IF sy-subrc EQ 0.
+      gs_lines-ordtx41 = it_t087t-ordtx.
+    ENDIF.
+    "使用状况描述
+    READ TABLE it_t087t WITH KEY  ord4x = gw_item-ord42 ordnr = '2'.
+    IF sy-subrc EQ 0.
+      gs_lines-ordtx42 = it_t087t-ordtx.
+    ENDIF.
+
+    READ TABLE it_anlb WITH KEY bukrs = gw_item-bukrs anln1 = gw_item-anln1 anln2 = gw_item-anln2.
+    IF sy-subrc EQ 0.
+      gs_lines-ndjar  = it_anlb-ndjar. "使用年限
+      gs_lines-ndper  = it_anlb-ndper. "使用期间
+      gs_lines-afabg  = it_anlb-afabg. "折旧开始日期
+    ENDIF.
+
+    "内部订单描述
+    READ TABLE it_aufk WITH KEY aufnr = gw_item-caufn.
+    IF sy-subrc EQ 0.
+      gs_lines-ktext2 = it_aufk-ktext.
+    ENDIF.
+
+***根据成本中心找功能范围及名称
+    IF gs_lines-kostl IS NOT INITIAL.
+      SELECT SINGLE func_area INTO gs_lines-fkber FROM csks WHERE kokrs = '1000' AND kostl = gs_lines-kostl AND datbi >= sy-datum AND datab <= sy-datum.
+      IF sy-subrc = 0.
+        SELECT SINGLE fkbtx INTO gs_lines-fkbtx FROM tfkbt WHERE spras = sy-langu AND fkber = gs_lines-fkber.
+      ENDIF.
+    ENDIF.
+
+    PERFORM fm_append_to_table CHANGING gs_lines.
+    CLEAR gs_lines.
+  ENDLOOP.
+ENDFORM .
+
+
+FORM fm_append_to_table  CHANGING ps_lines TYPE gty_excel_lines.
+*  PERFORM flag_to_front CHANGING ps_lines-qcs1.
+*  PERFORM flag_to_front CHANGING ps_lines-bqzj1.
+*  PERFORM flag_to_front CHANGING ps_lines-bqjs1.
+*  PERFORM flag_to_front CHANGING ps_lines-qms1.
+*
+*  PERFORM flag_to_front CHANGING ps_lines-qcs2.
+*  PERFORM flag_to_front CHANGING ps_lines-bqzj2.
+*  PERFORM flag_to_front CHANGING ps_lines-bqjs2.
+*  PERFORM flag_to_front CHANGING ps_lines-qms2.
+*
+*  PERFORM flag_to_front CHANGING ps_lines-qcs3.
+*  PERFORM flag_to_front CHANGING ps_lines-bqzj3.
+*  PERFORM flag_to_front CHANGING ps_lines-bqjs3.
+*  PERFORM flag_to_front CHANGING ps_lines-qms3.
+*  CLEAR gt_lines.
+  APPEND ps_lines TO gt_lines.
+  MOVE-CORRESPONDING gt_lines TO gt_lines3.
+ENDFORM.
+
+FORM flag_to_front  CHANGING p_dmbtr.
+  DATA: lv_len TYPE i.
+  IF p_dmbtr < 0.
+    lv_len = strlen( p_dmbtr ) - 1.
+    p_dmbtr = '-' && p_dmbtr+0(lv_len).
+  ELSEIF p_dmbtr = 0.
+    p_dmbtr = '0.00'.
+  ENDIF.
+  CONDENSE p_dmbtr.
+ENDFORM.
+*
+
+FORM frm_output_alv."ALV显示界面
+  DATA : col_pos TYPE i VALUE 1.
+
+  CLEAR:it_fieldcat,wa_fieldcat.
+
+  gs_layout-zebra = 'X'.
+  gs_layout-cwidth_opt = 'X'."
+*  gs_layout-stylefname = 'FIELD_STYLE'. " 将内表中的字段名存入显示格式
+*  gs_layout-box_fname        = 'SEL'.
+*  wa_events-name = 'CALLER_EXIT'.
+*  wa_events-form = 'CALLER_EXIT'.
+*  APPEND wa_events TO it_events.
+
+  PERFORM fieldcat_int USING col_pos  'BUKRS'   ' '   '公司代码'          ''  'BUKRS' 'T001' '' '' ''.
+  PERFORM fieldcat_int USING col_pos  'ANLN1'   ' '   '资产编号'   ''  'ANLN1' 'ANLA' '' '' ''.
+  PERFORM fieldcat_int USING col_pos  'ANLN2'   ' '   '次资产编号'   ''  'ANLN2' 'ANLA' '' '' ''.
+  PERFORM fieldcat_int USING col_pos  'ZTXT1'   ' '   '名称'   ''  '' '' ''   '' ''.
+*  PERFORM fieldcat_int USING col_pos  'QDFS1'   ' '   '取得方式'   ''  '' '' ''   ''  ''.
+  PERFORM fieldcat_int USING col_pos  'QCS1'   ' '   '原值年初数'   'X'  '' '' ''   '' 'X'.
+  PERFORM fieldcat_int USING col_pos  'BQZJ1'   ' '   '原值本期增加'   'X'  '' '' ''   '' 'X'.
+  PERFORM fieldcat_int USING col_pos  'BQJS1'   ' '   '原值本期减少'   'X'  '' '' ''   '' 'X'.
+  PERFORM fieldcat_int USING col_pos  'QMS1'   ' '   '原值期末数'   'X'  '' '' ''   '' 'X'.
+
+  PERFORM fieldcat_int USING col_pos  'QCS2'   ' '   '累计折旧年初数'   'X'  '' '' ''   '' 'X'.
+  PERFORM fieldcat_int USING col_pos  'BQZJ2'   ' '   '累计折旧本期增加'   'X'  '' '' ''   '' 'X'.
+  PERFORM fieldcat_int USING col_pos  'BQJS2'   ' '   '累计折旧本期减少'   'X'  '' '' ''   '' 'X'.
+  PERFORM fieldcat_int USING col_pos  'QMS2'   ' '   '累计折旧期末数'   'X'  '' '' ''   '' 'X'.
+
+  PERFORM fieldcat_int USING col_pos  'QCS3'   ' '   '净值年初数'   'X'  '' '' ''   '' 'X'.
+  PERFORM fieldcat_int USING col_pos  'BQZJ3'   ' '   '净值本期增加'   'X'  '' '' ''   '' 'X'.
+  PERFORM fieldcat_int USING col_pos  'BQJS3'   ' '   '净值本期减少'   'X'  '' '' ''   '' 'X'.
+  PERFORM fieldcat_int USING col_pos  'QMS3'   ' '   '净值期末数'   'X'  '' '' ''   '' 'X'.
+
+  PERFORM fieldcat_int USING col_pos  'BYZJ'   ' '   '本月折旧'   'X'  '' '' ''   '' 'X'.
+
+  PERFORM fieldcat_int USING col_pos  'ANLKL'   ' '   '资产类别'   ''  '' '' ''   '' ''.
+  PERFORM fieldcat_int USING col_pos  'TXK20'   ' '   '资产类别描述'   ''  '' '' ''   '' ''.
+  PERFORM fieldcat_int USING col_pos  'TXA50'   ' '   '规格型号'   ''  '' '' ''   '' ''.
+  PERFORM fieldcat_int USING col_pos  'SERNR'   ' '   '序列号'   ''  '' '' ''   '' ''.
+  PERFORM fieldcat_int USING col_pos  'MENGE'   ' '   '数量'   ''  '' '' ''   '' ''.
+  PERFORM fieldcat_int USING col_pos  'MEINS'   ' '   '单位'   ''  '' '' ''   '' ''.
+  PERFORM fieldcat_int USING col_pos  'AKTIV'   ' '   '资本化日期'   ''  '' '' ''   '' ''.
+  PERFORM fieldcat_int USING col_pos  'DEAKT'   ' '   '不活动日期'   ''  '' '' ''   '' ''.
+  PERFORM fieldcat_int USING col_pos  'KOSTL'   ' '   '成本中心'   ''  'KOSTL' 'ANLZ' ''   '' ''.
+  PERFORM fieldcat_int USING col_pos  'KTEXT'   ' '   '成本中心描述'   ''  '' '' ''   '' ''.
+
+  PERFORM fieldcat_int USING col_pos  'FKBER'   ' '   '功能范围'   ''  'FKBER' 'TFKBT' ''   '' ''.
+  PERFORM fieldcat_int USING col_pos  'FKBTX'   ' '   '功能范围名称'   ''  '' '' ''   '' ''.
+
+  PERFORM fieldcat_int USING col_pos  'PRCTR'   ' '   '利润中心'   ''  '' '' ''   '' ''.
+  PERFORM fieldcat_int USING col_pos  'LTEXT'   ' '   '利润中心描述'   ''  '' '' ''   '' ''.
+  PERFORM fieldcat_int USING col_pos  'KOSTLV'   ' '   '责任成本中心'   ''  '' '' ''   '' ''.
+  PERFORM fieldcat_int USING col_pos  'KTEXT1'   ' '   '责任成本中心描述'   ''  '' '' ''   '' ''.
+  PERFORM fieldcat_int USING col_pos  'CAUFN'   ' '   '内部订单'   ''  '' '' ''   '' ''.
+  PERFORM fieldcat_int USING col_pos  'KTEXT2'   ' '   '内部订单描述'   ''  '' '' ''   '' ''.
+  PERFORM fieldcat_int USING col_pos  'RAUMN'   ' '   '使用人'   ''  '' '' ''   '' ''.
+  PERFORM fieldcat_int USING col_pos  'KFZKZ'   ' '   '存放位置'   ''  '' '' ''   '' ''.
+  PERFORM fieldcat_int USING col_pos  'ORD41'   ' '   '增加方式'   ''  '' '' ''   '' ''.
+  PERFORM fieldcat_int USING col_pos  'ORDTX41'   ' '   '增加方式描述'   ''  '' '' ''   '' ''.
+  PERFORM fieldcat_int USING col_pos  'ORD42'   ' '   '使用状况'   ''  '' '' ''   '' ''.
+  PERFORM fieldcat_int USING col_pos  'ORDTX42'   ' '   '使用状况描述'   ''  '' '' ''   '' ''.
+  PERFORM fieldcat_int USING col_pos  'NDJAR'   ' '   '使用年限'   ''  '' '' ''   '' ''.
+  PERFORM fieldcat_int USING col_pos  'NDPER'   ' '   '使用期间'   ''  '' '' ''   '' ''.
+  PERFORM fieldcat_int USING col_pos  'AFABG'   ' '   '折旧开始日期'   ''  '' '' ''   '' ''.
+
+  PERFORM fieldcat_int USING col_pos  'INVNR'   ' '   '原资产编号'   ''  'INVNR' 'ANLA' ''   '' ''.
+  PERFORM fieldcat_int USING col_pos  'ORD43'   ' '   '专项资产'   ''  '' '' ''   '' ''.
+  PERFORM fieldcat_int USING col_pos  'ORD44'   ' '   '低值易耗品细类'   ''  '' '' ''   '' ''.
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program       = sy-repid
+      is_layout_lvc            = gs_layout
+      it_fieldcat_lvc          = it_fieldcat
+*     it_events                = it_events
+      i_save                   = 'A'
+      i_callback_pf_status_set = 'SET_PF_STATUS'
+*     i_callback_user_command  = 'ALV_USER_COMMAND'
+*     i_grid_settings          = i_grid_settings
+    TABLES
+      t_outtab                 = gt_lines3[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+
+  IF sy-subrc <> 0.
+* MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+*         WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+  ENDIF.
+ENDFORM.
+
+FORM set_pf_status USING rt_extab TYPE slis_t_extab.
+
+  DATA: wa_extab TYPE slis_extab.
+
+  SET PF-STATUS 'ZRPFI010' EXCLUDING rt_extab.
+
+ENDFORM.                    "set_pf_status1
+
+FORM fieldcat_int  USING   p_col_pos         " 1
+                            p_fieldname       " 2
+                            p_key             " 3
+                            p_seltext_l       " 4
+                            p_zero
+                            p_filename
+                            p_talbename
+                            p_outputlen
+                            p_edit
+                            p_do_sum.
+
+  wa_fieldcat-col_pos       = p_col_pos.
+  wa_fieldcat-fieldname     = p_fieldname.
+  wa_fieldcat-key           = p_key.
+  wa_fieldcat-coltext     = p_seltext_l.
+  wa_fieldcat-no_zero        = p_zero.
+  wa_fieldcat-ref_field   = p_filename.
+  wa_fieldcat-ref_table    = p_talbename.
+  wa_fieldcat-tipddictxt       = 'L'.
+  wa_fieldcat-edit           = p_edit  .
+  wa_fieldcat-do_sum        = p_do_sum.
+  APPEND wa_fieldcat TO it_fieldcat.
+  p_col_pos = p_col_pos + 1.
+  CLEAR: wa_fieldcat.
+ENDFORM.                    " FIELDCAT_INT
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_AUTH
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_auth .
+  DATA:BEGIN OF lt_bukrs OCCURS 0,
+         bukrs LIKE t001-bukrs,
+       END OF lt_bukrs.
+  CHECK sy-ucomm = 'ONLI'.
+  REFRESH r_bukrs.
+
+  SELECT bukrs INTO TABLE lt_bukrs FROM t001 WHERE bukrs IN s_bukrs.
+  IF sy-subrc NE 0.
+    MESSAGE '输入公司代码无效' TYPE 'E'.
+  ELSE.
+    LOOP AT lt_bukrs.
+      AUTHORITY-CHECK OBJECT 'F_BKPF_BUK'
+                    ID 'BUKRS' FIELD lt_bukrs-bukrs
+                    ID 'ACTVT' FIELD '03'.
+      IF sy-subrc <> 0.
+        DELETE lt_bukrs.
+      ELSE.
+        r_bukrs = 'IEQ'.
+        r_bukrs-low = lt_bukrs-bukrs.
+        APPEND r_bukrs.
+        CLEAR r_bukrs.
+      ENDIF.
+    ENDLOOP.
+    IF r_bukrs[] IS INITIAL.
+      MESSAGE '你没有公司代码的权限' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+ENDFORM.

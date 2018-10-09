@@ -1,0 +1,10 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPPP002S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_werks FOR mapl-werks,
+               s_matnr FOR mapl-matnr,
+               s_dispo FOR marc-dispo,
+               s_statu FOR plko-statu.
+SELECTION-SCREEN END OF BLOCK blc.

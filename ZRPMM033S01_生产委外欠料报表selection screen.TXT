@@ -1,0 +1,21 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM033S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK blc1 WITH FRAME TITLE TEXT-001.
+PARAMETERS:r1 RADIOBUTTON GROUP ra DEFAULT 'X' USER-COMMAND com,
+           r2 RADIOBUTTON GROUP ra.
+SELECTION-SCREEN END OF BLOCK blc1.
+SELECTION-SCREEN BEGIN OF BLOCK blc2 WITH FRAME TITLE TEXT-002.
+SELECT-OPTIONS:s_matnr FOR mara-matnr,
+               s_aufnr FOR aufk-aufnr MODIF ID m1,
+               s_gstrp FOR afko-gstrp  MODIF ID m1,
+               s_ebeln FOR ekko-ebeln MODIF ID m2,
+               s_lifnr FOR ekko-lifnr MODIF ID m2,
+               s_bednr FOR ekpo-bednr MODIF ID m2,
+               s_bedat FOR ekko-bedat MODIF ID m2,
+               s_frgrl FOR ekko-frgrl MODIF ID m2,
+               s_erdat FOR aufk-erdat.
+PARAMETERS:p_werks LIKE t001w-werks OBLIGATORY DEFAULT '1000'.
+PARAMETERS:p_chk AS CHECKBOX .   "生产条件也要筛选 add by leimt 20180402
+SELECTION-SCREEN END OF BLOCK blc2.

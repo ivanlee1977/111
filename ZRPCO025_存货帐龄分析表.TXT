@@ -1,0 +1,28 @@
+*&---------------------------------------------------------------------*
+*& Report ZRPCO025
+*&---------------------------------------------------------------------*
+*&存货帐龄分析表
+*&制作人：leimt 日期：20171113
+*&---------------------------------------------------------------------*
+REPORT zrpco025.
+
+INCLUDE zrpco025_top.
+INCLUDE zrpco025_s01.
+INCLUDE zrpco025_f01.
+
+INITIALIZATION.
+
+AT SELECTION-SCREEN OUTPUT.
+
+CALL FUNCTION 'BKK_GET_MONTH_LASTDAY'
+  EXPORTING
+    i_date = sy-datum   "输入日期
+  IMPORTING
+    e_date = p_budat.
+
+START-OF-SELECTION.
+
+PERFORM frm_getdata.
+PERFORM frm_processdata.
+*PERFORM frm_output.
+PERFORM frm_todbs.

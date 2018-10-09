@@ -1,0 +1,545 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP026F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:lt_mast LIKE mast OCCURS 0 WITH HEADER LINE.
+  DATA:ls_cstmat       LIKE cstmat,
+       lt_stpo         LIKE stpox OCCURS 0 WITH HEADER LINE,
+       lt_matcat       LIKE cscmat OCCURS 0 WITH HEADER LINE,
+       lt_matcat_total LIKE cscmat OCCURS 0 WITH HEADER LINE,
+       lt_stpu         LIKE stpu OCCURS 0 WITH HEADER LINE.
+  DATA :lv_objek LIKE ausp-objek,lv TYPE num.
+  DATA: ls_class      LIKE TABLE OF sclass WITH HEADER LINE,
+        ls_objectdata LIKE TABLE OF clobjdat WITH HEADER LINE.
+*  DATA:BEGIN OF lt_aeoi OCCURS 0,
+*         aennr LIKE aeoi-aennr,
+*         aetyp LIKE aeoi-aetyp,
+*         objkt LIKE aeoi-objkt,
+*         revlv LIKE aeoi-revlv,
+*         oitxt LIKE aeoi-oitxt,
+*         datuv LIKE aenr-datuv,
+*       END OF lt_aeoi.
+
+***抓取满足条件的BOM数据
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE lt_mast
+    FROM mast AS a
+    INNER JOIN stko AS b
+    ON a~stlnr = b~stlnr
+    AND a~stlal = b~stlal
+    WHERE a~matnr IN s_matnr
+      AND a~werks IN s_werks
+      AND b~stlty = 'M'.
+***如果输入了物料，需要展到底层，如果没有输入物料，则导出工厂所有BOM
+  IF s_matnr[] IS NOT INITIAL.
+    LOOP AT lt_mast.
+*      PERFORM frm_explo_bom TABLES lt_stpo lt_matcat USING lt_mast-matnr lt_mast-werks 'X' lt_mast-stlal CHANGING ls_cstmat.
+      PERFORM frm_explo_bom TABLES lt_stpo lt_matcat USING lt_mast-matnr lt_mast-werks '' lt_mast-stlal CHANGING ls_cstmat.
+      APPEND LINES OF lt_matcat TO lt_matcat_total.
+    ENDLOOP.
+    SORT lt_matcat_total.
+    DELETE ADJACENT DUPLICATES FROM lt_matcat_total COMPARING ALL FIELDS.
+    IF lt_matcat_total[] IS NOT INITIAL.
+      SELECT *
+        APPENDING CORRESPONDING FIELDS OF TABLE lt_mast
+        FROM mast AS a
+       INNER JOIN stko AS b
+          ON a~stlnr = b~stlnr
+         AND a~stlal = b~stlal
+        FOR ALL ENTRIES IN lt_matcat_total
+       WHERE a~matnr = lt_matcat_total-matnr
+         AND a~werks IN s_werks
+         AND b~stlty = 'M'.
+    ENDIF.
+  ENDIF.
+
+  SORT lt_mast.
+  DELETE ADJACENT DUPLICATES FROM lt_mast COMPARING ALL FIELDS.
+
+***调用函数 展开BOM
+  LOOP AT lt_mast.
+    READ TABLE gt_out WITH KEY matnr = lt_mast-matnr werks = lt_mast-werks stlan = lt_mast-stlan stlal = lt_mast-stlal.
+    CHECK sy-subrc NE 0. "如果已经存在不需要再展BOM
+    REFRESH:lt_stpu.
+    PERFORM frm_explo_bom TABLES lt_stpo lt_matcat USING lt_mast-matnr lt_mast-werks ''  lt_mast-stlal CHANGING ls_cstmat.
+***抓取位号
+    IF lt_stpo[] IS NOT INITIAL.
+      SELECT * INTO TABLE lt_stpu
+        FROM stpu
+         FOR ALL ENTRIES IN lt_stpo
+       WHERE stlty = lt_stpo-stlty
+         AND stlnr = lt_stpo-stlnr
+         AND stlkn = lt_stpo-stlkn
+         AND stpoz = lt_stpo-stpoz.
+    ENDIF.
+***取ECN及版本
+*    REFRESH:lt_aeoi.
+*    SELECT   a~aennr
+*             a~aetyp
+*             a~objkt
+*             a~revlv
+*             a~oitxt
+*             b~datuv
+*         INTO CORRESPONDING FIELDS OF TABLE lt_aeoi
+*         FROM aeoi AS a
+*         INNER JOIN aenr AS b
+*         ON a~aennr = b~aennr
+*         WHERE a~objkt = lt_mast-matnr
+*           AND a~aetyp = '41'.
+*    SORT lt_aeoi BY datuv DESCENDING.
+*    DELETE lt_aeoi WHERE datuv > p_datum.
+
+    SORT lt_stpu.
+
+
+    LOOP AT lt_stpo.
+      gt_out-znum = sy-tabix.
+      gt_out-matnr = lt_mast-matnr.
+      SELECT SINGLE maktx INTO gt_out-maktx_f FROM makt WHERE matnr = gt_out-matnr AND spras = sy-langu.
+      gt_out-posnr = lt_stpo-posnr.
+      IF lt_stpo-postp EQ 'D'.
+        gt_out-idnrk = lt_stpo-doknr.
+*        SELECT SINGLE dktxt INTO gt_out-maktx_z FROM drat WHERE dokar = 'ZCD' AND doknr = gt_out-idnrk AND langu = sy-langu.
+        gt_out-maktx_z = lt_stpo-ojtxp.
+      ELSE.
+        gt_out-idnrk = lt_stpo-idnrk.
+        SELECT SINGLE maktx INTO gt_out-maktx_z FROM makt WHERE matnr = gt_out-idnrk AND spras = sy-langu.
+      ENDIF.
+      gt_out-menge = lt_stpo-menge.
+      gt_out-meins = lt_stpo-meins.
+      CALL FUNCTION 'CONVERSION_EXIT_CUNIT_OUTPUT'
+        EXPORTING
+          input          = gt_out-meins
+          language       = sy-langu
+        IMPORTING
+          output         = gt_out-meins
+        EXCEPTIONS
+          unit_not_found = 1
+          OTHERS         = 2.
+      gt_out-postp = lt_stpo-postp.
+      gt_out-potx1 = lt_stpo-potx1.
+      gt_out-potx2 = lt_stpo-potx2.
+      gt_out-sortf = lt_stpo-sortf.
+      lv_objek = gt_out-idnrk.
+      CALL FUNCTION 'CLAF_CLASSIFICATION_OF_OBJECTS'
+        EXPORTING
+*         CLASS              = ' '
+*         CLASSTEXT          = 'X'
+          classtype          = '001'
+*         CLINT              = 0
+*         FEATURES           = 'X'
+          language           = sy-langu
+          object             = lv_objek
+          objecttable        = 'MARA'
+*         KEY_DATE           = SY-DATUM
+*         INITIAL_CHARACT    = 'X'
+*         NO_VALUE_DESCRIPT  =
+*         CHANGE_SERVICE_CLF = 'X'
+*         INHERITED_CHAR     = ' '
+*         CHANGE_NUMBER      = ' '
+        TABLES
+          t_class            = ls_class
+          t_objectdata       = ls_objectdata
+*         I_SEL_CHARACTERISTIC       =
+*         T_NO_AUTH_CHARACT  =
+        EXCEPTIONS
+          no_classification  = 1
+          no_classtypes      = 2
+          invalid_class_type = 3
+          OTHERS             = 4.
+
+      LOOP AT ls_objectdata WHERE ausp1 <> '?'.
+        CASE ls_objectdata-atnam.
+*          WHEN 'ZROH_ICZYCS'.
+*            alv_stb-zroh_iczycs = ls_objectdata-ausp1.
+*          WHEN 'ZROH_PCBGY'.
+*            alv_stb-zroh_pcbgy = ls_objectdata-ausp1.
+*          WHEN 'ZROH_PCBCZ'.
+*            alv_stb-zroh_pcbcz = ls_objectdata-ausp1.
+          WHEN 'ZROH_PCBCS'.
+            gt_out-zpcbcs = ls_objectdata-ausp1.
+*          WHEN 'ZROH_BCDZLTH'.
+*            alv_stb-zroh_bcdzlth = ls_objectdata-ausp1.
+*          WHEN 'ZROH_BCCZ'.
+*            alv_stb-zroh_bccz = ls_objectdata-ausp1.
+*          WHEN 'ZROH_BCRZ'.
+*            alv_stb-zroh_bcrz = ls_objectdata-ausp1.
+*          WHEN 'ZROH_GYSXH'.
+*            alv_stb-zroh_gysxh = ls_objectdata-ausp1.
+*          WHEN 'ZROH_JGTH'.
+*            alv_stb-zroh_jgth = ls_objectdata-ausp1.
+*          WHEN 'ZROH_SYTH'.
+*            alv_stb-zroh_syth = ls_objectdata-ausp1.
+*          WHEN 'ZROH_MH'.
+*            alv_stb-zroh_mh = ls_objectdata-ausp1.
+          WHEN 'ZROH_TSBZ'.
+            gt_out-tsbz = ls_objectdata-ausp1.
+          WHEN OTHERS.
+        ENDCASE.
+      ENDLOOP.
+
+      CONCATENATE gt_out-potx1 gt_out-potx2 gt_out-zpcbcs INTO gt_out-zbz SEPARATED BY ','.
+      CONDENSE gt_out-zbz NO-GAPS.
+      SHIFT  gt_out-zbz LEFT DELETING LEADING ','.
+      SHIFT  gt_out-zbz RIGHT DELETING TRAILING ','.
+      gt_out-werks = lt_mast-werks.
+*      gt_out-stlan = lt_mast-stlan.
+*      gt_out-stlal = lt_mast-stlal.
+*      gt_out-bmeng = ls_cstmat-bmeng.
+*      gt_out-stlst = ls_cstmat-stlst.
+*      READ TABLE lt_aeoi INDEX 1.
+*      IF sy-subrc = 0.
+*        gt_out-aennr = lt_aeoi-aennr.
+*        gt_out-oitxt = lt_aeoi-oitxt.
+*      ENDIF.
+*      gt_out-nfeag = lt_stpo-nfeag.
+*      gt_out-nfgrp = lt_stpo-nfgrp.
+*      gt_out-alpgr = lt_stpo-alpgr.
+*      gt_out-alprf = lt_stpo-alprf.
+*      gt_out-alpst = lt_stpo-alpst.
+*      gt_out-ewahr = lt_stpo-ewahr.
+      LOOP AT lt_stpu WHERE stlnr = lt_stpo-stlnr AND stlkn = lt_stpo-stlkn AND stpoz = lt_stpo-stpoz.
+        IF gt_out-zwh IS INITIAL.
+          gt_out-zwh = lt_stpu-ebort.
+        ELSE.
+          CONDENSE gt_out-zwh NO-GAPS.
+          CONCATENATE gt_out-zwh lt_stpu-ebort INTO gt_out-zwh SEPARATED BY ','.
+        ENDIF.
+        CONDENSE gt_out-zwh NO-GAPS.
+      ENDLOOP.
+      SELECT SINGLE zfzlx INTO gt_out-zfzlx FROM ztpp002 WHERE matnr = lt_stpo-idnrk.
+
+      APPEND gt_out.
+      CLEAR gt_out.
+    ENDLOOP.
+  ENDLOOP.
+
+  SORT gt_out.
+  DELETE ADJACENT DUPLICATES FROM gt_out COMPARING ALL FIELDS.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  layout_build 设置alv显示格式和属性
+*&---------------------------------------------------------------------*
+*---------------------------------
+FORM pf_status_set USING rt_extab TYPE slis_t_extab.
+  IF sy-tcode = 'ZPP026'.
+    SET PF-STATUS '0100'.
+  ELSE.
+    SET PF-STATUS '0200'.
+  ENDIF.
+
+ENDFORM.                    "PF_STATUS_SET
+
+
+
+*&--------------------------------------------------------------------*
+*&      Form user_command
+*&--------------------------------------------------------------------*
+FORM user_command USING i_ucomm LIKE sy-ucomm
+                        is_selfield TYPE slis_selfield.
+  DATA: l_grid TYPE REF TO cl_gui_alv_grid.
+
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = l_grid.
+
+  is_selfield-refresh = 'X'."这个值可以让alv自动刷新
+**
+  CASE i_ucomm.
+    WHEN 'SELECT'.
+      LOOP AT gt_out .
+        gt_out-sel = 'X'.
+        MODIFY gt_out.
+      ENDLOOP.
+      is_selfield-refresh = 'X'.
+    WHEN 'DESELECT'.
+      LOOP AT gt_out .
+        gt_out-sel = ''.
+        MODIFY gt_out.
+      ENDLOOP.
+      is_selfield-refresh = 'X'.
+    WHEN 'A_PRINT' OR 'B_PRINT'.
+      READ TABLE gt_out WITH  KEY sel = 'X'.
+      IF sy-subrc <> 0.
+        MESSAGE e398(00) WITH '至少要选择一条记录'.
+        EXIT.
+      ENDIF.
+      IF i_ucomm = 'A_PRINT'.
+        PERFORM frm_print USING 'ZSFPP_002'.
+      ELSE.
+        PERFORM frm_print USING 'ZSFPP_002A'.
+      ENDIF.
+
+      LOOP AT gt_out .
+        gt_out-sel = ''.
+        MODIFY gt_out.
+      ENDLOOP.
+      is_selfield-refresh = 'X'."这个值可以让alv自动刷新
+    WHEN OTHERS.
+  ENDCASE.
+
+ENDFORM.                    "user_command
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_EXPLO_BOM
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LT_STPO  text
+*      -->P_LT_MAST_MATNR  text
+*      -->P_LT_MAST_WERKS  text
+*      -->P_0152   text
+*      <--P_LS_CSTMAT  text
+*----------------------------------------------------------------------*
+FORM frm_explo_bom  TABLES   lt_stpo STRUCTURE stpox
+                             lt_matcat STRUCTURE cscmat
+                     USING    u_matnr LIKE mara-matnr
+                              u_werks LIKE marc-werks
+                              u_mehrs TYPE c
+                              u_stlal LIKE mast-stlal
+                    CHANGING ls_cstmat LIKE cstmat.
+  REFRESH:lt_stpo,lt_matcat.
+  CLEAR:ls_cstmat.
+  CALL FUNCTION 'CS_BOM_EXPL_MAT_V2'
+    EXPORTING
+      capid                 = p_capid
+      datuv                 = p_datum
+      mehrs                 = u_mehrs
+      mtnrv                 = u_matnr
+      werks                 = u_werks
+      stlal                 = u_stlal
+    IMPORTING
+      topmat                = ls_cstmat
+    TABLES
+      matcat                = lt_matcat
+      stb                   = lt_stpo
+    EXCEPTIONS
+      alt_not_found         = 1
+      call_invalid          = 2
+      material_not_found    = 3
+      missing_authorization = 4
+      no_bom_found          = 5
+      no_plant_data         = 6
+      no_suitable_bom_found = 7
+      conversion_error      = 8
+      OTHERS                = 9.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+
+*设置并显示alv结果
+  gs_layout-zebra = 'X'.
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-box_fname = 'SEL'.
+  PERFORM it_field USING 'MATNR' '父项物料编码'    'MATNR' 'MARA'.
+  PERFORM it_field USING 'MAKTX_F' '父项物料描述'    'MAKTX' 'MAKT'.
+  PERFORM it_field USING 'ZNUM' '序号'    '' ''.
+  PERFORM it_field USING 'POSNR' '行项目'    'POSNR' 'STPO'.
+  PERFORM it_field USING 'IDNRK' '子项物料编码'    'MATNR' 'MARA'.
+  PERFORM it_field USING 'MAKTX_Z' '物料描述'    'MAKTX' 'MAKT'.
+  PERFORM it_field USING 'ZFZLX' '封装类型'    '' ''.
+  PERFORM it_field USING 'MENGE' '数量'    'MENGE' 'STPO'.
+  PERFORM it_field USING 'ZWH' '位号'    '' ''.
+  PERFORM it_field USING 'ZBZ' '项目文本'    '' ''.
+  PERFORM it_field USING 'TSBZ' '特殊备注'    '' ''.
+
+  DATA: lt_sort TYPE lvc_t_sort, ls_sort TYPE lvc_s_sort .
+  ls_sort-fieldname = 'MATNR'.
+  APPEND ls_sort TO lt_sort.
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK        = ' '
+*     I_BYPASSING_BUFFER       =
+*     I_BUFFER_ACTIVE          =
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'PF_STATUS_SET'
+      i_callback_user_command  = 'USER_COMMAND'
+*     I_CALLBACK_TOP_OF_PAGE   = ' '
+*     i_callback_html_top_of_page       =
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME         =
+*     I_BACKGROUND_ID          = ' '
+*     I_GRID_TITLE             =
+*     I_GRID_SETTINGS          =
+      is_layout_lvc            = gs_layout
+      it_fieldcat_lvc          = fieldcat[]
+*     IT_EXCLUDING             =
+*     IT_SPECIAL_GROUPS_LVC    =
+      it_sort_lvc              = lt_sort[]
+*     it_filter_lvc            = lt_filt[]
+*     IT_HYPERLINK             =
+*     IS_SEL_HIDE              =
+*     I_DEFAULT                = 'X'
+      i_save                   = 'A'
+*     IS_VARIANT               =
+*     it_events                =
+*     IT_EVENT_EXIT            =
+*     IS_PRINT_LVC             =
+*     IS_REPREP_ID_LVC         =
+*     I_SCREEN_START_COLUMN    = 0
+*     I_SCREEN_START_LINE      = 0
+*     I_SCREEN_END_COLUMN      = 0
+*     I_SCREEN_END_LINE        = 0
+*     I_HTML_HEIGHT_TOP        =
+*     I_HTML_HEIGHT_END        =
+*     IT_ALV_GRAPHICS          =
+*     IT_EXCEPT_QINFO_LVC      =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER  =
+*     ES_EXIT_CAUSED_BY_USER   =
+    TABLES
+      t_outtab                 = gt_out[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.
+
+FORM it_field  USING   p_fieldname       "
+                     p_seltext_l       "
+                     p_field
+                     p_table.
+
+  fieldcat_ln-fieldname     = p_fieldname.
+  fieldcat_ln-reptext     = p_seltext_l.
+  fieldcat_ln-ref_field  = p_field.
+  fieldcat_ln-ref_table  = p_table.
+
+  APPEND fieldcat_ln TO fieldcat.
+  CLEAR: fieldcat_ln.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PRINT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_print USING lv_tdsfname TYPE tdsfname.
+  DATA: fm_name TYPE rs38l_fnam,lv TYPE mara-matnr.
+  DATA lt_out TYPE TABLE OF zspp002 WITH HEADER LINE.
+  DATA lt_out1 LIKE TABLE OF gt_out WITH HEADER LINE.
+  DATA:BEGIN OF lt_matnr OCCURS 0,
+         matnr TYPE mara-matnr,
+       END OF lt_matnr.
+  DATA:xssfctrlop        LIKE ssfctrlop,
+       w_job_output_info TYPE ssfcrescl.
+  xssfctrlop-no_open = 'X'.
+  xssfctrlop-no_close = 'X'.
+
+  CALL FUNCTION 'SSF_OPEN'
+    EXPORTING
+      control_parameters = xssfctrlop
+    EXCEPTIONS
+      formatting_error   = 1
+      internal_error     = 2
+      send_error         = 3
+      user_canceled      = 4
+      OTHERS             = 5.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+
+  CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
+    EXPORTING
+      formname           = lv_tdsfname
+    IMPORTING
+      fm_name            = fm_name
+    EXCEPTIONS
+      no_form            = 1
+      no_function_module = 2
+      OTHERS             = 3.
+
+  LOOP AT gt_out.
+    AT NEW matnr.
+      CLEAR lv.
+      lv = gt_out-matnr.
+      READ TABLE gt_out WITH  KEY sel = 'X' matnr = lv.
+      IF sy-subrc <> 0.
+        lv = ''.
+      ENDIF.
+    ENDAT.
+    IF gt_out-matnr = lv.
+      gt_out-sel = 'X'.
+      MODIFY gt_out.
+      MOVE-CORRESPONDING gt_out TO lt_out1.
+      APPEND lt_out1.
+    ENDIF.
+  ENDLOOP.
+
+  LOOP AT lt_out1 .
+    AT  FIRST .
+      xssfctrlop-no_close = 'X'.
+    ENDAT.
+    AT LAST.
+      xssfctrlop-no_close = ''.
+    ENDAT.
+    AT NEW matnr.
+      CLEAR lv.
+      lv = lt_out1-matnr.
+    ENDAT.
+
+    IF lt_out1-matnr = lv AND lt_out1-sel = 'X'.
+      MOVE-CORRESPONDING lt_out1 TO   lt_out.
+      APPEND lt_out.
+    ENDIF.
+    AT END OF matnr.
+      CALL FUNCTION fm_name
+        EXPORTING
+          control_parameters = xssfctrlop
+*        IMPORTING
+*         job_output_info    = w_job_output_info
+        TABLES
+          gt_out             = lt_out[]
+        EXCEPTIONS
+          formatting_error   = 1
+          internal_error     = 2
+          send_error         = 3
+          user_canceled      = 4
+          OTHERS             = 5.
+      xssfctrlop-no_open = 'X'.
+
+      IF sy-subrc <> 0.
+* Implement suitable error handling here
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      ELSE.
+        IF  w_job_output_info-outputdone = 'X' .
+          LOOP AT lt_out1.
+            MOVE-CORRESPONDING lt_out1 TO lt_matnr.
+            APPEND lt_matnr.
+          ENDLOOP.
+          DELETE ADJACENT DUPLICATES FROM lt_matnr.
+        ENDIF.
+      ENDIF.
+
+      CLEAR lt_out[].
+      REFRESH lt_out[].
+    ENDAT.
+  ENDLOOP.
+
+ENDFORM.

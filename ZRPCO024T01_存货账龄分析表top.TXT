@@ -1,0 +1,38 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPCO024T01
+*&---------------------------------------------------------------------*
+TABLES:bsis.
+
+DATA:gv_date LIKE sy-datum.
+
+RANGES:r_bwkey FOR t001k-bwkey.
+
+DATA:BEGIN OF gt_bseg OCCURS 0,
+       bukrs LIKE bseg-bukrs,
+       belnr LIKE bseg-belnr,
+       gjahr LIKE bseg-gjahr,
+       buzei LIKE bseg-buzei,
+       menge LIKE bseg-menge,
+       dmbtr LIKE bseg-dmbtr,
+       shkzg LIKE bseg-shkzg,
+       matnr LIKE bseg-matnr,
+       werks LIKE bseg-werks,
+       hkont LIKE bseg-hkont,
+       hrkft LIKE bseg-hrkft,
+     END OF gt_bseg.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       zexno(2) TYPE n,
+       zmenge   TYPE p DECIMALS 2,   "合计-数量
+       zamount  TYPE p DECIMALS 2,   "合计-金额
+       zmenge1  TYPE p DECIMALS 2,   "0-90天数量
+       zamount1 TYPE p DECIMALS 2,   "0-90天金额
+       zmenge2  TYPE p DECIMALS 2,   "91-180天数量
+       zamount2 TYPE p DECIMALS 2,   "91-180天金额
+       zmenge3  TYPE p DECIMALS 2,   "181-270天数量
+       zamount3 TYPE p DECIMALS 2,   "181-270天金额
+       zmenge4  TYPE p DECIMALS 2,   "271-360天数量
+       zamount4 TYPE p DECIMALS 2,   "271-360天金额
+       zmenge5  TYPE p DECIMALS 2,   ">360天数量
+       zamount5 TYPE p DECIMALS 2,   ">360天金额
+     END OF gt_out.

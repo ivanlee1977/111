@@ -1,0 +1,636 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI028_F01
+*&---------------------------------------------------------------------*
+
+FORM check_enter.
+  PERFORM frm_get_date TABLES it_pdate USING  '00'.
+  PERFORM frm_get_date TABLES it_pdate USING  '01'.
+  PERFORM frm_get_date TABLES it_pdate USING  '02'.
+  PERFORM frm_get_date TABLES it_pdate USING  '03'.
+  PERFORM frm_get_date TABLES it_pdate USING  '04'.
+  PERFORM frm_get_date TABLES it_pdate USING  '05'.
+  PERFORM frm_get_date TABLES it_pdate USING  '06'.
+  PERFORM frm_get_date TABLES it_pdate USING  '07'.
+  PERFORM frm_get_date TABLES it_pdate USING  '08'.
+  PERFORM frm_get_date TABLES it_pdate USING  '09'.
+  PERFORM frm_get_date TABLES it_pdate USING  '10'.
+  PERFORM frm_get_date TABLES it_pdate USING  '11'.
+  PERFORM frm_get_date TABLES it_pdate USING  '12'.
+  PERFORM frm_get_date TABLES it_pdate USING  '13'.
+  PERFORM frm_get_date TABLES it_pdate USING  '14'.
+  PERFORM frm_get_date TABLES it_pdate USING  '15'.
+  PERFORM frm_get_date TABLES it_pdate USING  '16'.
+  PERFORM frm_get_date TABLES it_pdate USING  '17'.
+  PERFORM frm_get_date TABLES it_pdate USING  '18'.
+  PERFORM frm_get_date TABLES it_pdate USING  '19'.
+  PERFORM frm_get_date TABLES it_pdate USING  '20'.
+  PERFORM frm_get_date TABLES it_pdate USING  '21'.
+  PERFORM frm_get_date TABLES it_pdate USING  '22'.
+  PERFORM frm_get_date TABLES it_pdate USING  '23'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_IT_PDATE  text
+*      -->P_SY_DATUM  text
+*      -->P_0009   text
+*----------------------------------------------------------------------*
+FORM frm_get_date  TABLES   pt_pdate STRUCTURE it_pdate
+                    USING lv_months LIKE t5a4a-dlymo.
+  DATA: lv_datum LIKE p0001-begda.
+
+  CLEAR:it_pdate.
+  CONCATENATE 'COL' lv_months INTO it_pdate-lv_date.
+
+  IF lv_months NE '00'.
+    CALL FUNCTION 'RP_CALC_DATE_IN_INTERVAL'
+      EXPORTING
+        date      = p_budat
+        days      = '00'
+        months    = lv_months
+        signum    = '-'
+        years     = '00'
+      IMPORTING
+        calc_date = lv_datum.
+    it_pdate-date = lv_datum+0(6).
+  ELSE.
+    it_pdate-date = p_budat+0(6).
+  ENDIF.
+  APPEND it_pdate.
+
+ENDFORM.
+FORM get_data."取数据
+  DATA:lv_budat LIKE bsid-budat.
+
+  REFRESH: gt_bsid,gt_knvv.
+
+  SELECT bukrs kunnr gjahr belnr buzei kkber prctr budat hkont waers dmbtr wrbtr shkzg rebzg
+    INTO CORRESPONDING FIELDS OF TABLE gt_bsid
+    FROM bsad
+   WHERE bukrs EQ p_bukrs
+     AND hkont IN s_hkont
+     AND kunnr IN s_kunnr
+     AND prctr IN s_prctr
+     AND budat LE p_budat
+     AND augdt GT p_budat
+     AND kkber IN s_kkber..
+
+  SELECT bukrs kunnr gjahr belnr buzei kkber prctr budat hkont waers dmbtr wrbtr shkzg rebzg
+    APPENDING CORRESPONDING FIELDS OF TABLE gt_bsid
+    FROM bsid
+   WHERE bukrs EQ p_bukrs
+     AND hkont IN s_hkont
+     AND kunnr IN s_kunnr
+     AND prctr IN s_prctr
+     AND budat LE p_budat
+     AND kkber IN s_kkber.
+
+
+*  SELECT a~bukrs a~kunnr a~gjahr a~belnr a~buzei a~kkber a~prctr a~budat a~hkont a~waers a~dmbtr a~wrbtr a~shkzg a~rebzg
+*         b~bzirk b~kvgr2 b~kvgr1 b~vkbur
+*    INTO CORRESPONDING FIELDS OF TABLE gt_bsid
+*    FROM bsad AS a INNER JOIN knvv AS b ON a~kunnr = b~kunnr
+*   WHERE a~bukrs EQ p_bukrs
+*     AND a~hkont IN s_hkont
+*     AND a~kunnr IN s_kunnr
+*     AND a~prctr IN s_prctr
+*     AND a~budat LE p_budat
+*     AND a~augdt GT p_budat
+*     AND a~kkber IN s_kkber
+*     AND b~bzirk IN s_bzirk
+*     AND b~kvgr1 IN s_kvgr1
+*     AND b~kvgr2 IN s_kvgr2
+*     AND b~vkbur IN s_vkbur
+*     AND b~vkorg IN s_kkber.
+
+*  SELECT a~bukrs a~kunnr a~gjahr a~belnr a~buzei a~kkber a~prctr a~budat a~hkont a~waers a~dmbtr a~wrbtr a~shkzg a~rebzg
+*         b~bzirk b~kvgr2 b~kvgr1 b~vkbur
+*    APPENDING CORRESPONDING FIELDS OF TABLE gt_bsid
+*    FROM bsid AS a INNER JOIN knvv AS b ON a~kunnr = b~kunnr
+*   WHERE a~bukrs EQ p_bukrs
+*     AND a~hkont IN s_hkont
+*     AND a~kunnr IN s_kunnr
+*     AND a~prctr IN s_prctr
+*     AND a~budat LE p_budat
+*     AND a~kkber IN s_kkber
+*     AND b~bzirk IN s_bzirk
+*     AND b~kvgr1 IN s_kvgr1
+*     AND b~kvgr2 IN s_kvgr2
+*     AND b~vkbur IN s_vkbur
+*     AND b~vkorg IN s_kkber.
+
+  REFRESH:gt_bsad.
+  gt_bsad[] = gt_bsid[].
+  SORT gt_bsid BY belnr.
+
+  DATA:  lv_tabix  LIKE sy-tabix.
+  LOOP AT gt_bsad WHERE rebzg IS NOT INITIAL.
+*    READ TABLE gt_bsid WITH KEY belnr = gt_bsad-rebzg BINARY SEARCH.
+*    IF sy-subrc = 0.
+*      gt_bsad-budat = gt_bsid-budat.
+*    ENDIF.
+    CLEAR:lv_budat.
+    SELECT SINGLE budat INTO lv_budat FROM bsid WHERE belnr = gt_bsad-rebzg AND bukrs = gt_bsad-bukrs AND kunnr = gt_bsad-kunnr.
+    IF sy-subrc = 0.
+      gt_bsad-budat = lv_budat.
+    ELSE.
+      SELECT SINGLE budat INTO lv_budat FROM bsad WHERE belnr = gt_bsad-rebzg AND bukrs = gt_bsad-bukrs AND kunnr = gt_bsad-kunnr.
+      IF sy-subrc = 0.
+        gt_bsad-budat = lv_budat.
+      ENDIF.
+    ENDIF.
+
+    MODIFY gt_bsad TRANSPORTING budat.
+    CLEAR: gt_bsad.
+  ENDLOOP.
+
+  REFRESH: gt_bsid[].
+  gt_bsid[] = gt_bsad[].
+  REFRESH: gt_bsad.
+ENDFORM.
+
+FORM process_data."处理数据
+  DATA: gt_kna1  LIKE kna1 OCCURS 0 WITH HEADER LINE,
+        gt_knb1  LIKE knb1 OCCURS 0 WITH HEADER LINE,
+        gt_tvv1t LIKE tvv1t OCCURS 0 WITH HEADER LINE,
+        gt_tvv2t LIKE tvv2t OCCURS 0 WITH HEADER LINE,
+        gt_t171t LIKE t171t OCCURS 0 WITH HEADER LINE,
+        gt_tvkbt LIKE tvkbt OCCURS 0 WITH HEADER LINE,
+        gt_t052u LIKE t052u OCCURS 0 WITH HEADER LINE.
+  DATA:lv_date(20)   TYPE c.
+  DATA:lv_num(2) TYPE c VALUE 1,
+       lv_tabix  TYPE sy-tabix.
+  DATA:l_dec TYPE i.
+
+
+  IF gt_bsid[] IS NOT INITIAL.
+    SELECT * INTO TABLE gt_kna1 FROM kna1 FOR ALL ENTRIES IN gt_bsid WHERE kunnr = gt_bsid-kunnr.
+    SELECT * INTO TABLE gt_knb1 FROM knb1 FOR ALL ENTRIES IN gt_bsid WHERE kunnr = gt_bsid-kunnr AND bukrs = gt_bsid-bukrs.
+    SELECT * INTO TABLE gt_knvv FROM knvv FOR ALL ENTRIES IN gt_bsid WHERE kunnr = gt_bsid-kunnr AND vkorg IN s_kkber.
+  ENDIF.
+  SELECT * INTO TABLE gt_tvv1t FROM tvv1t WHERE spras = sy-langu.
+  SELECT * INTO TABLE gt_tvv2t FROM tvv2t WHERE spras = sy-langu.
+  SELECT * INTO TABLE gt_t171t FROM t171t WHERE spras = sy-langu.
+  SELECT * INTO TABLE gt_tvkbt FROM tvkbt WHERE spras = sy-langu.
+  SELECT * INTO TABLE gt_t052u FROM t052u WHERE spras = sy-langu.
+
+  SORT gt_kna1 BY kunnr.
+  SORT gt_knb1 BY kunnr.
+  SORT gt_knvv BY kunnr vkorg.
+  SORT gt_tvv1t BY kvgr1.
+  SORT gt_tvv2t BY kvgr2.
+  SORT gt_t171t BY bzirk.
+  SORT gt_tvkbt BY vkbur.
+  SORT gt_t052u BY zterm.
+
+  DESCRIBE TABLE it_pdate LINES l_dec.
+  CLEAR: lv_date.
+  READ TABLE it_pdate INDEX l_dec.
+  IF sy-subrc = 0.
+    lv_date = it_pdate-date.
+  ENDIF.
+
+  LOOP AT gt_bsid.
+***检查业务员权限
+    lv_tabix = sy-tabix.
+    READ TABLE gt_knvv WITH KEY kunnr = gt_bsid-kunnr vkorg = gt_bsid-kkber BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_bsid-kvgr1 = gt_knvv-kvgr1.
+      gt_bsid-bzirk = gt_knvv-bzirk.
+      gt_bsid-kvgr2 = gt_knvv-kvgr2.
+      gt_bsid-vkbur = gt_knvv-vkbur.
+    ENDIF.
+
+    IF gt_bsid-kvgr1 NOT IN s_kvgr1.
+      DELETE gt_bsid INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+
+    IF gt_bsid-bzirk NOT IN s_bzirk.
+      DELETE gt_bsid INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+
+    IF gt_bsid-kvgr2 NOT IN s_kvgr2.
+      DELETE gt_bsid INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+
+    IF gt_bsid-vkbur NOT IN s_vkbur.
+      DELETE gt_bsid INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+
+    IF gt_bsid-kvgr1 IS NOT INITIAL.
+      AUTHORITY-CHECK OBJECT 'Z_KVGR1'
+               ID 'KVGR1' FIELD gt_bsid-kvgr1.
+      IF sy-subrc <> 0.
+        DELETE gt_bsid INDEX lv_tabix.
+        CONTINUE.
+      ENDIF.
+    ELSE.
+      READ TABLE gt_kna1 WITH KEY kunnr = gt_bsid-kunnr BINARY SEARCH.
+      IF sy-subrc = 0 AND ( gt_kna1-ktokd = 'ZAG2' OR gt_kna1-ktokd = 'ZAG3' OR gt_kna1-ktokd = 'ZAG4' OR gt_kna1-ktokd = 'ZCPD')."不进行权限管控
+      ELSE.
+        DELETE gt_bsid INDEX lv_tabix.
+        CONTINUE.
+      ENDIF.
+    ENDIF.
+
+    CLEAR: gt_alv,lv_num.
+    MOVE-CORRESPONDING gt_bsid TO gt_alv.
+*  CHANGE BY pft 20171225
+*  如果原币取WRBTR(币别取WAERS),如果本币取DMBTR(币别取CNY)
+*  gt_alv-zdmbtr = gt_bsid-dmbtr.
+    IF p_r0 EQ 'X'.  "本币
+      gt_alv-waers = 'CNY'.
+      gt_alv-zdmbtr = gt_bsid-dmbtr.
+    ELSE.
+      gt_alv-waers = gt_bsid-waers.
+      gt_alv-zdmbtr = gt_bsid-wrbtr.
+    ENDIF.
+*  END BY PFT 20171225
+    IF gt_bsid-shkzg = 'H'.
+      gt_alv-zdmbtr = gt_alv-zdmbtr * ( -1 ).
+    ENDIF.
+    IF gt_bsid-budat+0(6) < lv_date .
+      gt_alv-zdmbtr2 = gt_alv-zdmbtr.
+    ENDIF.
+    COLLECT gt_alv.
+
+*  按月分布
+    gt_pdate-kunnr = gt_bsid-kunnr.
+    gt_pdate-kkber = gt_bsid-kkber.
+    gt_pdate-lv_date = gt_bsid-budat+0(6).
+    gt_pdate-dmbtr = gt_alv-zdmbtr.
+*  ADD BY pft 20171225
+    gt_pdate-waers = gt_alv-waers.
+*  END BY PFT 20171225
+    COLLECT gt_pdate.
+    CLEAR: gt_bsid.
+  ENDLOOP.
+
+  LOOP AT gt_alv.
+    lv_tabix = sy-tabix.
+*    READ TABLE gt_knvv WITH KEY kunnr = gt_alv-kunnr BINARY SEARCH.
+*    IF sy-subrc = 0.
+*      gt_alv-kvgr1 = gt_knvv-kvgr1.
+*      gt_alv-bzirk = gt_knvv-bzirk.
+*      gt_alv-kvgr2 = gt_knvv-kvgr2.
+*      gt_alv-vkbur = gt_knvv-vkbur.
+*    ENDIF.
+*  取客户描述
+    READ TABLE gt_kna1 WITH KEY kunnr = gt_alv-kunnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-name1 = gt_kna1-name1.
+    ENDIF.
+    READ TABLE gt_knb1 WITH KEY kunnr = gt_alv-kunnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-zterm = gt_knb1-zterm.
+    ENDIF.
+    READ TABLE gt_t052u WITH KEY zterm = gt_alv-zterm BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-text1 = gt_t052u-text1.
+    ENDIF.
+    READ TABLE gt_tvv1t WITH KEY kvgr1 = gt_alv-kvgr1 BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-bezei = gt_tvv1t-bezei.
+    ENDIF.
+    READ TABLE gt_tvv2t WITH KEY kvgr2 = gt_alv-kvgr2 BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-kvgr2_vtext = gt_tvv2t-bezei.
+    ENDIF.
+    READ TABLE gt_t171t WITH KEY bzirk = gt_alv-bzirk BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-bzirk_vtext = gt_t171t-bztxt.
+    ENDIF.
+    READ TABLE gt_tvkbt WITH KEY vkbur = gt_alv-vkbur BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-vkbur_vtext = gt_tvkbt-bezei.
+    ENDIF.
+
+    MODIFY gt_alv .
+    CLEAR: gt_alv.
+  ENDLOOP.
+ENDFORM.
+
+FORM sub_dny_field_create .
+  CLEAR compdesc.
+  compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'BSID-KUNNR' ). "客户
+  compdesc-name = 'KUNNR'.
+  APPEND compdesc TO components.
+  compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'KNA1-NAME1' ). "客户名称
+  compdesc-name = 'NAME1'.
+  APPEND compdesc TO components.
+  compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'BSID-KKBER' ). "信用控制范围
+  compdesc-name = 'KKBER'.
+  APPEND compdesc TO components.
+  compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'TVV1T-BEZEI' ). "业务员
+  compdesc-name = 'BEZEI'.
+  APPEND compdesc TO components.
+  compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'T052U-TEXT1' ). "付款条件
+  compdesc-name = 'TEXT1'.
+  APPEND compdesc TO components.
+* ADD BY pft 20171225
+  compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'BSID-WAERS' ). "币别
+  compdesc-name = 'WAERS'.
+  APPEND compdesc TO components.
+* END BY PFT 20171225
+  compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'BSID-DMBTR' ). "金额
+  compdesc-name = 'ZDMBTR'.
+  APPEND compdesc TO components.
+
+  LOOP AT it_pdate  .   "按月显示
+    CONCATENATE '' it_pdate-lv_date INTO wa_flname.
+    compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'BSID-DMBTR' ).
+    compdesc-name  = wa_flname.
+    APPEND compdesc TO components.
+  ENDLOOP.
+
+  compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'BSID-DMBTR' ). "两年前
+  compdesc-name = 'ZDMBTR2'.
+  APPEND compdesc TO components.
+
+  compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'BSID-DMBTR' ). "扣款金额
+  compdesc-name = 'ZKKJE'.
+  APPEND compdesc TO components.
+
+  compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'KNVV-BZIRK' ). "销售大区
+  compdesc-name = 'BZIRK'.
+  APPEND compdesc TO components.
+
+  compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'T171T-BZTXT' ). "销售大区描述
+  compdesc-name = 'BZIRK_VTEXT'.
+  APPEND compdesc TO components.
+
+  compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'KNVV-KVGR2' ). "商务
+  compdesc-name = 'KVGR2'.
+  APPEND compdesc TO components.
+
+  compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'TVV2T-BEZEI' ). "商务描述
+  compdesc-name = 'KVGR2_VTEXT'.
+  APPEND compdesc TO components.
+
+*  compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'KNVV-KVGR1' ). "业务员
+*  compdesc-name = 'KVGR1'.
+*  APPEND compdesc TO components.
+*
+*  compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'TVV1T-BEZEI' ). "销售业务员描述
+*  compdesc-name = 'KVGR1_VTEXT'.
+*  APPEND compdesc TO components.
+
+  compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'KNVV-VKBUR' ). "业务员
+  compdesc-name = 'VKBUR'.
+  APPEND compdesc TO components.
+
+  compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'TVKBT-BEZEI' ). "行办描述
+  compdesc-name = 'VKBUR_VTEXT'.
+  APPEND compdesc TO components.
+ENDFORM.                    " SUB_DNY_FIELD_CREATE
+
+
+FORM sub_dny_table_create .
+  cl_stru = cl_abap_structdescr=>create( components ).
+  cl_tabl = cl_abap_tabledescr=>create( cl_stru ).
+  CREATE DATA cl_handle TYPE HANDLE cl_tabl.
+  ASSIGN cl_handle->* TO <dynitab>.
+  CREATE DATA cl_strue TYPE HANDLE cl_stru.
+  ASSIGN cl_strue->* TO <dynwa>.
+ENDFORM.                    " SUB_DNY_TABLE_CREATE
+
+
+FORM sub_dny_field_update .
+************************按汇总条件取数*************************
+  LOOP AT gt_alv  .
+    ASSIGN COMPONENT 'KUNNR' OF STRUCTURE <dynwa> TO <field>. "客户
+    <field> =  gt_alv-kunnr.
+    ASSIGN COMPONENT 'NAME1' OF STRUCTURE <dynwa> TO <field>. "客户名称
+    <field> =  gt_alv-name1.
+    ASSIGN COMPONENT 'KKBER' OF STRUCTURE <dynwa> TO <field>. "信用控制范围
+    <field> =  gt_alv-kkber.
+    ASSIGN COMPONENT 'BEZEI' OF STRUCTURE <dynwa> TO <field>. "业务员
+    <field> =  gt_alv-bezei.
+    ASSIGN COMPONENT 'TEXT1' OF STRUCTURE <dynwa> TO <field>. "付款条件
+    <field> =  gt_alv-text1.
+*   ADD BY pft 20171225
+    ASSIGN COMPONENT 'WAERS' OF STRUCTURE <dynwa> TO <field>. "币别
+    <field> =  gt_alv-waers.
+*   END BY PFT 20171225
+    ASSIGN COMPONENT 'ZDMBTR' OF STRUCTURE <dynwa> TO <field>. "金额
+    <field> =  gt_alv-zdmbtr.
+
+    LOOP AT it_pdate.
+      CONCATENATE '' it_pdate-lv_date  INTO  wa_flname.
+      ASSIGN COMPONENT wa_flname OF STRUCTURE <dynwa> TO <field>.
+      READ TABLE gt_pdate WITH KEY kunnr = gt_alv-kunnr kkber = gt_alv-kkber waers = gt_alv-waers lv_date = it_pdate-date. "ADD BY PFT 20171225 增加币别
+      IF sy-subrc EQ 0.
+        <field> = gt_pdate-dmbtr.
+        IF wa_flname BETWEEN 'COL03' AND 'COL05'.
+          ASSIGN COMPONENT 'ZKKJE' OF STRUCTURE <dynwa> TO <field>. "扣款金额
+          <field> = <field> + ( gt_pdate-dmbtr * '0.001' ).
+        ENDIF.
+        IF wa_flname BETWEEN 'COL06' AND 'COL23'.
+          ASSIGN COMPONENT 'ZKKJE' OF STRUCTURE <dynwa> TO <field>. "扣款金额
+          <field> = <field> + ( gt_pdate-dmbtr * '0.002' ).
+        ENDIF.
+      ENDIF.
+    ENDLOOP.
+
+
+    ASSIGN COMPONENT 'ZDMBTR2' OF STRUCTURE <dynwa> TO <field>. "两年前
+    <field> =  gt_alv-zdmbtr2.
+
+    ASSIGN COMPONENT 'BZIRK' OF STRUCTURE <dynwa> TO <field>. "两年前
+    <field> =  gt_alv-bzirk.
+
+    ASSIGN COMPONENT 'BZIRK_VTEXT' OF STRUCTURE <dynwa> TO <field>. "两年前
+    <field> =  gt_alv-bzirk_vtext.
+
+    ASSIGN COMPONENT 'KVGR2' OF STRUCTURE <dynwa> TO <field>. "两年前
+    <field> =  gt_alv-kvgr2.
+
+    ASSIGN COMPONENT 'KVGR2_VTEXT' OF STRUCTURE <dynwa> TO <field>. "两年前
+    <field> =  gt_alv-kvgr2_vtext.
+
+*    ASSIGN COMPONENT 'KVGR1_VTEXT' OF STRUCTURE <dynwa> TO <field>. "两年前
+*    <field> =  gt_alv-kvgr1_vtext.
+
+    ASSIGN COMPONENT 'VKBUR' OF STRUCTURE <dynwa> TO <field>. "两年前
+    <field> =  gt_alv-vkbur.
+
+    ASSIGN COMPONENT 'VKBUR_VTEXT' OF STRUCTURE <dynwa> TO <field>. "两年前
+    <field> =  gt_alv-vkbur_vtext.
+
+    APPEND <dynwa> TO <dynitab>.
+    CLEAR <dynwa>.
+  ENDLOOP.
+
+
+ENDFORM.
+FORM sub_write_data .
+  CLEAR fieldcat.
+  REFRESH fieldcat.
+  PERFORM frm_get_event.           "设置自定义事件处理程序
+  PERFORM build_fieldcat.
+  PERFORM display_alv.
+ENDFORM.                    " SUB_WRITE_DATA
+*&---------------------------------------------------------------------*
+*&      Form  frm_get_event
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+FORM frm_get_event .
+  DATA l_events TYPE LINE OF slis_t_event.
+  CLEAR l_events.
+  l_events-name = 'CALLER_EXIT'.
+  l_events-form = 'FM_BUTTON'.
+  APPEND l_events TO git_events.
+ENDFORM.                    " FRM_GET_EVENT
+*&---------------------------------------------------------------------*
+*&      Form  build_fieldcat
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+FORM build_fieldcat .
+  DATA : col_pos TYPE i VALUE 1.
+  ps_layout-zebra             = 'X'.
+  ps_layout-cwidth_opt        = 'X'.
+  DATA:l_date        TYPE idcn_segm.
+*----------------------------------------------------------------------*
+*& Rerference
+*&  _fieldname scrtext_l  _no_zero  _edit _decimals_out
+*----------------------------------------------------------------------*
+
+  PERFORM field USING 'KUNNR' '客户代码'      'X' '' '' '' 'KUNNR' 'BSID' ''.
+  PERFORM field USING 'NAME1' '客户描述'      'X' '' '' '' 'NAME1' 'KNA1' ''.
+  PERFORM field USING 'KKBER' '信用控制范围'  'X' '' '' '' 'KKBER' 'BSID' ''.
+  PERFORM field USING 'BEZEI' '业务员'        'X' '' '' '' '' '' ''.
+  PERFORM field USING 'TEXT1' '付款条件'      'X' '' '' '' '' '' ''.
+  PERFORM field USING 'WAERS' '币别'          'X' '' '' '' 'WAERS' 'BSID' ''.
+  PERFORM field USING 'ZDMBTR' '金额'         'X' '' '' '' '' '' 'X'.
+
+  LOOP AT it_pdate .
+    wa_flname = it_pdate-lv_date.
+    CONCATENATE it_pdate-date+0(4) '年' it_pdate-date+4(2) '月' INTO wa_field.
+    PERFORM field USING wa_flname wa_field 'X' '' '' '' '' '' 'X'.
+  ENDLOOP.
+
+  PERFORM field USING 'ZDMBTR2'      '两年前' 'X' '' '' '' '' '' 'X'.
+  PERFORM field USING 'ZKKJE'        '扣款金额' 'X' '' '' '' '' '' 'X'.
+  PERFORM field USING 'BZIRK'        '销售大区' 'X' '' '' '' '' '' 'X'.
+  PERFORM field USING 'BZIRK_VTEXT'  '销售大区描述' 'X' '' '' '' '' '' 'X'.
+  PERFORM field USING 'KVGR2'        '商务' 'X' '' '' '' '' '' 'X'.
+  PERFORM field USING 'KVGR2_VTEXT'  '商务描述' 'X' '' '' '' '' '' 'X'.
+*  PERFORM field USING 'KVGR1_VTEXT'  '销售业务员描述' 'X' '' '' '' '' '' 'X'.
+  PERFORM field USING 'VKBUR'        '行办代码' 'X' '' '' '' '' '' 'X'.
+  PERFORM field USING 'VKBUR_VTEXT'  '行办描述' 'X' '' '' '' '' '' 'X'.
+ENDFORM.                    " BUILD_FIELDCAT
+
+*&---------------------------------------------------------------------*
+*&      Form  display_alv
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+FORM field  USING   p_fieldname       "
+      p_seltext_l       "
+      p_no_zero         "
+      p_edit            "
+      p_check
+      p_deci
+      p_field
+      p_table
+      p_sum.
+  fieldcat_ln-fieldname     = p_fieldname.
+  fieldcat_ln-reptext     = p_seltext_l.
+  fieldcat_ln-no_zero       = p_no_zero.
+  fieldcat_ln-edit          = p_edit.
+  fieldcat_ln-checkbox          = p_check.
+  fieldcat_ln-decimals_o  = p_deci.
+  fieldcat_ln-ref_field  = p_field.
+  fieldcat_ln-ref_table  = p_table.
+  fieldcat_ln-do_sum  = p_sum.
+
+  APPEND fieldcat_ln TO fieldcat.
+  CLEAR: fieldcat_ln.
+ENDFORM.                    " field
+
+*&---------------------------------------------------------------------*
+*&      Form  display_alv
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+FORM display_alv .
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program          = sy-cprog
+      is_layout_lvc               = ps_layout
+      it_fieldcat_lvc             = fieldcat
+      i_save                      = 'A'
+*     i_callback_user_command     = 'USER_COMMAND'
+*     it_events                   = git_events
+*     i_callback_pf_status_set    = 'SET_PFSTATUS'
+*     i_grid_title                = ztitle
+      i_callback_html_top_of_page = 'ALV_TOP_OF_PAGE'
+      i_html_height_top           = 22     "HTML框的高度
+    TABLES
+      t_outtab                    = <dynitab>
+    EXCEPTIONS
+      program_error               = 1
+      OTHERS                      = 2.
+
+ENDFORM.                    " DISPLAY_ALV
+**&---------------------------------------------------------------------*
+**&      设置状态条
+**&---------------------------------------------------------------------*
+*FORM set_pfstatus USING extab TYPE slis_t_extab.
+*
+*  SET PF-STATUS 'ZRPFI009'." 标准ALV功能
+*
+*ENDFORM.                    "set_pf_status_1000
+
+FORM alv_top_of_page USING cl_dd TYPE REF TO cl_dd_document.
+  DATA: m_pos TYPE i.
+  DATA: m_con TYPE string.
+  DATA: tablen TYPE p,lenstr TYPE string.
+  DATA: comp_t(50) TYPE c.
+
+  SELECT SINGLE butxt INTO comp_t FROM t001 WHERE bukrs EQ p_bukrs.
+
+  m_con = '<html>'.
+  CALL METHOD cl_dd->html_insert
+    EXPORTING
+      contents = m_con
+    CHANGING
+      position = m_pos.
+
+*  m_con =  '<H3>销售业务台帐</H3>'.
+  CONCATENATE '<H4>应收账款按月分布明细表</H4>' '' INTO  m_con. "ALV表头标题
+  CALL METHOD cl_dd->html_insert
+    EXPORTING
+      contents = m_con
+    CHANGING
+      position = m_pos.
+
+  CONCATENATE '<H5>' p_budat+0(4) '年' p_budat+4(2) '月' p_budat+6(2) '日 </H5>' INTO  m_con. "ALV表头标题
+  CALL METHOD cl_dd->html_insert
+    EXPORTING
+      contents = m_con
+    CHANGING
+      position = m_pos.
+*应收余额（按币种分开合计）：'ysye_a '___
+  CONCATENATE '<H5>编制单位：'  comp_t '</H5>' INTO  m_con. "ALV表头标题
+  CALL METHOD cl_dd->html_insert
+    EXPORTING
+      contents = m_con
+    CHANGING
+      position = m_pos.
+  m_con = '</html>'.
+  CALL METHOD cl_dd->html_insert
+    EXPORTING
+      contents = m_con
+    CHANGING
+      position = m_pos.
+ENDFORM.                    "alv_top_of_page

@@ -1,0 +1,15 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPMM007_S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+
+PARAMETERS      p_werks TYPE eban-werks OBLIGATORY DEFAULT '1000'.
+SELECT-OPTIONS: s_banfn FOR eban-banfn,
+                s_ekgrp FOR eban-ekgrp,
+                s_bsart FOR eban-bsart,
+                s_matkl FOR eban-matkl,
+                s_lfdat FOR eban-lfdat,
+                s_badat FOR eban-badat,
+                s_plifz FOR marc-plifz             .
+SELECTION-SCREEN END OF BLOCK b1.

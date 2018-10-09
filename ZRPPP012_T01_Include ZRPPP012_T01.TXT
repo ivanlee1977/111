@@ -1,0 +1,69 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP012_T01
+*&---------------------------------------------------------------------*
+
+TABLES :afpo,afko,afvc,afvv,crhd.
+
+DATA: BEGIN OF gt_pp OCCURS 0,
+        aufnr LIKE afko-aufnr,
+        dauat LIKE afpo-dauat,
+        matnr LIKE afpo-matnr,
+        arbpl LIKE crhd-arbpl,
+        fevor LIKE afko-fevor,
+        rgekz LIKE resb-rgekz,
+        charg LIKE afpo-charg,
+        vornr LIKE afvc-vornr,
+        mgvrg LIKE afvv-mgvrg, "总计划
+        lmnga LIKE afvv-lmnga, "已生产数
+*        rmnga LIKE afvv-rmnga,  "不良品
+        objnr LIKE aufk-objnr,
+        rsnum LIKE afko-rsnum,
+        aplzl LIKE afvv-aplzl,
+        aufpl LIKE afvv-aufpl,
+        aplzt LIKE afko-aplzt,
+        zjys  LIKE afvv-rmnga,
+        arbid LIKE afvc-arbid,
+        maktx LIKE makt-maktx,
+        gstrp LIKE afko-gstrp,
+        gltrp LIKE afko-gltrp,
+        psmng LIKE afpo-psmng,
+        wemng LIKE afpo-wemng,
+        zstr(132)  TYPE c,
+        zlp1  LIKE afvv-lmnga,
+        zjy1  LIKE afvv-lmnga,
+        zlp2  LIKE afvv-lmnga,
+        zjy2  LIKE afvv-lmnga,
+        zlp3  LIKE afvv-lmnga,
+        zjy3  LIKE afvv-lmnga,
+        zlp4  LIKE afvv-lmnga,
+        zjy4  LIKE afvv-lmnga,
+        zlp5  LIKE afvv-lmnga,
+        zjy5  LIKE afvv-lmnga,
+        zlp6  LIKE afvv-lmnga,
+        zjy6  LIKE afvv-lmnga,
+        zlp7  LIKE afvv-lmnga,
+        zjy7  LIKE afvv-lmnga,
+        zlp8  LIKE afvv-lmnga,
+        zjy8  LIKE afvv-lmnga,
+      END OF gt_pp.
+DATA gs_pp LIKE gt_pp.
+DATA gs_pp1 LIKE gt_pp.
+DATA gt_pp1 LIKE TABLE OF gt_pp WITH HEADER LINE.
+DATA:ok_code   TYPE sy-ucomm,
+     save_ok   TYPE sy-ucomm,
+     errorcode TYPE i.
+
+DATA: gt_fcat   TYPE slis_t_fieldcat_alv WITH HEADER LINE,
+      gs_layout TYPE slis_layout_alv.
+
+CONSTANTS:gcst_excel_template TYPE w3objid VALUE 'ZPP010'.
+
+DEFINE g_fieldfcat .
+  gt_fcat-fieldname = &1.
+  gt_fcat-seltext_s = &2.
+  gt_fcat-ddictxt = 'S'.
+  gt_fcat-ref_fieldname = &3.
+  gt_fcat-ref_tabname = &4.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

@@ -1,0 +1,151 @@
+*&---------------------------------------------------------------------*
+*& 程序名： ZRPWMS001
+*& 创建者(公司)/日期： PFT/20170925
+*& 程序描述: WMS接口：物料主数据推送
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    PFT           20170925      创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpwms001.
+TABLES:mara,marc,makt.
+
+DATA:BEGIN OF gt_data OCCURS 0,
+       matnr LIKE mara-matnr,
+       matkl LIKE mara-matkl,
+       meins LIKE mara-meins,
+       werks LIKE marc-werks,
+       lgpro LIKE marc-lgpro,
+       lgfsb LIKE marc-lgfsb,
+       maktx LIKE makt-maktx,
+     END OF gt_data.
+
+***selection screen define
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_datum FOR sy-datum OBLIGATORY.
+SELECTION-SCREEN END OF BLOCK blc.
+
+*********单位内部转外部*************
+DEFINE mcr_cunit_output.
+  IF &1 IS NOT INITIAL.
+    CALL FUNCTION 'CONVERSION_EXIT_CUNIT_OUTPUT'
+    EXPORTING
+      input          = &1
+      language       = sy-langu
+    IMPORTING
+      output         = &1
+    EXCEPTIONS
+      unit_not_found = 1
+      OTHERS         = 2.
+  ENDIF.
+END-OF-DEFINITION.
+
+START-OF-SELECTION.
+
+  PERFORM frm_get_data.
+  PERFORM frm_send_data.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA: lt_makt LIKE makt OCCURS 0 WITH HEADER LINE.
+
+  SELECT a~matnr a~matkl a~meins
+         b~werks b~lgpro b~lgfsb
+    INTO CORRESPONDING FIELDS OF TABLE gt_data
+    FROM mara AS a INNER JOIN marc AS b ON a~matnr = b~matnr
+    WHERE ( ersda IN s_datum OR laeda IN s_datum )
+      and b~werks = '1000'.
+
+  CHECK gt_data[] IS NOT INITIAL.
+  SELECT * INTO TABLE lt_makt FROM makt
+    FOR ALL ENTRIES IN gt_data
+    WHERE matnr = gt_data-matnr
+      AND spras = sy-langu.
+  SORT lt_makt BY matnr.
+
+  FIELD-SYMBOLS <fs_data> LIKE gt_data.
+  LOOP AT gt_data ASSIGNING <fs_data>.
+*   去掉0
+*    CALL FUNCTION 'CONVERSION_EXIT_MATN1_OUTPUT'
+*      EXPORTING
+*        input  = <fs_data>-matnr
+*      IMPORTING
+*        output = <fs_data>-matnr.
+    mcr_cunit_output:<fs_data>-meins.
+    READ TABLE lt_makt WITH KEY matnr = <fs_data>-matnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      <fs_data>-maktx = lt_makt-maktx.
+    ENDIF.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SEND_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_send_data .
+
+  DATA:cl_si_wms_material_out TYPE REF TO zco_si_wms_material_out.
+  DATA:cl_cx_ai_system_fault      TYPE REF TO cx_ai_system_fault,
+       cl_cx_ai_application_fault TYPE REF TO cx_ai_application_fault.
+  DATA:ls_output    TYPE zmt_wms_material_req,
+       ls_input     TYPE zmt_wms_common_res,
+       lt_mara_data TYPE TABLE OF zdt_wms_material_req_muli_mata,
+       ls_mara_data TYPE zdt_wms_material_req_muli_mata.
+  DATA:lv_msg TYPE string.
+
+  WRITE:/ '准备将数据推送到WMS系统:'.
+
+  TRY.
+      CREATE OBJECT cl_si_wms_material_out.
+    CATCH cx_ai_system_fault INTO cl_cx_ai_system_fault.
+      lv_msg = cl_cx_ai_system_fault->get_text( ).
+      WRITE:/ lv_msg.
+      EXIT.
+  ENDTRY.
+
+  LOOP AT gt_data.
+    ls_mara_data-matnr = gt_data-matnr.
+    ls_mara_data-maktx = gt_data-maktx.
+    ls_mara_data-matkl = gt_data-matkl.
+    ls_mara_data-meins = gt_data-meins.
+    ls_mara_data-lgpro = gt_data-lgpro.
+    ls_mara_data-lgfsb = gt_data-lgfsb.
+    APPEND ls_mara_data TO lt_mara_data.
+    CLEAR ls_mara_data.
+  ENDLOOP.
+
+  ls_output-mt_wms_material_req-muli_matas = lt_mara_data.
+
+  TRY.
+      CALL METHOD cl_si_wms_material_out->si_wms_material_out
+        EXPORTING
+          output = ls_output
+        IMPORTING
+          input  = ls_input.
+      lv_msg = ls_input-mt_wms_common_res-message.
+      WRITE:/ lv_msg.
+    CATCH cx_ai_system_fault INTO cl_cx_ai_system_fault.
+      lv_msg =  cl_cx_ai_system_fault->get_text( ).
+      WRITE:/ lv_msg.
+      EXIT.
+    CATCH cx_ai_application_fault INTO cl_cx_ai_application_fault.
+      lv_msg = cl_cx_ai_application_fault->get_text( ).
+      WRITE:/ lv_msg.
+      EXIT.
+  ENDTRY.
+
+  IF ls_input-mt_wms_common_res-type = 'S'.
+    WRITE:/ '将数据推送到WMS系统成功'.
+  ENDIF.
+
+  COMMIT WORK AND WAIT.
+ENDFORM.

@@ -1,0 +1,619 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP001F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_INIT_DATE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_init_date .
+  CLEAR: lv_date1,lv_date2,lv_date3,lv_date4,lv_date5,lv_date6,lv_date7.
+  CONCATENATE p_month '01' INTO lv_date1.
+  PERFORM frm_date_interval USING lv_date1 '01' '+' CHANGING lv_date1.
+  PERFORM frm_date_interval USING lv_date1 '01' '+' CHANGING lv_date2.
+  PERFORM frm_date_interval USING lv_date2 '01' '+' CHANGING lv_date3.
+  PERFORM frm_date_interval USING lv_date3 '01' '+' CHANGING lv_date4.
+  PERFORM frm_date_interval USING lv_date4 '01' '+' CHANGING lv_date5.
+  PERFORM frm_date_interval USING lv_date5 '01' '+' CHANGING lv_date6.
+  PERFORM frm_date_interval USING lv_date6 '01' '+' CHANGING lv_date7.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  frm_GET_data
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+*  逻辑：（1）先根据需求计划月份从表ZTSD001C中取出销售预测数量（作为MD61的前三个月）
+*        （2）根据取出的物料从主数据中取出主型号，
+*        （3）根据需求计划月份从表ZTSD007中取出ZMONTH小于等于需求计划月份的年度预测数据（作为MD61的后四个月）
+  DATA: BEGIN OF lt_ztsd007 OCCURS 0,
+          matnr LIKE mara-matnr,
+          matkl LIKE mara-matkl.
+      INCLUDE STRUCTURE ztsd007.
+  DATA:END OF lt_ztsd007.
+
+  DATA: BEGIN OF lt_ausp OCCURS 0,
+          objek LIKE ausp-objek,
+          atinn LIKE ausp-atinn,
+          atwrt LIKE ausp-atwrt,
+          atnam LIKE cabn-atnam,
+        END OF lt_ausp.
+*从表ZTSD001C中取出销售预测数量
+  SELECT a~matnr a~zbyjh AS value1 a~zbyyc1 AS value2 a~zbyyc2 AS value3 a~matnr AS objek
+    INTO CORRESPONDING FIELDS OF TABLE gt_alv
+    FROM ztsd001c AS a INNER JOIN mara AS b ON a~matnr = b~matnr
+                       INNER JOIN marc AS c ON a~matnr = c~matnr
+    WHERE a~zmonth EQ p_month
+      AND c~werks EQ '1000'
+      AND c~dispo NE 'M05'.
+*      AND b~matkl NE '2010'.
+
+  IF gt_alv[] IS INITIAL.
+    MESSAGE e398(00) WITH '销售需求计划未导入，请用TCODE：ZSD001导入' DISPLAY LIKE 'E'.
+    EXIT.
+  ENDIF.
+
+  CHECK gt_alv[] IS NOT INITIAL.
+  SELECT a~objek a~atinn a~atwrt b~atnam
+     INTO CORRESPONDING FIELDS OF TABLE lt_ausp
+     FROM ausp AS a INNER JOIN cabn AS b ON a~atinn = b~atinn
+     WHERE b~atnam EQ 'ZFER_DYZXH'.
+  SORT lt_ausp BY objek.
+
+
+*  计算从表ZTSD007中读取的年月
+  DATA: lv_date  LIKE sy-datum,
+        lv_month TYPE zmonth,
+        lv_tabix LIKE sy-tabix,
+        lv_dispo LIKE marc-dispo.
+
+  DATA: lv_zmonth_max TYPE zmonth.
+
+  SELECT MAX( zmonth ) INTO lv_zmonth_max FROM ztsd007.
+  CONCATENATE lv_zmonth_max '01' INTO lv_date.
+  PERFORM frm_date_interval USING lv_date '12' '+' CHANGING lv_date.
+  lv_month = lv_date+0(6).
+
+*  根据主型号从表ZTSD007中取出主型号对应的销售预测信息
+  IF lv_month GE p_month .
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_ztsd007
+      FROM ztsd007
+     WHERE zmonth EQ lv_zmonth_max.
+    SORT lt_ztsd007 BY zfer_dyzxh.
+  ENDIF.
+
+  LOOP AT lt_ztsd007 .
+    CLEAR:lv_dispo.
+    lv_tabix = sy-tabix.
+    READ TABLE lt_ausp WITH KEY atwrt = lt_ztsd007-zfer_dyzxh.
+    IF sy-subrc = 0.
+      lt_ztsd007-matnr = lt_ausp-objek.
+    ENDIF.
+    SELECT SINGLE matkl INTO lt_ztsd007-matkl FROM mara WHERE matnr = lt_ztsd007-matnr.
+*  CHANGE BY PFT 20171206
+*    IF lt_ztsd007-matkl EQ '2010'.
+*      DELETE lt_ztsd007 INDEX lv_tabix.
+*    ENDIF.
+    SELECT SINGLE dispo INTO lv_dispo FROM marc WHERE matnr = lt_ztsd007-matnr AND werks = '1000'.
+    IF lv_dispo EQ 'M05'.
+      DELETE lt_ztsd007 INDEX lv_tabix.
+    ENDIF.
+*  END BY PFT 20171206
+    MODIFY lt_ztsd007 TRANSPORTING matnr.
+    CLEAR: lt_ztsd007.
+  ENDLOOP.
+
+*  计算两个月份的差
+  DATA: lv_date_from LIKE sy-datum , "ZTSD007中的导入年月
+        lv_date_to   LIKE sy-datum, "屏幕输入的需求计划月份
+        lv_atage     TYPE vtbbewe-atage. "月份差
+
+  IF lv_zmonth_max GE p_month.
+    CONCATENATE lv_zmonth_max '01' INTO lv_date_to.
+    CONCATENATE p_month '01' INTO lv_date_from.
+  ELSE.
+    CONCATENATE lv_zmonth_max '01' INTO lv_date_from.
+    CONCATENATE p_month '01' INTO lv_date_to.
+  ENDIF.
+  CONDENSE lv_date_from.
+  CONDENSE lv_date_to.
+
+
+  CALL FUNCTION 'FIMA_DAYS_AND_MONTHS_AND_YEARS'
+    EXPORTING
+      i_date_from = lv_date_from
+      i_date_to   = lv_date_to
+    IMPORTING
+      e_months    = lv_atage.
+
+  DATA: lv_index(2),
+        lv_index2(2),
+        lv_index3(1),
+        lv_fieldname(18),
+        fieldname(6).
+  FIELD-SYMBOLS:<f>      LIKE ztsd007-value1,
+                <fs_str> TYPE any.
+  lv_index = lv_atage + 4 .
+
+  LOOP AT gt_alv.
+*   获取主型号
+    READ TABLE lt_ausp WITH KEY objek = gt_alv-objek BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-zfer_dyzxh = lt_ausp-atwrt.
+    ENDIF.
+*  获取后四个月的销售预测
+    IF lv_month GE p_month.
+      READ TABLE lt_ztsd007 WITH KEY zfer_dyzxh = gt_alv-zfer_dyzxh BINARY SEARCH.
+      IF sy-subrc = 0.
+        lv_tabix = sy-tabix.
+        lv_index2 = lv_index.
+        lv_index3 = '4'.
+        DO 4 TIMES.
+          IF lv_index2 LE 12.
+            CONCATENATE 'VALUE' lv_index3 INTO fieldname.
+            CONDENSE fieldname.
+            ASSIGN COMPONENT fieldname OF STRUCTURE gt_alv TO <fs_str>.
+            CONCATENATE 'LT_ZTSD007-VALUE' lv_index2 INTO lv_fieldname.
+            ASSIGN (lv_fieldname) TO <f>.
+            ADD <f> TO <fs_str>.
+          ELSE.
+            EXIT.
+          ENDIF.
+          UNASSIGN: <fs_str>,<f>.
+          lv_index2 = lv_index2 + 1.
+          lv_index3 = lv_index3 + 1.
+        ENDDO.
+        DELETE lt_ztsd007 INDEX lv_tabix.
+      ENDIF.
+    ENDIF.
+    MODIFY gt_alv.
+    CLEAR: gt_alv.
+  ENDLOOP.
+
+  CHECK lv_month GE p_month.
+  LOOP AT lt_ztsd007 .
+    CLEAR: gt_alv.
+    gt_alv-matnr = lt_ztsd007-matnr.
+    gt_alv-zfer_dyzxh = lt_ztsd007-zfer_dyzxh.
+    CLEAR:lv_index2.
+    lv_index2 = lv_index.
+    lv_index3 = '4'.
+    DO 4 TIMES.
+      IF lv_index2 LE 12.
+        CONCATENATE 'VALUE' lv_index3 INTO fieldname.
+        CONDENSE fieldname.
+        ASSIGN COMPONENT fieldname OF STRUCTURE gt_alv TO <fs_str>.
+        CONCATENATE 'LT_ZTSD007-VALUE' lv_index2 INTO lv_fieldname.
+        ASSIGN (lv_fieldname) TO <f>.
+        ADD <f> TO <fs_str>.
+      ELSE.
+        EXIT.
+      ENDIF.
+      UNASSIGN: <fs_str>,<f>.
+      lv_index2 = lv_index2 + 1.
+      lv_index3 = lv_index3 + 1.
+    ENDDO.
+    APPEND gt_alv.
+    CLEAR: lt_ztsd007.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  frm_check_data
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_data .
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  frm_get_fieldcat
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  DATA:lv_colname1(20).
+  REFRESH:gt_fcat.
+  mcr_fieldcat: 'ZICON'      '状态'      'C' '30' ''.
+  mcr_fieldcat: 'MATNR'      '物料'      'C' '18' 'X'.
+  mcr_fieldcat: 'ZFER_DYZXH' '主型号'    'C' '40' ''.
+  CLEAR:lv_colname1.
+  lv_colname1 = lv_date1+0(6).
+  mcr_fieldcat: 'VALUE1'     lv_colname1 'C' '20' 'X'.
+  CLEAR:lv_colname1.
+  lv_colname1 = lv_date2+0(6).
+  mcr_fieldcat: 'VALUE2'     lv_colname1 'C' '20' 'X'.
+  CLEAR:lv_colname1.
+  lv_colname1 = lv_date3+0(6).
+  mcr_fieldcat: 'VALUE3'     lv_colname1 'C' '20' 'X'.
+  CLEAR:lv_colname1.
+  lv_colname1 = lv_date4+0(6).
+  mcr_fieldcat: 'VALUE4'     lv_colname1 'C' '20' 'X'.
+  CLEAR:lv_colname1.
+  lv_colname1 = lv_date5+0(6).
+  mcr_fieldcat: 'VALUE5'     lv_colname1 'C' '20' 'X'.
+  CLEAR:lv_colname1.
+  lv_colname1 = lv_date6+0(6).
+  mcr_fieldcat: 'VALUE6'     lv_colname1 'C' '20' 'X'.
+  CLEAR:lv_colname1.
+  lv_colname1 = lv_date7+0(6).
+  mcr_fieldcat: 'VALUE7'     lv_colname1 'C' '20' 'X'.
+  mcr_fieldcat: 'ZMSG'       '消息'      'C' '200' ''.
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+  gs_layout-no_toolbar = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  frm_output_data
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'FRM_PF_STATUS'
+      i_callback_user_command  = 'FRM_USER_COMMAND'
+      is_layout_lvc            = gs_layout
+      it_fieldcat_lvc          = gt_fcat[]
+      i_default                = 'X'
+      i_save                   = 'A'
+    TABLES
+      t_outtab                 = gt_alv[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  frm_pf_status
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_pf_status USING rt_extab TYPE slis_t_extab.
+  SET PF-STATUS 'PF_001'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  frm_user_command
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_user_command USING r_ucomm LIKE sy-ucomm
+                            rs_selfield TYPE slis_selfield..
+
+  DATA:lv_grid TYPE REF TO cl_gui_alv_grid.
+
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = lv_grid.
+
+  CASE r_ucomm.
+    WHEN 'ZUPLOAD'.  "导入数据
+      DATA: answer TYPE c.
+      CLEAR: answer.
+      IF lv_exit IS NOT INITIAL.
+        MESSAGE e398(00) WITH '请勿重复执行' DISPLAY LIKE 'E'.
+      ENDIF.
+      CALL FUNCTION 'POPUP_TO_CONFIRM'
+        EXPORTING
+          titlebar              = '系统警告'
+          text_question         = '将清空原来00版本的所有计划独立需求，确定？'
+          text_button_1         = '确定'
+          icon_button_1         = 'ICON_DELETE'
+          text_button_2         = '否'
+          icon_button_2         = 'ICON_CANCEL'
+          default_button        = '2'
+          display_cancel_button = 'X'
+        IMPORTING
+          answer                = answer
+        EXCEPTIONS
+          text_not_found        = 1
+          OTHERS                = 2.
+
+      CHECK answer EQ '1'.
+      BREAK xul.
+      PERFORM frm_create_md61 CHANGING lv_exit.
+      CALL METHOD lv_grid->set_frontend_layout
+        EXPORTING
+          is_layout = gs_layout.
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  frm_create_md61
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+* 逻辑说明：先调用BDC将选择屏幕期间到默认期间的计划全部删除
+*           再调用BAPI生成需求计划（从选择屏幕的需求计划月份的下月1号开始，填7个月的计划）
+*----------------------------------------------------------------------*
+FORM frm_create_md61 CHANGING lv_exit.
+*BAPI参数定义
+  DATA: wa_requi_item       LIKE bapisitemr,
+        lv_material         LIKE  bapisitemr-material,
+        lv_plant            LIKE  bapisitemr-plant,
+        lv_requirementstype LIKE  bapisitemr-requ_type,
+        lv_version          LIKE  bapisitemr-version,
+        lv_reqmtsplannumber LIKE  bapisitemr-req_number,
+        lv_mrp_area         LIKE  bapisitemr-mrp_area,
+        lv_material_evg     TYPE  bapimgvmatnr,
+        lv_req_plan_id_ext  LIKE  bapisitemr-req_plan_id_ext,
+        lv_req_segment      LIKE  bapisitemr-req_segment,
+        lv_material_long    TYPE  bapisitemr-material_long,
+        lt_schedule         LIKE bapisshdin OCCURS 0 WITH HEADER LINE,
+        lt_return           LIKE bapireturn1 OCCURS 0 WITH HEADER LINE.
+
+  DATA:lv_msg  TYPE string, "BDC消息
+       lv_flag TYPE c, "是否成功
+       lv_mess TYPE string. "消息
+  DATA: lv_datve LIKE sy-datum.
+  DATA: lt_pbim LIKE pbim OCCURS 0 WITH HEADER LINE.
+  CONCATENATE p_month '01' INTO lv_datve. CONDENSE lv_datve.
+  SELECT * INTO TABLE lt_pbim FROM pbim WHERE werks = '1000' AND versb = '00' AND loevr EQ space.
+  IF sy-subrc = 0.
+    REFRESH:bdcdata_itab,messtab.
+    PERFORM bdc_dynpro      USING 'SAPMM60X' '0106'.
+    PERFORM bdc_field       USING 'BDC_OKCODE' '/00'.
+    PERFORM bdc_field       USING 'AM60X-PBDAW' 'X'.
+    PERFORM bdc_field       USING 'AM60X-PBDNR' '*'.
+    PERFORM bdc_field       USING 'AM60X-WERKS' '1000'.
+    PERFORM bdc_field       USING 'AM60X-VERAW' 'X'.
+    PERFORM bdc_field       USING 'RM60X-VERSB' '00'.
+    PERFORM bdc_field       USING 'RM60X-DATVE' lv_datve.
+    PERFORM bdc_field       USING 'RM60X-ENTLU' 'M'.
+    PERFORM bdc_dynpro      USING 'SAPLM60E' '0200'.
+    PERFORM bdc_field       USING 'BDC_OKCODE' '=ALMK'.
+    PERFORM bdc_dynpro      USING 'SAPLM60E' '0200'.
+    PERFORM bdc_field       USING 'BDC_OKCODE' '=POLO'.
+    PERFORM bdc_dynpro      USING 'SAPLSPO1' '0500'.
+    PERFORM bdc_field       USING 'BDC_OKCODE' '=OPT1'.
+    PERFORM bdc_dynpro      USING 'SAPLM60E' '0200'.
+    PERFORM bdc_field       USING 'BDC_OKCODE' '=SICH'.
+    CALL TRANSACTION 'MD62' USING bdcdata_itab MODE 'N' UPDATE 'L' MESSAGES INTO messtab.
+    LOOP AT messtab WHERE msgtyp = 'E' OR msgtyp = 'A'.
+      EXIT.
+    ENDLOOP.
+    IF sy-subrc = 0.
+      lv_flag = 'E'.
+      LOOP AT messtab WHERE msgtyp = 'E' OR msgtyp = 'A'.
+        CLEAR lv_msg.
+        CALL FUNCTION 'MESSAGE_TEXT_BUILD'
+          EXPORTING
+            msgid               = messtab-msgid
+            msgnr               = messtab-msgnr
+            msgv1               = messtab-msgv1
+            msgv2               = messtab-msgv2
+            msgv3               = messtab-msgv3
+            msgv4               = messtab-msgv4
+          IMPORTING
+            message_text_output = lv_msg.
+        IF lv_mess IS INITIAL.
+          lv_mess =  lv_msg.
+        ELSE.
+          CONCATENATE lv_mess  lv_msg INTO lv_mess .
+        ENDIF.
+      ENDLOOP.
+      MESSAGE e398(00) WITH lv_mess DISPLAY LIKE 'E'.
+    ELSE.
+      lv_flag = 'S'.
+    ENDIF.
+  ELSE.
+    lv_flag = 'S'.
+  ENDIF.
+
+*  BDC删除计划成功，调用BAPI生成需求计划
+  DATA: lv_meins LIKE mara-meins.
+  CHECK lv_flag = 'S'.
+  LOOP AT gt_alv.
+    CLEAR: wa_requi_item,lv_meins.
+    REFRESH:lt_schedule,lt_return.
+    wa_requi_item-material = gt_alv-matnr."物料号
+    wa_requi_item-plant = '1000'."工厂
+    wa_requi_item-version = '00'."版本号
+    wa_requi_item-vers_activ = 'X'."标识：版本已激活
+
+*   需求计划1
+    SELECT SINGLE meins INTO lv_meins FROM mara WHERE matnr = gt_alv-matnr.
+    CLEAR:lt_schedule.
+    lt_schedule-date_type = '3'."日期类型（日，周，月，间隔）
+    lt_schedule-req_date = lv_date1."计划行日期
+    lt_schedule-req_qty = gt_alv-value1."计划数量
+    lt_schedule-unit = lv_meins."基本计量单位
+    APPEND lt_schedule.
+*   需求计划2
+    CLEAR:lt_schedule.
+    lt_schedule-date_type = '3'."日期类型（日，周，月，间隔）
+    lt_schedule-req_date = lv_date2."计划行日期
+    lt_schedule-req_qty = gt_alv-value2."计划数量
+    lt_schedule-unit = lv_meins."基本计量单位
+    APPEND lt_schedule.
+*   需求计划3
+    CLEAR:lt_schedule.
+    lt_schedule-date_type = '3'."日期类型（日，周，月，间隔）
+    lt_schedule-req_date = lv_date3."计划行日期
+    lt_schedule-req_qty = gt_alv-value3."计划数量
+    lt_schedule-unit = lv_meins."基本计量单位
+    APPEND lt_schedule.
+*   需求计划4
+    CLEAR:lt_schedule.
+    lt_schedule-date_type = '3'."日期类型（日，周，月，间隔）
+    lt_schedule-req_date = lv_date4."计划行日期
+    lt_schedule-req_qty = gt_alv-value4."计划数量
+    lt_schedule-unit = lv_meins."基本计量单位
+    APPEND lt_schedule.
+*   需求计划5
+    CLEAR:lt_schedule.
+    lt_schedule-date_type = '3'."日期类型（日，周，月，间隔）
+    lt_schedule-req_date = lv_date5."计划行日期
+    lt_schedule-req_qty = gt_alv-value5."计划数量
+    lt_schedule-unit = lv_meins."基本计量单位
+    APPEND lt_schedule.
+*   需求计划6
+    CLEAR:lt_schedule.
+    lt_schedule-date_type = '3'."日期类型（日，周，月，间隔）
+    lt_schedule-req_date = lv_date6."计划行日期
+    lt_schedule-req_qty = gt_alv-value6."计划数量
+    lt_schedule-unit = lv_meins."基本计量单位
+    APPEND lt_schedule.
+*   需求计划7
+    CLEAR:lt_schedule.
+    lt_schedule-date_type = '3'."日期类型（日，周，月，间隔）
+    lt_schedule-req_date = lv_date7."计划行日期
+    lt_schedule-req_qty = gt_alv-value7."计划数量
+    lt_schedule-unit = lv_meins."基本计量单位
+    APPEND lt_schedule.
+
+    CALL FUNCTION 'BAPI_REQUIREMENTS_CREATE'
+      EXPORTING
+        requirements_item        = wa_requi_item
+*       requirement_param        =
+        do_commit                = 'X'
+        update_mode              = 'X'
+*       refer_type               = ' '
+*       profilid                 = ' '
+      IMPORTING
+        material                 = lv_material
+        plant                    = lv_plant
+        requirementstype         = lv_requirementstype
+        version                  = lv_version
+        reqmtsplannumber         = lv_reqmtsplannumber
+        mrp_area                 = lv_mrp_area
+        material_evg             = lv_material_evg
+        req_plan_id_ext          = lv_req_plan_id_ext
+        req_segment              = lv_req_segment
+        material_long            = lv_material_long
+      TABLES
+        requirements_schedule_in = lt_schedule
+        return                   = lt_return.
+    LOOP AT lt_return WHERE type = 'E' OR type = 'A'.
+      EXIT.
+    ENDLOOP.
+    IF sy-subrc = 0.
+      CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+      gt_alv-msgty = 'E'.
+      gt_alv-zicon = icon_led_red.
+      PERFORM frm_get_msg TABLES lt_return CHANGING gt_alv-zmsg.
+    ELSE.
+      CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+        EXPORTING
+          wait = 'X'.
+      gt_alv-msgty = 'S'.
+      gt_alv-zicon = icon_led_green.
+      gt_alv-zmsg = '导入成功'.
+    ENDIF.
+    MODIFY gt_alv.
+    CLEAR: gt_alv.
+  ENDLOOP.
+  lv_exit = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  BDC_DYNPRO
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_1152   text
+*      -->P_1153   text
+*----------------------------------------------------------------------*
+FORM bdc_dynpro USING program dynpro.
+  CLEAR bdcdata_itab.
+  bdcdata_itab-program  = program.
+  bdcdata_itab-dynpro   = dynpro.
+  bdcdata_itab-dynbegin = 'X'.
+  APPEND bdcdata_itab.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  BDC_FIELD
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_1317   text
+*      -->P_1318   text
+*----------------------------------------------------------------------*
+FORM bdc_field USING fnam fval.
+  CLEAR bdcdata_itab.
+  bdcdata_itab-fnam = fnam.
+  bdcdata_itab-fval = fval.
+  APPEND bdcdata_itab.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DATE_INTERVAL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LV_DATE1  text
+*      -->P_0029   text
+*      -->P_0030   text
+*      <--P_LV_DATE2  text
+*----------------------------------------------------------------------*
+FORM frm_date_interval  USING    pv_date
+                                 pv_month TYPE t5a4a-dlymo
+                                 pv_signum TYPE t5a4a-split
+                        CHANGING pv_date1.
+  CALL FUNCTION 'RP_CALC_DATE_IN_INTERVAL'
+    EXPORTING
+      date      = pv_date
+      days      = '00'
+      months    = pv_month
+      signum    = pv_signum
+      years     = '00'
+    IMPORTING
+      calc_date = pv_date1.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_MSG
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LT_RETURN  text
+*      <--P_GT_ALV_ZMSG  text
+*----------------------------------------------------------------------*
+FORM frm_get_msg  TABLES  lt_return STRUCTURE bapireturn1
+                  CHANGING c_zmsg TYPE bapi_msg.
+  DATA:lv_msg TYPE string.
+  CLEAR c_zmsg.
+  LOOP AT lt_return WHERE type  = 'E' OR type = 'A'.
+    CLEAR lv_msg.
+    CALL FUNCTION 'MESSAGE_TEXT_BUILD'
+      EXPORTING
+        msgid               = lt_return-id
+        msgnr               = lt_return-number
+        msgv1               = lt_return-message_v1
+        msgv2               = lt_return-message_v2
+        msgv3               = lt_return-message_v3
+        msgv4               = lt_return-message_v4
+      IMPORTING
+        message_text_output = lv_msg.
+    IF c_zmsg IS INITIAL.
+      c_zmsg = lv_msg.
+    ELSE.
+      CONCATENATE c_zmsg lv_msg INTO c_zmsg.
+    ENDIF.
+  ENDLOOP.
+ENDFORM.

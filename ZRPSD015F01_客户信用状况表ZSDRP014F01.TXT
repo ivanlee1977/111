@@ -1,0 +1,877 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZSDRP014F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*& 特殊逻辑说明:客户对应的信贷帐户号不是客户本身(客户号1000030,客户信贷帐户1000041)
+*& 从表S066和表S067中取数时根据信贷帐户号取未清销售额\未清交货\未清发票
+*& 信用额度\应收总额\特别往来债务也需要根据信贷帐户号去取
+*& 在显示明细时:如果指定查询客户1000030,则明细要显示1000030和1000041
+*&              如果指定查询客户1000041,则明细要显示1000030和1000041.
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+
+*************************取出客户范围**************************************
+*  根据屏幕输入的客户从表KNKK\KNVV中取出相关信息
+  REFRESH:gt_alv,gt_alv_kunnr.
+  SELECT a~kkber a~knkli a~kunnr a~ctlpc a~grupp a~dtrev a~nxtrv
+         b~vkorg b~vtweg b~bzirk b~vkbur b~vkgrp b~kvgr1 b~kvgr2 b~zterm
+         c~name1 c~name2 c~sortl c~ktokd
+    INTO CORRESPONDING FIELDS OF TABLE gt_alv
+    FROM knkk AS a INNER JOIN knvv AS b ON a~kunnr = b~kunnr AND a~kkber = b~kkber
+                   INNER JOIN kna1 AS c ON a~kunnr = c~kunnr
+    WHERE a~kkber EQ p_kkber
+      AND b~vtweg IN s_vtweg
+      AND b~kunnr IN s_kunnr
+      AND b~bzirk IN s_bzirk
+      AND b~vkbur IN s_vkbur
+      AND b~vkgrp IN s_vkgrp
+      AND b~kvgr1 IN s_kvgr1
+      AND b~kvgr2 IN s_kvgr2
+      AND b~loevm EQ space
+      AND c~loevm EQ space
+      AND c~ktokd IN ('ZAG1','ZAG4','ZCPD').  "CHANGE BY PFT 20171227  新增帐户组ZAG4 ZCPD
+
+*  如果取出相关客户，用取出的客户再关联表KNKK中的客户信贷帐户
+  IF gt_alv[] IS NOT INITIAL.
+    SELECT a~kkber a~knkli a~kunnr a~ctlpc a~grupp a~dtrev a~nxtrv
+           b~vkorg b~vtweg b~bzirk b~vkbur b~vkgrp b~kvgr1 b~kvgr2 b~zterm
+           c~name1 c~name2 c~sortl c~ktokd
+      APPENDING CORRESPONDING FIELDS OF TABLE gt_alv
+      FROM knkk AS a INNER JOIN knvv AS b ON a~kunnr = b~kunnr AND a~kkber = b~kkber
+                     INNER JOIN kna1 AS c ON a~kunnr = c~kunnr
+      FOR ALL ENTRIES IN gt_alv
+      WHERE a~kkber EQ p_kkber
+        AND b~vtweg IN s_vtweg
+        AND a~knkli = gt_alv-knkli
+        AND b~bzirk IN s_bzirk
+        AND b~vkbur IN s_vkbur
+        AND b~vkgrp IN s_vkgrp
+        AND b~kvgr1 IN s_kvgr1
+        AND b~kvgr2 IN s_kvgr2
+        AND b~loevm EQ space
+        AND c~loevm EQ space
+        AND c~ktokd IN ('ZAG1','ZAG4','ZCPD'). "CHANGE BY PFT 20171227  新增帐户组ZAG4 ZCPD
+  ENDIF.
+* 根据控制范围和客户去重
+  SORT gt_alv BY kkber kunnr.
+  DELETE ADJACENT DUPLICATES FROM gt_alv COMPARING kkber kunnr.
+  gt_alv_kunnr[] = gt_alv[].
+**********************************************************************************
+
+  CHECK gt_alv[] IS NOT INITIAL.
+
+*  根据客户从表KNKK、S066、S067中取出相关的额度（KNKK:信贷额度、S066:未清销售额、S067:未清交货额和未清发票金额）
+  PERFORM frm_get_s066_s067.
+
+* 计算付款逾期次数(根据客户+客户信贷范围从表BSAD中取科目 1122000000并且凭证类型不等于Z1的会计凭证,
+*                  付款日期= zfbdt + zbd1t + zbd2t
+*                  判断如果结算日期AUGDT > 付款日期 并且 结算日期 > 上次信用评估日KNKK-DTREV；
+*                  符合上述条件的条目数)
+  PERFORM frm_get_bsad.
+
+* 取客户未清应收账款（当查询汇总时，取科目 1122000000并且凭证类型不等于Z1；
+*                     当查询明细时，（1）取科目1122000000并且凭证类型不等于Z1；
+*                                   （2）取科目1122000000并且凭证类型等于Z1；
+*                                   （3）取科目1121开头）
+  PERFORM frm_get_bsid.
+
+
+*  客户信用放行说明：（只有当用户查询汇总并且交货单S_VBELN不为空时，可取数）
+*  逻辑：根据屏幕输入的交货单号从表LIKP和LIPS中取出符合条件的交货单信息放在内表GT_LIKP中
+*        根据销售订单号+行项目号从表VBAP中取出销售订单信息，放在内表GT_VBAP
+*        LOOP循环计算交货单金额（数量GT_LIKP-LFIMG * (GT_VBAP-KZWI1 / GT_VBAP-KWMENG) ,
+*        当交货单类型为ZLR1时，金额为负）
+  IF p_hz EQ 'X' AND p_vbeln IS NOT INITIAL.
+    PERFORM frm_get_fxsm.
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_MX
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_mx .
+  DATA: BEGIN OF gt_vbfa OCCURS 0,
+          vbelv LIKE vbfa-vbelv, "前单据
+          posnv LIKE vbfa-posnv, "前单据行项目
+          vbeln LIKE vbfa-vbeln, "后单据，
+          posnn LIKE vbfa-posnn, "后续单据行项目
+          rfmng LIKE vbfa-rfmng, "数量
+        END OF gt_vbfa,
+        gt_vbfa_col LIKE gt_vbfa OCCURS 0 WITH HEADER LINE.
+
+  CHECK gt_alv_kunnr[] IS NOT INITIAL.
+*********************取未清交货*******************
+* 逻辑：根据信贷范围和客户关联表LIPS LIKP VBUK 从表中取出出具发票状态FKSTK = 'A'，并且交货但类型为ZLF1 ZLR1放在表GT_LIKP
+*       根据未清交货单的销售订单号从表VBAP中取出销售订单的价格和数量存放在表GT_VBAP中，用于计算单价
+*       LOOP循环计算交货单的金额（交货数量*（SO价格KZWI1/SO的数量））,根据客户、信贷范围、DN号累加金额，存放在表GT_LIKP_COL
+*       释放内表:GT_LIKP GT_VBAP ,保留内表GT_LIKP_COL
+  REFRESH: gt_likp,gt_vbap.
+
+  SELECT a~vbeln a~posnr a~lfimg a~vgbel a~vgpos
+         b~kunag b~kkber b~bldat b~erdat b~wadat_ist b~lfart
+    INTO CORRESPONDING FIELDS OF TABLE gt_likp
+    FROM lips AS a INNER JOIN likp AS b ON a~vbeln = b~vbeln
+                   INNER JOIN vbuk AS c ON a~vbeln = c~vbeln
+    FOR ALL ENTRIES IN gt_alv_kunnr
+    WHERE b~kkber = gt_alv_kunnr-kkber
+      AND b~kunag = gt_alv_kunnr-kunnr
+      AND c~fkstk = 'A'
+      AND b~lfart IN ('ZLF1','ZLR1').
+
+*  根据未清交货取销售订单，计算交货金额
+  IF gt_likp[] IS NOT INITIAL.
+    SELECT vbeln posnr kzwi1 zmeng kwmeng waerk
+      INTO CORRESPONDING FIELDS OF TABLE gt_vbap
+      FROM vbap
+      FOR ALL ENTRIES IN gt_likp
+      WHERE vbeln = gt_likp-vgbel
+        AND posnr = gt_likp-vgpos.
+    SORT gt_vbap BY vbeln posnr.
+
+    LOOP AT gt_likp.
+      CLEAR: gt_likp_col.
+      MOVE-CORRESPONDING gt_likp TO gt_likp_col.
+      IF gt_likp_col-wadat_ist IS INITIAL.
+        gt_likp_col-wadat_ist = gt_likp-bldat.
+      ENDIF.
+      CLEAR:gt_likp_col-dmbtr.
+      READ TABLE gt_vbap WITH KEY vbeln = gt_likp-vgbel posnr = gt_likp-vgpos BINARY SEARCH.
+      IF sy-subrc = 0 AND gt_vbap-kwmeng NE 0.
+        gt_likp_col-dmbtr = gt_likp-lfimg * ( gt_vbap-kzwi1 / gt_vbap-kwmeng ).
+        gt_likp_col-waerk = gt_vbap-waerk.
+      ENDIF.
+      IF gt_likp-lfart = 'ZLR1'.
+        gt_likp_col-dmbtr = 0 -  gt_likp_col-dmbtr.
+      ENDIF.
+      COLLECT gt_likp_col.
+      CLEAR: gt_likp.
+    ENDLOOP.
+  ENDIF.
+
+  REFRESH: gt_vbap,gt_likp.
+******************************************************
+
+****************************取未清销售订单****************
+* 逻辑：根据客户、信贷控制范围从表VBAP和表VBAK中取出相关的销售订单存放在表GT_VBAP中
+*       根据取出的销售订单和行项目关联表VBFA取出已交货数量，存放在表GT_VBFA中
+*       根据SO和SO行项目计算出已交货数量，存放在表GT_VBFA_COL中
+*       LOOP循环表GT_VBAP，计算出未清销售订单，（未清数量=SO数量-已交货数量），存放在表GT_VBAP_COL中
+*       释放内表GT_VBAP GT_VBFA GT_VBFA_COL
+  REFRESH:gt_vbfa,gt_vbfa_col.
+* 取未清销售订单
+  SELECT a~vbeln a~posnr a~kzwi1 a~kwmeng b~auart b~audat b~kunnr b~kkber b~waerk
+    INTO CORRESPONDING FIELDS OF TABLE gt_vbap
+    FROM vbap AS a INNER JOIN vbak AS b ON a~vbeln = b~vbeln
+                   INNER JOIN vbup AS c ON a~vbeln = c~vbeln AND a~posnr = c~posnr
+    FOR ALL ENTRIES IN gt_alv_kunnr
+    WHERE b~kunnr = gt_alv_kunnr-kunnr
+      AND b~kkber = gt_alv_kunnr-kkber
+      AND ( ( b~lifsk = '30' AND b~auart EQ 'ZOR1') OR b~auart EQ 'ZRE1' )
+      AND c~lfsta NE 'C'
+      AND a~abgru EQ space.
+
+  IF gt_vbap[] IS NOT INITIAL.
+    SELECT vbelv posnv vbeln posnn rfmng
+      INTO CORRESPONDING FIELDS OF TABLE gt_vbfa
+      FROM vbfa
+      FOR ALL ENTRIES IN gt_vbap
+      WHERE vbelv = gt_vbap-vbeln
+        AND posnv = gt_vbap-posnr
+        AND vbtyp_n = 'J'.
+
+    LOOP AT gt_vbfa.
+      CLEAR:gt_vbfa_col.
+      gt_vbfa_col-vbelv = gt_vbfa-vbelv.
+      gt_vbfa_col-posnv = gt_vbfa-posnv.
+      gt_vbfa_col-rfmng = gt_vbfa-rfmng.
+      COLLECT gt_vbfa_col.
+      CLEAR: gt_vbfa.
+    ENDLOOP.
+    SORT gt_vbfa_col BY vbelv posnv.
+
+    LOOP AT gt_vbap.
+      CLEAR: gt_vbap_col.
+      gt_vbap_col-vbeln = gt_vbap-vbeln.
+      gt_vbap_col-kunnr = gt_vbap-kunnr.
+      gt_vbap_col-kkber = gt_vbap-kkber.
+      gt_vbap_col-audat = gt_vbap-audat.
+      gt_vbap_col-waerk = gt_vbap-waerk.
+      READ TABLE gt_vbfa_col WITH KEY vbelv = gt_vbap-vbeln posnv = gt_vbap-posnr BINARY SEARCH.
+      IF sy-subrc = 0 AND gt_vbap-kwmeng NE 0 AND gt_vbap-kwmeng NE gt_vbfa_col-rfmng.
+        gt_vbap_col-kzwi1 = gt_vbap-kzwi1 / gt_vbap-kwmeng * ( gt_vbap-kwmeng - gt_vbfa_col-rfmng ).
+        IF gt_vbap-auart = 'ZRE1'.
+          gt_vbap_col-kzwi1 = 0 - gt_vbap_col-kzwi1.
+        ENDIF.
+*        gt_vbap-kwmeng = gt_vbap-kwmeng - gt_vbfa_col-rfmng.
+      ELSE.
+        gt_vbap_col-kzwi1 = gt_vbap-kzwi1.
+      ENDIF.
+      COLLECT gt_vbap_col.
+      CLEAR: gt_vbap.
+    ENDLOOP.
+  ENDIF.
+******************************************************
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PROCESS_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_process_data .
+* 取相关描述
+  DATA: gt_t691t LIKE t691t OCCURS 0 WITH HEADER LINE, "风险类别描述
+        gt_tvzbt LIKE tvzbt OCCURS 0 WITH HEADER LINE, "付款条件描述
+        gt_tvkot LIKE tvkot OCCURS 0 WITH HEADER LINE, "销售组描述
+        gt_tvtwt LIKE tvtwt OCCURS 0 WITH HEADER LINE, "渠道描述
+        gt_t171t LIKE t171t OCCURS 0 WITH HEADER LINE, "销售大区描述
+        gt_tvkbt LIKE tvkbt OCCURS 0 WITH HEADER LINE, "行办描述
+        gt_tvgrt LIKE tvgrt OCCURS 0 WITH HEADER LINE, "销售组描述
+        gt_tvv1t LIKE tvv1t OCCURS 0 WITH HEADER LINE, "业务员描述
+        gt_tvv2t LIKE tvv2t OCCURS 0 WITH HEADER LINE. "商务描述
+  DATA: lv_string(50),
+        lv_dmbtr      TYPE dmbtr,
+        lv_tabix      LIKE sy-tabix.
+*  取付款条件描述
+  SELECT * INTO TABLE gt_tvzbt FROM tvzbt WHERE spras EQ sy-langu.
+  SORT gt_tvzbt BY zterm.
+*  取风险类别描述
+  SELECT * INTO TABLE gt_t691t FROM t691t WHERE spras EQ sy-langu.
+  SORT gt_t691t BY ctlpc kkber.
+**  取销售组织描述
+*  SELECT * INTO TABLE gt_tvkot FROM tvkot WHERE spras EQ sy-langu AND vkorg IN s_vkorg.
+*  SORT gt_tvkot BY vkorg.
+*  取渠道描述
+  SELECT * INTO TABLE gt_tvtwt FROM tvtwt WHERE spras EQ sy-langu AND vtweg IN s_vtweg.
+  SORT gt_tvtwt BY vtweg.
+*  取销售大区描述
+  SELECT * INTO TABLE gt_t171t FROM t171t WHERE spras EQ sy-langu AND bzirk IN s_bzirk.
+  SORT gt_t171t BY bzirk.
+*  取行办描述
+  SELECT * INTO TABLE gt_tvkbt FROM tvkbt WHERE spras EQ sy-langu AND vkbur IN s_vkbur.
+  SORT gt_tvkbt BY vkbur.
+*  取销售组描述
+  SELECT * INTO TABLE gt_tvgrt FROM tvgrt WHERE spras EQ sy-langu AND vkgrp IN s_vkgrp.
+  SORT gt_tvgrt BY vkgrp.
+*  取业务员描述
+  SELECT * INTO TABLE gt_tvv1t FROM tvv1t WHERE spras EQ sy-langu AND kvgr1 IN s_kvgr1.
+  SORT gt_tvv1t BY kvgr1.
+*  取商务描述
+  SELECT * INTO TABLE gt_tvv2t FROM tvv2t WHERE spras EQ sy-langu AND kvgr2 IN s_kvgr2.
+  SORT gt_tvv2t BY kvgr2.
+
+*************************计算违约次数（取客户信用冻结后审批通过的交货单）***************************
+*  根据客户+信贷控制范围从表LIKP中取出审批通过CMGST= D 并且交货完成WBSTK = C的交货单的个数
+  REFRESH: gt_likp.
+  SELECT a~vbeln a~kunag a~kkber a~erdat
+    INTO CORRESPONDING FIELDS OF TABLE gt_likp
+    FROM likp AS a INNER JOIN vbuk AS b ON a~vbeln = b~vbeln
+    FOR ALL ENTRIES IN gt_alv_kunnr
+    WHERE a~kkber = gt_alv_kunnr-kkber
+      AND a~kunag = gt_alv_kunnr-kunnr
+      AND b~cmgst = 'D'
+      AND b~wbstk = 'C'.
+
+  LOOP AT gt_alv.
+***ADD BY PFT 20171116 增加权限检查
+    lv_tabix = sy-tabix.
+    AUTHORITY-CHECK OBJECT 'Z_KVGR1'
+             ID 'KVGR1' FIELD gt_alv-kvgr1.
+    IF sy-subrc <> 0.
+      DELETE gt_alv INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+    AUTHORITY-CHECK OBJECT 'V_VBAK_VKO'
+             ID 'VKORG' FIELD gt_alv-vkorg
+             ID 'VTWEG' DUMMY
+             ID 'SPART' DUMMY
+             ID 'ACTVT' FIELD '03'.
+    IF sy-subrc <> 0.
+      DELETE gt_alv INDEX lv_tabix .
+      CONTINUE.
+    ENDIF.
+***END BY PFT 20171116
+*   取客户名称
+    CONCATENATE gt_alv-name1 gt_alv-name2 INTO gt_alv-name. CONDENSE gt_alv-name.
+*   取付款条件
+    READ TABLE gt_tvzbt WITH KEY zterm = gt_alv-zterm BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-vtext_zterm = gt_tvzbt-vtext.
+    ENDIF.
+*   取风险类别描述
+    READ TABLE gt_t691t WITH KEY ctlpc = gt_alv-ctlpc kkber = gt_alv-kkber BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-rtext = gt_t691t-rtext.
+    ENDIF.
+*   取销售组织描述
+    READ TABLE gt_tvkot WITH KEY vkorg = gt_alv-vkorg BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-vtext_vkorg = gt_tvkot-vtext.
+    ENDIF.
+*   取渠道描述
+    READ TABLE gt_tvtwt WITH KEY vtweg = gt_alv-vtweg BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-vtext_vtweg = gt_tvtwt-vtext.
+    ENDIF.
+*   取销售大区描述
+    READ TABLE gt_t171t WITH KEY bzirk = gt_alv-bzirk BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-bztxt = gt_t171t-bztxt.
+    ENDIF.
+*   取行办描述
+    READ TABLE gt_tvkbt WITH KEY vkbur = gt_alv-vkbur BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-bezei_vkbur = gt_tvkbt-bezei.
+    ENDIF.
+*   取销售组描述
+    READ TABLE gt_tvgrt WITH KEY vkgrp = gt_alv-vkgrp BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-bezei_vkgrp = gt_tvgrt-bezei.
+    ENDIF.
+*   取业务员描述
+    READ TABLE gt_tvv1t WITH KEY kvgr1 = gt_alv-kvgr1 BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-bezei_kvgr1 = gt_tvv1t-bezei.
+    ENDIF.
+*   取商务描述
+    READ TABLE gt_tvv2t WITH KEY kvgr2 = gt_alv-kvgr2 BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-bezei_kvgr2 = gt_tvv2t-bezei.
+    ENDIF.
+*   处理额度
+    READ TABLE gt_knkk WITH KEY kkber = gt_alv-kkber kunnr = gt_alv-knkli BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-klimk = gt_knkk-klimk.
+      gt_alv-skfor = gt_knkk-skfor.
+      gt_alv-ssobl = gt_knkk-ssobl.
+    ENDIF.
+*   取未清销售额
+    READ TABLE gt_s066 WITH KEY kkber = gt_alv-kkber knkli = gt_alv-knkli BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-oeikw = gt_s066-oeikw. "未清销售额
+    ENDIF.
+*   取未清交货和未清发票金额
+    READ TABLE gt_s067 WITH KEY kkber = gt_alv-kkber knkli = gt_alv-knkli BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-olikw = gt_s067-olikw. "未清交货
+      gt_alv-ofakw = gt_s067-ofakw. "未清发票
+    ENDIF.
+*  计算已用额度（=未清销售值+未清交货值+未清发票+应收总额+特别往来债务）
+    gt_alv-zyyed = gt_alv-oeikw + gt_alv-olikw + gt_alv-ofakw + gt_alv-skfor + gt_alv-ssobl.
+*  计算超信用额度（=已用额度-信用额度，如果为负值即等于0 )
+    gt_alv-cxyed = gt_alv-zyyed - gt_alv-klimk.
+    IF gt_alv-cxyed < 0.
+      gt_alv-cxyed = 0.
+    ENDIF.
+    IF p_hz EQ 'X'.
+*  计算最早超期天数和超期金额
+      READ TABLE gt_bsid WITH KEY kkber = gt_alv-kkber kunnr = gt_alv-kunnr BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_alv-zzcqts = gt_bsid-zcqts.
+      ENDIF.
+      READ TABLE gt_cqje WITH KEY kkber = gt_alv-kkber kunnr = gt_alv-kunnr BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_alv-zcqje = gt_cqje-dmbtr.
+      ENDIF.
+*  计算违约次数
+      LOOP AT gt_likp WHERE kunag = gt_alv-kunnr AND kkber = gt_alv-kkber AND erdat GE gt_alv-dtrev .
+        gt_alv-zwycs = gt_alv-zwycs + 1.
+      ENDLOOP.
+*  计算付款逾期次数
+      LOOP AT gt_bsad WHERE kunnr = gt_alv-kunnr AND kkber = gt_alv-kkber .
+        IF gt_bsad-augdt > gt_bsad-bldat AND gt_bsad-augdt > gt_alv-dtrev.
+          gt_alv-fkyqcs = gt_alv-fkyqcs + 1.
+        ENDIF.
+      ENDLOOP.
+    ENDIF.
+*  处理客户信用放行说明
+    IF p_vbeln IS NOT INITIAL AND gt_alv-kunnr = lv_kunag.
+      CONCATENATE gt_alv-sortl '信用等级' gt_alv-grupp ',付款条件' gt_alv-vtext_zterm INTO gt_alv-zfxsm.
+      CONDENSE gt_alv-zfxsm.
+      CLEAR: lv_string .lv_string = gt_alv-zzcqts.
+      CONCATENATE gt_alv-zfxsm ',超账期天数' lv_string  INTO gt_alv-zfxsm .
+      CONDENSE gt_alv-zfxsm.
+      CLEAR: lv_string .lv_string = gt_alv-zcqje.
+      CONCATENATE gt_alv-zfxsm',超期金额' lv_string INTO gt_alv-zfxsm.
+      CONDENSE gt_alv-zfxsm.
+      CLEAR: lv_string .lv_string = gt_alv-klimk.
+      CONCATENATE gt_alv-zfxsm ',信用额度' lv_string INTO gt_alv-zfxsm.
+      CONDENSE gt_alv-zfxsm.
+      CLEAR: lv_string .lv_string = gt_alv-cxyed.
+      CONCATENATE gt_alv-zfxsm ',超信用金额' lv_string INTO gt_alv-zfxsm.
+      CONDENSE gt_alv-zfxsm.
+      CLEAR:lv_dmbtr,lv_string.
+      LOOP AT gt_likp_col WHERE kkber = gt_alv-kkber AND kunag = gt_alv-kunnr.
+        CONCATENATE lv_string gt_likp_col-vbeln INTO lv_string SEPARATED BY '/'.
+        lv_dmbtr = lv_dmbtr + gt_likp_col-dmbtr.
+        CLEAR: gt_likp_col.
+      ENDLOOP.
+      CONCATENATE gt_alv-zfxsm ',当前待放行交货单' lv_string INTO gt_alv-zfxsm.
+      CONDENSE gt_alv-zfxsm.
+      CLEAR: lv_string .lv_string = lv_dmbtr.
+      CONCATENATE gt_alv-zfxsm ',待放行金额' lv_string INTO gt_alv-zfxsm.
+      CONDENSE gt_alv-zfxsm.
+    ENDIF.
+
+    MODIFY gt_alv.
+    CLEAR: gt_alv.
+  ENDLOOP.
+
+  SORT gt_alv BY kkber kunnr.
+
+  IF p_mx EQ 'X'.
+*    取未清应收账款
+    LOOP AT gt_bsid .
+      CLEAR: gt_alv_mx.
+      READ TABLE gt_alv WITH KEY kkber = gt_bsid-kkber kunnr = gt_bsid-kunnr BINARY SEARCH.
+      IF sy-subrc = 0.
+        MOVE-CORRESPONDING gt_alv TO gt_alv_mx.
+        gt_alv_mx-belnr = gt_bsid-belnr."会计凭证号
+        gt_alv_mx-bldat = gt_bsid-bldat."凭证日期
+        gt_alv_mx-zdqri = gt_bsid-zfkrq."到期日
+        gt_alv_mx-dmbtr = gt_bsid-dmbtr."金额
+        gt_alv_mx-zcqts = gt_bsid-zcqts."超期天数
+        gt_alv_mx-aubel = gt_bsid-aubel."销售订单
+        gt_alv_mx-vgbel = gt_bsid-vgbel."交货单
+        gt_alv_mx-zxsfp = gt_bsid-vbeln."销售发票
+        gt_alv_mx-waerk = 'CNY'."币别
+        gt_alv_mx-zfbdt = gt_bsid-zfbdt. "收付基准日期 add by wsk 20170118
+        IF gt_bsid-hkont = '1122000000'.
+          CASE gt_bsid-blart .
+            WHEN 'Z1'.
+              gt_alv_mx-zwqlx = '未清收款'.
+            WHEN OTHERS.
+              gt_alv_mx-zwqlx = '未清应收'.
+          ENDCASE.
+        ELSE.
+          gt_alv_mx-zwqlx = '特别往来债务'.
+        ENDIF.
+
+        APPEND gt_alv_mx.
+      ENDIF.
+      CLEAR: gt_bsid.
+    ENDLOOP.
+
+*  取未清交货项目
+    LOOP AT gt_likp_col.
+      CLEAR:gt_alv_mx.
+      READ TABLE gt_alv WITH KEY kkber = gt_likp_col-kkber kunnr = gt_likp_col-kunag BINARY SEARCH.
+      IF sy-subrc = 0.
+        MOVE-CORRESPONDING gt_alv TO gt_alv_mx.
+        gt_alv_mx-bldat = gt_likp_col-wadat_ist."凭证日期
+        gt_alv_mx-aubel = gt_likp_col-vgbel."销售订单号
+        gt_alv_mx-vgbel = gt_likp_col-vbeln."交货单
+        gt_alv_mx-dmbtr = gt_likp_col-dmbtr."销售发票
+        gt_alv_mx-waerk = gt_likp_col-waerk."币别
+        gt_alv_mx-zwqlx = '未清交货'.
+        APPEND gt_alv_mx.
+      ENDIF.
+      CLEAR: gt_likp_col.
+    ENDLOOP.
+
+*  取未清销售订单
+    LOOP AT gt_vbap_col.
+      CLEAR:gt_alv_mx.
+      READ TABLE gt_alv WITH KEY kkber = gt_vbap_col-kkber kunnr = gt_vbap_col-kunnr BINARY SEARCH.
+      IF sy-subrc = 0.
+        MOVE-CORRESPONDING gt_alv TO gt_alv_mx.
+        gt_alv_mx-bldat = gt_vbap_col-audat."凭证日期
+        gt_alv_mx-aubel = gt_vbap_col-vbeln."销售订单号
+        gt_alv_mx-dmbtr = gt_vbap_col-kzwi1."销售发票
+        gt_alv_mx-waerk = gt_vbap_col-waerk."币别
+        gt_alv_mx-zwqlx = '未清销售订单'.
+        APPEND gt_alv_mx.
+      ENDIF.
+      CLEAR: gt_likp_col.
+    ENDLOOP.
+    MOVE gt_alv-ernam TO gt_alv_mx-ernam.
+    REFRESH: gt_alv.
+    gt_alv[] = gt_alv_mx[] .
+
+    LOOP AT gt_alv.
+      SELECT SINGLE ernam INTO gt_alv-ernam FROM vbak WHERE vbeln = gt_alv-aubel.
+      IF sy-subrc = 0.
+        CALL FUNCTION 'Z_FMMM_001'
+          EXPORTING
+            i_ernam  = gt_alv-ernam
+          IMPORTING
+            ex_ernam = gt_alv-lv_ernam.
+      ENDIF.
+      MODIFY gt_alv.
+    ENDLOOP.
+    SORT gt_alv BY kkber kunnr.
+  ENDIF.
+
+
+*  ADD BY PFT 20171227
+*  逻辑：根据销售订单取客户名称
+  IF p_mx EQ 'X'.
+    IF gt_alv[] IS NOT INITIAL.
+      SELECT vbeln parvw adrnr
+        INTO CORRESPONDING FIELDS OF TABLE gt_vbpa
+        FROM vbpa
+        FOR ALL ENTRIES IN gt_alv
+        WHERE vbeln = gt_alv-aubel
+          AND parvw = 'AG'.
+      SORT gt_vbpa BY vbeln .
+    ENDIF.
+    IF gt_vbpa[] IS NOT INITIAL.
+      SELECT addrnumber name1 sort1
+        INTO CORRESPONDING FIELDS OF TABLE gt_adrc
+        FROM adrc
+        FOR ALL ENTRIES IN gt_vbpa
+        WHERE addrnumber = gt_vbpa-adrnr.
+      SORT gt_adrc BY addrnumber.
+    ENDIF.
+  ENDIF.
+
+  LOOP AT gt_alv WHERE ktokd EQ 'ZCPD'.
+    CASE 'X'.
+      WHEN p_mx.
+        READ TABLE gt_vbpa WITH KEY vbeln = gt_alv-aubel BINARY SEARCH.
+        IF sy-subrc = 0.
+          READ TABLE gt_adrc WITH KEY addrnumber = gt_vbpa-adrnr BINARY SEARCH.
+          IF sy-subrc = 0.
+            gt_alv-name = gt_adrc-name1.
+            gt_alv-sortl = gt_adrc-sort1.
+          ENDIF.
+        ENDIF.
+      WHEN p_hz.
+        gt_alv-name = '零散客户'.
+        gt_alv-sortl = '零散客户'.
+      WHEN OTHERS.
+    ENDCASE.
+
+    MODIFY gt_alv.
+  ENDLOOP.
+*  END BY PFT 20171227
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SUB_BUILD_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM sub_build_fieldcat .
+  REFRESH:g_it_fieldcat.
+
+  PERFORM sub_set_fieldcat USING 'X' 'KKBER'       '贷方控制范围'      ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING 'X' 'KNKLI'       '信贷账户号'        'X'  ''  ''  ''  ''  'KNKLI'  'KNKK' ''.
+  PERFORM sub_set_fieldcat USING 'X' 'KUNNR'       '客户'              'X'  ''  ''  ''  ''  'KUNNR'  'KNVV' ''.
+  PERFORM sub_set_fieldcat USING ''  'NAME'        '客户名称'          ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'SORTL'       '客户简称'          ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'ZTERM'       '付款条件'          ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'VTEXT_ZTERM' '付款条件描述'      ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'CTLPC'       '风险类别'          ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'RTEXT'       '风险类别描述'      ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'GRUPP'       '信用等级'          ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'KLIMK'       '信用额度'          'X'  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'ZYYED'       '已用额度'          'X'  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'SKFOR'       '应收总额'          'X'  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'CXYED'       '超信用额度'        'X'  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'SSOBL'       '特别往来债务'      'X'  ''  ''  ''  ''  ''  '' ''.
+  IF p_hz EQ 'X'.
+    PERFORM sub_set_fieldcat USING ''  'OEIKW'       '未清销售订单金额'  'X'  ''  ''  ''  ''  ''  '' ''.
+    PERFORM sub_set_fieldcat USING ''  'OLIKW'       '未清交货单金额'    'X'  ''  ''  ''  ''  ''  '' ''.
+    PERFORM sub_set_fieldcat USING ''  'OFAKW'       '未清发票金额'      'X'  ''  ''  ''  ''  ''  '' ''.
+    PERFORM sub_set_fieldcat USING ''  'ZZCQTS'      '最早超期天数'      'X'  ''  ''  ''  ''  ''  '' ''.
+    PERFORM sub_set_fieldcat USING ''  'ZCQJE'       '超期金额'          'X'  ''  ''  ''  ''  ''  '' ''.
+    PERFORM sub_set_fieldcat USING ''  'FKYQCS'      '付款逾期次数'      'X'  ''  ''  ''  ''  ''  '' ''.
+
+  ENDIF.
+  IF p_mx EQ 'X'.
+    PERFORM sub_set_fieldcat USING ''  'BELNR'       '会计凭证号'      'X'  ''  ''  ''  ''  'BELNR'  'BSID' ''.
+    PERFORM sub_set_fieldcat USING ''  'BLDAT'       '凭证日期'        ''  ''  ''  ''  ''  ''  '' ''.
+    PERFORM sub_set_fieldcat USING ''  'ZDQRI'       '到期日'          ''  ''  ''  ''  ''  ''  '' ''.
+    PERFORM sub_set_fieldcat USING ''  'DMBTR'       '金额'            'X'  ''  ''  ''  ''  ''  '' ''.
+    PERFORM sub_set_fieldcat USING ''  'WAERK'       '币别'            ''  ''  ''  ''  ''  ''  '' ''.
+    PERFORM sub_set_fieldcat USING ''  'ZCQTS'       '超期天数'        'X'  ''  ''  ''  ''  ''  '' ''.
+    PERFORM sub_set_fieldcat USING ''  'AUBEL'       '销售订单'        'X'  ''  ''  ''  ''  'VBELN'  'VBAK' ''.
+    PERFORM sub_set_fieldcat USING ''  'VGBEL'       '交货单'          'X'  ''  ''  ''  ''  'VBELN'  'LIKP' ''.
+    PERFORM sub_set_fieldcat USING ''  'ZXSFP'       '销售发票'        'X'  ''  ''  ''  ''  'VBELN'  'VBRP' ''.
+    PERFORM sub_set_fieldcat USING ''  'ZWQLX'       '未清类型'        ''  ''  ''  ''  ''  ''  '' ''.
+    PERFORM sub_set_fieldcat USING ''  'ZFBDT'       '收付基准日期'        ''  ''  ''  ''  ''  ''  'ZFBDT' 'BSID'.
+*    PERFORM sub_set_fieldcat USING ''  'ERNAM'       '制单人'        'X'  ''  ''  ''  ''  ''  '' ''.
+*    PERFORM sub_set_fieldcat USING ''  'LV_ERNAM'       '制单人名称'        'X'  ''  ''  ''  ''  ''  '' ''.
+  ENDIF.
+*  PERFORM sub_set_fieldcat USING ''  'VKORG'       '销售组织'          ''  ''  ''  ''  ''  ''  '' ''.
+*  PERFORM sub_set_fieldcat USING ''  'VTEXT_VKORG' '销售组织名称'      ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'VTWEG'       '渠道'              ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'VTEXT_VTWEG' '渠道名称'          ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'BZIRK'       '销售大区代码'      ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'BZTXT'       '销售大区'          ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'VKBUR'       '行办代码'          ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'BEZEI_VKBUR' '行办'              ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'VKGRP'       '销售组代码'        ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'BEZEI_VKGRP' '销售组'            ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'KVGR1'       '业务员代码'        ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'BEZEI_KVGR1' '业务员'            ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'KVGR2'       '商务代码'          ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'BEZEI_KVGR2' '商务'              ''  ''  ''  ''  ''  ''  '' ''.
+  IF p_hz EQ 'X'.
+    PERFORM sub_set_fieldcat USING ''  'ZWYCS'       '违约次数'          'X'  ''  ''  ''  ''  ''  '' ''.
+  ENDIF.
+  PERFORM sub_set_fieldcat USING ''  'DTREV'       '上次信用评估日'    ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'NXTRV'       '下次信用评估日'    ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'ZFXSM'       '客户放行说明'      ''  ''  ''  ''  ''  ''  '' ''.
+  IF p_mx EQ 'X'.
+    PERFORM sub_set_fieldcat USING ''  'ERNAM'       '制单人'        'X'  ''  ''  ''  ''  ''  '' ''.
+    PERFORM sub_set_fieldcat USING ''  'LV_ERNAM'       '制单人名称'        'X'  ''  ''  ''  ''  ''  '' ''.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_BSAD
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_bsad .
+*
+  SELECT bukrs kunnr gjahr belnr buzei kkber zfbdt zbd1t zbd2t augdt
+    APPENDING CORRESPONDING FIELDS OF TABLE gt_bsad
+    FROM bsad
+    FOR ALL ENTRIES IN gt_alv_kunnr
+    WHERE kunnr = gt_alv_kunnr-kunnr
+      AND kkber = gt_alv_kunnr-kkber
+      AND hkont = '1122000000'
+      AND blart <> 'Z1'.
+
+*bldat
+  LOOP AT gt_bsad.
+    gt_bsad-bldat = gt_bsad-zfbdt + gt_bsad-zbd1t + gt_bsad-zbd2t.
+    MODIFY gt_bsad TRANSPORTING bldat.
+  ENDLOOP.
+
+  SORT gt_bsad BY kunnr kkber.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_S066_S067
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_s066_s067 .
+  REFRESH:gt_s066,gt_s067,gt_knkk.
+*******************取客户信贷额度*****************************
+*  根据信贷帐户号从表KNKK中取出额度
+  SELECT * INTO TABLE gt_knkk
+    FROM knkk
+    FOR ALL ENTRIES IN gt_alv
+    WHERE kkber = p_kkber
+      AND kunnr = gt_alv-knkli.
+  SORT gt_knkk BY kkber kunnr.
+********************************************************
+
+**********************取未清销售额*************************
+* 根据客户和信贷范围取未清销售额
+  SELECT kkber knkli oeikw
+    INTO CORRESPONDING FIELDS OF TABLE gt_s066
+    FROM s066
+    FOR ALL ENTRIES IN gt_alv
+    WHERE kkber = p_kkber
+      AND knkli = gt_alv-knkli .
+
+  LOOP AT gt_s066.
+    CLEAR:gt_s066_col.
+    MOVE-CORRESPONDING gt_s066 TO gt_s066_col.
+    COLLECT gt_s066_col.
+    CLEAR: gt_s066.
+  ENDLOOP.
+
+  REFRESH: gt_s066.
+  gt_s066[] = gt_s066_col[].
+  SORT gt_s066 BY kkber knkli.
+********************************************************
+
+******************取未清交货额和未清发票金额**********************
+*  根据客户和信贷范围取未清交货额和未清发票金额
+  SELECT kkber knkli olikw ofakw
+    INTO CORRESPONDING FIELDS OF TABLE gt_s067
+    FROM s067
+    FOR ALL ENTRIES IN gt_alv
+    WHERE kkber = p_kkber
+      AND knkli = gt_alv-knkli.
+
+  LOOP AT gt_s067.
+    CLEAR:gt_s067_col.
+    MOVE-CORRESPONDING gt_s067 TO gt_s067_col.
+    COLLECT gt_s067_col.
+    CLEAR: gt_s067.
+  ENDLOOP.
+
+  REFRESH: gt_s067.
+  gt_s067[] = gt_s067_col[].
+  SORT gt_s067 BY kkber knkli.
+********************************************************
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_BSID
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_bsid .
+  DATA: lv_tabix LIKE sy-tabix,
+        lv_aubel LIKE vbrp-aubel,
+        lv_vgbel LIKE vbrp-vgbel.
+
+  REFRESH:gt_bsid,gt_cqje.
+  SELECT bukrs blart kunnr gjahr belnr buzei kkber bldat hkont zterm shkzg dmbtr zfbdt zbd1t zbd2t zuonr vbeln
+    INTO CORRESPONDING FIELDS OF TABLE gt_bsid
+    FROM bsid
+    FOR ALL ENTRIES IN gt_alv_kunnr
+    WHERE kunnr = gt_alv_kunnr-kunnr
+      AND kkber = gt_alv_kunnr-kkber
+      AND hkont = '1122000000'
+      AND blart NE 'Z1'.
+
+* 如果查询明细，增加科目 及凭证类型
+  IF p_mx EQ 'X'.
+    SELECT bukrs blart kunnr gjahr belnr buzei kkber bldat hkont zterm shkzg dmbtr zfbdt zbd1t zbd2t zuonr vbeln
+      APPENDING CORRESPONDING FIELDS OF TABLE gt_bsid
+      FROM bsid
+      FOR ALL ENTRIES IN gt_alv_kunnr
+      WHERE kunnr = gt_alv_kunnr-kunnr
+        AND kkber = gt_alv_kunnr-kkber
+        AND hkont = '1122000000'
+        AND blart EQ 'Z1'.
+
+    SELECT bukrs blart kunnr gjahr belnr buzei kkber bldat hkont zterm shkzg dmbtr zfbdt zbd1t zbd2t zuonr vbeln
+      APPENDING CORRESPONDING FIELDS OF TABLE gt_bsid
+      FROM bsid
+      FOR ALL ENTRIES IN gt_alv_kunnr
+      WHERE kunnr = gt_alv_kunnr-kunnr
+        AND kkber = gt_alv_kunnr-kkber
+        AND hkont LIKE '1121%'.
+  ENDIF.
+
+*   根据取出的客户未清帐款，用发票号（GT_BSID-VBELN）关联从表VBAP(VBAP-VBELN)中取出发票相关信息
+  IF gt_bsid[] IS NOT INITIAL.
+    SELECT vbeln posnr aubel aupos vgbel vgpos
+      INTO CORRESPONDING FIELDS OF TABLE gt_vbrp
+      FROM vbrp
+      FOR ALL ENTRIES IN gt_bsid
+      WHERE vbeln = gt_bsid-vbeln.
+
+    SORT gt_vbrp BY vbeln aubel vgbel.
+    DELETE ADJACENT DUPLICATES FROM gt_vbrp COMPARING vbeln aubel vgbel.
+
+    LOOP AT gt_bsid.
+      CLEAR: lv_tabix,lv_aubel,lv_vgbel,gt_cqje.
+      lv_tabix = sy-tabix.
+*   计算付款日期（付款基准日期ZFBDT+付款天数BSID-ZBD1T+BSID-ZBD2T）
+      gt_bsid-zfkrq = gt_bsid-zfbdt + gt_bsid-zbd1t + gt_bsid-zbd2t.
+*  计算超期天数
+      IF gt_bsid-zfkrq IS NOT INITIAL.
+        gt_bsid-zcqts = sy-datum - gt_bsid-zfkrq.
+      ENDIF.
+      IF gt_bsid-zcqts < 0 .
+        gt_bsid-zcqts = 0.
+      ENDIF.
+*   计算金额
+      IF gt_bsid-shkzg = 'H'.
+        gt_bsid-dmbtr = 0 - gt_bsid-dmbtr.
+      ENDIF.
+*   根据销售发票GT_BSID-ZUONR取出销售订单和交货单
+      LOOP AT gt_vbrp WHERE vbeln = gt_bsid-vbeln.
+        IF gt_bsid-aubel IS INITIAL.
+          gt_bsid-aubel = gt_vbrp-aubel.
+        ELSEIF gt_vbrp-aubel NE lv_aubel.
+          CONCATENATE gt_bsid-aubel '/' gt_vbrp-aubel INTO gt_bsid-aubel.
+        ENDIF.
+        IF gt_bsid-vgbel IS INITIAL.
+          gt_bsid-vgbel = gt_vbrp-vgbel.
+        ELSEIF gt_vbrp-vgbel NE lv_vgbel.
+          CONCATENATE gt_bsid-vgbel '/' gt_vbrp-vgbel INTO gt_bsid-vgbel.
+        ENDIF.
+        lv_aubel = gt_vbrp-aubel.
+        lv_vgbel = gt_vbrp-vgbel.
+        CLEAR: gt_vbrp.
+      ENDLOOP.
+      IF gt_bsid-zcqts > 0.
+        MOVE-CORRESPONDING gt_bsid TO gt_cqje.
+        COLLECT gt_cqje.
+      ENDIF.
+      MODIFY gt_bsid.
+      CLEAR: gt_bsid.
+    ENDLOOP.
+
+    SORT gt_bsid BY kkber ASCENDING kunnr ASCENDING zcqts DESCENDING .
+    SORT gt_cqje BY kkber kunnr .
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FXSM
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fxsm .
+  REFRESH: gt_likp,gt_vbap.
+**********************根据S_VBELN取出交货单信息**********************
+  SELECT a~vbeln a~posnr a~lfimg a~vgbel a~vgpos
+         b~kunag b~kkber b~erdat b~wadat_ist b~lfart
+    INTO CORRESPONDING FIELDS OF TABLE gt_likp
+    FROM lips AS a INNER JOIN likp AS b ON a~vbeln = b~vbeln
+                   INNER JOIN vbuk AS c ON a~vbeln = c~vbeln
+    WHERE a~vbeln EQ p_vbeln.
+*********************************************************************
+
+*******************根据DN取出SO相关信息，用来计算交货金额*************
+  IF gt_likp[] IS NOT INITIAL.
+    SELECT vbeln posnr kzwi1 zmeng kwmeng
+      INTO CORRESPONDING FIELDS OF TABLE gt_vbap
+      FROM vbap
+      FOR ALL ENTRIES IN gt_likp
+      WHERE vbeln = gt_likp-vgbel
+        AND posnr = gt_likp-vgpos.
+    SORT gt_vbap BY vbeln posnr.
+
+    LOOP AT gt_likp.
+      CLEAR: gt_likp_col.
+      gt_likp_col-kkber = gt_likp-kkber.
+      gt_likp_col-kunag = gt_likp-kunag.
+      gt_likp_col-vbeln = gt_likp-vbeln.
+      READ TABLE gt_vbap WITH KEY vbeln = gt_likp-vgbel posnr = gt_likp-vgpos BINARY SEARCH.
+      IF sy-subrc = 0 AND gt_vbap-kwmeng NE 0.
+        gt_likp_col-dmbtr = gt_likp-lfimg * ( gt_vbap-kzwi1 / gt_vbap-kwmeng ).
+      ENDIF.
+      IF gt_likp-lfart = 'ZLR1'.
+        gt_likp_col-dmbtr = 0 -  gt_likp_col-dmbtr.
+      ENDIF.
+      COLLECT gt_likp_col.
+      CLEAR: gt_likp.
+    ENDLOOP.
+    SORT gt_likp_col BY kkber kunag.
+  ENDIF.
+*********************************************************************
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_EXPORT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_export_data .
+  FREE MEMORY ID 'T_TAB2'.
+  EXPORT gt_alv TO MEMORY ID 'T_TAB2'.
+ENDFORM.

@@ -1,0 +1,20 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI024S01
+*&---------------------------------------------------------------------*
+*选择操作类型
+SELECTION-SCREEN BEGIN OF BLOCK blk_001 WITH FRAME TITLE TEXT-001.
+PARAMETERS: rd_01 RADIOBUTTON GROUP g01 DEFAULT 'X' USER-COMMAND clk,
+            rd_02 RADIOBUTTON GROUP g01.
+SELECTION-SCREEN END OF BLOCK blk_001.
+
+SELECTION-SCREEN BEGIN OF BLOCK b2 WITH FRAME TITLE TEXT-002.
+PARAMETERS: p_bukrs TYPE t001-bukrs DEFAULT '1000' MODIF ID mr1 ."OBLIGATORY .
+SELECT-OPTIONS:s_zskrq FOR zficotfkt-zskrq MODIF ID mr1,
+               s_lifnr FOR bsik-lifnr MODIF ID mr1.
+PARAMETERS: p_zskfs TYPE zficotfkt-zskfs MODIF ID mr1,
+            p_zbb   TYPE zficotfkt-zbb MODIF ID mr1,
+            p_zhkr  TYPE zficotfkt-zhkr MODIF ID mr1,
+            p_zskze TYPE zficotfkt-zskze MODIF ID mr1.
+SELECT-OPTIONS:s_zdjhm FOR zficotfkt-zdjhm MODIF ID mr1.
+PARAMETERS: p_zdjzt TYPE zficotfkt-zdjzt MODIF ID mr1.
+SELECTION-SCREEN END OF BLOCK b2.

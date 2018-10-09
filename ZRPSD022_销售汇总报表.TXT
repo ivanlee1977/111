@@ -1,0 +1,59 @@
+*&---------------------------------------------------------------------*
+*& Report ZRPSD022
+*& 创建者(公司)/日期： PFT/20171017
+*& 程序描述:销售汇总报表
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    PFT           20171017     创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpsd022 MESSAGE-ID z001.
+
+INCLUDE zalv.
+
+INCLUDE zrpsd022t01.
+
+INCLUDE zrpsd022s01.
+
+INCLUDE zrpsd022f01.
+
+************************************************************************
+*INITIALIZATION.
+************************************************************************
+INITIALIZATION.
+  PERFORM frm_get_ausp."取产品线和系列
+************************************************************************
+*AT SELECTION-SCREEN ON VALUE_REQUEST.
+************************************************************************
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_xl-low.
+  PERFORM sub_search_help_zxl USING 'XL' 'S_XL' 'ZFER_XL'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_xl-high.
+  PERFORM sub_search_help_zxl USING 'XL' 'S_XL'  'ZFER_XL'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_cpx-low.
+  PERFORM sub_search_help_zxl USING 'CPX' 'S_ZXL'  'ZFER_CPX'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_cpx-high.
+  PERFORM sub_search_help_zxl USING 'CPX' 'S_ZXL'  'ZFER_CPX'.
+************************************************************************
+* AT SELECTION-SCREEN OUTPUT
+************************************************************************
+AT SELECTION-SCREEN OUTPUT.
+  PERFORM frm_modify_screen.
+************************************************************************
+* AT SELECTION-SCREEN
+************************************************************************
+AT SELECTION-SCREEN.
+  CHECK sy-ucomm EQ 'ONLI'.
+  IF s_wadat IS INITIAL.
+    MESSAGE e398(00) WITH '请输入销售交货日期'.
+  ENDIF.
+************************************************************************
+* START-OF-SELECTION
+************************************************************************
+START-OF-SELECTION.
+  PERFORM frm_get_data."取数
+  PERFORM frm_process_data."对取出的数据进行处理
+  PERFORM sub_build_fieldcat.
+  PERFORM sub_build_layout.
+  PERFORM sub_display_alv TABLES gt_alv USING '' ''.

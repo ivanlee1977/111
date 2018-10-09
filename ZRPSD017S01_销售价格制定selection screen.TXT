@@ -1,0 +1,16 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPSD001S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+PARAMETERS:r1 RADIOBUTTON GROUP ra DEFAULT 'X' USER-COMMAND um,
+           r2 RADIOBUTTON GROUP ra,
+           r3 RADIOBUTTON GROUP ra.
+SELECTION-SCREEN END OF BLOCK blc.
+
+SELECTION-SCREEN BEGIN OF BLOCK blc1 WITH FRAME TITLE TEXT-002.
+SELECT-OPTIONS:s_matnr FOR mara-matnr MODIF ID m1,"物料号
+               s_mvgr1 FOR mvke-mvgr1 MODIF ID m2,"产品定位
+               s_xl FOR ztsd009-zfer_xl MODIF ID m2,"系列
+               s_zxl FOR ztsd009-zfer_zxl MODIF ID m2,"子系列
+               s_cpx FOR ztsd007-zfer_cpx MODIF ID m2."产品线
+SELECTION-SCREEN END OF BLOCK blc1.

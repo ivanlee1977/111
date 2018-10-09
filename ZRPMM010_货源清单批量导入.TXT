@@ -1,0 +1,49 @@
+*&---------------------------------------------------------------------*
+*& 程序名：ZRPMM010
+*& 创建者(公司)/日期： PFT/20170823
+*& 程序描述:配额批量导入
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    PFT           20170823      创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpmm010.
+
+INCLUDE zalv.
+INCLUDE zrpmm010t01.
+INCLUDE zrpmm010s01.
+INCLUDE zrpmm010f01.
+
+************************************************************************
+*INITIALIZATION.
+************************************************************************
+INITIALIZATION.
+  PERFORM frm_initial_data.
+************************************************************************
+*AT SELECTION-SCREEN ON VALUE-REQUEST
+************************************************************************
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_file.
+  PERFORM frm_filename_find CHANGING p_file.
+************************************************************************
+* AT SELECTION-SCREEN OUTPUT
+************************************************************************
+AT SELECTION-SCREEN OUTPUT.
+************************************************************************
+* AT SELECTION-SCREEN
+************************************************************************
+AT SELECTION-SCREEN.
+  CLEAR sy-ucomm.
+  CASE sscrfields-ucomm.
+    WHEN 'FC01'.  "开启文件
+      PERFORM frm_download_template USING 'ZMM010' CHANGING p_file.
+    WHEN OTHERS.
+  ENDCASE.
+************************************************************************
+* START-OF-SELECTION
+************************************************************************
+START-OF-SELECTION.
+
+  PERFORM frm_upload_data.  "从EXCEL中读取数据
+  PERFORM frm_check_data."数据校验
+  PERFORM sub_build_fieldcat.
+  PERFORM sub_build_layout.
+  PERFORM sub_display_alv TABLES gt_alv USING 'ALV_USER_COMMAND' 'PF_STATUS_SET'.

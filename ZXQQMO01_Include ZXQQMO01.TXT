@@ -1,0 +1,94 @@
+*----------------------------------------------------------------------*
+***INCLUDE ZXQQMO01.
+*----------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Module  STATUS_0100  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE status_0100 OUTPUT.
+*  SET PF-STATUS 'xxxxxxxx'.
+*  SET TITLEBAR 'xxx'.
+  IF gv_aktyp = 'A'.
+    LOOP AT SCREEN.
+      IF screen-group1 = 'G1' OR screen-group1 = 'MOD'.
+        screen-input = 0.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+ENDMODULE.
+*&SPWIZARD: OUTPUT MODULE FOR TC 'ZTDATA'. DO NOT CHANGE THIS LINE!
+*&SPWIZARD: UPDATE LINES FOR EQUIVALENT SCROLLBAR
+MODULE ztdata_change_tc_attr OUTPUT.
+  DESCRIBE TABLE gt_data LINES ztdata-lines.
+  IF gv_aktyp NE 'A'.
+    ztdata-lines = ztdata-lines + 5.
+  ENDIF.
+ENDMODULE.
+
+*&SPWIZARD: OUTPUT MODULE FOR TC 'ZTDATA'. DO NOT CHANGE THIS LINE!
+*&SPWIZARD: GET LINES OF TABLECONTROL
+MODULE ztdata_get_lines OUTPUT.
+  g_ztdata_lines = sy-loopc.
+  IF ( gt_data-zwczt = 'X' OR gt_data-zthwx = 'X' ) AND gt_data-zwxzt(1) = 'A'.
+    LOOP AT SCREEN.
+      IF screen-group1 = 'G1' AND screen-name NE 'GT_DATA-LIFNR'.
+        screen-input = 0.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+ENDMODULE.
+MODULE ztgz_change_tc_attr OUTPUT.
+  DESCRIBE TABLE gt_ztcs003 LINES ztgz-lines.
+ENDMODULE.
+*&SPWIZARD: OUTPUT MODULE FOR TC 'ZTGZ'. DO NOT CHANGE THIS LINE!
+*&SPWIZARD: GET LINES OF TABLECONTROL
+MODULE ztgz_get_lines OUTPUT.
+  g_ztgz_lines = sy-loopc.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  STATUS_0200  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE status_0200 OUTPUT.
+  SET PF-STATUS 'PF_0200'.
+  SET TITLEBAR 'T_0200'.
+
+  IF gv_aktyp = 'A'.
+    LOOP AT SCREEN.
+      IF screen-group1 = 'G1' OR screen-group1 = 'MOD'.
+        screen-input = 0.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+ENDMODULE.
+
+MODULE ztyy_change_tc_attr OUTPUT.
+  DESCRIBE TABLE gt_ztcs004 LINES ztyy-lines.
+ENDMODULE.
+
+MODULE ztyy_get_lines OUTPUT.
+  g_ztyy_lines = sy-loopc.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  STATUS_0300  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE status_0300 OUTPUT.
+  SET PF-STATUS 'PF_0200'.
+  SET TITLEBAR 'T_0300'.
+
+  IF gv_aktyp = 'A'.
+    LOOP AT SCREEN.
+      IF screen-group1 = 'G1' OR screen-group1 = 'MOD'.
+        screen-input = 0.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+ENDMODULE.

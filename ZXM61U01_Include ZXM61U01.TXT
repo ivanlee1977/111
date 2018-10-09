@@ -1,0 +1,25 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZXM61U01
+*&---------------------------------------------------------------------*
+*BREAK LIJS.
+DATA:lv_msg  TYPE string.
+
+AUTHORITY-CHECK OBJECT 'ZUXKEY'
+         ID 'UXKEY' FIELD user_key.
+IF sy-subrc <> 0.
+  stop_planning = 'X'.
+  CONCATENATE '你没有用户出口：' user_key '的权限' INTO lv_msg.
+  MESSAGE lv_msg TYPE 'E'.
+ENDIF.
+
+*2、	在增强M61X0001中，判断如果UXKEY=JHB，则MRP控制者<>’M05’的物料才运行MRP，否则不运行MRP；
+*如果UXKEY=SWB，则MRP控制者=’M05’ 的物料才运行MRP，否则不运行MRP；
+IF user_key	EQ 'SWB'AND mt61d-dispo NE 'M05'.
+*  MESSAGE 'MRP控制者不为M05时,只能运行用户出口码:JHB' TYPE 'E' DISPLAY LIKE 'E'.
+  no_planning = 'X'.
+ENDIF.
+
+IF user_key	EQ 'JHB' AND mt61d-dispo EQ 'M05'.
+*  MESSAGE  'MRP控制者为M05时,只能运行用户出口码:SWB' TYPE 'E'DISPLAY LIKE 'E'..
+  no_planning = 'X'.
+ENDIF.

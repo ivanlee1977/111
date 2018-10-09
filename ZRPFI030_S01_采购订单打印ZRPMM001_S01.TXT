@@ -1,0 +1,13 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPMM004_S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:
+
+                s_ZGSDM FOR ZFICOTFKT-ZGSDM,
+                s_PRCTR FOR ZFICOTFKT-PRCTR,
+                s_lifnr FOR ZFICOTFKT-lifnr,
+                s_ZSKRQ FOR ZFICOTFKT-ZSKRQ  .
+
+SELECTION-SCREEN END OF BLOCK b1.

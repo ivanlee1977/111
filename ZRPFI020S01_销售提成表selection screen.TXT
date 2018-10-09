@@ -1,0 +1,12 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPFI020S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_bukrs FOR ce11000-bukrs,
+               s_prctr FOR ce11000-prctr,
+               s_VKORG FOR ce11000-VKORG,
+               s_KNDNR FOR ce11000-KNDNR.
+PARAMETERS:p_gjahr LIKE ce11000-gjahr OBLIGATORY DEFAULT sy-datum(4).
+SELECT-OPTIONS:s_perde FOR ce11000-perde OBLIGATORY NO-EXTENSION.
+SELECTION-SCREEN END OF BLOCK blc.

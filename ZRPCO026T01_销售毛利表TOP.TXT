@@ -1,0 +1,145 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPCO026T01
+*&---------------------------------------------------------------------*
+TABLES:ce11000.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       perio      LIKE ce11000-perio,
+       bukrs      LIKE ce11000-bukrs,
+       waers      LIKE ce11000-rec_waers,
+       absmg      LIKE ce11000-absmg,
+       absmg_me   LIKE ce11000-absmg_me,
+       bzirk      LIKE ce11000-bzirk,
+       bzirk_txt  LIKE t171t-bztxt,  "销售大区名称
+*       fkart      LIKE ce11000-fkart,
+       kaufn      LIKE ce11000-kaufn,
+       kdpos      LIKE ce11000-kdpos,
+       kmkdgr     LIKE ce11000-kmkdgr,
+       kmkdgr_txt LIKE t151t-ktext, "行业名称
+       kndnr      LIKE ce11000-kndnr,
+       name1      LIKE kna1-name1,   "客户名称
+       ktgrd      LIKE ce11000-ktgrd,
+       kvgr1      LIKE ce11000-kvgr1,
+       kvgr1_txt  LIKE tvv1t-bezei,  "销售工程师/销售代表名称
+       kvgr2      LIKE ce11000-kvgr2,
+       kvgr2_txt  LIKE tvv2t-bezei,  "商务名称
+       land1      LIKE ce11000-land1,
+       matkl      LIKE ce11000-matkl,
+       matkl_txt  LIKE t023t-wgbez,  "物料组名称
+       perde      LIKE ce11000-perde,
+       prctr      LIKE ce11000-prctr,
+       prodh      LIKE ce11000-prodh,
+       rkaufnr    LIKE ce11000-rkaufnr,
+       spart      LIKE ce11000-spart,
+       spart_txt  LIKE tspat-vtext,  "产品组名称
+       vkbur      LIKE ce11000-vkbur,
+       vkbur_txt  LIKE tvkbt-bezei,  "销售行办名称
+       vkorg      LIKE ce11000-vkorg,
+       vtweg      LIKE ce11000-vtweg,
+       vtweg_txt  LIKE tvtwt-vtext,  "分销渠道名称
+       vv001      LIKE ce11000-vv001,
+       vv002      LIKE ce11000-vv002,
+       vv100      LIKE ce11000-vv100,
+       vv101      LIKE ce11000-vv101,
+       vv102      LIKE ce11000-vv102,
+       vv103      LIKE ce11000-vv103,
+       vv104      LIKE ce11000-vv104,
+       vv105      LIKE ce11000-vv105,
+       vv106      LIKE ce11000-vv106,
+       vv107      LIKE ce11000-vv107,
+       vv108      LIKE ce11000-vv108,
+       vv109      LIKE ce11000-vv109,
+       vv110      LIKE ce11000-vv110,
+       vv111      LIKE ce11000-vv111,
+       vv112      LIKE ce11000-vv112,
+       vv113      LIKE ce11000-vv113,
+       vv114      LIKE ce11000-vv114,
+       vv115      LIKE ce11000-vv115,
+       vv200      LIKE ce11000-vv200,
+       vv201      LIKE ce11000-vv201,
+       vv202      LIKE ce11000-vv202,
+       vv203      LIKE ce11000-vv203,
+       vv204      LIKE ce11000-vv204,
+       vv205      LIKE ce11000-vv205,
+       vv206      LIKE ce11000-vv206,
+       vv207      LIKE ce11000-vv207,
+       vv208      LIKE ce11000-vv208,
+       vv209      LIKE ce11000-vv209,
+       vv210      LIKE ce11000-vv210,
+       vv211      LIKE ce11000-vv211,
+       vv212      LIKE ce11000-vv212,
+       vv213      LIKE ce11000-vv213,
+       vv214      LIKE ce11000-vv214,
+       vv215      LIKE ce11000-vv215,
+       vv216      LIKE ce11000-vv216,
+       vv301      LIKE ce11000-vv301,
+       ww001      LIKE ce11000-ww001,
+       ww001_txt  LIKE t25a0-bezek,  "产品分类名称
+       ww002      LIKE ce11000-ww002,
+       ww003      LIKE ce11000-ww003,
+       ww004      LIKE ce11000-ww004,
+       ww005      LIKE ce11000-ww005,
+       ww006      LIKE ce11000-ww006,
+       ww007      LIKE ce11000-ww007,
+       ww008      LIKE ce11000-ww008,
+       ww009      LIKE ce11000-ww009,
+*      ww012      LIKE ce11000-ww012, "科学计数法
+*      ww013      LIKE ce11000-ww013,
+       ww015      LIKE ce11000-ww015,
+       ww015_txt  LIKE tvkbt-bezei,
+       ww016      LIKE ce11000-ww016,
+       ww016_txt  LIKE t171t-bztxt,  "销售大区名称
+       ww017      LIKE ce11000-ww017,
+       ww017_txt  LIKE tvv2t-bezei,  "商务名称
+       ww018      LIKE ce11000-ww018,
+       ww018_txt  LIKE tvv1t-bezei,
+       zbhrj      LIKE ce11000-vv200, "不含软件金额
+       zmlv       TYPE p DECIMALS 2, "毛利率
+       artnr      TYPE ce11000-artnr,
+       matnr      TYPE makt-matnr,
+       maktx      TYPE makt-maktx,
+       zmatnr     TYPE makt-matnr,
+       zmaktx     TYPE makt-maktx,
+       zbhrj1     LIKE ce11000-vv200, "不含软件金额(新) add by leimt 20180329
+       vv207_new  TYPE p DECIMALS 3,
+       ktext1     TYPE ztco004-ktext1,
+       kbetr1     TYPE konp-kbetr, "实时零售价
+       kbetr2     TYPE konp-kbetr, "历史零售价
+       kbetr3     TYPE konp-kbetr, "实时结算价
+       kbetr4     TYPE konp-kbetr, "历史结算价
+     END OF gt_out.
+***alv data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.
+
+DATA: BEGIN OF gt_konh OCCURS 0,
+        knumh   TYPE konh-knumh,
+        kotabnr TYPE konh-kotabnr,
+        kschl   TYPE konh-kschl,
+        matnr   TYPE mara-matnr,
+        datab   TYPE konh-datab,
+        datbi   TYPE konh-datbi,
+        kbetr   TYPE konp-kbetr,
+      END OF gt_konh.
+
+DATA: BEGIN OF gt_konh1 OCCURS 0,
+        vakey   TYPE konh-vakey,
+        knumh   TYPE konh-knumh,
+        kotabnr TYPE konh-kotabnr,
+        kschl   TYPE konh-kschl,
+        datab   TYPE konh-datab,
+        datbi   TYPE konh-datbi,
+        kbetr   TYPE konp-kbetr,
+      END OF gt_konh1.

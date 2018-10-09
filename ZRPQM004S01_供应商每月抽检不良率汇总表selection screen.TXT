@@ -1,0 +1,13 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPQM004S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_pastr FOR qals-pastrterm OBLIGATORY ,
+*               s_paend FOR qals-paendterm OBLIGATORY,
+               s_lifnr FOR qals-sellifnr,
+               s_matkl FOR mara-matkl,
+               s_matnr FOR qals-selmatnr,
+               s_werk  FOR qals-werk OBLIGATORY DEFAULT '1000',
+               s_charg FOR qals-charg,
+               s_pruef FOR qals-prueflos.
+SELECTION-SCREEN END OF BLOCK blc.

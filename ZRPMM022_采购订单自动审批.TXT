@@ -1,0 +1,194 @@
+*&---------------------------------------------------------------------*
+*& 程序名：ZRPMM022
+*& 创建者(公司)/日期： PFT/20170913
+*& 程序描述:采购订单自动审批
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    PFT           20170913      创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpmm022.
+
+INCLUDE zalv.
+
+DATA: BEGIN OF gt_ekko OCCURS 0,
+        box(1),
+        ebeln     LIKE ekko-ebeln, "采购订单号
+        bukrs     LIKE ekko-bukrs, "公司代码
+        waers     LIKE ekko-waers, "币别
+        wkurs     LIKE ekko-wkurs, "汇率
+        bsart     LIKE ekko-bsart, "订单类型
+        frggr     LIKE ekko-frggr, "审批组
+        frgsx     LIKE ekko-frgsx, "审批策略
+        frgke     LIKE ekko-frgke, "批准标识：采购凭证
+        frgzu     LIKE ekko-frgzu, "发布状态
+        frgrl     LIKE ekko-frgrl, "批准尚未完全生效
+        frgc1     LIKE t16fs-frgc1, "审批代码
+        flag(1),"S成功，F失败
+        mess(200),"错误消息
+      END OF gt_ekko.
+
+DATA: BEGIN OF gt_ekpo OCCURS 0,
+        ebeln LIKE ekpo-ebeln,
+        ebelp LIKE ekpo-ebelp,
+        netwr LIKE ekpo-netwr,
+        mwskz LIKE ekpo-mwskz,
+      END OF gt_ekpo.
+
+DATA:gt_t16fs LIKE t16fs OCCURS 0 WITH HEADER LINE.
+
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+PARAMETERS:p_code LIKE t16fs-frgc1."审批代码
+SELECTION-SCREEN END OF BLOCK blc.
+
+START-OF-SELECTION.
+  PERFORM frm_get_data.
+  PERFORM sub_build_fieldcat.
+  PERFORM sub_build_layout.
+  PERFORM sub_display_alv TABLES gt_ekko USING '' ''.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA: lv_fwste  TYPE fwste,
+        lv_netwr  TYPE netwr,
+        lv_tabix  LIKE sy-tabix,
+        lv_rate   TYPE bapi1093_0,
+        lv_factor TYPE isoc_factor.
+  REFRESH: gt_ekko,gt_t16fs.
+  SELECT ebeln bukrs waers wkurs bsart frggr frgsx frgke frgzu frgrl
+    INTO CORRESPONDING FIELDS OF TABLE gt_ekko
+    FROM ekko
+    WHERE frgsx IN ('10','60')
+      AND frgke NE 'R'
+      AND bsart IN ('Z001','Z004','Z005').
+
+*  ADD BY PFT 20171128
+*  根据PO号取出PO的含税价格，计算整张单价格如果大于25W，程序不自动审批
+  IF gt_ekko[] IS NOT INITIAL.
+    SELECT ebeln ebelp netwr mwskz
+      INTO CORRESPONDING FIELDS OF TABLE gt_ekpo
+      FROM ekpo
+      FOR ALL ENTRIES IN gt_ekko
+      WHERE ebeln = gt_ekko-ebeln.
+  ENDIF.
+
+  LOOP AT gt_ekko.
+    CLEAR:lv_netwr,lv_tabix.
+    lv_tabix = sy-tabix.
+
+    LOOP AT gt_ekpo WHERE ebeln = gt_ekko-ebeln.
+      CLEAR: lv_fwste,lv_factor.
+      CALL FUNCTION 'RECP_FI_TAX_CALCULATE'
+        EXPORTING
+          ic_bukrs    = gt_ekko-bukrs
+          ic_mwskz    = gt_ekpo-mwskz
+          ic_waers    = gt_ekko-waers
+        IMPORTING
+          ep_tax_rate = lv_fwste
+        EXCEPTIONS
+          not_found   = 1.
+
+      CALL FUNCTION 'CURRENCY_CONVERTING_FACTOR'
+        EXPORTING
+          currency          = gt_ekko-waers
+        IMPORTING
+          factor            = lv_factor
+        EXCEPTIONS
+          too_many_decimals = 1.
+
+      lv_netwr = lv_netwr + ( gt_ekpo-netwr * lv_factor * ( 1 + lv_fwste / 100 ) *  gt_ekko-wkurs ).
+    ENDLOOP.
+    IF  lv_netwr > 250000.
+      DELETE gt_ekko INDEX lv_tabix.
+    ENDIF.
+  ENDLOOP.
+* END BY  PFT 20171128
+
+  SELECT * INTO TABLE gt_t16fs
+    FROM t16fs
+    WHERE frggr EQ 'Z2'
+      AND frgsx IN ('10','60').
+
+  DATA:lv_code      LIKE bapimmpara-po_rel_cod,
+       lv_status    LIKE bapimmpara-rel_status,
+       lv_indicator LIKE bapimmpara-po_rel_ind,
+       ret_code     LIKE sy-subrc,
+       gt_return    LIKE bapireturn OCCURS 0 WITH HEADER LINE.
+
+  DATA: l_level     TYPE n, "审批级数
+        l_fieldname TYPE string. "字段名.
+
+  FIELD-SYMBOLS:<fs_field> TYPE t16fs-frgc1.
+
+  LOOP AT gt_ekko .
+    lv_tabix = sy-tabix.
+    l_level = strlen( gt_ekko-frgzu ).
+    l_level = l_level + 1.
+
+    CONCATENATE 'FRGC' l_level INTO l_fieldname.
+    CLEAR: gt_t16fs.
+    READ TABLE gt_t16fs WITH KEY frggr = gt_ekko-frggr frgsx = gt_ekko-frgsx.
+    ASSIGN COMPONENT l_fieldname OF STRUCTURE gt_t16fs TO <fs_field>.
+    lv_code = <fs_field>.
+    IF lv_code NE p_code .
+      DELETE gt_ekko INDEX lv_tabix.
+      CONTINUE.
+    ELSE.
+      CLEAR: lv_status,lv_indicator,ret_code.REFRESH: gt_return.
+      CALL FUNCTION 'BAPI_PO_RELEASE'
+        EXPORTING
+          purchaseorder          = gt_ekko-ebeln
+          po_rel_code            = p_code
+        IMPORTING
+          rel_status_new         = lv_status
+          rel_indicator_new      = lv_indicator
+          ret_code               = ret_code
+        TABLES
+          return                 = gt_return
+        EXCEPTIONS
+          authority_check_fail   = 1
+          document_not_found     = 2
+          enqueue_fail           = 3
+          prerequisite_fail      = 4
+          release_already_posted = 5
+          responsibility_fail    = 6
+          OTHERS                 = 7.
+      IF gt_return[] IS INITIAL.
+        gt_ekko-flag = 'S'.
+        gt_ekko-mess = '审批成功'.
+      ELSE.
+        gt_ekko-flag = 'F'.
+        LOOP AT gt_return.
+          CONCATENATE gt_ekko-mess gt_return-message INTO gt_ekko-mess.
+          CLEAR: gt_return.
+        ENDLOOP.
+      ENDIF.
+    ENDIF.
+    gt_ekko-frgc1 = p_code.
+    MODIFY gt_ekko TRANSPORTING frgc1 flag mess.
+    CLEAR:gt_ekko.
+  ENDLOOP.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SUB_BUILD_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM sub_build_fieldcat .
+  REFRESH:g_it_fieldcat.
+
+  PERFORM sub_set_fieldcat USING ''  'EBELN'   '采购订单号'          'X'    ''  ''  ''  '10'   'EBELN'    'EKKO' ''.
+  PERFORM sub_set_fieldcat USING ''  'FRGC1'   '审批代码'            ''    ''  ''  ''  ''  ''    '' ''.
+  PERFORM sub_set_fieldcat USING ''  'FLAG'    '审批成功与否'        ''    ''  ''  ''  ''  ''    '' ''.
+  PERFORM sub_set_fieldcat USING ''  'MESS'    '审批消息'            ''    ''  ''  ''  ''   ''    '' ''.
+
+ENDFORM.

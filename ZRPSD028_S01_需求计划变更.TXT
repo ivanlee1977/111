@@ -1,0 +1,17 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPQM001_S01
+*&---------------------------------------------------------------------*
+DATA: c50 TYPE char50.
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+
+SELECT-OPTIONS:
+        s_matnr FOR mara-matnr,
+        s_kunnr FOR kna1-kunnr,
+        s_matkl FOR mara-matkl,
+        s_sqr FOR c50,
+        s_sqrq FOR sy-datum,
+        s_qrrq FOR sy-datum,
+        s_pmc FOR  c50,
+        s_pmcrq FOR sy-datum,
+        s_dispo FOR marc-dispo.
+SELECTION-SCREEN END OF BLOCK b1.

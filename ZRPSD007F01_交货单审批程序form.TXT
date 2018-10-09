@@ -1,0 +1,692 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPSD007F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:BEGIN OF lt_kna1 OCCURS 0,
+         kunnr LIKE kna1-kunnr,
+         name1 LIKE kna1-name1,
+         kukla LIKE kna1-kukla,
+       END OF lt_kna1.
+
+  DATA:lt_tvlst LIKE tvlst OCCURS 0 WITH HEADER LINE,
+       lt_tvv2t LIKE tvv2t OCCURS 0 WITH HEADER LINE,
+       lt_t171t LIKE t171t OCCURS 0 WITH HEADER LINE,
+       lt_tvkbt LIKE tvkbt OCCURS 0 WITH HEADER LINE,
+       lt_tvv1t LIKE tvv1t OCCURS 0 WITH HEADER LINE,
+       lt_t151t LIKE t151t OCCURS 0 WITH HEADER LINE,
+       lt_tkukt LIKE tkukt OCCURS 0 WITH HEADER LINE,
+       lt_t173t LIKE t173t OCCURS 0 WITH HEADER LINE,
+       lt_tvlkt LIKE tvlkt OCCURS 0 WITH HEADER LINE,
+       lt_tvzbt LIKE tvzbt OCCURS 0 WITH HEADER LINE,
+       lt_vbpa  LIKE vbpa OCCURS 0 WITH HEADER LINE,
+       lt_adrc  LIKE adrc OCCURS 0 WITH HEADER LINE.
+
+  DATA:BEGIN OF lt_cdpos OCCURS 0.
+      INCLUDE STRUCTURE cdhdr.
+  DATA:fname     LIKE cdpos-fname,
+       chngind   LIKE cdpos-chngind,
+       value_new LIKE cdpos-value_new,
+       value_old LIKE cdpos-value_old,
+       END OF lt_cdpos.
+
+  DATA:lv_name  LIKE thead-tdname,
+       lv_adrnr LIKE vbpa-adrnr.
+
+  RANGES:r_lifsk FOR likp-lifsk.
+
+  CASE 'X'.
+    WHEN r1.
+      r_lifsk = 'ILT'.
+      r_lifsk-low = '30'.
+      APPEND r_lifsk.
+    WHEN r2.
+      r_lifsk = 'IEQ'.
+      r_lifsk-low = '30'.
+      APPEND r_lifsk.
+    WHEN OTHERS.
+  ENDCASE.
+
+  SELECT a~vbeln                     "交货单号
+         a~kunag                     "客户
+         a~erdat                     "订单日期
+         a~lifsk                     "订单状态
+         b~posnr                     "项次
+         b~matnr                     "物料号码
+         b~arktx                     "物料描述
+         b~lfimg                     "数量
+         b~vrkme                     "单位
+         d~kwmeng
+         d~netwr                     "不含税金额
+         d~mwsbp                     "税额
+         c~waerk                     "币别
+         c~kvgr2                     "商务人员
+         c~vkorg                     "销售组织
+         c~vtweg                     "分销渠道
+         c~spart                     "产品组
+         e~bzirk                     "大区
+         c~vkbur                     "行办
+         c~kvgr1                     "业务员
+         e~kdgrp                     "行业
+         a~vbeln AS objectid         "对象号
+         a~vsart
+         b~werks
+         b~lgort
+         a~lfart
+         e~zterm
+    INTO CORRESPONDING FIELDS OF TABLE gt_out
+    FROM likp AS a
+   INNER JOIN lips AS b
+      ON a~vbeln = b~vbeln
+   INNER JOIN vbap AS d
+      ON b~vgbel = d~vbeln
+     AND b~vgpos = d~posnr
+   INNER JOIN vbak AS c
+      ON d~vbeln = c~vbeln
+   INNER JOIN vbkd AS e
+      ON c~vbeln = e~vbeln
+     AND e~posnr = '000000'
+    INNER JOIN vbuk AS f
+    ON a~vbeln = f~vbeln
+   WHERE c~vkorg IN s_vkorg
+      AND e~bzirk IN s_bzirk
+      AND c~kvgr1 IN s_kvgr1
+      AND c~kvgr2 IN s_kvgr2
+      AND a~kunag IN s_kunnr
+      AND a~vbeln IN s_vbeln
+      AND a~erdat IN s_erdat
+      AND a~lifsk IN r_lifsk
+      AND c~kvgr1 IN r_kvgr1
+      AND f~wbstk NE 'C'.
+
+  CHECK gt_out[] IS NOT INITIAL.
+***客户名称
+  SELECT kunnr name1 kukla
+    INTO CORRESPONDING FIELDS OF TABLE lt_kna1
+    FROM kna1
+    FOR ALL ENTRIES IN gt_out
+    WHERE kunnr = gt_out-kunag.
+***交货状态描述
+  SELECT * INTO TABLE lt_tvlst FROM tvlst WHERE spras = sy-langu.
+***交货单类型描述
+  SELECT * INTO TABLE lt_tvlkt FROM tvlkt WHERE spras = sy-langu.
+  SORT lt_tvlkt BY lfart.
+***抓取商务或经理确认日期
+  SELECT a~objectclas
+         a~objectid
+         a~changenr
+         a~username
+         a~udate
+         a~utime
+         b~fname
+         b~chngind
+         b~value_new
+         b~value_old
+    INTO CORRESPONDING FIELDS OF TABLE lt_cdpos
+    FROM cdhdr AS a
+    INNER JOIN cdpos AS b
+    ON a~objectclas = b~objectclas
+    AND a~objectid  = b~objectid
+    AND a~changenr  = b~changenr
+    FOR ALL ENTRIES IN gt_out
+    WHERE a~objectclas = 'LIEFERUNG'
+      AND a~objectid   =  gt_out-objectid
+      AND b~fname = 'LIFSK'.
+  DELETE lt_cdpos WHERE value_new NE '30'.
+  SORT lt_cdpos BY objectclas objectid udate DESCENDING utime DESCENDING.
+  DELETE ADJACENT DUPLICATES FROM lt_cdpos COMPARING objectclas objectid.
+
+***商务人员描述
+  SELECT * INTO TABLE lt_tvv2t FROM tvv2t WHERE spras = sy-langu.
+***大区描述
+  SELECT * INTO TABLE lt_t171t FROM t171t WHERE spras = sy-langu.
+***行办描述
+  SELECT * INTO TABLE lt_tvkbt FROM tvkbt WHERE spras = sy-langu.
+***业务员描述
+  SELECT * INTO TABLE lt_tvv1t FROM tvv1t WHERE spras = sy-langu.
+***行业描述
+  SELECT * INTO TABLE lt_t151t FROM t151t WHERE spras = sy-langu.
+***客户分类描述
+  SELECT * INTO TABLE lt_tkukt FROM tkukt WHERE spras = sy-langu.
+***快递公司名称
+  SELECT * INTO TABLE lt_t173t FROM t173t WHERE spras = sy-langu.
+***付款条件描述
+  SELECT * INTO TABLE lt_tvzbt FROM tvzbt WHERE spras = sy-langu.
+
+  SORT lt_kna1  BY kunnr.
+  SORT lt_tvlst BY lifsp.
+  SORT lt_tvv2t BY kvgr2.
+  SORT lt_t171t BY bzirk.
+  SORT lt_tvkbt BY vkbur.
+  SORT lt_tvv1t BY kvgr1.
+  SORT lt_t151t BY kdgrp.
+  SORT lt_tkukt BY kukla.
+  SORT lt_t173t BY vsart.
+  SORT lt_tvzbt BY zterm.
+
+***ADD BY PFT 20171204
+* 根据地址号取电话\传真\手机
+*** 取送货地址号
+  SELECT * INTO TABLE lt_vbpa
+    FROM vbpa
+    FOR ALL ENTRIES IN gt_out
+    WHERE vbeln = gt_out-vbeln
+      AND parvw = 'WE'.
+  SORT lt_vbpa BY vbeln.
+
+  IF lt_vbpa[] IS NOT INITIAL.
+    SELECT * INTO TABLE lt_adrc FROM adrc FOR ALL ENTRIES IN lt_vbpa WHERE addrnumber = lt_vbpa-adrnr.
+    SORT lt_adrc BY addrnumber.
+  ENDIF.
+***END BY PFT 20171204
+
+***整理数据到输出表
+  LOOP AT gt_out.
+***check 销售组织权限
+    AUTHORITY-CHECK OBJECT 'V_VBAK_VKO'
+             ID 'VKORG' FIELD gt_out-vkorg
+             ID 'VTWEG' FIELD gt_out-vtweg
+             ID 'SPART' FIELD gt_out-spart
+             ID 'ACTVT' FIELD '03'.
+    IF sy-subrc <> 0.
+      DELETE gt_out.
+      CONTINUE.
+    ENDIF.
+***客户名称 & 分类
+    READ TABLE lt_kna1 WITH KEY kunnr = gt_out-kunag BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-name1 = lt_kna1-name1.
+      gt_out-kukla = lt_kna1-kukla.
+    ENDIF.
+***订单状态描述
+    READ TABLE lt_tvlst WITH KEY lifsp = gt_out-lifsk BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-vtext = lt_tvlst-vtext.
+    ENDIF.
+***单价
+    IF gt_out-kwmeng NE 0.
+      gt_out-netpr = ( gt_out-netwr + gt_out-mwsbp ) / gt_out-kwmeng.
+    ENDIF.
+***金额
+    gt_out-amount = gt_out-netpr * gt_out-lfimg.
+***经理\主管确认日期
+    IF gt_out-lifsk EQ '30'.
+      READ TABLE lt_cdpos WITH KEY objectid = gt_out-objectid value_new = '30'.
+      IF sy-subrc = 0.
+        gt_out-zjlqr = lt_cdpos-udate.
+      ENDIF.
+    ENDIF.
+***商务人员描述
+    READ TABLE lt_tvv2t WITH KEY kvgr2 = gt_out-kvgr2 BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-bezei = lt_tvv2t-bezei.
+    ENDIF.
+***大区描述
+    READ TABLE lt_t171t WITH KEY bzirk = gt_out-bzirk BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-bztxt = lt_t171t-bztxt.
+    ENDIF.
+***行办描述
+    READ TABLE lt_tvkbt WITH KEY vkbur = gt_out-vkbur BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-vkbur_txt = lt_tvkbt-bezei.
+    ENDIF.
+***业务员描述
+    READ TABLE lt_tvv1t WITH KEY kvgr1 = gt_out-kvgr1 BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-kvgr1_txt = lt_tvv1t-bezei.
+    ENDIF.
+***行业描述
+    READ TABLE lt_t151t WITH KEY kdgrp = gt_out-kdgrp BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-kdgrp_txt = lt_t151t-ktext.
+    ENDIF.
+***客户分类描述
+    READ TABLE lt_tkukt WITH KEY kukla = gt_out-kukla BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-kukla_txt = lt_tkukt-vtext.
+    ENDIF.
+***快递公司
+    READ TABLE lt_t173t WITH KEY vsart = gt_out-vsart BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-vsart_txt = lt_t173t-bezei.
+    ENDIF.
+***库位描述
+    SELECT SINGLE lgobe INTO gt_out-lgobe FROM t001l WHERE werks = gt_out-werks AND lgort = gt_out-lgort.
+    CLEAR lv_name .
+    lv_name = gt_out-vbeln.
+    PERFORM frm_get_text USING  'Z001' '1'  'VBBK' lv_name CHANGING gt_out-ztext1. "文本-注意事项
+    PERFORM frm_get_text USING  'Z006' '1'  'VBBK' lv_name CHANGING gt_out-ztext2. "文本-特殊包装
+    PERFORM frm_get_text USING  'Z002' '1'  'VBBK' lv_name CHANGING gt_out-ztext2. "文本-提单要求
+    PERFORM frm_get_text USING  'Z003' '1'  'VBBK' lv_name CHANGING gt_out-ztext2. "文本-标签要求
+    PERFORM frm_get_text USING  'Z004' '1'  'VBBK' lv_name CHANGING gt_out-ztext2. "文本-箱唛要求
+    PERFORM frm_get_text USING  'Z005' '1'  'VBBK' lv_name CHANGING gt_out-ztext2. "文本-随货单证
+***交货信用冻结
+    SELECT SINGLE cmgst INTO gt_out-cmgst FROM vbuk WHERE vbeln = gt_out-vbeln.
+    CASE gt_out-cmgst.
+      WHEN 'A'.
+        gt_out-cmgst_txt = '信用正常'.
+      WHEN 'B'.
+        gt_out-cmgst_txt = '信用冻结'.
+      WHEN 'D'.
+        gt_out-cmgst_txt = '已信用释放'.
+      WHEN OTHERS.
+    ENDCASE.
+***取送货单类型描述
+    READ TABLE lt_tvlkt WITH KEY lfart = gt_out-lfart BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-lfart_txt = lt_tvlkt-vtext.
+    ENDIF.
+***付款条件描述
+    READ TABLE lt_tvzbt WITH KEY zterm = gt_out-zterm BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-zterm_txt = lt_tvzbt-vtext.
+    ENDIF.
+***取送货地址
+    CLEAR:lv_adrnr.
+    READ TABLE lt_vbpa WITH KEY vbeln = gt_out-vbeln  BINARY SEARCH.
+    IF sy-subrc = 0.
+      lv_adrnr = lt_vbpa-adrnr.
+    ENDIF.
+    READ TABLE lt_adrc WITH KEY addrnumber = lv_adrnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      CONCATENATE lt_adrc-street lt_adrc-house_num1
+                  lt_adrc-str_suppl3 lt_adrc-location INTO gt_out-street.
+      CONDENSE gt_out-street.
+      IF gt_out-kunag = 'A000' OR gt_out-kunag = 'C000' .
+        gt_out-name1 = lt_adrc-name1.
+      ENDIF.
+    ENDIF.
+***ZLR1标准退货单、ZLR2免费退货单、ZLR3样品退货单、ZLR4样品转销售退货单的金额为负 add by wusk 20180115
+    IF gt_out-lfart = 'ZLR1' OR gt_out-lfart = 'ZLR2' OR gt_out-lfart = 'ZLR3' OR gt_out-lfart = 'ZLR4'.
+      gt_out-amount = gt_out-amount * -1.
+    ENDIF.
+
+
+    MODIFY gt_out.
+  ENDLOOP.
+
+  SORT gt_out BY vbeln posnr.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  mcr_build_fieldcat:'ZSTAT'   '状态'         ''        ''      'C'  '30',
+                     'ZMSG'    '消息'         ''        ''      'C'  '50',
+                     'VBELN'   '交货单号'     'VBELN'   'LIKP'  ''   '',
+                     'POSNR'   '项次'         'POSNR'   'LIPS'  ''   '',
+                     'KUNAG'   '客户'         'KUNAG'   'LIKP'  ''   '',
+                     'NAME1'   '客户名称'     'NAME1'   'KNA1'  ''   '',
+                     'ERDAT'   '订单日期'     'ERDAT'   'LIKP'  ''   '',
+                     'LFART'   '交货单类型'     'LFART'   'LIKP'  ''   '',
+                     'LFART_TXT'   '交货单类型' 'VTEXT'   'TVLKT'  ''   '',
+                     'LIFSK'   '订单状态'     'LIFSK'   'LIKP'  ''   '',
+                     'VTEXT'   '订单状态描述' 'VTEXT'   'TVLST'  ''   '',
+                     'MATNR'   '物料号码'     'MATNR'   'LIPS'  ''   '',
+                     'ARKTX'   '物料描述'     'ARKTX'   'LIPS'  ''   '',
+                     'LFIMG'   '数量'         'LFIMG'   'LIPS'  ''   '',
+                     'VRKME'   '单位'         'VRKME'   'LIPS'  ''   '',
+                     'NETPR'   '单价'         ''        ''     'P'  '15',
+                     'AMOUNT'  '金额'         ''        ''     'P'  '15',
+                     'WAERK'   '币别'         'WAERK'   'VBAK' ''   '',
+                     'ZJLQR'   '经理\主管确认日期' ''   ''      'D'  '10',
+                     'KVGR2'   '商务人员'     'KVGR2'   'VBAK'   ''  '',
+                     'BEZEI'   '商务人员描述' 'BEZEI'   'TVV2T'   ''  '',
+                     'VKORG'   '销售组织'     'VKORG'   'VBAK'   ''  '',
+                     'VTWEG'   '分销渠道'     'VTWEG'   'VBAK'   ''  '',
+                     'BZIRK'   '大区'         'BZIRK'   'VBKD'   ''  '',
+                     'BZTXT'   '大区描述'     'BZTXT'   'T171T'   ''  '',
+                     'VKBUR'   '行办'         'VKBUR'   'VBAK'   ''  '',
+                     'VKBUR_TXT' '行办描述'   'BEZEI'   'TVKBT'   ''  '',
+                     'KVGR1'   '业务员'       'KVGR1'   'VBAK'   ''  '',
+                     'KVGR1_TXT' '业务员描述' 'BEZEI'   'TVV1T'   ''  '',
+                     'KDGRP'    '行业'        'KDGRP'   'VBKD'   ''  '',
+                     'KDGRP_TXT' '行业描述'   'KTEXT'   'T151T'   ''  '',
+                     'KUKLA'    '客户分类'    'KUKLA'   'KNA1'   ''  '',
+                     'KUKLA_TXT' '客户分类描述' 'VTEXT'   'TKUKT'   ''  '',
+                     'VSART_TXT' '快递公司'     'BEZEI'   'T173T'   ''  '',
+                     'ZTEXT1'    '注意事项'     ''        ''        'C' '200',
+                     'ZTEXT2'    '特殊包装'     ''        ''        'C' '200',
+                     'ZTEXT3'    '提单要求'     ''        ''        'C' '200',
+                     'ZTEXT4'    '标签要求'     ''        ''        'C' '200',
+                     'ZTEXT5'    '箱唛要求'     ''        ''        'C' '200',
+                     'ZTEXT6'    '随货单证'     ''        ''        'C' '200',
+                     'CMGST'     '信用状态'     'CMGST'   'VBUK'    ''   '',
+                     'CMGST_TXT' '信用状态描述' ''        ''        'C'  '50',
+                     'LGORT'     '库位'         'LGORT'   'LIPS'    ''  '',
+                     'LGOBE'     '库位描述'     'LGOBE'   'T001L'   ''  '',
+                     'ZTERM'     '付款条件'   'ZTERM'   'VBKD'   ''  '',
+                     'ZTERM_TXT' '付款条件描述'   'VTEXT'   'TVZBT'   ''  '',
+                     'STREET'    '送货地址' ''        ''        'C'  '100'.
+
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+  gs_layout-box_fname = 'CHECK'.
+  gs_layout-sel_mode  = 'A'.
+  gs_layout-no_toolbar = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK        = ' '
+*     I_BYPASSING_BUFFER       =
+*     I_BUFFER_ACTIVE          =
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'FRM_PF_STATUS'
+      i_callback_user_command  = 'FRM_USER_COMMAND'
+*     I_CALLBACK_TOP_OF_PAGE   = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME         =
+*     I_BACKGROUND_ID          = ' '
+*     I_GRID_TITLE             =
+*     I_GRID_SETTINGS          =
+      is_layout_lvc            = gs_layout
+      it_fieldcat_lvc          = gt_fcat[]
+*     IT_EXCLUDING             =
+*     IT_SPECIAL_GROUPS_LVC    =
+*     IT_SORT_LVC              =
+*     IT_FILTER_LVC            =
+*     IT_HYPERLINK             =
+*     IS_SEL_HIDE              =
+      i_default                = 'X'
+      i_save                   = 'A'
+*     IS_VARIANT               =
+*     IT_EVENTS                =
+*     IT_EVENT_EXIT            =
+*     IS_PRINT_LVC             =
+*     IS_REPREP_ID_LVC         =
+*     I_SCREEN_START_COLUMN    = 0
+*     I_SCREEN_START_LINE      = 0
+*     I_SCREEN_END_COLUMN      = 0
+*     I_SCREEN_END_LINE        = 0
+*     I_HTML_HEIGHT_TOP        =
+*     I_HTML_HEIGHT_END        =
+*     IT_ALV_GRAPHICS          =
+*     IT_EXCEPT_QINFO_LVC      =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+*   IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER  =
+*     ES_EXIT_CAUSED_BY_USER   =
+    TABLES
+      t_outtab                 = gt_out[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PF_STATUS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_pf_status USING rt_extab TYPE slis_t_extab.
+  IF r1 = 'X'.
+    SET PF-STATUS 'PF_1000' EXCLUDING 'ZUNDOREL'.
+  ELSEIF r2 = 'X'.
+    SET PF-STATUS 'PF_1000' EXCLUDING 'ZDOREL'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_USER_COMMAND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_user_command USING r_ucomm LIKE sy-ucomm
+                            rs_selfield TYPE slis_selfield..
+  DATA:lv_grid TYPE REF TO cl_gui_alv_grid.
+
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = lv_grid.
+
+  CASE r_ucomm.
+    WHEN 'ZDOREL'.  "审批
+      PERFORM frm_release_dn USING 'R'.
+*      PERFORM frm_refresh_display USING lv_grid.
+    WHEN 'ZUNDOREL'. "取消审批
+      PERFORM frm_release_dn USING 'U'.
+*      PERFORM frm_refresh_display USING lv_grid.
+    WHEN '&IC1'.
+      CHECK  rs_selfield-fieldname = 'VBELN'.
+      SET PARAMETER ID 'VL' FIELD rs_selfield-value.
+      CALL TRANSACTION 'VL03N' AND SKIP FIRST SCREEN.
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_RELEASE_DN
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_1029   text
+*----------------------------------------------------------------------*
+FORM frm_release_dn  USING u_flag TYPE c.
+  DATA:lt_data LIKE gt_out OCCURS 0 WITH HEADER LINE.
+  DATA:ls_header_data    LIKE bapiobdlvhdrchg,
+       ls_header_control LIKE bapiobdlvhdrctrlchg.
+  DATA:lt_return LIKE bapiret2 OCCURS 0 WITH HEADER LINE.
+  DATA:lv_msg     TYPE string,
+       lv_msg_all TYPE string.
+
+  READ TABLE gt_out WITH KEY check = 'X'.
+  IF sy-subrc NE 0.
+    MESSAGE '请至少选择一行数据' TYPE 'E' DISPLAY LIKE 'S'.
+    EXIT.
+  ENDIF.
+
+  IF u_flag = 'R'.
+    LOOP AT gt_out WHERE check = 'X' AND cmgst = 'B'.
+      CONCATENATE '交货单:' gt_out-vbeln '信用冻结，不能审批' INTO lv_msg.
+      MESSAGE lv_msg TYPE 'I'.
+      EXIT.
+    ENDLOOP.
+    IF sy-subrc = 0.
+      EXIT.
+    ENDIF.
+  ENDIF.
+
+  APPEND LINES OF gt_out TO lt_data.
+  DELETE lt_data WHERE check IS INITIAL OR zstat = icon_led_green..
+  SORT lt_data BY vbeln.
+  DELETE ADJACENT DUPLICATES FROM lt_data COMPARING vbeln.
+
+  LOOP AT lt_data.
+    CASE u_flag.
+      WHEN 'R'.
+        ls_header_data-dlv_block = '30'.
+      WHEN 'U'.
+        ls_header_data-dlv_block = '20'.
+      WHEN OTHERS.
+    ENDCASE.
+    ls_header_data-deliv_numb = lt_data-vbeln.
+    ls_header_control-deliv_numb = lt_data-vbeln.
+    ls_header_control-dlv_block_flg = 'X'.
+    REFRESH lt_return.
+    CLEAR lt_return.
+    CALL FUNCTION 'BAPI_OUTB_DELIVERY_CHANGE'
+      EXPORTING
+        header_data    = ls_header_data
+        header_control = ls_header_control
+        delivery       = lt_data-vbeln
+      TABLES
+        return         = lt_return.
+    LOOP AT lt_return WHERE type = 'E' OR type = 'A'.
+      EXIT.
+    ENDLOOP.
+    IF sy-subrc = 0.
+      CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+      CLEAR:lv_msg,lv_msg_all.
+      LOOP AT lt_return WHERE type = 'E' OR type = 'A'.
+        CLEAR lv_msg.
+        CALL FUNCTION 'MESSAGE_TEXT_BUILD'
+          EXPORTING
+            msgid               = lt_return-id
+            msgnr               = lt_return-number
+            msgv1               = lt_return-message_v1
+            msgv2               = lt_return-message_v2
+            msgv3               = lt_return-message_v3
+            msgv4               = lt_return-message_v4
+          IMPORTING
+            message_text_output = lv_msg.
+        IF lv_msg_all IS INITIAL.
+          lv_msg_all = lv_msg.
+        ELSE.
+          CONCATENATE lv_msg_all lv_msg INTO lv_msg_all SEPARATED BY ','.
+        ENDIF.
+      ENDLOOP.
+      LOOP AT gt_out WHERE vbeln = lt_data-vbeln.
+        gt_out-zstat = icon_led_red.
+        gt_out-zmsg = lv_msg_all.
+        MODIFY gt_out.
+      ENDLOOP.
+    ELSE.
+      CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+        EXPORTING
+          wait = 'X'.
+      LOOP AT gt_out WHERE vbeln = lt_data-vbeln.
+        IF r1 = 'X'.
+          gt_out-lifsk = '30'.
+          gt_out-zjlqr = sy-datum.
+          gt_out-zmsg = '审批成功'.
+        ELSE.
+          gt_out-zmsg = '撤消审批成功'.
+          CLEAR gt_out-zjlqr.
+          gt_out-lifsk = '20'.
+        ENDIF.
+        SELECT SINGLE vtext INTO gt_out-vtext FROM tvlst WHERE spras = sy-langu AND lifsp = gt_out-lifsk.
+        gt_out-zstat = icon_led_green.
+        MODIFY gt_out.
+      ENDLOOP.
+    ENDIF.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_REFRESH_DISPLAY
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LV_GRID  text
+*----------------------------------------------------------------------*
+FORM frm_refresh_display  USING  u_grid TYPE REF TO cl_gui_alv_grid.
+  LOOP AT gt_fcat WHERE fieldname = 'ZSTAT' OR fieldname = 'ZMSG'.
+    gt_fcat-tech = space.
+    MODIFY gt_fcat.
+  ENDLOOP.
+
+  CALL METHOD u_grid->set_frontend_fieldcatalog
+    EXPORTING
+      it_fieldcatalog = gt_fcat[].
+
+  CALL METHOD u_grid->set_frontend_layout
+    EXPORTING
+      is_layout = gs_layout.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_AUTH
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_auth .
+  DATA:lt_tvv1 LIKE tvv1 OCCURS 0 WITH HEADER LINE.
+
+  CHECK sy-ucomm = 'ONLI'.
+***获取业务员的权限
+  REFRESH r_kvgr1.
+  SELECT * INTO TABLE lt_tvv1 FROM tvv1.
+  LOOP AT lt_tvv1.
+    AUTHORITY-CHECK OBJECT 'Z_KVGR1'
+             ID 'KVGR1' FIELD lt_tvv1-kvgr1.
+    IF sy-subrc = 0.
+      r_kvgr1 = 'IEQ'.
+      r_kvgr1-low = lt_tvv1-kvgr1.
+      APPEND r_kvgr1.
+      CLEAR r_kvgr1.
+    ENDIF.
+  ENDLOOP.
+  IF r_kvgr1[] IS INITIAL.
+    MESSAGE '你没有任何业务员的权限' TYPE 'E'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_TEXT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0753   text
+*      -->P_0754   text
+*      -->P_0755   text
+*      -->P_LV_NAME  text
+*      <--P_T_DATA_ZTEXT1  text
+*----------------------------------------------------------------------*
+FORM frm_get_text USING u_id LIKE thead-tdid
+                         u_language LIKE thead-tdspras
+                         u_object   LIKE thead-tdobject
+                         u_name     LIKE thead-tdname
+                   CHANGING c_text TYPE c.
+  DATA:lt_lines LIKE tline OCCURS 0 WITH HEADER LINE.
+
+  CLEAR c_text.
+  CALL FUNCTION 'READ_TEXT'
+    EXPORTING
+      client                  = sy-mandt
+      id                      = u_id
+      language                = u_language
+      name                    = u_name
+      object                  = u_object
+    TABLES
+      lines                   = lt_lines
+    EXCEPTIONS
+      id                      = 1
+      language                = 2
+      name                    = 3
+      not_found               = 4
+      object                  = 5
+      reference_check         = 6
+      wrong_access_to_archive = 7
+      OTHERS                  = 8.
+  DELETE lt_lines WHERE tdline IS INITIAL.
+  LOOP AT lt_lines.
+    IF sy-tabix = 1.
+      c_text = lt_lines-tdline.
+    ELSE.
+      CONCATENATE c_text lt_lines-tdline INTO c_text SEPARATED BY space.
+    ENDIF.
+    CONDENSE  c_text.
+  ENDLOOP.
+ENDFORM.

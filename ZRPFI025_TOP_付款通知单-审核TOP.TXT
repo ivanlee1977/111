@@ -1,0 +1,101 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI002_TOP
+*&---------------------------------------------------------------------*
+
+INCLUDE <icon>.
+TYPE-POOLS: truxs,
+            soi,
+            cntl,
+            cntb,
+            abap,
+            slis,
+            vrm.
+TABLES:zficotfkt,zficotfkh,bsik,skb1.
+DATA:BEGIN OF gs_alv.
+DATA:check(1)  TYPE c,
+     name1     LIKE lfa1-name1,
+     txt(6)    TYPE c,
+     txt_s(20) TYPE c.
+DATA:kursf   LIKE bkpf-kursf,
+     zamount LIKE bseg-dmbtr.
+    INCLUDE STRUCTURE zficotfkt.
+DATA:END OF gs_alv.
+DATA:gt_alv LIKE TABLE OF gs_alv.
+
+CONTROLS ctr02 TYPE TABLEVIEW USING SCREEN 9002.
+DATA:gwa_skt TYPE zficotfkt,
+     gt_skt  TYPE TABLE OF zficotfkt,
+
+     gwa_skh TYPE zficotfkh,
+     gt_skh  TYPE TABLE OF zficotfkh.
+
+DATA: g_khmc TYPE kna1-name1,
+      g_zhmc TYPE skat-txt20.
+*-------------------ALV属性声明区---------------------------------*
+DATA: gt_alv_fcat          TYPE  lvc_t_fcat WITH HEADER LINE,
+      "字段属性
+      gs_alv_fcat          LIKE  LINE OF gt_alv_fcat,
+      gt_toolbar_excluding TYPE  ui_functions, "删除功能内表
+      gs_layout            TYPE  lvc_s_layo,   "ALV布局
+      gs_variant           TYPE  disvariant,   "是否保存变式
+      gt_ddval             TYPE  lvc_t_drop,   "下拉列表内表
+      gs_ddval             TYPE  lvc_s_drop,   "下拉列表结构
+      gt_f4                TYPE  lvc_t_f4,     "f4帮助内表
+      gs_f4                TYPE  lvc_s_f4.     "f4帮助结构
+
+DATA: BEGIN OF gs_refresh,
+        row TYPE char1 VALUE 'X',
+        col TYPE char1 VALUE 'X',
+      END OF gs_refresh.
+
+DATA: ok_code  LIKE sy-ucomm,
+      save_ok  LIKE ok_code,
+      gv_repid LIKE sy-repid.
+
+*-------------------控件声明区------------------------------------*
+DATA: cl_alv       TYPE REF TO cl_gui_alv_grid,
+      cl_container TYPE REF TO cl_gui_custom_container.
+
+CLASS lcl_event_receiver DEFINITION.
+  PUBLIC SECTION.
+    METHODS:
+      handle_toolbar FOR EVENT toolbar OF cl_gui_alv_grid
+        IMPORTING e_object e_interactive,
+
+      handle_user_command FOR EVENT user_command OF cl_gui_alv_grid
+        IMPORTING e_ucomm,
+
+      handle_double_click  FOR EVENT double_click  OF cl_gui_alv_grid
+        IMPORTING e_row e_column es_row_no,
+
+      handle_on_f4 FOR EVENT onf4 OF cl_gui_alv_grid
+        IMPORTING e_fieldname  e_fieldvalue   es_row_no
+                    er_event_data  et_bad_cells   e_display.
+ENDCLASS.
+
+*---------------------------------------------------------------------*
+*       CLASS lcl_event_receiver IMPLEMENTATION
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+CLASS lcl_event_receiver IMPLEMENTATION.
+  METHOD handle_toolbar.
+    PERFORM f_class_set_toolbar CHANGING e_object ."e_interactive.
+  ENDMETHOD.
+
+  METHOD handle_user_command.
+    PERFORM  f_class_toolbar_user_command USING e_ucomm.
+  ENDMETHOD.
+
+  METHOD handle_double_click.
+    PERFORM double_click USING e_row.
+  ENDMETHOD.
+
+  METHOD handle_on_f4.
+    PERFORM f_class_on_f4 CHANGING e_fieldname  e_fieldvalue
+                                   es_row_no    er_event_data
+                                   et_bad_cells   e_display.
+  ENDMETHOD.
+ENDCLASS.
+
+DATA: cl_button_event TYPE REF TO lcl_event_receiver.

@@ -1,0 +1,37 @@
+*&---------------------------------------------------------------------*
+*& 程序名： ZRPFI024
+*& 创建者(公司)/日期： QUYT/20170821
+*& 程序描述：付款通知单
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    QUYT           20170821      创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpfi024.
+
+INCLUDE zrpfi024t01.   "全局数据定义
+INCLUDE zrpfi024s01.   "选择界面定义
+INCLUDE zrpfi024f01.   "Form定义
+INCLUDE zrpfi024m01.   "Module
+
+AT SELECTION-SCREEN .
+  "检查公司权限
+  PERFORM frm_check_authority.
+
+AT SELECTION-SCREEN OUTPUT.
+  "根据选择类型显示数据
+  PERFORM frm_filter_operation.
+
+START-OF-SELECTION.
+  IF rd_01 EQ 'X'.  "创建
+    GWA_SKT-PRCTR = 'P1000'.
+    CALL SCREEN 100.
+  ELSEIF rd_02 EQ 'X'."查询
+    IF p_bukrs IS NOT INITIAL.
+      "取数
+      PERFORM get_data.
+      "显示结果
+      PERFORM dis_data.
+    ELSE.
+      MESSAGE '公司代码为必输！'TYPE 'S' DISPLAY LIKE 'E'.
+    ENDIF.
+  ENDIF.

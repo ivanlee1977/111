@@ -1,0 +1,199 @@
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA lt_qmat TYPE TABLE OF qmat WITH HEADER LINE.
+  DATA lt_tq30t TYPE TABLE OF tq30t WITH HEADER LINE.
+  DATA: lv   TYPE i VALUE 1,lv1 TYPE char2,tmp1 TYPE string,tmp2 TYPE string,tmp3 TYPE string,tmp4 TYPE string.
+
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_tq30t FROM tq30t WHERE sprache = 1.
+  SORT lt_tq30t BY art sprache.
+
+  SELECT a~matnr b~werks a~maktx b~qmatv INTO CORRESPONDING FIELDS OF TABLE gt_out
+    FROM makt AS a INNER JOIN marc AS b ON a~matnr = b~matnr
+    INNER JOIN mara AS c ON a~matnr = c~matnr
+    WHERE a~matnr IN s_matnr
+    AND a~spras = 1
+    AND b~werks IN s_werks
+    AND c~mtart IN s_mtart
+    AND c~matkl IN s_matkl.
+
+  SELECT art apa aktiv matnr werks INTO CORRESPONDING FIELDS OF TABLE lt_qmat   FROM qmat
+    FOR ALL ENTRIES IN gt_out
+    WHERE matnr = gt_out-matnr AND werks = gt_out-werks.
+
+  SORT lt_qmat BY matnr art.
+  FIELD-SYMBOLS: <f1> TYPE any, <f2> TYPE any,<f3> TYPE any,<f4> TYPE any .
+  DATA :lv_art1 TYPE string,lv_art2 TYPE string.
+
+  LOOP AT gt_out.
+    LOOP AT lt_qmat WHERE matnr = gt_out-matnr AND werks = gt_out-werks.
+      lv1 = lv.
+      CONCATENATE 'GT_OUT-ART' lv1 INTO tmp1.
+      ASSIGN (tmp1) TO <f1>.
+      <f1> = lt_qmat-art.
+      IF <f1> = '01'.
+        lv_art1 = <f1>.
+      ENDIF.
+      IF  <f1> = 'Z01'.
+        lv_art2 = <f1>.
+      ENDIF.
+      CONCATENATE 'GT_OUT-APA' lv1 INTO tmp2.
+      ASSIGN (tmp2) TO <f2>.
+      <f2> = lt_qmat-apa.
+      CONCATENATE 'GT_OUT-AKTIV' lv1 INTO tmp3.
+      ASSIGN (tmp3) TO <f3>.
+      <f3> = lt_qmat-aktiv.
+      READ TABLE lt_tq30t WITH  KEY art = <f1> sprache = 1 BINARY SEARCH.
+      CONCATENATE 'GT_OUT-KURZTEXT' lv1 INTO tmp4.
+      ASSIGN (tmp4) TO <f4>.
+      <f4> = lt_tq30t-kurztext.
+      MODIFY gt_out.
+      CLEAR: lv1,tmp1,tmp2,tmp3.
+      lv = lv + 1.
+    ENDLOOP.
+*    IF gt_out-qmatv = '' OR ( gt_out-art1 = '01' AND gt_out-aktiv1 = '' ).
+    IF lv_art1 = '01' AND gt_out-aktiv1 = 'X' AND gt_out-qmatv <> ''.
+      gt_out-bnoqc = 'Y'.
+    ELSE.
+      gt_out-bnoqc = 'N'.
+    ENDIF.
+*    IF gt_out-qmatv = '' OR ( gt_out-art1 = 'Z01' AND gt_out-aktiv1 = '' ).
+    IF lv_art2 = 'Z01' AND gt_out-aktiv1 = 'X' AND gt_out-qmatv <> ''.
+      gt_out-znoqc = 'Y'.
+    ELSE.
+      gt_out-znoqc = 'N'.
+    ENDIF.
+    MODIFY gt_out.
+
+    lv = 1.
+    CLEAR: lv_art1,lv_art2.
+  ENDLOOP.
+  DELETE ADJACENT DUPLICATES FROM gt_out.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  mcr_build_fieldcat: 'MATNR'          '物料编号'        'MATNR'         'MAKT'   ,
+                     'MAKTX'           '物料描述'        'MAKTX'         'MAKT'   ,
+                     'WERKS'           '工厂'            'WERKS'         'QALS'   ,
+                     'QMATV'           '检验设置'       'QMATV'          'MARC'  ,
+                                          'ART1'             '设置1'          'ART'           'QMAT'  ,
+                     'KURZTEXT1'        '名称1'          'KURZTEXT'      'TQ30T' ,
+                     'APA1'             '首选1'          'APA'           'QMAT'  ,
+                     'AKTIV1'           '激活1'          'AKTIV'         'QMAT'  ,
+                                          'ART2'             '设置2'          'ART'           'QMAT'  ,
+                     'KURZTEXT2'        '名称2'          'KURZTEXT'      'TQ30T' ,
+                     'APA2'             '首选2'          'APA'           'QMAT'  ,
+                     'AKTIV2'           '激活2'          'AKTIV'         'QMAT'  ,
+                                          'ART3'             '设置3'          'ART'           'QMAT'  ,
+                     'KURZTEXT3'        '名称3'          'KURZTEXT'      'TQ30T' ,
+                     'APA3'             '首选3'          'APA'           'QMAT'  ,
+                     'AKTIV3'           '激活3'          'AKTIV'         'QMAT'  ,
+                                          'ART4'             '设置4'          'ART'           'QMAT'  ,
+                     'KURZTEXT4'        '名称4'          'KURZTEXT'      'TQ30T' ,
+                     'APA4'             '首选4'          'APA'           'QMAT'  ,
+                     'AKTIV4'           '激活4'          'AKTIV'         'QMAT'  ,
+                                          'ART5'             '设置5'          'ART'           'QMAT'  ,
+                     'KURZTEXT5'        '名称5'          'KURZTEXT'      'TQ30T' ,
+                     'APA5'             '首选5'          'APA'           'QMAT'  ,
+                     'AKTIV5'           '激活5'          'AKTIV'         'QMAT'  ,
+                                          'ART6'             '设置6'          'ART'           'QMAT'  ,
+                     'KURZTEXT6'        '名称6'          'KURZTEXT'      'TQ30T' ,
+                     'APA6'             '首选6'          'APA'           'QMAT'  ,
+                     'AKTIV6'           '激活6'          'AKTIV'         'QMAT'  ,
+                                          'ART7'             '设置7'          'ART'           'QMAT'  ,
+                     'KURZTEXT7'        '名称7'          'KURZTEXT'      'TQ30T' ,
+                     'APA7'             '首选7'          'APA'           'QMAT'  ,
+                     'AKTIV7'           '激活7'          'AKTIV'         'QMAT'  ,
+                                          'ART8'             '设置8'          'ART'           'QMAT'  ,
+                     'KURZTEXT8'        '名称8'          'KURZTEXT'      'TQ30T' ,
+                     'APA8'             '首选8'          'APA'           'QMAT'  ,
+                     'AKTIV8'           '激活8'          'AKTIV'         'QMAT'  ,
+                                          'ART9'             '设置9'          'ART'           'QMAT'  ,
+                     'KURZTEXT9'        '名称9'          'KURZTEXT'      'TQ30T' ,
+                     'APA9'             '首选9'          'APA'           'QMAT'  ,
+                     'AKTIV9'           '激活9'          'AKTIV'         'QMAT'  ,
+                                        'ART10'             '设置10'          'ART'           'QMAT'  ,
+                     'KURZTEXT10'        '名称10'          'KURZTEXT'      'TQ30T' ,
+                     'APA10'             '首选10'          'APA'           'QMAT'  ,
+                     'AKTIV10'           '激活10'          'AKTIV'         'QMAT'  ,
+                     'BNOQC'           '标准采购检验'          ''         ''  ,
+                     'ZNOQC'           'Z01采购检验'          ''         ''  .
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK  = ' '
+*     I_BYPASSING_BUFFER =
+*     I_BUFFER_ACTIVE    =
+      i_callback_program = sy-repid
+*     I_CALLBACK_PF_STATUS_SET          = ' '
+*     I_CALLBACK_USER_COMMAND           = ' '
+*     I_CALLBACK_TOP_OF_PAGE            = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME   =
+*     I_BACKGROUND_ID    = ' '
+*     I_GRID_TITLE       =
+*     I_GRID_SETTINGS    =
+      is_layout_lvc      = gs_layout
+      it_fieldcat_lvc    = gt_fcat[]
+*     IT_EXCLUDING       =
+*     IT_SPECIAL_GROUPS_LVC             =
+*     IT_SORT_LVC        =
+*     IT_FILTER_LVC      =
+*     IT_HYPERLINK       =
+*     IS_SEL_HIDE        =
+      i_default          = 'X'
+      i_save             = 'A'
+*     IS_VARIANT         =
+*     IT_EVENTS          =
+*     IT_EVENT_EXIT      =
+*     IS_PRINT_LVC       =
+*     IS_REPREP_ID_LVC   =
+*     I_SCREEN_START_COLUMN             = 0
+*     I_SCREEN_START_LINE               = 0
+*     I_SCREEN_END_COLUMN               = 0
+*     I_SCREEN_END_LINE  = 0
+*     I_HTML_HEIGHT_TOP  =
+*     I_HTML_HEIGHT_END  =
+*     IT_ALV_GRAPHICS    =
+*     IT_EXCEPT_QINFO_LVC               =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER           =
+*     ES_EXIT_CAUSED_BY_USER            =
+    TABLES
+      t_outtab           = gt_out[]
+    EXCEPTIONS
+      program_error      = 1
+      OTHERS             = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.

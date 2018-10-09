@@ -1,0 +1,48 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPQM004T01
+*&---------------------------------------------------------------------*
+TABLES:qals,mara.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       werks      LIKE qals-werk,
+       lifnr      LIKE qals-lifnr,      "供应商代码
+       sortl      LIKE lfa1-sortl,      "供应商简称
+       gesstichpr LIKE qals-gesstichpr, "抽检数量
+       cjbls      LIKE qmfel-anzfehler, "抽检不良数
+       zmqxs      LIKE qmfel-anzfehler, "致命缺陷数
+       zzqxs      LIKE qmfel-anzfehler, "重缺陷数
+       zqqxs      LIKE qmfel-anzfehler, "轻缺陷数
+       cjbll      TYPE p DECIMALS 2,    "抽检不良率
+       zmbz(10)   TYPE c,               "目标值
+       zsfdb(2)   TYPE c,               "是否达标
+       zsysj      TYPE p DECIMALS 2,    "上月数据
+       zqs(5)     TYPE c,               "趋势
+     END OF gt_out.
+
+DATA:BEGIN OF gt_data OCCURS 0,
+       werks      LIKE qals-werk,       "工厂
+       lifnr      LIKE qals-lifnr,      "供应商代码
+       gesstichpr LIKE qals-gesstichpr, "抽检数量
+       cjbls      LIKE qmfel-anzfehler, "抽检不良数
+       zmqxs      LIKE qmfel-anzfehler, "致命缺陷数
+       zzqxs      LIKE qmfel-anzfehler, "重缺陷数
+       zqqxs      LIKE qmfel-anzfehler, "轻缺陷数
+     END OF gt_data.
+
+***alv data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  gt_fcat-inttype = &5.
+  gt_fcat-intlen = &6.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

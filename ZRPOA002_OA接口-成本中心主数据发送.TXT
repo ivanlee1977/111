@@ -1,0 +1,106 @@
+*&---------------------------------------------------------------------*
+*& 程序名： ZRPOA002
+*& 创建者(公司)/日期： LIJS/20170731
+*& 程序描述:OA主数据发送接口
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    LIJS           20170731      创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpoa002.
+TABLES:csks.
+
+DATA:BEGIN OF gt_data OCCURS 0,
+       kostl LIKE csks-kostl,
+       bukrs LIKE csks-bukrs,
+       ltext LIKE cskt-ltext,
+       bkzkp LIKE csks-bkzkp,
+       kosar like csks-kosar,
+     END OF gt_data.
+
+***selection screen define
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_kostl FOR csks-kostl.
+SELECTION-SCREEN END OF BLOCK blc.
+
+START-OF-SELECTION.
+
+  PERFORM frm_get_data.
+  PERFORM frm_send_data.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  SELECT
+         a~kostl
+         a~bkzkp
+         a~bukrs
+         a~kosar
+         b~ltext
+    INTO CORRESPONDING FIELDS OF TABLE gt_data
+    FROM csks AS a
+    LEFT JOIN cskt AS b
+    ON a~kokrs EQ b~kokrs AND a~kostl EQ b~kostl AND a~datbi EQ b~datbi
+    AND b~spras = '1'
+    WHERE a~kostl IN s_kostl
+      and a~kokrs = '1000'
+      AND a~datbi GE sy-datum
+      AND a~datab < sy-datum.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SEND_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_send_data .
+
+  DATA:cl_si_cost_out TYPE REF TO zco_si_cost_out."成本中心 name
+  DATA:cl_cx_ai_system_fault      TYPE REF TO cx_ai_system_fault,
+       cl_cx_ai_application_fault TYPE REF TO cx_ai_application_fault.
+  DATA:ls_output    TYPE zmt_cost_out,
+       lt_cost_data TYPE zdt_cost_tab,
+       ls_cost_data TYPE LINE OF zdt_cost_tab.
+  DATA:lv_msg TYPE string.
+
+  TRY.
+      CREATE OBJECT cl_si_cost_out.
+    CATCH cx_ai_system_fault INTO cl_cx_ai_system_fault.
+      lv_msg = cl_cx_ai_system_fault->get_text( ).
+      WRITE:/ lv_msg.
+      EXIT.
+  ENDTRY.
+
+  LOOP AT gt_data.
+    ls_cost_data-bukrs = gt_data-bukrs.
+    ls_cost_data-kostl = gt_data-kostl.
+    ls_cost_data-ltext = gt_data-ltext.
+    ls_cost_data-xspeb = gt_data-bkzkp.
+    ls_cost_data-kosar = gt_data-kosar.
+    APPEND ls_cost_data TO lt_cost_data.
+    CLEAR ls_cost_data.
+  ENDLOOP.
+
+  ls_output-mt_cost_out-row = lt_cost_data.
+
+  TRY.
+      CALL METHOD cl_si_cost_out->si_cost_out
+        EXPORTING
+          output = ls_output.
+    CATCH cx_ai_system_fault INTO cl_cx_ai_system_fault.
+      lv_msg =  cl_cx_ai_system_fault->get_text( ).
+      WRITE:/ lv_msg.
+      EXIT.
+    CATCH cx_ai_application_fault INTO cl_cx_ai_application_fault.
+      lv_msg = cl_cx_ai_application_fault->get_text( ).
+      WRITE:/ lv_msg.
+      EXIT.
+  ENDTRY.
+  COMMIT WORK AND WAIT.
+ENDFORM.

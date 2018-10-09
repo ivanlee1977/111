@@ -1,0 +1,31 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZSDRP014S01
+*&---------------------------------------------------------------------*
+***选择屏幕
+*SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+*PARAMETERS:
+**            p_r1 RADIOBUTTON GROUP r1 DEFAULT 'X' USER-COMMAND r0.
+**           p_r2 RADIOBUTTON GROUP r1,
+**           p_r3 RADIOBUTTON GROUP r1,
+**           p_r4 RADIOBUTTON GROUP r1.
+*SELECTION-SCREEN END OF BLOCK b1.
+
+SELECTION-SCREEN BEGIN OF BLOCK b2 WITH FRAME TITLE TEXT-002.
+PARAMETERS p_year type char4  DEFAULT sy-datum(4).
+*SELECT-OPTIONS:
+**
+*                s_wadat FOR VBRK-FKDAT ."销售交货日期
+**               s_vkorg FOR knvv-vkorg,"销售组织
+**               s_vtweg FOR knvv-vtweg,"分销渠道
+**               s_bzirk FOR knvv-bzirk,"销售大区
+**               s_vkbur FOR knvv-vkbur,"行办
+**               s_vkgrp FOR knvv-vkgrp,"销售组
+**               s_kvgr1 FOR knvv-kvgr1,"业务员
+**               s_kvgr2 FOR knvv-kvgr2,"商务
+**               s_kunnr FOR knvv-kunnr MODIF ID m1,"客户
+**               s_cpx FOR ausp-atwrt,"产品线
+**               s_xl FOR ausp-atwrt,"系列
+**               s_matkl FOR mara-matkl,"物料组
+**               s_spart FOR mara-spart, "产品组
+*               s_BUKRS FOR vbrk-BUKRS DEFAULT '1000'. "公司代码
+SELECTION-SCREEN END OF BLOCK b2.

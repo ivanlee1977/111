@@ -1,0 +1,11 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPFI005S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_bukrs FOR faglflext-rbukrs,
+               s_prctr FOR faglflext-prctr.
+PARAMETERS:p_ryear LIKE faglflext-ryear DEFAULT sy-datum(4) OBLIGATORY,
+           p_rpmax LIKE faglflext-rpmax DEFAULT sy-datum+4(2) OBLIGATORY.
+PARAMETERS:P_CHK AS CHECKBOX DEFAULT SPACE.
+SELECTION-SCREEN END OF BLOCK blc.

@@ -1,0 +1,164 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZXM06U43
+*&---------------------------------------------------------------------*
+BREAK xul.
+
+* 检查采购申请号是否为空，如果不为空，执行以下逻辑
+* 根据采购申请号、行项目号、物料汇总本次采购订单的数量，作为A
+* 从表EBAN中取出采购申请数量 ，作为B
+* 根据采购申请号+行项目号+物料从表EKPO中取出已转采购订单的信息，汇总数量 ，作为C
+***逻辑一：
+* 如果A>B-C,则执行以下逻辑 ：
+* 从表EINE中取出MOQ ：EINE~MINBM ,从表MARC中出MPQ:MARC~BSTRF
+* 如果MOQ> MPQ，判断采购订单数量>MOQ,报：采购申请数量已经全部订购！；
+* 如果MOQ< MPQ,判断采购订单数量-MPQ>采购申请数量，报：采购申请数量已经全部订购！；
+***逻辑二：
+* 当创建采购订单时，检查历史采购申请转采购订单的数量C >= 采购申请行项目数量B，报：采购申请数量已经全部订购！；
+CHECK sy-tcode = 'ME21N' OR sy-tcode = 'ME22N'.
+DATA: BEGIN OF lt_eket OCCURS 0,
+        ebeln LIKE eket-ebeln, "采购订单号
+*        ebelp LIKE eket-ebelp,
+        banfn LIKE eket-banfn, "采购申请号
+        bnfpo LIKE eket-bnfpo, "采购申请行项目号
+        matnr LIKE ekpo-matnr, "物料
+        menge LIKE eket-menge, "数量
+        infnr LIKE ekpo-infnr, "采购信息记录号
+        werks LIKE ekpo-werks,
+      END OF lt_eket,
+      gt_eban LIKE lt_eket OCCURS 0 WITH HEADER LINE.
+
+DATA: BEGIN OF gt_eket OCCURS 0,
+        ebeln LIKE eket-ebeln,
+        ebelp LIKE eket-ebelp,
+        menge LIKE eket-menge,
+        banfn LIKE eket-banfn,
+        bnfpo LIKE eket-bnfpo,
+      END OF gt_eket,
+      gt_eket_col LIKE gt_eket OCCURS 0 WITH HEADER LINE.
+DATA: lt_eine LIKE eine OCCURS 0 WITH HEADER LINE.
+
+DATA: lv_menge LIKE ekpo-menge,
+      lv_loekz TYPE ekpo-loekz,
+      lv       TYPE i,
+      lv_minbm LIKE eine-minbm, "MOQ
+      lv_bstrf LIKE marc-bstrf, "mpq
+      lv_mess  TYPE string.
+
+*  根据采购申请号+行项目号+物料，汇总数量
+LOOP AT teket WHERE banfn IS NOT INITIAL AND bnfpo IS NOT INITIAL.
+  CLEAR: lt_eket.
+*"add by leimt 20180504
+  SELECT SINGLE loekz INTO lv_loekz FROM ekpo WHERE ebeln = teket-ebeln AND ebelp = teket-ebelp.
+  IF lv_loekz = 'L'.
+    CONTINUE.
+  ENDIF.
+*end by leimt
+  lt_eket-ebeln = teket-ebeln.
+  lt_eket-banfn = teket-banfn.
+  lt_eket-bnfpo = teket-bnfpo.
+  READ TABLE tekpo WITH KEY ebelp = teket-ebelp.
+  IF sy-subrc = 0.
+    lt_eket-matnr = tekpo-matnr.
+    lt_eket-menge = tekpo-menge.
+    lt_eket-infnr = tekpo-infnr.
+    lt_eket-werks = tekpo-werks.
+    COLLECT lt_eket.
+  ENDIF.
+ENDLOOP.
+
+
+CHECK lt_eket[] IS NOT INITIAL.
+* 取采购信息记录
+SELECT * INTO TABLE lt_eine
+  FROM eine
+  FOR ALL ENTRIES IN lt_eket
+  WHERE infnr = lt_eket-infnr.
+
+* 根据采购申请号取出采购申请信息
+SELECT banfn bnfpo matnr menge
+  INTO CORRESPONDING FIELDS OF TABLE gt_eban
+  FROM eban
+  FOR ALL ENTRIES IN lt_eket
+  WHERE banfn = lt_eket-banfn
+    AND bnfpo = lt_eket-bnfpo
+    AND matnr = lt_eket-matnr
+    AND loekz EQ space.
+
+* 根据采购申请号+行项目+物料从表EKET中取出已转采购订单的信息
+SELECT a~ebeln a~ebelp a~menge a~banfn a~bnfpo
+  INTO CORRESPONDING FIELDS OF TABLE gt_eket
+  FROM eket AS a INNER JOIN ekpo AS b ON a~ebeln = b~ebeln
+                                     AND a~ebelp = b~ebelp
+  FOR ALL ENTRIES IN lt_eket
+  WHERE a~banfn = lt_eket-banfn
+    AND a~bnfpo = lt_eket-bnfpo
+    AND b~loekz EQ space.
+
+DELETE gt_eket WHERE ebeln EQ i_ekko-ebeln.
+
+* 汇总已转采购订单的数量
+LOOP AT gt_eket.
+  gt_eket_col-banfn = gt_eket-banfn.
+  gt_eket_col-bnfpo = gt_eket-bnfpo.
+  gt_eket_col-menge = gt_eket-menge.
+  COLLECT gt_eket_col.
+ENDLOOP.
+
+LOOP AT lt_eket .
+  CLEAR:lv_menge,lv_minbm,lv_bstrf,lv_mess.
+  CLEAR:gt_eban,gt_eket_col.
+  READ TABLE gt_eban WITH KEY banfn = lt_eket-banfn bnfpo = lt_eket-bnfpo.
+  IF sy-subrc = 0.
+    lv_menge = gt_eban-menge.
+  ENDIF.
+  READ TABLE gt_eket_col WITH KEY banfn = lt_eket-banfn bnfpo = lt_eket-bnfpo.
+  IF sy-subrc = 0.
+    lv_menge = lv_menge - gt_eket_col-menge.
+  ENDIF.
+  SELECT SINGLE bstrf INTO lv_bstrf FROM marc WHERE matnr = lt_eket-matnr AND werks = lt_eket-werks.    "modi by leimt 20180508
+  IF lt_eket-menge - lv_bstrf  > lv_menge.
+*    读取MOQ
+    READ TABLE lt_eine WITH KEY infnr = lt_eket-infnr.
+    IF sy-subrc = 0.
+      lv_minbm = lt_eine-minbm.
+    ENDIF.
+*  读取MPQ
+
+    IF lv_minbm > lv_bstrf.
+      IF lt_eket-menge > lv_minbm  .
+        CALL FUNCTION 'CONVERSION_EXIT_MATN1_OUTPUT'
+          EXPORTING
+            input  = lt_eket-matnr
+          IMPORTING
+            output = lv_mess.
+        CONCATENATE '物料' lv_mess '采购申请数量已经全部订购1！' INTO lv_mess.
+        CONDENSE lv_mess.
+        MESSAGE e398(00) WITH lv_mess DISPLAY LIKE 'E'.
+      ENDIF.
+    ELSE.
+      IF lt_eket-menge - lv_bstrf > gt_eban-menge.
+        CALL FUNCTION 'CONVERSION_EXIT_MATN1_OUTPUT'
+          EXPORTING
+            input  = lt_eket-matnr
+          IMPORTING
+            output = lv_mess.
+        CONCATENATE '物料' lv_mess '采购申请数量已经全部订购2！' INTO lv_mess.
+        CONDENSE lv_mess.
+        MESSAGE e398(00) WITH lv_mess DISPLAY LIKE 'E'.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+
+*  IF sy-tcode = 'ME21N'.
+*    IF gt_eban-menge LE gt_eket_col-menge .     " modi by leimt 20180417
+*      CALL FUNCTION 'CONVERSION_EXIT_MATN1_OUTPUT'
+*        EXPORTING
+*          input  = lt_eket-matnr
+*        IMPORTING
+*          output = lv_mess.
+*      CONCATENATE '物料' lv_mess '采购申请数量已经全部订购3！' INTO lv_mess.
+*      CONDENSE lv_mess.
+*      MESSAGE e398(00) WITH lv_mess DISPLAY LIKE 'E'.
+*    ENDIF.
+*  ENDIF.
+ENDLOOP.

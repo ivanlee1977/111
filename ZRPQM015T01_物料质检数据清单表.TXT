@@ -1,0 +1,69 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPQM004T01
+*&---------------------------------------------------------------------*
+TABLES:makt,marc,qmat,tq30t,mara.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       matnr      TYPE makt-matnr,
+       maktx      TYPE makt-maktx,
+       werks      LIKE marc-werks,
+       qmatv      TYPE marc-qmatv,
+       art1       TYPE qmat-art,
+       kurztext1  TYPE tq30t-kurztext,
+       apa1       TYPE qmat-apa,
+       aktiv1     TYPE qmat-aktiv,
+       art2       TYPE qmat-art,
+       kurztext2  TYPE tq30t-kurztext,
+       apa2       TYPE qmat-apa,
+       aktiv2     TYPE qmat-aktiv,
+       art3       TYPE qmat-art,
+       kurztext3  TYPE tq30t-kurztext,
+       apa3       TYPE qmat-apa,
+       aktiv3     TYPE qmat-aktiv,
+       art4       TYPE qmat-art,
+       kurztext4  TYPE tq30t-kurztext,
+       apa4       TYPE qmat-apa,
+       aktiv4     TYPE qmat-aktiv,
+       art5       TYPE qmat-art,
+       kurztext5  TYPE tq30t-kurztext,
+       apa5       TYPE qmat-apa,
+       aktiv5     TYPE qmat-aktiv,
+       art6       TYPE qmat-art,
+       kurztext6  TYPE tq30t-kurztext,
+       apa6       TYPE qmat-apa,
+       aktiv6     TYPE qmat-aktiv,
+       art7       TYPE qmat-art,
+       kurztext17 TYPE tq30t-kurztext,
+       apa7       TYPE qmat-apa,
+       aktiv7     TYPE qmat-aktiv,
+       art8       TYPE qmat-art,
+       kurztext8  TYPE tq30t-kurztext,
+       apa8       TYPE qmat-apa,
+       aktiv8     TYPE qmat-aktiv,
+       art9       TYPE qmat-art,
+       kurztext9  TYPE tq30t-kurztext,
+       apa9       TYPE qmat-apa,
+       aktiv9     TYPE qmat-aktiv,
+       art10      TYPE qmat-art,
+       kurztext10 TYPE tq30t-kurztext,
+       apa10      TYPE qmat-apa,
+       aktiv10    TYPE qmat-aktiv,
+       bnoqc      TYPE char1,
+       znoqc      TYPE char1,
+     END OF gt_out.
+
+
+***alv data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+*  gt_fcat-inttype = &5.
+*  gt_fcat-intlen = &6.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

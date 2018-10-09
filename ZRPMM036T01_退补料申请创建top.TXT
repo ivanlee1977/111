@@ -1,0 +1,48 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM036T01
+*&---------------------------------------------------------------------*
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       aufnr      LIKE aufk-aufnr,  "生产订单号
+       rsnum      LIKE resb-rsnum,  "预留号码
+       rspos      LIKE resb-rspos,  "预留项次
+       rsart      like resb-rsart, "预留记录类型
+       matnr      LIKE resb-matnr,  "物料号码
+       maktx      LIKE makt-maktx,  "物料描述
+       charg      LIKE resb-charg,  "批次
+       werks      LIKE resb-werks,  "工厂
+       lgort      LIKE resb-lgort,  "库位
+       menge_t    LIKE ztmm008-menge_t, "退料数量
+*      lgort_f    LIKE resb-lgort,  "补料库位
+*      menge_f    LIKE ztmm008-menge_t, "补料数量
+       meins      LIKE resb-meins,  "单位
+       labst      LIKE mard-labst,  "非限制库存数
+       ztext(100) TYPE c,           "文本
+       check      TYPE c,           "选择
+     END OF gt_out.
+
+
+DATA:gv_flag TYPE c.
+
+***ALV Data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  gt_fcat-inttype = &5.
+  gt_fcat-intlen = &6.
+  gt_fcat-outputlen = &7.
+  gt_fcat-edit = &8.
+  IF &1 = 'CHECK'.
+    gt_fcat-checkbox = 'X'.
+  ENDIF.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

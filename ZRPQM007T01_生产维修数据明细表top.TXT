@@ -1,0 +1,73 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPQM007T01
+*&---------------------------------------------------------------------*
+TABLES:qmur,qmel,afpo,qmfe.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       erdat         LIKE qmur-erdat,      "日期
+       qmnum         LIKE qmel-qmnum,      "单据编号
+       fertaufnr     LIKE qmel-fertaufnr,  "生产订单号
+       dauat         LIKE afpo-dauat,      "订单类型
+       vtext         LIKE tspat-vtext,     "产品组
+       zline(30)     TYPE c,               "产品线
+       zcpxl(30)     TYPE c,               "产品系列
+       zcpxl_sub(30) TYPE c,               "产品子系列
+       zcpxh_m(30)   TYPE c,               "产品主型号
+       zcpmc(30)     TYPE c,               "产品名称
+       zcpxh(30)     TYPE c,               "产品型号
+       matnr         LIKE qmel-matnr,      "物料编码
+       maktx         LIKE makt-maktx,      "物料描述
+       revlv         LIKE aeoi-revlv,      "SAP版本
+       fetxt         LIKE qmfe-fetxt,      "成品SN号码
+       sortl         LIKE lfa1-sortl,      "委外厂
+       prueflinr     LIKE qmfe-prueflinr,  "不良半成品S/N码
+       zpcba         LIKE mara-matnr,      "半成品PCBA料号
+       zpcba_txt     LIKE makt-maktx,      "半成品PCBA名称
+       fenum         LIKE qmfe-fenum,
+       fekat         LIKE qmfe-fekat,
+       fegrp         LIKE qmfe-fegrp,
+       fecod         LIKE qmfe-fecod,      "不良代码
+       fecod_txt     LIKE qpct-kurztext,   "不良描述
+       prueflos      LIKE qmel-prueflos,   "检验批
+       pnlkn         LIKE qmfe-pnlkn,      "订单计数器 APLZL 的当前节点号码
+       vornr         LIKE qapo-vornr,      "不良工序
+       vorktxt       LIKE qapo-vorktxt,    "不良工序描述
+       urkat         LIKE qmur-urkat,
+       urgrp         LIKE qmur-urgrp,
+       urcod         LIKE qmur-urcod,      "原因代码
+       urcod_txt     LIKE qpct-kurztext,   "原因描述
+       urtxt         LIKE qmur-urtxt,      "不良元器件BOM位置号
+       idnrk         LIKE stpo-idnrk,      "更换元器件物料编码
+       idnrk_txt     LIKE makt-maktx,      "更换元器件名称
+       wgbez         LIKE v023-wgbez,      "不良元器件分类
+       otkat         LIKE qmfe-otkat,
+       otgrp         LIKE qmfe-otgrp,
+       oteil         LIKE qmfe-oteil,
+       kurztext      LIKE qpct-kurztext,   "插件料/贴片料/BGA
+       erlnam        LIKE qmsm-erlnam,     "维修员
+       matxt         LIKE qmsm-matxt,      "备注
+       objkt         LIKE aeoi-objkt,
+     END OF gt_out.
+DATA : BEGIN OF gt_f4_code OCCURS 0,
+         codegruppe LIKE qpct-codegruppe,
+           kurztext   LIKE qpct-kurztext,
+         code       LIKE qpct-code,
+
+       END OF gt_f4_code.
+***ALV data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  gt_fcat-inttype = &5.
+  gt_fcat-intlen = &6.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

@@ -1,0 +1,107 @@
+*&---------------------------------------------------------------------*
+*& 程序名： ZRPWMS002
+*& 创建者(公司)/日期： PFT/20170925
+*& 程序描述: WMS接口：客户主数据推送
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    PFT           20170925      创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpwms002.
+TABLES:kna1.
+
+DATA:BEGIN OF gt_data OCCURS 0,
+       kunnr LIKE kna1-kunnr, "客户
+       name1 LIKE kna1-name1, "客户名称
+     END OF gt_data.
+
+***selection screen define
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_datum FOR sy-datum OBLIGATORY.
+SELECTION-SCREEN END OF BLOCK blc.
+
+START-OF-SELECTION.
+
+  PERFORM frm_get_data.
+  PERFORM frm_send_data.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  REFRESH: gt_data.
+  SELECT kunnr name1
+    INTO CORRESPONDING FIELDS OF TABLE gt_data
+    FROM kna1.
+
+  LOOP AT gt_data WHERE name1 EQ space.
+    gt_data-name1 = '一次性客户'.
+    MODIFY gt_data TRANSPORTING name1.
+    CLEAR: gt_data.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SEND_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_send_data .
+
+  DATA:cl_si_wms_customer_out TYPE REF TO zco_si_wms_customer_out.
+  DATA:cl_cx_ai_system_fault      TYPE REF TO cx_ai_system_fault,
+       cl_cx_ai_application_fault TYPE REF TO cx_ai_application_fault.
+  DATA:ls_output        TYPE zmt_wms_customer_req,
+       ls_input         TYPE zmt_wms_common_res,
+       lt_customer_data TYPE TABLE OF zdt_wms_customer_req_muli_mata,
+       ls_customer_data TYPE zdt_wms_customer_req_muli_mata.
+  DATA:lv_msg TYPE string.
+
+  WRITE:/ '准备将数据推送到WMS系统:'.
+
+  TRY.
+      CREATE OBJECT cl_si_wms_customer_out.
+    CATCH cx_ai_system_fault INTO cl_cx_ai_system_fault.
+      lv_msg = cl_cx_ai_system_fault->get_text( ).
+      WRITE:/ lv_msg.
+      EXIT.
+  ENDTRY.
+
+  LOOP AT gt_data.
+    ls_customer_data-kunnr = gt_data-kunnr.
+    ls_customer_data-name1 = gt_data-name1.
+    APPEND ls_customer_data TO lt_customer_data.
+    CLEAR ls_customer_data.
+  ENDLOOP.
+
+  ls_output-mt_wms_customer_req-muli_matas = lt_customer_data.
+
+  TRY.
+      CALL METHOD cl_si_wms_customer_out->si_wms_customer_out
+        EXPORTING
+          output = ls_output
+        IMPORTING
+          input  = ls_input.
+      lv_msg = ls_input-mt_wms_common_res-message.
+      WRITE:/ lv_msg.
+    CATCH cx_ai_system_fault INTO cl_cx_ai_system_fault.
+      lv_msg =  cl_cx_ai_system_fault->get_text( ).
+      WRITE:/ lv_msg.
+      EXIT.
+    CATCH cx_ai_application_fault INTO cl_cx_ai_application_fault.
+      lv_msg = cl_cx_ai_application_fault->get_text( ).
+      WRITE:/ lv_msg.
+      EXIT.
+  ENDTRY.
+
+  IF ls_input-mt_wms_common_res-type = 'S'.
+    WRITE:/ '将数据推送到WMS系统成功'.
+  ENDIF.
+
+  COMMIT WORK AND WAIT.
+ENDFORM.

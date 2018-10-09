@@ -1,0 +1,652 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI024M01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Module  STATUS_0100  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE status_0100 OUTPUT.
+  SET PF-STATUS 'PF_0100'.
+  SET TITLEBAR 'TITLE'.
+  IF gwa_skt-zgsdm IS INITIAL.
+    gwa_skt-zgsdm = '1000'.
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0100  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_0100 INPUT.
+  CLEAR:save_ok.
+  save_ok = ok_code.
+  CLEAR: ok_code.
+  CASE save_ok.
+    WHEN 'BACK' .
+      LEAVE TO SCREEN 0.
+    WHEN 'EXIT'.
+      LEAVE TO SCREEN 0.
+    WHEN 'CANCEL'.
+      LEAVE TO SCREEN 0.
+    WHEN 'INSERT'."新增
+      PERFORM frm_insert.
+    WHEN 'DELETE'."删除
+      PERFORM frm_delete.
+    WHEN 'SAVE'."保存
+      PERFORM frm_save.
+  ENDCASE.
+
+  CLEAR gv_total.
+  LOOP AT gt_table INTO gwa_table.
+    gv_total = gv_total + gwa_table-zskje.
+  ENDLOOP.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  CTR01_GET_LINES  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE ctr01_get_lines OUTPUT.
+  PERFORM ctr01_get_lines.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  CTR01_EDITABLE  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE ctr01_editable OUTPUT.
+  LOOP AT SCREEN.
+    IF screen-name = 'GWA_TABLE-MARK'
+      OR screen-name = 'GWA_TABLE-ZHTH'
+      OR screen-name = 'GWA_TABLE-ZSKJE'.
+      IF gwa_table-sel = 'X'.
+        screen-input = 1.
+      ELSE.
+        screen-input = 0.
+      ENDIF.
+    ENDIF.
+    MODIFY SCREEN.
+  ENDLOOP.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  CTR01_CHANGE_TC_ATTR  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE ctr01_change_tc_attr OUTPUT.
+  DESCRIBE TABLE gt_table LINES ctr01-lines.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  CTR01_MODIFY  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE ctr01_modify INPUT.
+  MODIFY gt_table FROM gwa_table INDEX ctr01-current_line.
+  IF sy-subrc NE 0.
+    INSERT gwa_table INTO gt_table INDEX ctr01-current_line.
+  ENDIF.
+  CLEAR: gwa_table.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  CTR02_CHANGE_TC_ATTR  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE ctr02_change_tc_attr OUTPUT.
+  DESCRIBE TABLE gt_table_200 LINES ctr02-lines.
+  LOOP AT SCREEN.
+    IF gwa_skt_200-zdjzt = '2'
+      OR gwa_skt_200-zdjzt = '3'.
+      screen-input = '0'.
+    ENDIF.
+    MODIFY SCREEN.
+  ENDLOOP.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  CTR02_GET_LINES  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE ctr02_get_lines OUTPUT.
+  PERFORM ctr02_get_lines.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  CTR02_MODIFY  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE ctr02_modify INPUT.
+  MODIFY gt_table_200 FROM gwa_table_200 INDEX ctr02-current_line.
+  IF sy-subrc NE 0.
+    INSERT gwa_table_200 INTO gt_table_200 INDEX ctr02-current_line.
+  ENDIF.
+  CLEAR: gwa_table_200.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_9002  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_9002 INPUT.
+  CLEAR:save_ok.
+  save_ok = ok_code.
+  CLEAR: ok_code.
+  CASE save_ok.
+    WHEN 'BACK_2' .
+      LEAVE TO SCREEN 0.
+    WHEN 'EXIT_2'.
+      LEAVE TO SCREEN 0.
+    WHEN 'CANCEL_2'.
+      LEAVE TO SCREEN 0.
+    WHEN 'INSERT_2'."新增
+      PERFORM frm_insert_200.
+    WHEN 'DELETE_2'."删除
+      PERFORM frm_delete_200.
+    WHEN 'SAVE_2'."保存
+      PERFORM frm_save_200.
+  ENDCASE.
+
+  CLEAR gv_total.
+  loop at GT_TABLE_200 INTO GWA_TABLE_200.
+    gv_total = gv_total + GWA_TABLE_200-ZSKJE.
+  ENDLOOP.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  GET_KHMC  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE get_gys INPUT.
+
+  IF gwa_skt-lifnr IS NOT INITIAL.
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+      EXPORTING
+        input  = gwa_skt-lifnr
+      IMPORTING
+        output = gwa_skt-lifnr.
+
+    SELECT SINGLE name1
+      INTO g_khmc
+      FROM lfa1
+      WHERE lifnr = gwa_skt-lifnr.
+  ENDIF.
+
+  DATA:l_begru LIKE lfa1-begru.
+  DATA:l_kvgr1 LIKE knvv-kvgr1.
+  IF gwa_skt-lifnr IS NOT INITIAL.
+    SELECT SINGLE begru INTO l_begru FROM lfa1 WHERE lifnr = gwa_skt-lifnr.
+*    AUTHORITY-CHECK OBJECT 'F_LFA1_BED'
+*              ID 'BRGRU' FIELD l_begru
+*              ID 'ACTVT' FIELD '01'.
+*    IF sy-subrc <> 0.
+*      MESSAGE '此客户不属于该销售组织' TYPE 'E'.
+*    ENDIF.
+
+***抓取业务员信息
+*    SELECT SINGLE kvgr1 INTO l_kvgr1 FROM knvv WHERE LIFNR = gwa_skt-LIFNR AND vkorg = gwa_skt-kkber.
+*    IF sy-subrc = 0.
+*      SELECT SINGLE bezei INTO gwa_skt-zywy FROM tvv1t WHERE spras = sy-langu AND kvgr1 = l_kvgr1.
+*    ENDIF.
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  GET_KHMC_200  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE get_khmc_200 INPUT.
+  IF gwa_skt_200-lifnr IS NOT INITIAL.
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+      EXPORTING
+        input  = gwa_skt_200-lifnr
+      IMPORTING
+        output = gwa_skt_200-lifnr.
+
+    SELECT SINGLE name1
+      INTO g_khmc
+      FROM lfa1
+      WHERE lifnr = gwa_skt_200-lifnr.
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  F4_HELP  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE f4_help INPUT.
+  TYPES:BEGIN OF ty_skb1,
+          bukrs TYPE skb1-bukrs,
+          saknr TYPE skb1-saknr,
+          txt50 TYPE skat-txt50,
+        END OF ty_skb1.
+  DATA: ls_skb1 TYPE ty_skb1,
+        lt_skb1 TYPE TABLE OF ty_skb1.
+
+  DATA: dynpfields1 TYPE TABLE OF dynpread WITH HEADER LINE.
+
+  CLEAR: dynpfields1, dynpfields1[].
+  dynpfields1-fieldname = 'GWA_SKT-ZGSDM'. "填入需要读值的字段名
+  APPEND dynpfields1.
+
+  CALL FUNCTION 'DYNP_VALUES_READ'
+    EXPORTING
+      dyname             = sy-repid
+      dynumb             = sy-dynnr
+      translate_to_upper = 'X'
+    TABLES
+      dynpfields         = dynpfields1
+    EXCEPTIONS
+      OTHERS             = 9.
+  IF sy-subrc = 0.
+    READ TABLE dynpfields1 WITH KEY fieldname = 'GWA_SKT-ZGSDM'.
+    gwa_skt-zgsdm = dynpfields1-fieldvalue. "备注
+  ENDIF.
+
+  SELECT skb1~bukrs
+         skb1~saknr
+         skat~txt50
+    INTO TABLE lt_skb1
+    FROM skb1
+    JOIN skat
+    ON skb1~saknr = skat~saknr
+    WHERE skb1~bukrs = gwa_skt-zgsdm
+      AND ( ( skb1~saknr LIKE '1001%')
+       OR  ( skb1~saknr LIKE '1002%' ) ).
+
+  "调用展示函数
+  CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+    EXPORTING
+      retfield    = 'SAKNR'          "表格要显示的字段
+      dynpprog    = sy-repid         "返回才程序
+      dynpnr      = sy-dynnr         "屏幕
+      dynprofield = 'GWA_SKT-ZHRYH'  "往页面回填值的地方
+      value_org   = 'S'              "显示类型
+    TABLES
+      value_tab   = lt_skb1.           "传进去的表格 帮助的内表
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+            WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  F4_HELP_200  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE f4_help_200 INPUT.
+  TYPES:BEGIN OF ty_skb1_200,
+          bukrs TYPE skb1-bukrs,
+          saknr TYPE skb1-saknr,
+          txt50 TYPE skat-txt50,
+        END OF ty_skb1_200.
+  DATA: ls_skb1_200 TYPE ty_skb1_200,
+        lt_skb1_200 TYPE TABLE OF ty_skb1_200.
+
+  SELECT skb1~bukrs
+         skb1~saknr
+         skat~txt50
+    INTO TABLE lt_skb1_200
+    FROM skb1
+    JOIN skat
+    ON skb1~saknr = skat~saknr
+    WHERE skb1~bukrs = gwa_skt_200-zgsdm
+      AND ( ( skb1~saknr LIKE '1001%')
+       OR  ( skb1~saknr LIKE '1002%' ) ).
+
+  "调用展示函数
+  CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+    EXPORTING
+      retfield    = 'SAKNR'          "表格要显示的字段
+      dynpprog    = sy-repid         "返回才程序
+      dynpnr      = sy-dynnr         "屏幕
+      dynprofield = 'GWA_SKT_200-ZHRYH'  "往页面回填值的地方
+      value_org   = 'S'              "显示类型
+    TABLES
+      value_tab   = lt_skb1_200.           "传进去的表格 帮助的内表
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+            WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  CTR02_EDITABLE  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE ctr02_editable OUTPUT.
+  LOOP AT SCREEN.
+    IF screen-name = 'GWA_TABLE_200-MARK'
+      OR screen-name = 'GWA_TABLE_200-ZHTH'
+      OR screen-name = 'GWA_TABLE_200-ZSKJE'.
+      IF gwa_table_200-sel = 'X'.
+        screen-input = 1.
+      ELSE.
+        screen-input = 0.
+      ENDIF.
+      IF gwa_skt_200-zdjzt = '2'
+        OR gwa_skt_200-zdjzt = '3'.
+        screen-input = 0.
+      ENDIF.
+    ENDIF.
+    MODIFY SCREEN.
+  ENDLOOP.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  STATUS_9002  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE status_9002 OUTPUT.
+  SET PF-STATUS 'PF_9002'.
+  SET TITLEBAR 'TIT9002'.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  F4_HELP_HTH  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE f4_help_hth INPUT.
+  DATA:lt_bsik LIKE zsfi_fkd_help OCCURS 0 WITH HEADER LINE.
+  DATA:lt_return_tab LIKE ddshretval OCCURS 0 WITH HEADER LINE,
+       lt_mapping    LIKE dselc OCCURS 0 WITH HEADER LINE.
+  DATA:lv_line TYPE i.
+
+  REFRESH:lt_bsik,lt_return_tab,lt_mapping.
+  .
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE lt_bsik
+    FROM bsik
+    WHERE bukrs = gwa_skt-zgsdm
+      AND lifnr = gwa_skt-lifnr
+      AND hkont LIKE '2202%'.
+
+  LOOP AT lt_bsik.
+    IF lt_bsik-shkzg = 'S'.
+      lt_bsik-dmbtr = -1 * lt_bsik-dmbtr.
+      lt_bsik-wrbtr = -1 * lt_bsik-wrbtr.
+    ENDIF.
+    IF lt_bsik-waers = gwa_skt-zbb.
+      lt_bsik-zskje = lt_bsik-wrbtr.
+    ELSE.
+      lt_bsik-zskje = lt_bsik-dmbtr.
+    ENDIF.
+    MODIFY lt_bsik.
+  ENDLOOP.
+
+  lt_mapping-fldname = 'BELNR'.
+  lt_mapping-dyfldname = 'GWA_TABLE-ZHTH'.
+  APPEND lt_mapping.
+
+  lt_mapping-fldname = 'ZSKJE'.
+  lt_mapping-dyfldname = 'GWA_TABLE-ZSKJE'.
+  APPEND lt_mapping.
+
+  lt_mapping-fldname = 'ZUONR'.
+  lt_mapping-dyfldname = 'GWA_TABLE-ZUONR'.
+  APPEND lt_mapping.
+
+  "调用展示函数
+  CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+    EXPORTING
+      ddic_structure   = 'ZSFI_FKD_HELP'
+      retfield         = 'BELNR'          "表格要显示的字段
+      dynpprog         = sy-repid         "返回才程序
+      dynpnr           = sy-dynnr         "屏幕
+      dynprofield      = 'GWA_TABLE-ZHTH' "往页面回填值的地方
+      value_org        = 'S'              "显示类型
+      callback_program = sy-repid
+      callback_form    = 'FRM_RETURN_OTHER_FIELD_VALUE'
+    TABLES
+      value_tab        = lt_bsik           "传进去的表格 帮助的内表.
+      return_tab       = lt_return_tab
+      dynpfld_mapping  = lt_mapping.
+
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  GET_ZHMC  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE get_zhmc INPUT.
+  SELECT SINGLE txt20
+      INTO (g_zhmc)
+      FROM skat
+      WHERE spras = '1'
+        AND saknr = gwa_skt-zhryh.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  F4_HELP_BB  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE f4_help_bb INPUT.
+  TYPES:BEGIN OF ty_bb,
+          waers TYPE tcurt-waers,
+          ktext TYPE tcurt-ktext,
+        END OF ty_bb.
+  DATA: ls_bb TYPE ty_bb,
+        lt_bb TYPE TABLE OF ty_bb.
+
+  SELECT waers
+         ktext
+    INTO TABLE lt_bb
+    FROM tcurt
+    WHERE spras = '1'.
+  DELETE ADJACENT DUPLICATES FROM lt_bb COMPARING waers.
+  "调用展示函数
+  CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+    EXPORTING
+      retfield    = 'WAERS'          "表格要显示的字段
+      dynpprog    = sy-repid         "返回才程序
+      dynpnr      = sy-dynnr         "屏幕
+      dynprofield = 'GWA_TABLE-ZBB' "往页面回填值的地方
+      value_org   = 'S'              "显示类型
+    TABLES
+      value_tab   = lt_bb.           "传进去的表格 帮助的内表
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+            WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  GET_ZHMC_200  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE get_zhmc_200 INPUT.
+  SELECT SINGLE txt20
+        INTO (g_zhmc)
+        FROM skat
+        WHERE spras = '1'
+          AND saknr = gwa_skt_200-zhryh.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  F4_HELP_BB_200  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE f4_help_bb_200 INPUT.
+  TYPES:BEGIN OF ty_bb_200,
+          waers TYPE tcurt-waers,
+          ktext TYPE tcurt-ktext,
+        END OF ty_bb_200.
+  DATA: ls_bb_200 TYPE ty_bb_200,
+        lt_bb_200 TYPE TABLE OF ty_bb_200.
+
+  SELECT waers
+         ktext
+    INTO TABLE lt_bb_200
+    FROM tcurt
+    WHERE spras = '1'.
+  DELETE ADJACENT DUPLICATES FROM lt_bb COMPARING waers.
+  "调用展示函数
+  CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+    EXPORTING
+      retfield    = 'WAERS'          "表格要显示的字段
+      dynpprog    = sy-repid         "返回才程序
+      dynpnr      = sy-dynnr         "屏幕
+      dynprofield = 'GWA_TABLE_200-ZBB' "往页面回填值的地方
+      value_org   = 'S'              "显示类型
+    TABLES
+      value_tab   = lt_bb_200.           "传进去的表格 帮助的内表
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+            WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  F4_HELP_HTH_200  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE f4_help_hth_200 INPUT.
+  REFRESH:lt_bsik.
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE lt_bsik
+    FROM bsik
+    WHERE bukrs = gwa_skt_200-zgsdm
+      AND lifnr = gwa_skt_200-lifnr
+      AND hkont LIKE '2202%'.
+
+  LOOP AT lt_bsik.
+    IF lt_bsik-shkzg = 'S'.
+      lt_bsik-dmbtr = -1 * lt_bsik-dmbtr.
+      lt_bsik-wrbtr = -1 * lt_bsik-wrbtr.
+    ENDIF.
+    IF lt_bsik-waers = gwa_skt-zbb.
+      lt_bsik-zskje = lt_bsik-wrbtr.
+    ELSE.
+      lt_bsik-zskje = lt_bsik-dmbtr.
+    ENDIF.
+    MODIFY lt_bsik.
+  ENDLOOP.
+
+  lt_mapping-fldname = 'BELNR'.
+  lt_mapping-dyfldname = 'GWA_TABLE_200-ZHTH'.
+  APPEND lt_mapping.
+
+  lt_mapping-fldname = 'ZSKJE'.
+  lt_mapping-dyfldname = 'GWA_TABLE_200-ZSKJE'.
+  APPEND lt_mapping.
+
+  lt_mapping-fldname = 'ZUONR'.
+  lt_mapping-dyfldname = 'GWA_TABLE_200-ZUONR'.
+  APPEND lt_mapping.
+  "调用展示函数
+  CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+    EXPORTING
+      retfield         = 'BELNR'          "表格要显示的字段
+      dynpprog         = sy-repid         "返回才程序
+      dynpnr           = sy-dynnr         "屏幕
+      dynprofield      = 'GWA_TABLE_200-ZHTH' "往页面回填值的地方
+      value_org        = 'S'              "显示类型
+      callback_program = sy-repid
+      callback_form    = 'FRM_RETURN_OTHER_FIELD_VALUE1'
+    TABLES
+      value_tab        = lt_bsik           "传进去的表格 帮助的内表
+      dynpfld_mapping  = lt_mapping.
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+            WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  F4_KHBM  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE f4_gysbm INPUT.
+  TYPES:BEGIN OF ty_lfa1,
+          bukrs TYPE lfb1-bukrs,
+          lifnr TYPE lfa1-lifnr,
+          name1 TYPE lfa1-name1,
+        END OF ty_lfa1.
+  DATA: ls_b1 TYPE ty_lfa1,
+        lt_b1 TYPE TABLE OF ty_lfa1.
+
+  DATA: dynpfields TYPE TABLE OF dynpread WITH HEADER LINE.
+
+  CLEAR: dynpfields, dynpfields[].
+  dynpfields-fieldname = 'GWA_SKT-ZGSDM'. "填入需要读值的字段名
+  APPEND dynpfields.
+
+  CALL FUNCTION 'DYNP_VALUES_READ'
+    EXPORTING
+      dyname             = sy-repid
+      dynumb             = sy-dynnr
+      translate_to_upper = 'X'
+    TABLES
+      dynpfields         = dynpfields
+    EXCEPTIONS
+      OTHERS             = 9.
+  IF sy-subrc = 0.
+    READ TABLE dynpfields WITH KEY fieldname = 'GWA_SKT-ZGSDM'.
+    gwa_skt-zgsdm = dynpfields-fieldvalue. "备注
+  ENDIF.
+
+
+  SELECT lfb1~bukrs
+         lfb1~lifnr
+         lfa1~name1
+    INTO TABLE lt_b1
+    FROM lfb1
+    JOIN lfa1
+    ON lfb1~lifnr = lfa1~lifnr
+    WHERE lfb1~bukrs = gwa_skt-zgsdm.
+  DELETE ADJACENT DUPLICATES FROM lt_b1 COMPARING lifnr name1.
+  "调用展示函数
+  CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+    EXPORTING
+      retfield    = 'LIFNR'          "表格要显示的字段
+      dynpprog    = sy-repid         "返回才程序
+      dynpnr      = sy-dynnr         "屏幕
+      dynprofield = 'GWA_SKT-LIFNR'  "往页面回填值的地方
+      value_org   = 'S'              "显示类型
+    TABLES
+      value_tab   = lt_b1.           "传进去的表格 帮助的内表
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+            WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  F4_KHBM_200  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE f4_khbm_200 INPUT.
+  TYPES:BEGIN OF ty_lfb1_200,
+          bukrs TYPE lfb1-bukrs,
+          lifnr TYPE lfb1-lifnr,
+          name1 TYPE lfa1-name1,
+        END OF ty_lfb1_200.
+  DATA: ls_b1_200 TYPE ty_lfb1_200,
+        lt_b1_200 TYPE TABLE OF ty_lfb1_200.
+
+  SELECT lfb1~bukrs
+         lfb1~lifnr
+         lfa1~name1
+    INTO TABLE lt_b1_200
+    FROM lfb1
+    JOIN lfa1
+    ON lfb1~lifnr = lfa1~lifnr
+    WHERE lfb1~bukrs = gwa_skt_200-zgsdm.
+  DELETE ADJACENT DUPLICATES FROM lt_b1_200 COMPARING lifnr name1.
+
+  "调用展示函数
+  CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+    EXPORTING
+      retfield    = 'LIFNR'          "表格要显示的字段
+      dynpprog    = sy-repid         "返回才程序
+      dynpnr      = sy-dynnr         "屏幕
+      dynprofield = 'GWA_SKT_200-LIFNR'  "往页面回填值的地方
+      value_org   = 'S'              "显示类型
+    TABLES
+      value_tab   = lt_b1_200.           "传进去的表格 帮助的内表
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+            WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+ENDMODULE.

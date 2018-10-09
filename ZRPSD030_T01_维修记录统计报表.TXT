@@ -1,0 +1,105 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM031_TOP
+*&---------------------------------------------------------------------*
+TYPE-POOLS:truxs,slis.
+DATA:xlstab TYPE truxs_t_text_data.
+TABLES:lips,mara,ausp,ztcs001,ztsd011,ztcs003,ztcs004.
+********************ALV 事件****************
+DATA:
+  it_fieldcat TYPE lvc_t_fcat,
+  wa_fieldcat LIKE LINE OF it_fieldcat,
+  gs_layout   TYPE lvc_s_layo,
+  it_events   TYPE slis_t_event, ""事件属性
+  wa_events   TYPE slis_alv_event.
+
+
+DATA:BEGIN OF gw_item,"展示内表
+       qmnum    TYPE ztcs001-qmnum,
+       zindx    TYPE ztcs001-zindx,
+       zxflms   TYPE ztsd011-zxflms,
+       atwrt    LIKE ausp-atwrt,
+*       lfimg    TYPE lips-lfimg,
+       lfimg    TYPE p DECIMALS 2,
+       menge    TYPE ztcs001-menge,
+       menge1   TYPE ztcs001-menge,
+       menge2   TYPE ztcs001-menge,
+       menge3   TYPE ztcs001-menge,
+       zfxl     TYPE p DECIMALS 2,
+       zthwx    TYPE ztcs001-zthwx,
+       zbarcode TYPE ztcs001-zbarcode,
+       zgbbs    TYPE ztcs001-zgbbs,
+       matnr    TYPE ztcs001-matnr,
+       name1    TYPE kna1-name1,
+     END OF gw_item.
+DATA:gt_item LIKE TABLE OF gw_item WITH HEADER LINE.
+
+
+DATA:BEGIN OF gt_item1 OCCURS 0,"展示内表
+       zxflms  TYPE ztsd011-zxflms,
+       menge1  TYPE ztcs001-menge,
+       menge2  TYPE ztcs001-menge,
+       menge3  TYPE ztcs001-menge,
+       name1   TYPE kna1-name1,
+       fetext  TYPE qpct-kurztext,
+       fecount TYPE i,
+       urtext  TYPE qpct-kurztext,
+       urcount TYPE i,
+     END OF gt_item1.
+
+DATA:BEGIN OF gt_item2 OCCURS 0,"展示内表
+       zxflms TYPE ztsd011-zxflms,
+       atwrt  LIKE ausp-atwrt,
+*       lfimg   TYPE lips-lfimg,
+       lfimg  TYPE p DECIMALS 2,
+       menge1 TYPE ztcs001-menge,
+       menge2 TYPE ztcs001-menge,
+       menge3 TYPE ztcs001-menge,
+       name1  TYPE kna1-name1,
+       ft1    TYPE qpct-kurztext,
+       fc1    TYPE i,
+       ft2    TYPE qpct-kurztext,
+       fc2    TYPE i,
+       ft3    TYPE qpct-kurztext,
+       fc3    TYPE i,
+       ft4    TYPE qpct-kurztext,
+       fc4    TYPE i,
+       ft5    TYPE qpct-kurztext,
+       fc5    TYPE i,
+     END OF gt_item2.
+
+DATA:BEGIN OF gt_kunnr OCCURS 0,
+       zxflms  TYPE ztsd011-zxflms,
+       name1   TYPE kna1-name1,
+       fetext  TYPE qpct-kurztext,
+       fecount TYPE i,
+       urtext  TYPE qpct-kurztext,
+       urcount TYPE i,
+     END OF gt_kunnr.
+
+DATA: i_grid_settings TYPE lvc_s_glay.
+
+DATA: BEGIN OF lt_lips OCCURS 0,
+        lfimg TYPE lips-lfimg,
+        matnr TYPE lips-matnr,
+        vbeln TYPE lips-vbeln,
+        kunnr TYPE likp-kunnr,
+      END OF lt_lips.
+
+DATA:BEGIN OF gt_xl OCCURS 0,
+       atwrt LIKE ausp-atwrt,
+     END OF gt_xl,
+     gt_zxl LIKE gt_xl OCCURS 0 WITH HEADER LINE. "子系列内表
+
+*  获取主型号、系列、产品线
+DATA: BEGIN OF gt_ausp OCCURS 0,
+        objek LIKE ausp-objek,
+        atinn LIKE ausp-atinn,
+        atwrt LIKE ausp-atwrt,
+        atnam LIKE cabn-atnam,
+      END OF gt_ausp.
+
+DATA:ok_code   TYPE sy-ucomm,
+     save_ok   TYPE sy-ucomm,
+     errorcode TYPE i.
+DATA: l_grid TYPE REF TO cl_gui_alv_grid,
+      stbl   TYPE lvc_s_stbl. ""稳定刷新

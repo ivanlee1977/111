@@ -1,0 +1,1016 @@
+*----------------------------------------------------------------------*
+***INCLUDE ZXQQMF01.
+*----------------------------------------------------------------------*
+
+*----------------------------------------------------------------------*
+*   INCLUDE TABLECONTROL_FORMS                                         *
+*----------------------------------------------------------------------*
+
+*&---------------------------------------------------------------------*
+*&      Form  USER_OK_TC                                               *
+*&---------------------------------------------------------------------*
+ FORM user_ok_tc USING    p_tc_name TYPE dynfnam
+                          p_table_name
+                          p_mark_name
+                 CHANGING p_ok      LIKE sy-ucomm.
+
+*&SPWIZARD: BEGIN OF LOCAL DATA----------------------------------------*
+   DATA: l_ok     TYPE sy-ucomm,
+         l_offset TYPE i.
+*&SPWIZARD: END OF LOCAL DATA------------------------------------------*
+
+*&SPWIZARD: Table control specific operations                          *
+*&SPWIZARD: evaluate TC name and operations                            *
+   SEARCH p_ok FOR p_tc_name.
+   IF sy-subrc <> 0.
+     EXIT.
+   ENDIF.
+   l_offset = strlen( p_tc_name ) + 1.
+   l_ok = p_ok+l_offset.
+*&SPWIZARD: execute general and TC specific operations                 *
+   CASE l_ok.
+     WHEN 'INSR'.                      "insert row
+       PERFORM fcode_insert_row USING    p_tc_name
+                                         p_table_name.
+       CLEAR p_ok.
+
+     WHEN 'DELE'.                      "delete row
+       PERFORM fcode_delete_row USING    p_tc_name
+                                         p_table_name
+                                         p_mark_name.
+       CLEAR p_ok.
+
+     WHEN 'P--' OR                     "top of list
+          'P-'  OR                     "previous page
+          'P+'  OR                     "next page
+          'P++'.                       "bottom of list
+       PERFORM compute_scrolling_in_tc USING p_tc_name
+                                             l_ok.
+       CLEAR p_ok.
+*     WHEN 'L--'.                       "total left
+*       PERFORM FCODE_TOTAL_LEFT USING P_TC_NAME.
+*
+*     WHEN 'L-'.                        "column left
+*       PERFORM FCODE_COLUMN_LEFT USING P_TC_NAME.
+*
+*     WHEN 'R+'.                        "column right
+*       PERFORM FCODE_COLUMN_RIGHT USING P_TC_NAME.
+*
+*     WHEN 'R++'.                       "total right
+*       PERFORM FCODE_TOTAL_RIGHT USING P_TC_NAME.
+*
+     WHEN 'MARK'.                      "mark all filled lines
+       PERFORM fcode_tc_mark_lines USING p_tc_name
+                                         p_table_name
+                                         p_mark_name   .
+       CLEAR p_ok.
+
+     WHEN 'DMRK'.                      "demark all filled lines
+       PERFORM fcode_tc_demark_lines USING p_tc_name
+                                           p_table_name
+                                           p_mark_name .
+       CLEAR p_ok.
+
+*     WHEN 'SASCEND'   OR
+*          'SDESCEND'.                  "sort column
+*       PERFORM FCODE_SORT_TC USING P_TC_NAME
+*                                   l_ok.
+
+   ENDCASE.
+
+ ENDFORM.                              " USER_OK_TC
+
+*&---------------------------------------------------------------------*
+*&      Form  FCODE_INSERT_ROW                                         *
+*&---------------------------------------------------------------------*
+ FORM fcode_insert_row
+               USING    p_tc_name           TYPE dynfnam
+                        p_table_name             .
+
+*&SPWIZARD: BEGIN OF LOCAL DATA----------------------------------------*
+   DATA l_lines_name       LIKE feld-name.
+   DATA l_selline          LIKE sy-stepl.
+   DATA l_lastline         TYPE i.
+   DATA l_line             TYPE i.
+   DATA l_table_name       LIKE feld-name.
+   FIELD-SYMBOLS <tc>                 TYPE cxtab_control.
+   FIELD-SYMBOLS <table>              TYPE STANDARD TABLE.
+   FIELD-SYMBOLS <lines>              TYPE i.
+*&SPWIZARD: END OF LOCAL DATA------------------------------------------*
+
+   ASSIGN (p_tc_name) TO <tc>.
+
+*&SPWIZARD: get the table, which belongs to the tc                     *
+   CONCATENATE p_table_name '[]' INTO l_table_name. "table body
+   ASSIGN (l_table_name) TO <table>.                "not headerline
+
+*&SPWIZARD: get looplines of TableControl                              *
+   CONCATENATE 'G_' p_tc_name '_LINES' INTO l_lines_name.
+   ASSIGN (l_lines_name) TO <lines>.
+
+*&SPWIZARD: get current line                                           *
+*   GET CURSOR LINE l_selline.
+*   IF sy-subrc <> 0.                   " append line to table
+   l_selline = <tc>-lines + 1.
+*&SPWIZARD: set top line                                               *
+   IF l_selline > <lines>.
+     <tc>-top_line = l_selline - <lines> + 1 .
+   ELSE.
+     <tc>-top_line = 1.
+   ENDIF.
+*   ELSE.                               " insert line into table
+*     l_selline = <tc>-top_line + l_selline - 1.
+*     l_lastline = <tc>-top_line + <lines> - 1.
+*   ENDIF.
+*&SPWIZARD: set new cursor line                                        *
+   l_line = l_selline - <tc>-top_line + 1.
+
+*&SPWIZARD: insert initial line                                        *
+   INSERT INITIAL LINE INTO <table> INDEX l_selline.
+
+   <tc>-lines = <tc>-lines + 1.
+*&SPWIZARD: set cursor                                                 *
+   SET CURSOR LINE l_line.
+*   APPEND INITIAL LINE TO <table>.
+ ENDFORM.                              " FCODE_INSERT_ROW
+
+*&---------------------------------------------------------------------*
+*&      Form  FCODE_DELETE_ROW                                         *
+*&---------------------------------------------------------------------*
+ FORM fcode_delete_row
+               USING    p_tc_name           TYPE dynfnam
+                        p_table_name
+                        p_mark_name   .
+
+*&SPWIZARD: BEGIN OF LOCAL DATA----------------------------------------*
+   DATA l_table_name       LIKE feld-name.
+
+   FIELD-SYMBOLS <tc>         TYPE cxtab_control.
+   FIELD-SYMBOLS <table>      TYPE STANDARD TABLE.
+   FIELD-SYMBOLS <wa>.
+   FIELD-SYMBOLS <mark_field>.
+   FIELD-SYMBOLS <fs_zindx>.
+   DATA:lv_zindx  LIKE ztcs003-zindx,
+        lv_msg    TYPE string,
+        lv_answer TYPE c.
+   DATA:lv_tabix LIKE sy-tabix.
+*&SPWIZARD: END OF LOCAL DATA------------------------------------------*
+
+   ASSIGN (p_tc_name) TO <tc>.
+
+*&SPWIZARD: get the table, which belongs to the tc                     *
+   CONCATENATE p_table_name '[]' INTO l_table_name. "table body
+   ASSIGN (l_table_name) TO <table>.                "not headerline
+
+*&SPWIZARD: delete marked lines                                        *
+   DESCRIBE TABLE <table> LINES <tc>-lines.
+
+   LOOP AT <table> ASSIGNING <wa>.
+     lv_tabix = sy-tabix.
+*&SPWIZARD: access to the component 'FLAG' of the table header         *
+     ASSIGN COMPONENT p_mark_name OF STRUCTURE <wa> TO <mark_field>.
+     IF <mark_field> = 'X'.
+***add by quyt 20170729如果删除上层数据，则下层的也要同时删除
+       IF p_tc_name = 'ZTDATA'.
+         ASSIGN COMPONENT 'ZINDX' OF STRUCTURE <wa> TO <fs_zindx>.
+         IF sy-subrc = 0.
+           lv_zindx = <fs_zindx>.
+         ENDIF.
+         ASSIGN COMPONENT 'ZWCZT' OF STRUCTURE <wa> TO <fs_zindx>.
+         IF <fs_zindx> EQ 'X'.
+           CONCATENATE '项次：'  lv_zindx  '被标记为完成状态，不允许删除' INTO lv_msg.
+           MESSAGE lv_msg TYPE 'I'.
+           CONTINUE.
+         ELSE.
+           CONCATENATE '确定要删除项次：' lv_zindx '吗?' INTO lv_msg.
+           CALL FUNCTION 'POPUP_TO_CONFIRM'
+             EXPORTING
+               text_question         = lv_msg
+               text_button_1         = '确定'(001)
+*              ICON_BUTTON_1         = ' '
+               text_button_2         = '取消'(002)
+*              ICON_BUTTON_2         = ' '
+*              DEFAULT_BUTTON        = '1'
+               display_cancel_button = 'X'
+             IMPORTING
+               answer                = lv_answer
+             EXCEPTIONS
+               text_not_found        = 1
+               OTHERS                = 2.
+           IF lv_answer <> '1'.
+             CONTINUE.
+           ENDIF.
+         ENDIF.
+       ENDIF.
+       DELETE <table> INDEX lv_tabix.
+       IF sy-subrc = 0.
+         <tc>-lines = <tc>-lines - 1.
+         IF p_tc_name = 'ZTDATA'.
+           DELETE gt_ztcs003_total WHERE zindx = lv_zindx.
+           DELETE gt_ztcs004_total WHERE zindx = lv_zindx.
+         ENDIF.
+       ENDIF.
+     ENDIF.
+   ENDLOOP.
+
+ ENDFORM.                              " FCODE_DELETE_ROW
+
+*&---------------------------------------------------------------------*
+*&      Form  COMPUTE_SCROLLING_IN_TC
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_TC_NAME  name of tablecontrol
+*      -->P_OK       ok code
+*----------------------------------------------------------------------*
+ FORM compute_scrolling_in_tc USING    p_tc_name
+                                       p_ok.
+*&SPWIZARD: BEGIN OF LOCAL DATA----------------------------------------*
+   DATA l_tc_new_top_line     TYPE i.
+   DATA l_tc_name             LIKE feld-name.
+   DATA l_tc_lines_name       LIKE feld-name.
+   DATA l_tc_field_name       LIKE feld-name.
+
+   FIELD-SYMBOLS <tc>         TYPE cxtab_control.
+   FIELD-SYMBOLS <lines>      TYPE i.
+*&SPWIZARD: END OF LOCAL DATA------------------------------------------*
+
+   ASSIGN (p_tc_name) TO <tc>.
+*&SPWIZARD: get looplines of TableControl                              *
+   CONCATENATE 'G_' p_tc_name '_LINES' INTO l_tc_lines_name.
+   ASSIGN (l_tc_lines_name) TO <lines>.
+
+
+*&SPWIZARD: is no line filled?                                         *
+   IF <tc>-lines = 0.
+*&SPWIZARD: yes, ...                                                   *
+     l_tc_new_top_line = 1.
+   ELSE.
+*&SPWIZARD: no, ...                                                    *
+     CALL FUNCTION 'SCROLLING_IN_TABLE'
+       EXPORTING
+         entry_act      = <tc>-top_line
+         entry_from     = 1
+         entry_to       = <tc>-lines
+         last_page_full = 'X'
+         loops          = <lines>
+         ok_code        = p_ok
+         overlapping    = 'X'
+       IMPORTING
+         entry_new      = l_tc_new_top_line
+       EXCEPTIONS
+*        NO_ENTRY_OR_PAGE_ACT  = 01
+*        NO_ENTRY_TO    = 02
+*        NO_OK_CODE_OR_PAGE_GO = 03
+         OTHERS         = 0.
+   ENDIF.
+
+*&SPWIZARD: get actual tc and column                                   *
+   GET CURSOR FIELD l_tc_field_name
+              AREA  l_tc_name.
+
+   IF syst-subrc = 0.
+     IF l_tc_name = p_tc_name.
+*&SPWIZARD: et actual column                                           *
+       SET CURSOR FIELD l_tc_field_name LINE 1.
+     ENDIF.
+   ENDIF.
+
+*&SPWIZARD: set the new top line                                       *
+   <tc>-top_line = l_tc_new_top_line.
+
+
+ ENDFORM.                              " COMPUTE_SCROLLING_IN_TC
+
+*&---------------------------------------------------------------------*
+*&      Form  FCODE_TC_MARK_LINES
+*&---------------------------------------------------------------------*
+*       marks all TableControl lines
+*----------------------------------------------------------------------*
+*      -->P_TC_NAME  name of tablecontrol
+*----------------------------------------------------------------------*
+ FORM fcode_tc_mark_lines USING p_tc_name
+                                p_table_name
+                                p_mark_name.
+*&SPWIZARD: EGIN OF LOCAL DATA-----------------------------------------*
+   DATA l_table_name       LIKE feld-name.
+
+   FIELD-SYMBOLS <tc>         TYPE cxtab_control.
+   FIELD-SYMBOLS <table>      TYPE STANDARD TABLE.
+   FIELD-SYMBOLS <wa>.
+   FIELD-SYMBOLS <mark_field>.
+*&SPWIZARD: END OF LOCAL DATA------------------------------------------*
+
+   ASSIGN (p_tc_name) TO <tc>.
+
+*&SPWIZARD: get the table, which belongs to the tc                     *
+   CONCATENATE p_table_name '[]' INTO l_table_name. "table body
+   ASSIGN (l_table_name) TO <table>.                "not headerline
+
+*&SPWIZARD: mark all filled lines                                      *
+   LOOP AT <table> ASSIGNING <wa>.
+
+*&SPWIZARD: access to the component 'FLAG' of the table header         *
+     ASSIGN COMPONENT p_mark_name OF STRUCTURE <wa> TO <mark_field>.
+
+     <mark_field> = 'X'.
+   ENDLOOP.
+ ENDFORM.                                          "fcode_tc_mark_lines
+
+*&---------------------------------------------------------------------*
+*&      Form  FCODE_TC_DEMARK_LINES
+*&---------------------------------------------------------------------*
+*       demarks all TableControl lines
+*----------------------------------------------------------------------*
+*      -->P_TC_NAME  name of tablecontrol
+*----------------------------------------------------------------------*
+ FORM fcode_tc_demark_lines USING p_tc_name
+                                  p_table_name
+                                  p_mark_name .
+*&SPWIZARD: BEGIN OF LOCAL DATA----------------------------------------*
+   DATA l_table_name       LIKE feld-name.
+
+   FIELD-SYMBOLS <tc>         TYPE cxtab_control.
+   FIELD-SYMBOLS <table>      TYPE STANDARD TABLE.
+   FIELD-SYMBOLS <wa>.
+   FIELD-SYMBOLS <mark_field>.
+*&SPWIZARD: END OF LOCAL DATA------------------------------------------*
+
+   ASSIGN (p_tc_name) TO <tc>.
+
+*&SPWIZARD: get the table, which belongs to the tc                     *
+   CONCATENATE p_table_name '[]' INTO l_table_name. "table body
+   ASSIGN (l_table_name) TO <table>.                "not headerline
+
+*&SPWIZARD: demark all filled lines                                    *
+   LOOP AT <table> ASSIGNING <wa>.
+
+*&SPWIZARD: access to the component 'FLAG' of the table header         *
+     ASSIGN COMPONENT p_mark_name OF STRUCTURE <wa> TO <mark_field>.
+
+     <mark_field> = space.
+   ENDLOOP.
+ ENDFORM.                                          "fcode_tc_mark_
+*&---------------------------------------------------------------------*
+*&      Form  CODE_PF4_F40_NEW
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+ FORM code_pf4_f40_new .
+   DATA: lv_temp_module_calling(40) TYPE c,
+         lv_nov_via_sov(1)          TYPE c.
+   DATA: BEGIN OF lv_uitoggle,
+           badiactive         TYPE c,
+           ref_iwo_ui_useflex TYPE REF TO if_ex_iwo_ui_useflex,
+           fcode              TYPE syucomm VALUE 'UI_TOGGLE',
+           new_ui_active      TYPE c,
+           back_just_leaves   TYPE c,
+         END OF lv_uitoggle.
+
+   FIELD-SYMBOLS: <lfs_module_calling> TYPE any.
+
+   ASSIGN ('(SAPLMFAW)modulpool_values_get') TO <lfs_module_calling>.
+   IF <lfs_module_calling> IS ASSIGNED.
+     PERFORM get_gv_nov_via_sov(saplcoih) USING lv_nov_via_sov.
+     PERFORM get_uitoggle(saplcoih) USING lv_uitoggle.
+   ELSE.
+     UNASSIGN <lfs_module_calling>.
+   ENDIF.
+
+   IF lv_uitoggle-new_ui_active = 'X'
+      AND lv_nov_via_sov <> 'X'
+      AND <lfs_module_calling> IS ASSIGNED.
+     lv_temp_module_calling = <lfs_module_calling>.
+     CLEAR <lfs_module_calling>.
+   ENDIF.
+
+   PERFORM code_pf4_f40(sapliqs0) IF FOUND.
+
+   IF lv_uitoggle-new_ui_active = 'X'
+      AND lv_nov_via_sov <> 'X'
+      AND <lfs_module_calling> IS ASSIGNED.
+     <lfs_module_calling> = lv_temp_module_calling.
+     UNASSIGN <lfs_module_calling>.
+   ENDIF.
+ ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDS_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+ FORM frm_get_fields_data .
+   DATA:lv_matnr LIKE mara-matnr,
+        lv_lifnr LIKE lfa1-lifnr.
+   DATA:ls_mast LIKE mast.
+   IF gt_data-matnr IS NOT INITIAL.
+     SELECT SINGLE matnr INTO lv_matnr FROM mara WHERE matnr = gt_data-matnr.
+     IF sy-subrc NE 0.
+       MESSAGE '物料不存在' TYPE 'E'.
+     ELSE.
+       SELECT SINGLE maktx INTO gt_data-maktx FROM makt WHERE matnr = gt_data-matnr AND spras = sy-langu.
+     ENDIF.
+   ENDIF.
+
+   IF gt_data-lifnr IS NOT INITIAL.
+     SELECT SINGLE lifnr name1 INTO (lv_lifnr,gt_data-name1) FROM lfa1 WHERE lifnr = gt_data-lifnr.
+     IF sy-subrc NE 0.
+       MESSAGE '供应商不存在' TYPE 'E'.
+     ENDIF.
+   ENDIF.
+
+***故障原因代码检查
+   IF gt_data-fecod IS NOT INITIAL.
+     SELECT SINGLE * FROM qpcd WHERE katalogart = 'C' AND code = gt_data-fecod."每个代码配置为唯一
+     IF sy-subrc NE 0.
+       MESSAGE '故障代码不存在' TYPE 'E' .
+     ENDIF.
+   ENDIF.
+   IF gt_data-urcod IS NOT INITIAL.
+     SELECT SINGLE * FROM qpcd WHERE katalogart = '5' AND code = gt_data-urcod."每个代码配置为唯一
+     IF sy-subrc NE 0.
+       MESSAGE '原因代码不存在' TYPE 'E' DISPLAY LIKE 'S'.
+     ENDIF.
+   ENDIF.
+
+   IF gt_data-zwxzt = 'A3' AND ( gt_data-fecod IS NOT INITIAL OR gt_data-urcod IS NOT INITIAL ).
+     MESSAGE 'A3状态不允许维护故障现象和不良原因' TYPE 'E'.
+   ENDIF.
+
+***快递公司代码
+   IF gt_data-vsart IS NOT INITIAL.
+     SELECT SINGLE bezei INTO gt_data-zkdgs FROM t173t WHERE spras = sy-langu AND vsart = gt_data-vsart.
+   ENDIF.
+
+   IF gt_data-kunnr IS NOT INITIAL.
+     SELECT SINGLE name1 INTO gt_data-zkhms FROM kna1 WHERE kunnr = gt_data-kunnr.
+   ENDIF.
+
+   IF ( gt_data-zwxzt = 'A7' OR gt_data-zwxzt = 'B5' ) AND ( gt_data-urcod IS INITIAL OR gt_data-fecod IS INITIAL ) AND gt_data-fecod NE 'B29'.
+     MESSAGE '请输入故障现象和不良原因' TYPE 'E'.
+   ENDIF.
+
+   IF gt_data-lifnr NE gt_data-lifnr_o AND gt_data-lifnr IS INITIAL AND gt_data-zwxzt >= 'B3'."从有值变为空
+     gt_data-zwxzt = 'A3'. "维修中
+   ENDIF.
+
+   IF gt_data-lifnr NE gt_data-lifnr_o AND gt_data-lifnr IS NOT INITIAL AND gt_data-zwxzt >= 'A3'."从空变为有值
+     CLEAR gt_data-zwczt.
+     if gt_data-zwxzt = 'A6'.
+        GT_DATA-ZWXWC = SY-DATUM.
+     ENDIF.
+     gt_data-zwxzt = 'B3'. "维修中
+   ENDIF.
+
+   IF ( gt_data-lifnr_o IS INITIAL AND gt_data-lifnr IS INITIAL AND gt_data-zwxzt IS INITIAL ) OR ( gt_data-qmnum IS INITIAL AND gt_data-lifnr IS INITIAL ).
+     gt_data-zwxzt = 'A1'.
+     gt_data-ztext = '接收'.
+   ENDIF.
+
+   IF ( gt_data-lifnr_o IS INITIAL AND gt_data-lifnr IS NOT INITIAL AND ( gt_data-zwxzt IS INITIAL OR gt_data-zwxzt = 'A1') ) OR
+     ( gt_data-qmnum IS INITIAL AND gt_data-lifnr IS NOT INITIAL ).
+     CLEAR gt_data-zwczt.
+     gt_data-zwxzt = 'B1'.
+     gt_data-ztext = '接收'.
+   ENDIF.
+
+   IF gt_data-lifnr EQ gt_data-lifnr_o AND gt_data-zwxzt NE gt_data-zwxzt_o.
+     IF gt_data-lifnr IS NOT INITIAL.
+       SELECT SINGLE * FROM ztcs002 WHERE zstat = gt_data-zwxzt AND ztype = 'B'.
+       IF sy-subrc NE 0.
+         MESSAGE '请选择供应商维修状态' TYPE 'E'.
+       ENDIF.
+     ELSE.
+       SELECT SINGLE * FROM ztcs002 WHERE zstat = gt_data-zwxzt AND ztype = 'A'.
+       IF sy-subrc NE 0.
+         MESSAGE '请选择厂内维修状态' TYPE 'E'.
+       ENDIF.
+     ENDIF.
+     IF gt_data-zwxzt_o(1) = gt_data-zwxzt(1) AND gt_data-zwxzt > gt_data-zwxzt_o.
+       SELECT SINGLE *
+         FROM ztcs002
+        WHERE zstat = gt_data-zwxzt
+          AND ( zstat_pr1 = gt_data-zwxzt_o OR zstat_pr2 = gt_data-zwxzt_o OR zstat_pr3 = gt_data-zwxzt_o
+           OR zstat_pr4 = gt_data-zwxzt_o OR zstat_pr5 = gt_data-zwxzt_o ).
+       IF sy-subrc NE 0.
+         MESSAGE '维修状态切换错误' TYPE 'E'.
+       ENDIF.
+     ENDIF.
+   ENDIF.
+
+***维修次数
+   IF gt_data-qmnum IS INITIAL AND gt_data-zbarcode IS NOT INITIAL.
+     SELECT COUNT(*) INTO gt_data-zwxcs FROM ztcs001 WHERE qmnum NE gt_data-qmnum AND zbarcode = gt_data-zbarcode.
+   ENDIF.
+
+***创建日期
+   IF  gt_data-erdat IS INITIAL.
+     gt_data-erdat = sy-datum.
+   ENDIF.
+***接收日期
+   IF gt_data-zwxzt = 'A1' OR gt_data-zwxzt = 'B1'.
+     gt_data-zjsrq = sy-datum.
+   ENDIF.
+***客户确认日期
+   IF gt_data-zwxzt = 'A2' OR gt_data-zwxzt = 'B2'.
+     gt_data-zkhqr = sy-datum.
+   ENDIF.
+***维修中日期
+   IF gt_data-zwxzt = 'A3' OR gt_data-zwxzt = 'B3'.
+     gt_data-zwxrq = sy-datum.
+   ENDIF.
+***已寄供应商日期
+   IF gt_data-zwxzt = 'B4'.
+     gt_data-zyjgys = sy-datum.
+   ENDIF.
+***供应商返还/退货日期
+   IF gt_data-zwxzt = 'B5'.
+     gt_data-zthrq = sy-datum.
+   ENDIF.
+***维修完成日期
+   IF gt_data-zwxzt = 'A7'.
+     gt_data-zwxwc = sy-datum.
+   ENDIF.
+***质检通过日期
+   IF gt_data-zwxzt = 'A6' OR gt_data-zwxzt = 'B6'.
+     gt_data-zzjtg = sy-datum.
+   ENDIF.
+***产品返还确认日期
+   IF gt_data-zwxzt = 'A8' OR gt_data-zwxzt = 'B8'.
+     gt_data-zcpfh = sy-datum.
+   ENDIF.
+***获取序号数据
+   IF gt_data-zindx IS INITIAL.
+     gv_zindx = gv_zindx + 10.
+     gt_data-zindx = gv_zindx.
+   ENDIF.
+
+***状态描述
+   IF gt_data-zwxzt IS NOT INITIAL.
+     SELECT SINGLE ztext INTO gt_data-ztext FROM ztcs002 WHERE zstat = gt_data-zwxzt.
+   ENDIF.
+
+***通过位号找到BOM的物料号
+*   IF ( gt_data-zwhwl1 IS NOT INITIAL AND strlen( gt_data-zwhwl1 )  BETWEEN '2' AND '3' )  OR
+*      ( gt_data-zwhwl2 IS NOT INITIAL AND strlen( gt_data-zwhwl2 )  BETWEEN '2' AND '3' )  OR
+*      ( gt_data-zwhwl3 IS NOT INITIAL AND strlen( gt_data-zwhwl3 )  BETWEEN '2' AND '3' )  OR
+*      ( gt_data-zwhwl4 IS NOT INITIAL AND strlen( gt_data-zwhwl4 )  BETWEEN '2' AND '3' )  OR
+*      ( gt_data-zwhwl5 IS NOT INITIAL AND strlen( gt_data-zwhwl5 )  BETWEEN '2' AND '3' )  .
+*     SELECT SINGLE * INTO ls_mast FROM mast WHERE matnr = gt_data-matnr AND werks = '1000' AND stlan = '1'.
+*     PERFORM frm_get_comp_matnr USING ls_mast CHANGING gt_data-zwhwl1.
+*     PERFORM frm_get_comp_matnr USING ls_mast CHANGING gt_data-zwhwl2.
+*     PERFORM frm_get_comp_matnr USING ls_mast CHANGING gt_data-zwhwl3.
+*     PERFORM frm_get_comp_matnr USING ls_mast CHANGING gt_data-zwhwl4.
+*     PERFORM frm_get_comp_matnr USING ls_mast CHANGING gt_data-zwhwl5.
+*   ENDIF.
+***完成状态
+   IF gt_data-zthwx EQ 'X' AND gt_data-zwxzt(1) = 'A'.
+     gt_data-zwczt = 'X'.
+   ENDIF.
+
+***最后一次修改日期
+   gt_data-udate = sy-datum.
+ ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CODE_F4
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+ FORM frm_code_f4 USING u_katalogart TYPE c
+                        u_retfield TYPE dfies-fieldname
+                        u_dynprofield TYPE help_info-dynprofld.
+   DATA:lt_return_tab LIKE ddshretval OCCURS 0 WITH HEADER LINE.
+   DATA:lv_display TYPE c,
+        lv_line    TYPE i.
+
+   GET CURSOR LINE lv_line.
+   lv_line = lv_line + ztdata-top_line - 1.
+
+   READ TABLE gt_data INDEX lv_line.
+   IF ( gt_data-zwczt = 'X' OR gt_data-zthwx = 'X' ) AND gt_data-zwxzt(1) EQ 'A'.
+     lv_display = 'X'.
+   ENDIF.
+
+   REFRESH  gt_qpcd.
+   SELECT a~codegruppe a~code b~kurztext
+     INTO CORRESPONDING FIELDS OF TABLE gt_qpcd
+     FROM qpcd AS a
+     LEFT JOIN qpct AS b
+     ON a~katalogart = b~katalogart
+     AND a~codegruppe = b~codegruppe
+     AND a~code = b~code
+     AND b~sprache = '1'
+     WHERE  a~katalogart EQ u_katalogart
+       AND   a~codegruppe EQ 'Z1'
+       AND  a~geloescht EQ space.
+
+
+
+   CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+     EXPORTING
+*      DDIC_STRUCTURE  = ' '
+       retfield        = u_retfield
+*      PVALKEY         = ' '
+       dynpprog        = sy-repid
+       dynpnr          = sy-dynnr
+       dynprofield     = u_dynprofield
+*      STEPL           = 0
+*      WINDOW_TITLE    =
+*      VALUE           = ' '
+       value_org       = 'S'
+*      MULTIPLE_CHOICE = ' '
+       display         = lv_display
+*      CALLBACK_PROGRAM       = ' '
+*      CALLBACK_FORM   = ' '
+*      CALLBACK_METHOD =
+*      MARK_TAB        =
+* IMPORTING
+*      USER_RESET      =
+     TABLES
+       value_tab       = gt_qpcd[]
+*      FIELD_TAB       =
+       return_tab      = lt_return_tab
+*      DYNPFLD_MAPPING =
+     EXCEPTIONS
+       parameter_error = 1
+       no_values_found = 2
+       OTHERS          = 3.
+   IF sy-subrc <> 0.
+* Implement suitable error handling here
+   ENDIF.
+ ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_RESET_FUNCTION_CODE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+ FORM frm_reset_function_code .
+   IF <fs_code>+0(1) = 'Z'.
+     CLEAR:sy-ucomm,ok_code.
+     ASSIGN  (lv_str) TO <fs_code>.
+     IF sy-subrc = 0.
+*       <fs_code> = '10\TAB19'.
+       <fs_code> = space.
+     ENDIF.
+   ENDIF.
+
+   SORT gt_data BY zindx.
+ ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_LEAVE_TO_SCREEN_100
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+ FORM frm_leave_to_screen_100 USING u_flag TYPE c.
+   IF u_flag = 'G'.
+     READ TABLE gt_ztcs003 WITH KEY zindx = gw_data-zindx..
+     IF sy-subrc = 0.
+       READ TABLE gt_data WITH KEY zindx = gw_data-zindx.
+       IF sy-subrc = 0.
+         gt_data-fegrp = gt_ztcs003-fegrp.
+         gt_data-fecod = gt_ztcs003-fecod.
+         MODIFY gt_data INDEX sy-tabix TRANSPORTING fegrp fecod.
+       ENDIF.
+     ELSE.
+       READ TABLE gt_data WITH KEY zindx = gw_data-zindx.
+       IF sy-subrc = 0.
+         gt_data-fegrp = space.
+         gt_data-fecod = space.
+         MODIFY gt_data INDEX sy-tabix TRANSPORTING fegrp fecod.
+       ENDIF.
+     ENDIF.
+     DELETE gt_ztcs003_total WHERE zindx = gw_data-zindx.
+     APPEND LINES OF gt_ztcs003 TO gt_ztcs003_total.
+   ELSEIF u_flag = 'Y'.
+     READ TABLE gt_ztcs004 WITH KEY zindx = gw_data-zindx..
+     IF sy-subrc = 0.
+       READ TABLE gt_data WITH KEY zindx = gw_data-zindx.
+       IF sy-subrc = 0.
+         gt_data-urgrp = gt_ztcs004-urgrp.
+         gt_data-urcod = gt_ztcs004-urcod.
+         MODIFY gt_data INDEX sy-tabix TRANSPORTING urgrp urcod.
+       ENDIF.
+     ELSE.
+       READ TABLE gt_data WITH KEY zindx = gw_data-zindx.
+       IF sy-subrc = 0.
+         gt_data-urgrp = space.
+         gt_data-urcod = space.
+         MODIFY gt_data INDEX sy-tabix TRANSPORTING urgrp urcod.
+       ENDIF.
+     ENDIF.
+     DELETE gt_ztcs004_total WHERE zindx = gw_data-zindx.
+     APPEND LINES OF gt_ztcs004 TO gt_ztcs004_total.
+   ENDIF.
+   LEAVE TO SCREEN 0.
+ ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DISPLAY_GZ_DETAIL_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+ FORM frm_display_gz_detail_data .
+   DATA:lv_index LIKE sy-tabix.
+   REFRESH gt_ztcs003.
+   LOOP AT gt_ztcs003_total WHERE zindx = gw_data-zindx.
+     MOVE-CORRESPONDING gt_ztcs003_total TO gt_ztcs003.
+     APPEND gt_ztcs003.
+     CLEAR gt_ztcs003.
+   ENDLOOP.
+
+   IF gw_data-fecod IS NOT INITIAL.
+     READ TABLE gt_ztcs003 WITH KEY zindx = gw_data-zindx.
+     IF sy-subrc NE 0.
+       gt_ztcs003-qmnum = gw_data-qmnum.
+       gt_ztcs003-zindx = gw_data-zindx.
+       gt_ztcs003-fenum = '10'.
+       gt_ztcs003-fecod = gw_data-fecod.
+       SELECT SINGLE codegruppe INTO gt_ztcs003-fegrp FROM qpcd WHERE katalogart = 'C' AND code = gw_data-fecod."每个代码配置为唯一
+       SELECT SINGLE kurztext
+         INTO gt_ztcs003-txtcdfe
+         FROM qpct
+        WHERE katalogart = 'C'
+          AND codegruppe = gt_ztcs003-fegrp
+          AND code       = gw_data-fecod
+          AND sprache    = '1'.
+       APPEND gt_ztcs003.
+       CLEAR gt_ztcs003.
+     ELSE.
+       lv_index = sy-tabix.
+       IF gw_data-fecod NE gt_ztcs003-fecod.
+         gt_ztcs003-fecod = gw_data-fecod.
+         SELECT SINGLE codegruppe INTO gt_ztcs003-fegrp FROM qpcd WHERE katalogart = 'C' AND code = gw_data-fecod."每个代码配置为唯一
+         SELECT SINGLE kurztext
+           INTO gt_ztcs003-txtcdfe
+           FROM qpct
+          WHERE katalogart = 'C'
+            AND codegruppe = gt_ztcs003-fegrp
+            AND code       = gw_data-fecod
+            AND sprache    = '1'.
+         MODIFY gt_ztcs003 INDEX lv_index.
+         CLEAR gt_ztcs003.
+       ENDIF.
+     ENDIF.
+   ENDIF.
+
+   LOOP AT gt_ztcs003 WHERE txtcdfe IS INITIAL.
+     SELECT SINGLE kurztext
+           INTO gt_ztcs003-txtcdfe
+           FROM qpct
+          WHERE katalogart = 'C'
+            AND codegruppe = gt_ztcs003-fegrp
+            AND code       = gt_ztcs003-fecod
+            AND sprache    = '1'.
+     MODIFY gt_ztcs003.
+   ENDLOOP.
+   CALL SCREEN 0200 STARTING AT  5 5 ENDING AT 85 15.
+ ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DISPALY_YY_DETAIL_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+ FORM frm_dispaly_yy_detail_data .
+   DATA:lv_index LIKE sy-tabix.
+   REFRESH gt_ztcs004.
+   LOOP AT gt_ztcs004_total WHERE zindx = gw_data-zindx.
+     MOVE-CORRESPONDING gt_ztcs004_total TO gt_ztcs004.
+     APPEND gt_ztcs004.
+     CLEAR gt_ztcs004.
+   ENDLOOP.
+
+   IF gw_data-urcod IS NOT INITIAL.
+     READ TABLE gt_ztcs004 WITH KEY zindx = gw_data-zindx.
+     IF sy-subrc NE 0.
+       gt_ztcs004-qmnum = gw_data-qmnum.
+       gt_ztcs004-zindx = gw_data-zindx.
+       gt_ztcs004-fenum = '10'.
+       gt_ztcs004-urcod = gw_data-urcod.
+       SELECT SINGLE codegruppe INTO gt_ztcs004-urgrp FROM qpcd WHERE katalogart = '5' AND code = gw_data-urcod."每个代码配置为唯一
+       SELECT SINGLE kurztext
+         INTO gt_ztcs004-txtcdfe
+         FROM qpct
+        WHERE katalogart = '5'
+          AND codegruppe = gt_ztcs004-urgrp
+          AND code       = gw_data-urcod
+          AND sprache    = '1'.
+       APPEND gt_ztcs004.
+       CLEAR gt_ztcs004.
+     ELSE.
+       lv_index = sy-tabix.
+       IF gw_data-urcod NE gt_ztcs004-urcod.
+         gt_ztcs004-urcod = gw_data-urcod.
+         SELECT SINGLE codegruppe INTO gt_ztcs004-urgrp FROM qpcd WHERE katalogart = '5' AND code = gw_data-urcod."每个代码配置为唯一
+         SELECT SINGLE kurztext
+           INTO gt_ztcs004-txtcdfe
+           FROM qpct
+          WHERE katalogart = '5'
+            AND codegruppe = gt_ztcs004-urgrp
+            AND code       = gw_data-urcod
+            AND sprache    = '1'.
+         MODIFY gt_ztcs004 INDEX lv_index..
+         CLEAR gt_ztcs004.
+       ENDIF.
+     ENDIF.
+   ENDIF.
+
+   LOOP AT gt_ztcs004 WHERE txtcdfe IS INITIAL.
+     SELECT SINGLE kurztext
+          INTO gt_ztcs004-txtcdfe
+          FROM qpct
+         WHERE katalogart = '5'
+           AND codegruppe = gt_ztcs004-urgrp
+           AND code       = gt_ztcs004-urcod
+           AND sprache    = '1'.
+     MODIFY gt_ztcs004.
+   ENDLOOP.
+   CALL SCREEN 0300 STARTING AT  5 5 ENDING AT 85 15.
+ ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_ZWXZT_F4
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+ FORM frm_zwxzt_f4 USING u_line TYPE i.
+   DATA:lt_return_tab LIKE ddshretval OCCURS  0 WITH HEADER LINE.
+   DATA:ls_data LIKE LINE OF gt_data.
+   DATA:lv_display TYPE c.
+
+   REFRESH gt_zstat .
+
+   READ TABLE gt_data INTO ls_data INDEX u_line.
+   CHECK sy-subrc = 0 AND gt_data-zwczt IS INITIAL.
+   IF ls_data-lifnr IS INITIAL. "厂内维修
+     SELECT *
+      INTO CORRESPONDING FIELDS OF TABLE gt_zstat
+      FROM ztcs002
+      WHERE ztype = 'A'.
+   ELSE.                        "供应商维修
+     SELECT *
+       INTO CORRESPONDING FIELDS OF TABLE gt_zstat
+       FROM ztcs002
+       WHERE ztype = 'B'.
+   ENDIF.
+
+   IF ls_data-zwczt = 'X' OR ls_data-zthwx = 'X'.
+     lv_display = 'X'.
+   ENDIF.
+
+   SORT gt_zstat.
+
+   CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+     EXPORTING
+*      DDIC_STRUCTURE  = ' '
+       retfield        = 'ZSTAT'
+       pvalkey         = 'ZSTAT'
+       dynpprog        = sy-repid
+       dynpnr          = sy-dynnr
+       dynprofield     = 'ZWXZT'
+*      STEPL           = 0
+*      WINDOW_TITLE    =
+*      VALUE           = ' '
+       value_org       = 'S'
+*      MULTIPLE_CHOICE = ' '
+       display         = lv_display
+*      CALLBACK_PROGRAM       = ' '
+*      CALLBACK_FORM   = ' '
+*      CALLBACK_METHOD =
+*      MARK_TAB        =
+*   IMPORTING
+*      USER_RESET      =
+     TABLES
+       value_tab       = gt_zstat
+*      FIELD_TAB       =
+       return_tab      = lt_return_tab
+*      DYNPFLD_MAPPING =
+     EXCEPTIONS
+       parameter_error = 1
+       no_values_found = 2
+       OTHERS          = 3.
+   IF sy-subrc = 0.
+*     READ TABLE lt_return_tab INDEX 1.
+*     IF sy-subrc = 0.
+*       READ TABLE gt_zstat WITH KEY zstat = lt_return_tab-fieldval.
+*       IF sy-subrc = 0.
+*         ls_data-ztext = gt_zstat-ztext.
+*         MODIFY gt_data FROM ls_data INDEX u_line TRANSPORTING ztext.
+*       ENDIF.
+*     ENDIF.
+   ENDIF.
+
+ ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SET_FINISH_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+ FORM frm_set_finish_data .
+   READ TABLE gt_data WITH KEY check = 'X'.
+   IF sy-subrc NE 0.
+     MESSAGE '请先选择数据行' TYPE 'I'.
+   ENDIF.
+   LOOP AT gt_data WHERE check = 'X'.
+     gt_data-zwczt = 'X'.
+     MODIFY gt_data.
+   ENDLOOP.
+ ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_COMP_MATNR
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LS_MAST  text
+*      <--P_GT_DATA_ZWHWL1  text
+*----------------------------------------------------------------------*
+ FORM frm_get_comp_matnr  TABLES lt_stb STRUCTURE stpox
+                                  lt_stpu STRUCTURE stpu
+                          CHANGING c_zwhwl TYPE c
+                                   c_zwh  TYPE char20.
+   DATA:lv_idnrk LIKE stpo-idnrk.
+   DATA:lv_msg TYPE string.
+
+   CHECK c_zwhwl IS NOT INITIAL AND strlen( c_zwhwl ) BETWEEN '2' AND '3'.
+
+   c_zwh = c_zwhwl.
+
+   READ TABLE lt_stpu WITH KEY ebort = c_zwhwl.
+   IF sy-subrc NE 0.
+     CONCATENATE '位号' c_zwhwl '找不到对应的物料,请检查' INTO lv_msg.
+     MESSAGE lv_msg TYPE 'I'.
+   ELSE.
+     READ TABLE lt_stb WITH KEY stlty = lt_stpu-stlty stlnr = lt_stpu-stlnr
+                                stlkn = lt_stpu-stlkn stpoz = lt_stpu-stpoz.
+     IF sy-subrc = 0.
+       c_zwhwl = lt_stb-idnrk.
+       UNPACK c_zwhwl TO c_zwhwl.
+     ENDIF.
+   ENDIF.
+ ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_ZWXY_F4
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LV_LINE  text
+*----------------------------------------------------------------------*
+ FORM frm_zwxy_f4  USING  u_line TYPE i.
+   DATA:lt_return_tab LIKE ddshretval OCCURS  0 WITH HEADER LINE.
+   DATA:ls_data LIKE LINE OF gt_data.
+   DATA:lv_display TYPE c.
+
+   BREAK xul.
+   REFRESH gt_zwxy .
+
+   SELECT zcode zwxy INTO CORRESPONDING FIELDS OF TABLE gt_zwxy FROM ztcs005 .
+
+*   READ TABLE gt_data INTO ls_data INDEX u_line.
+*   CHECK sy-subrc = 0.
+
+   SORT gt_zstat.
+
+   CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+     EXPORTING
+*      DDIC_STRUCTURE  = ' '
+       retfield        = 'ZWXY'
+       pvalkey         = 'ZWXY'
+       dynpprog        = sy-repid
+       dynpnr          = sy-dynnr
+       dynprofield     = 'ZWXY'
+       value_org       = 'S'
+       display         = lv_display
+     TABLES
+       value_tab       = gt_zwxy
+       return_tab      = lt_return_tab
+     EXCEPTIONS
+       parameter_error = 1
+       no_values_found = 2
+       OTHERS          = 3.
+   IF sy-subrc = 0.
+
+   ENDIF.
+ ENDFORM.

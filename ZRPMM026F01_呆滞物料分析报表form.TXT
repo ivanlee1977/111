@@ -1,0 +1,343 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM026F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_INITIAL_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_initial_data .
+  s_budat = 'IBT'.
+  s_budat-high = sy-datum.
+  CALL FUNCTION 'BKK_ADD_MONTH_TO_DATE'
+    EXPORTING
+      months  = '-6'
+      olddate = sy-datum
+    IMPORTING
+      newdate = s_budat-low.
+  APPEND s_budat.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:BEGIN OF lt_mard OCCURS 0,
+         werks LIKE mard-werks,
+         matnr LIKE mard-matnr,
+         lgort LIKE mard-lgort,
+         labst LIKE mard-labst,
+         meins LIKE mara-meins,
+       END OF lt_mard.
+
+  DATA:BEGIN OF lt_t001l OCCURS 0,
+         werks LIKE t001l-werks,
+         lgort LIKE t001l-lgort,
+         lgobe LIKE t001l-lgobe,
+       END OF lt_t001l.
+
+  DATA:BEGIN OF lt_makt OCCURS 0,
+         matnr LIKE makt-matnr,
+         maktx LIKE makt-maktx,
+       END OF lt_makt.
+
+  DATA:BEGIN OF lt_mseg OCCURS 0,
+         mblnr      LIKE mseg-mblnr,
+         mjahr      LIKE mseg-mjahr,
+         zeile      LIKE mseg-zeile,
+         matnr      LIKE mseg-matnr,
+         werks      LIKE mseg-werks,
+         lgort      LIKE mseg-lgort,
+         bwart      LIKE mseg-bwart,
+         budat_mkpf LIKE mseg-budat_mkpf,
+       END OF lt_mseg.
+
+  FIELD-SYMBOLS:<fs_mard> LIKE LINE OF lt_mard.
+
+  DATA:lt_mseg_f LIKE lt_mseg OCCURS 0 WITH HEADER LINE,
+       lt_mseg_s LIKE lt_mseg OCCURS 0 WITH HEADER LINE.
+
+***抓取满足条件的数据
+  SELECT a~matnr
+         a~werks
+         a~lgort
+         a~labst
+         b~meins
+    INTO CORRESPONDING FIELDS OF TABLE lt_mard
+    FROM mard AS a
+    INNER JOIN mara AS b
+    ON a~matnr = b~matnr
+    WHERE a~werks = p_werks
+      AND a~matnr IN s_matnr
+      AND b~matkl IN s_matkl
+      AND b~spart IN s_spart
+      AND a~lgort IN s_lgort
+      AND a~labst > 0.
+
+  CHECK lt_mard[] IS NOT INITIAL.
+
+***抓取物料凭证数据
+  SELECT mblnr
+         mjahr
+         zeile
+         matnr
+         werks
+         lgort
+         bwart
+         budat_mkpf
+   INTO CORRESPONDING FIELDS OF TABLE lt_mseg
+   FROM mseg
+    FOR ALL ENTRIES IN lt_mard
+  WHERE matnr = lt_mard-matnr
+    AND werks = lt_mard-werks
+*    AND lgort = lt_mard-lgort
+    AND bwart IN ('101','102','201','202','Z01','Z02','261','262','541','543','Z41','Z43','601','602')
+    AND budat_mkpf IN s_budat.
+
+  SORT lt_mseg BY matnr werks lgort.
+  LOOP AT lt_mard.
+    READ TABLE lt_mseg WITH KEY matnr = lt_mard-matnr werks = lt_mard-werks BINARY SEARCH.
+    IF sy-subrc = 0.
+      DELETE lt_mard.
+    ENDIF.
+  ENDLOOP.
+
+  CHECK lt_mard[] IS NOT INITIAL.
+***库位描述
+  SELECT werks lgort lgobe
+    INTO CORRESPONDING FIELDS OF TABLE lt_t001l
+    FROM t001l
+    FOR ALL ENTRIES IN lt_mard
+    WHERE werks = lt_mard-werks
+      AND lgort = lt_mard-lgort.
+
+***物料描述
+  SELECT matnr maktx
+    INTO CORRESPONDING FIELDS OF TABLE lt_makt
+    FROM makt
+    FOR ALL ENTRIES IN lt_mard
+    WHERE matnr = lt_mard-matnr
+      AND spras = sy-langu.
+
+  APPEND LINES OF lt_mseg TO lt_mseg_s.
+  APPEND LINES OF lt_mseg TO lt_mseg_f.
+
+  DELETE lt_mseg_s WHERE bwart = '102' OR bwart = '102' OR bwart = '201' OR bwart = 'Z01' OR bwart = '261' OR bwart = '541' OR bwart = '543' OR bwart = 'Z41' OR bwart = '601'.
+  DELETE lt_mseg_f WHERE bwart = '101' OR bwart = '202' OR bwart = 'Z02' OR bwart = '262' OR bwart = '602'.
+  SORT lt_mseg_s BY matnr werks lgort budat_mkpf DESCENDING.
+  SORT lt_mseg_f BY matnr werks lgort budat_mkpf DESCENDING.
+  DELETE ADJACENT DUPLICATES FROM lt_mseg_s COMPARING  matnr werks lgort.
+  DELETE ADJACENT DUPLICATES FROM lt_mseg_f COMPARING  matnr werks lgort.
+
+  SORT lt_t001l BY werks lgort.
+  SORT lt_makt BY matnr.
+
+  SORT lt_mard BY werks matnr.
+  LOOP AT lt_mard ASSIGNING <fs_mard>.
+    MOVE-CORRESPONDING <fs_mard> TO gt_out.
+***库位描述
+    READ TABLE lt_t001l WITH KEY werks = gt_out-werks lgort = gt_out-lgort BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-lgobe = lt_t001l-lgobe.
+    ENDIF.
+***物料描述
+    READ TABLE lt_makt WITH KEY matnr = <fs_mard>-matnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-maktx = lt_makt-maktx.
+    ENDIF.
+***最后一次收的日期
+    READ TABLE lt_mseg_s WITH KEY matnr = <fs_mard>-matnr werks = <fs_mard>-werks lgort = <fs_mard>-lgort.
+    IF sy-subrc = 0.
+      gt_out-budat_s = lt_mseg_s-budat_mkpf.
+    ENDIF.
+***最后一次发的日期
+    READ TABLE lt_mseg_f WITH KEY matnr = <fs_mard>-matnr werks = <fs_mard>-werks lgort = <fs_mard>-lgort.
+    IF sy-subrc = 0.
+      gt_out-budat_f = lt_mseg_f-budat_mkpf.
+    ENDIF.
+***参考对应成品
+    AT NEW matnr.
+      CLEAR gw_cp_data.
+      PERFORM frm_get_cp_data USING <fs_mard>-matnr <fs_mard>-werks.
+    ENDAT.
+    MOVE-CORRESPONDING gw_cp_data TO gt_out.
+    APPEND gt_out.
+    CLEAR gt_out.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_CP_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_<FS_MARD>_MATNR  text
+*      -->P_<FS_MARD>_WERKS  text
+*----------------------------------------------------------------------*
+FORM frm_get_cp_data  USING   u_matnr LIKE mara-matnr
+                              u_werks LIKE marc-werks.
+  DATA: BEGIN OF alv_ltb OCCURS 0.
+      INCLUDE STRUCTURE stpov_alv.
+  DATA: info(3) TYPE c,
+        END OF alv_ltb.
+  DATA:BEGIN OF lt_mara OCCURS 0,
+         matnr LIKE mara-matnr,
+         mtart LIKE mara-mtart,
+         ersda LIKE mara-ersda,
+       END OF lt_mara.
+  DATA:BEGIN OF lt_lips OCCURS 0,
+         vbeln LIKE lips-vbeln,
+         posnr LIKE lips-posnr,
+         matnr LIKE lips-matnr,
+         vgbel LIKE lips-vgbel,
+         vgpos LIKE lips-vgpos,
+         erdat LIKE lips-erdat,
+       END OF lt_lips.
+
+  REFRESH:alv_ltb,lt_mara.
+  SUBMIT zrcs15001 WITH pm_idnrk = u_matnr
+                   WITH pm_werks = u_werks
+                   WITH pm_stlan = '1'
+                   WITH pm_dirkt = 'X'
+                   WITH pm_mehrs = 'X'
+                   WITH pm_mattp = 'X' AND RETURN.
+  IMPORT alv_ltb = alv_ltb FROM MEMORY ID 'ZRCS15001'.
+  FREE MEMORY ID 'ZRCS15001'.
+  IF alv_ltb[] IS NOT INITIAL.
+    SELECT matnr mtart ersda
+      INTO CORRESPONDING FIELDS OF TABLE lt_mara
+      FROM mara
+      FOR ALL ENTRIES IN alv_ltb
+      WHERE matnr = alv_ltb-matnr
+        AND mtart = 'Z003'.
+    SORT lt_mara BY ersda DESCENDING.
+    READ TABLE lt_mara INDEX 1.
+    IF sy-subrc = 0.
+      gw_cp_data-zcpwl = lt_mara-matnr.
+    ENDIF.
+  ENDIF.
+
+  CHECK gw_cp_data-zcpwl IS NOT INITIAL.
+
+*  取成品物料描述
+  SELECT SINGLE maktx INTO gw_cp_data-maktx_c FROM makt
+    WHERE matnr = gw_cp_data-zcpwl
+      AND spras = sy-langu.
+
+  SELECT vbeln
+         posnr
+         matnr
+         vgbel
+         vgpos
+         erdat
+    INTO CORRESPONDING FIELDS OF TABLE lt_lips
+    FROM lips
+    WHERE matnr = gw_cp_data-zcpwl.
+  SORT lt_lips BY erdat DESCENDING.
+  READ TABLE lt_lips INDEX 1.
+  IF sy-subrc = 0.
+    SELECT SINGLE kunnr kvgr1
+      INTO (gw_cp_data-kunnr,gw_cp_data-kvgr1)
+      FROM vbak
+      WHERE vbeln = lt_lips-vgbel.
+    SELECT SINGLE name1 INTO gw_cp_data-name1 FROM kna1 WHERE kunnr = gw_cp_data-kunnr.
+    SELECT SINGLE bezei INTO gw_cp_data-bezei FROM tvv1t WHERE spras = sy-langu AND kvgr1 = gw_cp_data-kvgr1.
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  mcr_build_fieldcat:'WERKS'     '工厂'               'WERKS'    'MARD',
+                     'LGORT'     '库位'               'LGORT'    'MARD',
+                     'LGOBE'     '库位描述'           'LGOBE'    'T001L',
+                     'MATNR'     '物料号码'           'MATNR'    'MARD',
+                     'MAKTX'     '物料描述'           'MAKTX'    'MAKT',
+                     'LABST'     '库存'               'LABST'    'MARD',
+                     'MEINS'     '单位'               'MEINS'    'MARA',
+                     'ZCPWL'     '成品物料'           'MATNR'    'MARA',
+                     'MAKTX_C'   '成品物料描述'       'MAKTX'    'MAKT',
+                     'BUDAT_S'   '最后一次收货日期'   'BUDAT'    'MKPF',
+                     'BUDAT_F'   '最后一次发货日期'   'BUDAT'    'MKPF',
+                     'KUNNR'     '客户号码'           'KUNNR'    'KNA1',
+                     'NAME1'     '客户名称'           'NAME1'    'KNA1',
+                     'KVGR1'     '业务员代码'         'KVGR1'    'VBAK',
+                     'BEZEI'     '业务员名称'         'BEZEI'    'TVV1T'.
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK  = ' '
+*     I_BYPASSING_BUFFER =
+*     I_BUFFER_ACTIVE    =
+      i_callback_program = sy-repid
+*     I_CALLBACK_PF_STATUS_SET          = ' '
+*     I_CALLBACK_USER_COMMAND           = ' '
+*     I_CALLBACK_TOP_OF_PAGE            = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME   =
+*     I_BACKGROUND_ID    = ' '
+*     I_GRID_TITLE       =
+*     I_GRID_SETTINGS    =
+      is_layout_lvc      = gs_layout
+      it_fieldcat_lvc    = gt_fcat[]
+*     IT_EXCLUDING       =
+*     IT_SPECIAL_GROUPS_LVC             =
+*     IT_SORT_LVC        =
+*     IT_FILTER_LVC      =
+*     IT_HYPERLINK       =
+*     IS_SEL_HIDE        =
+      i_default          = 'X'
+      i_save             = 'A'
+*     IS_VARIANT         =
+*     IT_EVENTS          =
+*     IT_EVENT_EXIT      =
+*     IS_PRINT_LVC       =
+*     IS_REPREP_ID_LVC   =
+*     I_SCREEN_START_COLUMN             = 0
+*     I_SCREEN_START_LINE               = 0
+*     I_SCREEN_END_COLUMN               = 0
+*     I_SCREEN_END_LINE  = 0
+*     I_HTML_HEIGHT_TOP  =
+*     I_HTML_HEIGHT_END  =
+*     IT_ALV_GRAPHICS    =
+*     IT_EXCEPT_QINFO_LVC               =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER           =
+*     ES_EXIT_CAUSED_BY_USER            =
+    TABLES
+      t_outtab           = gt_out[]
+    EXCEPTIONS
+      program_error      = 1
+      OTHERS             = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.

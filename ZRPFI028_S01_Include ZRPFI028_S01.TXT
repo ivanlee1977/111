@@ -1,0 +1,23 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI028_S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK b0 WITH FRAME TITLE TEXT-003.
+PARAMETERS: p_r0 RADIOBUTTON GROUP r0 DEFAULT 'X',
+            p_r1 RADIOBUTTON GROUP r0.
+SELECTION-SCREEN END OF BLOCK b0.
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+PARAMETERS:     p_bukrs LIKE t001-bukrs OBLIGATORY DEFAULT '1000'.
+SELECT-OPTIONS: s_prctr FOR bsid-prctr,"利润中心
+                s_kunnr FOR bsid-kunnr,"客户编码
+                s_hkont FOR bsid-hkont OBLIGATORY,"总账科目
+                s_kkber FOR bsid-kkber OBLIGATORY."信用控制范围
+PARAMETERS:     p_budat LIKE bsid-budat OBLIGATORY."报表日期
+SELECTION-SCREEN END OF BLOCK b1.
+
+SELECTION-SCREEN BEGIN OF BLOCK b3 WITH FRAME TITLE TEXT-002.
+SELECT-OPTIONS:s_bzirk FOR knvv-bzirk,"销售大区
+               s_vkbur FOR knvv-vkbur,"销售办事处
+               s_kvgr1 FOR knvv-kvgr1,"业务员
+               s_kvgr2 FOR knvv-kvgr2."商务
+SELECTION-SCREEN END OF BLOCK b3.

@@ -1,0 +1,357 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM036F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:lt_makt LIKE makt OCCURS 0 WITH HEADER LINE.
+  DATA:BEGIN OF lt_mard OCCURS 0,
+         matnr LIKE mard-matnr,
+         werks LIKE mard-werks,
+         lgort LIKE mard-lgort,
+         labst LIKE mard-labst,
+       END OF lt_mard.
+
+***抓取满足条件的数据
+  SELECT a~aufnr
+         b~rsnum
+         b~rspos
+         b~rsart  "20180207 add
+         b~matnr
+         b~charg
+         b~werks
+         b~lgort
+         b~enmng AS menge_t
+         b~meins
+    INTO CORRESPONDING FIELDS OF TABLE gt_out
+    FROM afko AS a
+    INNER JOIN resb AS b
+    ON a~rsnum = b~rsnum
+    WHERE a~aufnr = p_aufnr
+      AND b~enmng > 0.
+
+  CHECK gt_out[] IS NOT INITIAL.
+
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_makt FROM makt FOR ALL ENTRIES IN gt_out WHERE matnr = gt_out-matnr AND spras = sy-langu.
+
+***抓取库存信息
+  SELECT matnr werks lgort labst
+    INTO CORRESPONDING FIELDS OF TABLE lt_mard
+    FROM mard
+    FOR ALL ENTRIES IN gt_out
+    WHERE matnr = gt_out-matnr
+      AND werks = gt_out-werks.
+
+  SORT lt_makt BY matnr.
+
+  LOOP AT gt_out.
+    READ TABLE lt_makt WITH KEY matnr = gt_out-matnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-maktx = lt_makt-maktx.
+    ENDIF.
+    LOOP AT lt_mard WHERE matnr = gt_out-matnr AND werks = gt_out-werks.
+      gt_out-labst = gt_out-labst + lt_mard-labst.
+    ENDLOOP.
+    MODIFY gt_out.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  mcr_build_fieldcat:'CHECK'   '选择'           ''       ''       'C'    '1'   '4'   'X',
+                     'AUFNR'   '生产订单号'     'AUFNR'  'AFKO'    ''    ''    '8'   '',
+                     'RSNUM'   '预留号码'       'RSNUM'  'RESB'    ''    ''    '6'   '',
+                     'RSPOS'   '预留项次'       'RSPOS'  'RESB'    ''    ''    '4'   '',
+                     'RSART'   '预留记录类型'       'RSART'  'RESB'    ''    ''    '4'   '',
+                     'MATNR'   '物料号码'       'MATNR'  'RESB'    ''    ''    '8'   '',
+                     'MAKTX'   '物料描述'       'MAKTX'  'MAKT'    ''    ''    '20'   '',
+                     'CHARG'   '批次'           'CHARG'  'RESB'    ''    ''    '10'   '',
+                     'LGORT'   '退料库位'       'LGORT'  'T001L'    ''    ''    '4'   'X',
+                     'MENGE_T' '申请数量'       'MENGE_T'  'ZTMM008'    ''    ''    '8'   'X',
+*                    'LGORT_F' '补料库位'       'LGORT'  'T001L'    ''    ''    '4'   'X',
+*                    'MENGE_F' '补料数量'       'MENGE_F'  'ZTMM008'    ''    ''    '8'   'X',
+                     'MEINS'   '单位'           'MEINS'  'RESB'    ''    ''    '4'   '',
+                     'LABST'   '非限制库存数'   'LABST'  'MARD'    ''    ''    '12'   '',
+                     'ZTEXT'   '文本'           'ZTEXT'  'ZTMM008'    ''    ''    '30'   'X'.
+
+  gs_layout-no_toolbar = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK        = ' '
+*     I_BYPASSING_BUFFER       =
+*     I_BUFFER_ACTIVE          =
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'FRM_PF_STATUS'
+      i_callback_user_command  = 'FRM_USER_COMMAND'
+*     I_CALLBACK_TOP_OF_PAGE   = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME         =
+*     I_BACKGROUND_ID          = ' '
+*     I_GRID_TITLE             =
+*     I_GRID_SETTINGS          =
+      is_layout_lvc            = gs_layout
+      it_fieldcat_lvc          = gt_fcat[]
+*     IT_EXCLUDING             =
+*     IT_SPECIAL_GROUPS_LVC    =
+*     IT_SORT_LVC              =
+*     IT_FILTER_LVC            =
+*     IT_HYPERLINK             =
+*     IS_SEL_HIDE              =
+      i_default                = 'X'
+      i_save                   = 'A'
+*     IS_VARIANT               =
+*     IT_EVENTS                =
+*     IT_EVENT_EXIT            =
+*     IS_PRINT_LVC             =
+*     IS_REPREP_ID_LVC         =
+*     I_SCREEN_START_COLUMN    = 0
+*     I_SCREEN_START_LINE      = 0
+*     I_SCREEN_END_COLUMN      = 0
+*     I_SCREEN_END_LINE        = 0
+*     I_HTML_HEIGHT_TOP        =
+*     I_HTML_HEIGHT_END        =
+*     IT_ALV_GRAPHICS          =
+*     IT_EXCEPT_QINFO_LVC      =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER  =
+*     ES_EXIT_CAUSED_BY_USER   =
+    TABLES
+      t_outtab                 = gt_out[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.
+
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PF_STATUS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_pf_status USING rt_extab TYPE slis_t_extab.
+  IF gv_flag IS INITIAL.
+    SET PF-STATUS 'PF_1000'.
+  ELSE.
+    APPEND 'ZALL' TO rt_extab.
+    APPEND 'ZDALL' TO rt_extab.
+    APPEND 'ZCREATE' TO rt_extab.
+    SET PF-STATUS 'PF_1000' EXCLUDING rt_extab.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_USER_COMMAND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_user_command USING r_ucomm LIKE sy-ucomm
+                            rs_selfield TYPE slis_selfield..
+  DATA:lv_grid TYPE REF TO cl_gui_alv_grid.
+
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = lv_grid.
+
+  CALL METHOD lv_grid->check_changed_data( ).
+
+  CASE r_ucomm.
+    WHEN 'ZALL'.  "全选
+      PERFORM frm_select_all_data USING 'X'.
+    WHEN 'ZDALL'. "取消全选
+      PERFORM frm_select_all_data USING space.
+    WHEN 'ZCREATE'."生成申请单
+      PERFORM frm_generate_sqd.
+      PERFORM frm_refresh_display USING lv_grid.
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SELECT_ALL_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0376   text
+*----------------------------------------------------------------------*
+FORM frm_select_all_data  USING  u_flag TYPE c.
+  LOOP AT gt_out WHERE check NE u_flag.
+    gt_out-check = u_flag.
+    MODIFY gt_out.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GENERATE_SQD
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_generate_sqd .
+  DATA:lv_zsqno LIKE ztmm008-zsqno.
+  DATA:lt_data LIKE ztmm008 OCCURS 0 WITH HEADER LINE.
+  DATA:lv_msg TYPE string.
+
+  READ TABLE gt_out WITH KEY check = 'X'.
+  IF sy-subrc NE 0.
+    MESSAGE '请至少选择一行数据' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  IF gv_flag IS NOT INITIAL.
+    MESSAGE '你已经生成申请单，不能重复生成' TYPE 'E'.
+  ENDIF.
+
+  LOOP AT gt_out WHERE  check = 'X'.
+    IF gt_out-menge_t EQ 0.
+      MESSAGE '申请数量不能为0，请检查' TYPE 'E'.
+    ENDIF.
+    IF gt_out-lgort IS INITIAL.
+      MESSAGE '退料库位不能为空，请检查' TYPE 'E'.
+    ENDIF.
+*    IF gt_out-lgort_f IS INITIAL.
+*      MESSAGE '补料库位不能为空，请检查' TYPE 'E'.
+*    ENDIF.
+*    IF gt_out-menge_f EQ 0.
+*      MESSAGE '补料数量不能为0，请检查' TYPE 'E'.
+*    ENDIF.
+  ENDLOOP.
+
+***获取流水号
+  PERFORM frm_get_sqh CHANGING lv_zsqno.
+
+  LOOP AT gt_out WHERE check = 'X'.
+    MOVE-CORRESPONDING gt_out TO lt_data.
+    lt_data-menge_f = lt_data-menge_t. "发料数量默认等于退料数量
+    lt_data-lgort_f = '1010'.
+    lt_data-zstat = '1'.  "已创建
+    lt_data-zsqno = lv_zsqno.
+    lt_data-erdat = sy-datum.
+    lt_data-ernam = sy-uname.
+    APPEND lt_data.
+    CLEAR lt_data.
+  ENDLOOP.
+
+  IF lt_data[] IS NOT INITIAL.
+    MODIFY ztmm008 FROM TABLE lt_data.
+    IF sy-subrc = 0.
+      COMMIT WORK AND WAIT.
+      CONCATENATE '生成申请单成功，单号:' lv_zsqno INTO lv_msg.
+      MESSAGE lv_msg TYPE 'S'.
+      gv_flag = 'X'.
+    ELSE.
+      ROLLBACK WORK.
+      MESSAGE '生成申请单失败' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_SQH
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      <--P_LV_ZSQNO  text
+*----------------------------------------------------------------------*
+FORM frm_get_sqh  CHANGING c_zsqno LIKE ztmm008-zsqno.
+
+  CLEAR: c_zsqno.
+
+  CALL FUNCTION 'NUMBER_RANGE_ENQUEUE'
+    EXPORTING
+      object           = 'ZSQNO'
+    EXCEPTIONS
+      foreign_lock     = 1
+      object_not_found = 2
+      system_failure   = 3
+      OTHERS           = 4.
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+
+  CALL FUNCTION 'NUMBER_GET_NEXT'
+    EXPORTING
+      nr_range_nr             = '01'
+      object                  = 'ZSQNO'
+    IMPORTING
+      number                  = c_zsqno
+*     QUANTITY                =
+*     RETURNCODE              =
+    EXCEPTIONS
+      interval_not_found      = 1
+      number_range_not_intern = 2
+      object_not_found        = 3
+      quantity_is_0           = 4
+      quantity_is_not_1       = 5
+      interval_overflow       = 6
+      buffer_overflow         = 7
+      OTHERS                  = 8.
+  IF sy-subrc NE 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+
+  CALL FUNCTION 'NUMBER_RANGE_DEQUEUE'
+    EXPORTING
+      object           = 'ZSQNO'
+    EXCEPTIONS
+      object_not_found = 1
+      OTHERS           = 2.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_REFRESH_DISPLAY
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LV_GRID  text
+*----------------------------------------------------------------------*
+FORM frm_refresh_display  USING u_grid TYPE REF TO cl_gui_alv_grid.
+  CHECK gv_flag EQ 'X'.
+  LOOP AT gt_fcat WHERE edit = 'X'.
+    gt_fcat-edit = space.
+    MODIFY gt_fcat.
+  ENDLOOP.
+
+  CALL METHOD u_grid->set_frontend_fieldcatalog
+    EXPORTING
+      it_fieldcatalog = gt_fcat[].
+
+  CALL METHOD u_grid->set_frontend_layout
+    EXPORTING
+      is_layout = gs_layout.
+ENDFORM.

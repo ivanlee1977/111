@@ -1,0 +1,760 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM029_F01
+*&---------------------------------------------------------------------*
+
+FORM get_data.
+
+  SELECT b~lifnr
+         b~ebeln
+         a~ebelp
+         b~aedat
+         a~menge
+         b~adrnr
+         a~matnr
+    INTO CORRESPONDING FIELDS OF TABLE gt_item
+    FROM ekpo AS a JOIN ekko AS b ON a~ebeln = b~ebeln
+    WHERE a~ebeln  IN s_ebeln
+    AND  b~lifnr   EQ  p_lifnr
+    AND b~aedat  IN s_aedat
+    AND a~loekz NE 'L'
+    AND b~frgke EQ 'R'.
+
+
+
+ENDFORM.
+
+FORM process_data.
+  DATA: lt_lfa1 LIKE  lfa1 OCCURS 0 WITH HEADER LINE.
+  DATA: lt_adrc  LIKE adrc OCCURS 0 WITH HEADER LINE .
+  DATA: lt_ztmm005 LIKE ztmm005 OCCURS 0 WITH HEADER LINE.
+  DATA: lt_ztmm004 LIKE ztmm004 OCCURS 0 WITH HEADER LINE.
+  DATA:BEGIN OF  lt_matnr OCCURS 0 ,
+         zxh   TYPE ztsd003cpys-zxh,
+         zdesc TYPE ztsd003cpys-zdesc,
+         zzwpm TYPE ztsd003cpys-zzwpm, "中文品名
+         ntgew TYPE mara-ntgew,
+         brgew TYPE mara-brgew,
+         matnr TYPE mara-matnr,
+       END OF lt_matnr.
+
+
+  IF gt_item[] IS NOT INITIAL.
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_lfa1
+     FROM lfa1
+      FOR ALL ENTRIES IN gt_item
+      WHERE lifnr EQ gt_item-lifnr
+      AND  spras EQ sy-langu.
+
+    SELECT zxh  zdesc zzwpm zjz AS ntgew  matnr
+     FROM ztsd003cpys
+     INTO CORRESPONDING FIELDS OF TABLE lt_matnr
+    FOR ALL ENTRIES IN gt_item
+      WHERE matnr EQ gt_item-matnr.
+
+
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_ztmm005
+      FROM ztmm005
+      FOR ALL ENTRIES IN gt_item
+    WHERE ebeln EQ gt_item-ebeln
+      AND zflag EQ space.
+
+
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_adrc
+     FROM adrc
+     FOR ALL ENTRIES IN gt_item
+      WHERE addrnumber = gt_item-adrnr.
+
+  ENDIF.
+
+
+  IF lt_ztmm005[] IS NOT INITIAL .
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_ztmm004
+          FROM ztmm004
+          FOR ALL ENTRIES IN lt_ztmm005
+        WHERE zxhm EQ lt_ztmm005-zxhm.
+  ENDIF.
+
+  IF  lt_lfa1[] IS NOT INITIAL .
+    SELECT * APPENDING CORRESPONDING FIELDS OF TABLE lt_adrc
+       FROM adrc
+        FOR ALL ENTRIES IN lt_lfa1
+        WHERE addrnumber EQ lt_lfa1-adrnr.
+  ENDIF.
+
+  LOOP AT gt_item INTO gw_item.
+*----------供应商描述-LFA1-NAME1---------*
+    READ TABLE lt_lfa1 WITH  KEY lifnr = gw_item-lifnr.
+    IF sy-subrc EQ 0.
+      gw_item-name1 = lt_lfa1-name1.
+      gw_item-telf1 = lt_lfa1-telf1.
+      gw_item-land1 = lt_lfa1-land1.
+    ENDIF.
+*-------装箱号码-ZTMM005-ZXHM------------*
+    READ TABLE lt_ztmm005 WITH KEY  ebeln = gw_item-ebeln.
+    IF sy-subrc EQ 0.
+      gw_item-zxhm = lt_ztmm005-zxhm .
+    ENDIF.
+*------型号、品名、数量、净重、毛重------*
+    READ TABLE lt_matnr WITH KEY  matnr =  gw_item-matnr.
+    IF sy-subrc EQ 0.
+      gw_item-zxh       = lt_matnr-zxh   .
+      gw_item-zdesc     = lt_matnr-zdesc .
+      gw_item-zzwpm     = lt_matnr-zzwpm .
+      gw_item-ntgew     = lt_matnr-ntgew.
+*      gw_item-brgew     = lt_matnr-brgew . 取输入的毛重
+      CONCATENATE gw_item-zdesc gw_item-zzwpm INTO gw_item-ztext.
+    ENDIF.
+*--------供应商地址----------------------*
+    READ TABLE lt_adrc WITH KEY addrnumber = gw_item-adrnr.
+    IF sy-subrc EQ 0.
+      gw_item-street = lt_adrc-street.
+    ELSE.
+      READ TABLE lt_lfa1 WITH KEY  lifnr = gw_item-lifnr.
+      IF sy-subrc EQ 0.
+        READ TABLE lt_adrc WITH KEY addrnumber = lt_lfa1-adrnr.
+        IF sy-subrc EQ 0.
+          gw_item-street = lt_adrc-street.
+        ENDIF.
+      ENDIF.
+
+      READ TABLE lt_ztmm004 WITH KEY zxhm = gw_item-zxhm.
+      IF sy-subrc EQ 0.
+        gw_item-zmenge = lt_ztmm004-menge.
+        gw_item-zbz    = lt_ztmm004-zbz.
+        gw_item-brgew  = lt_ztmm004-brgew.
+      ENDIF.
+    ENDIF.
+
+    MODIFY gt_item FROM gw_item.
+  ENDLOOP.
+
+  CLEAR: lt_lfa1[],lt_ztmm005[].
+
+  SORT gt_item BY lifnr ebeln.
+
+  APPEND LINES OF gt_item TO gt_item_total.
+***ADD BY PFT 20171108
+* 删除重复项
+  DELETE ADJACENT DUPLICATES FROM gt_item COMPARING lifnr ebeln.
+***END BY PFT 20171108
+ENDFORM.
+
+FORM get_alv.
+
+
+  DATA : col_pos TYPE i VALUE 1.
+
+  CLEAR:it_fieldcat,wa_fieldcat.
+
+  gs_layout-zebra = 'X'.
+  gs_layout-cwidth_opt = 'X'."
+  gs_layout-stylefname = 'FIELD_STYLE'. " 将内表中的字段名存入显示格式
+  gs_layout-box_fname        = 'SEL'. "选择列
+  i_grid_settings-edt_cll_cb = 'X'.
+*  wa_events-name = 'CALLER_EXIT'.
+*  wa_events-form = 'CALLER_EXIT'.
+*  APPEND wa_events TO it_events.
+
+  PERFORM fieldcat_int USING col_pos  'LIFNR'   ' '   '供应商代码'  ''  'LIFNR' 'LFA1' '' ''.
+  PERFORM fieldcat_int USING col_pos  'NAME1'   ' '   '供应商描述'   ''  'NAME1' 'LFA1' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'EBELN'   ' '   '采购订单'   ''  'EBELN' 'EKKO' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'ZXHM'   ' '   '装箱单号'   ''  '' '' ''   ''.
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program       = sy-repid
+      is_layout_lvc            = gs_layout
+      it_fieldcat_lvc          = it_fieldcat
+      it_events                = it_events
+      i_save                   = 'A'
+      i_callback_pf_status_set = 'SET_PF_STATUS'
+      i_callback_user_command  = 'ALV_USER_COMMAND'
+      i_grid_settings          = i_grid_settings
+    TABLES
+      t_outtab                 = gt_item[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+
+  IF sy-subrc <> 0.
+* MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+*         WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+  ENDIF.
+
+
+
+ENDFORM.
+
+
+FORM set_pf_status USING rt_extab TYPE slis_t_extab.
+
+  DATA: wa_extab TYPE slis_extab.
+
+  SET PF-STATUS 'ZSTANDARD' EXCLUDING rt_extab.
+
+ENDFORM.                    "set_pf_status1
+
+FORM alv_user_command USING r_ucomm LIKE sy-ucomm  rs_selfield TYPE slis_selfield.
+*   获取ALV中的鼠标勾选记录
+  DATA: l_grid TYPE REF TO cl_gui_alv_grid.
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = l_grid.
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  r_ucomm = sy-ucomm.
+  save_ok =  r_ucomm .
+  CASE r_ucomm.
+      "打印
+    WHEN 'C_PRINT'.
+      PERFORM output_report."导出EXCEL  下面写FORM ENDFORM
+    WHEN 'C_ZXDH'.
+      PERFORM zxdh_report."生成装箱单号  下面写FORM ENDFORM
+    WHEN 'C_QXSC'.
+      PERFORM zxdh_delete."删除装箱单号
+  ENDCASE.
+
+
+ENDFORM.                    "alv_user_command
+
+FORM fieldcat_int  USING   p_col_pos         " 1
+                           p_fieldname       " 2
+                           p_key             " 3
+                           p_seltext_l       " 4
+                           p_zero
+                           p_filename
+                           p_talbename
+                           p_outputlen
+                           p_edit .
+
+
+  wa_fieldcat-col_pos       = p_col_pos.
+  wa_fieldcat-fieldname     = p_fieldname.
+  wa_fieldcat-key           = p_key.
+  wa_fieldcat-coltext     = p_seltext_l.
+  wa_fieldcat-no_zero        = p_zero.
+  wa_fieldcat-ref_field   = p_filename.
+  wa_fieldcat-ref_table    = p_talbename.
+  wa_fieldcat-tipddictxt       = 'L'.
+  wa_fieldcat-edit           = p_edit  .
+  APPEND wa_fieldcat TO it_fieldcat.
+  p_col_pos = p_col_pos + 1.
+  CLEAR: wa_fieldcat.
+ENDFORM.                    " FIELDCAT_INT
+
+FORM zxdh_report.
+  CLEAR: lv_zxhm,lv_menge,lv_zbz,lv_brgew.
+  CLEAR gt_check[].
+  LOOP AT gt_item INTO gw_item WHERE sel EQ 'X'.
+    MOVE-CORRESPONDING gw_item TO gw_check.
+    IF gw_item-zxhm IS NOT INITIAL.
+      MESSAGE '不能勾选已生成装箱单号的采购凭证！' TYPE 'E'.
+    ENDIF.
+
+    APPEND gw_check TO gt_check.
+  ENDLOOP.
+
+  "填写装箱信息屏幕 9001
+  CALL SCREEN 9001.
+ENDFORM.
+
+
+FORM zxsb_report CHANGING lv_zxhm."生成装箱单号 (自动生成 不可输入)
+  DATA:nextnum TYPE i.
+  CALL FUNCTION 'NUMBER_RANGE_ENQUEUE'
+    EXPORTING
+      object           = 'ZMM029'
+    EXCEPTIONS
+      foreign_lock     = 1
+      object_not_found = 2
+      system_failure   = 3
+      OTHERS           = 4.
+  IF sy-subrc = 0.
+    CALL FUNCTION 'NUMBER_GET_NEXT'
+      EXPORTING
+        nr_range_nr             = '01'
+        object                  = 'ZMM029'
+*       QUANTITY                = '1'
+*       SUBOBJECT               = ' '
+*       TOYEAR                  = '0000'
+*       IGNORE_BUFFER           = ' '
+      IMPORTING
+        number                  = nextnum
+*       QUANTITY                =
+*       RETURNCODE              =
+      EXCEPTIONS
+        interval_not_found      = 1
+        number_range_not_intern = 2
+        object_not_found        = 3
+        quantity_is_0           = 4
+        quantity_is_not_1       = 5
+        interval_overflow       = 6
+        buffer_overflow         = 7
+        OTHERS                  = 8.
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+      WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ELSE.
+      lv_zxhm = nextnum .
+      CALL FUNCTION 'NUMBER_RANGE_DEQUEUE'
+        EXPORTING
+          object           = 'ZMM0029'
+        EXCEPTIONS
+          object_not_found = 1
+          OTHERS           = 2.
+      IF sy-subrc <> 0.
+* Implement suitable error handling here
+      ENDIF.
+
+    ENDIF.
+  ENDIF.
+
+
+ENDFORM.
+FORM output_report.
+********数据定义*******
+  DATA:lv_file   TYPE string,
+       lv_result TYPE c. "标识: 空表示文件不存在;否则,表示存在
+  DATA lv_answer TYPE c.
+  DATA:li_lines TYPE i.
+  DATA:ls_key   TYPE wwwdatatab,
+       lv_subrc TYPE sy-subrc.
+  DATA lv_file1 LIKE rlgrap-filename.
+
+  DATA:lv_sortl LIKE lfa1-sortl.
+
+  SELECT SINGLE sortl INTO lv_sortl FROM lfa1 WHERE lifnr = p_lifnr.
+  CONCATENATE 'C:\MM\' lv_sortl  '_装箱单_'  sy-datum  '_' sy-uzeit '.xlsx' INTO lv_file.
+
+*******初始化*******
+*******程序主体******* 选择保存文件路径
+*  CALL METHOD cl_gui_frontend_services=>directory_browse
+*    EXPORTING
+*      window_title    = '请选择你要存放文件的路径'
+*      initial_folder  = 'D:'
+*    CHANGING
+*      selected_folder = lv_file.
+
+*  CONCATENATE lv_file '\' sy-title  sy-datum '.xls' INTO lv_file.
+
+
+  CALL METHOD cl_gui_frontend_services=>file_exist
+    EXPORTING
+      file                 = lv_file
+    RECEIVING
+      result               = lv_result
+    EXCEPTIONS
+      cntl_error           = 1
+      error_no_gui         = 2
+      wrong_parameter      = 3
+      not_supported_by_gui = 4
+      OTHERS               = 5.
+  IF lv_result IS NOT  INITIAL. "文件已经存在
+    CALL FUNCTION 'POPUP_TO_CONFIRM'
+      EXPORTING
+        titlebar              = '请确认'
+        text_question         = '文件已经存在，是否要覆盖?'
+        text_button_1         = '是'
+        text_button_2         = '否'
+        default_button        = '2' "缺省选中按钮: 1 是; 2 否
+        display_cancel_button = ''  "标识: 为空,不显示 取消按钮
+      IMPORTING
+        answer                = lv_answer "标识： 1 是;
+      EXCEPTIONS
+        text_not_found        = 1
+        OTHERS                = 2.
+    IF lv_answer NE '1'.
+      EXIT.
+    ENDIF.
+  ENDIF.
+
+  ls_key-relid = 'MI'.
+  ls_key-objid = gcst_excel_template.
+  lv_file1 = lv_file.
+  CALL FUNCTION 'DOWNLOAD_WEB_OBJECT'
+    EXPORTING
+      key         = ls_key
+      destination = lv_file1
+    IMPORTING
+      rc          = lv_subrc.
+  IF lv_subrc <> 0.
+    MESSAGE '下载模板出错，请检查，谢谢' TYPE 'E'.
+    EXIT.
+  ENDIF.
+
+***填充EXCEL数据
+  PERFORM frm_filldata_excel USING lv_file.
+
+ENDFORM.
+
+FORM frm_filldata_excel  USING  iv_file TYPE string.
+  DATA:BEGIN OF it_main OCCURS 0,
+         matnr LIKE ekpo-matnr,
+         menge LIKE ekpo-menge,
+       END OF it_main.
+
+  DATA:l_menge TYPE ekpo-menge, "  数量
+       l_ntgew TYPE mara-ntgew. " 净重
+
+  DATA lv_value TYPE char200.
+  DATA:
+       sheet_name(200) TYPE c. "EXCEL SHEET NAME
+  DATA:lv_line TYPE i.
+
+  DATA: l_row  TYPE i,
+        l_no   TYPE i,
+        l_num  TYPE i,
+        l_xlh  TYPE i,
+        l_row1 TYPE i,
+        l_row2 TYPE i.
+
+  DATA lv_row TYPE i.
+  DATA lv_col TYPE i.
+  DATA:
+    row_c   TYPE char4,
+    row_1   TYPE i,
+    row_c_2 TYPE char4,
+    row_2   TYPE i,
+    cell    TYPE char9.
+
+  DATA:lv_str TYPE string.
+
+  DATA:lv_lines TYPE i.
+  DATA:lv_zbz LIKE ztmm004-zbz.
+
+  DEFINE mac_fill_cell.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+      EXPORTING
+        #1 = &1
+        #2 = &2.
+    SET PROPERTY OF lo_cell 'VALUE' = &3.
+  END-OF-DEFINITION.
+
+  DEFINE mac_mer_cell.
+    CALL METHOD OF
+      lo_sheet
+      'RANGE' = lo_cell
+      EXPORTING
+      #1 = &1.
+    CALL METHOD OF
+      lo_cell
+      'MERGE'.
+    FREE OBJECT lo_cell.
+
+  END-OF-DEFINITION.               "mergerange
+
+  DEFINE mac_bord_cell.
+    CALL METHOD OF
+      lo_sheet"lo_workbook
+      'RANGE' = lo_cell
+      EXPORTING
+      #1 = &1.
+    DO 4 TIMES .
+      CALL METHOD OF
+        lo_cell
+        'BORDERS' = borders_obj
+        EXPORTING
+        #1 = sy-index.
+      SET PROPERTY OF borders_obj 'LineStyle' = '1'.
+      SET PROPERTY OF borders_obj 'WEIGHT' = '2'.
+      SET PROPERTY OF borders_obj 'ColorIndex' = '1'.
+      FREE OBJECT borders_obj.
+    ENDDO.
+    FREE OBJECT borders_obj.
+    FREE OBJECT lo_cell.
+  END-OF-DEFINITION.
+
+*填充excel
+  CREATE OBJECT lo_excel 'EXCEL.APPLICATION'.
+  CALL METHOD OF lo_excel 'WORKBOOKS' = lo_workbooks.
+  SET PROPERTY OF lo_excel 'VISIBLE' = 1.
+  CALL METHOD OF lo_workbooks 'OPEN' = lo_workbook EXPORTING #1 = iv_file.
+  CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = 1.
+
+*******程序主体*******
+  "表头数据.
+  CLEAR lt_head[].
+  LOOP AT gt_item INTO gw_item WHERE sel EQ 'X'.
+    MOVE-CORRESPONDING gw_item TO lt_head.
+    APPEND lt_head.
+  ENDLOOP.
+  SORT lt_head BY zxhm.
+  DELETE ADJACENT DUPLICATES FROM lt_head COMPARING zxhm.
+  DESCRIBE TABLE lt_head LINES lv_lines.
+  IF lv_lines NE 1.
+    MESSAGE '只允许下载一条装箱单号！' TYPE 'E'.
+  ENDIF.
+* 检查抬头，有几个SHEET，复制N-1个SHEET
+  CLEAR:lt_item[],it_main[].
+  LOOP AT lt_head.
+    LOOP AT gt_item_total INTO gw_item WHERE zxhm EQ lt_head-zxhm.
+      MOVE-CORRESPONDING gw_item TO lt_item.
+      APPEND lt_item.
+
+      it_main-matnr = gw_item-matnr.
+      it_main-menge = gw_item-menge.
+      COLLECT it_main.
+    ENDLOOP.
+  ENDLOOP.
+
+*读取模板数
+
+*  L_NUM = L_NUM + 1.
+*  PERFORM FRM_SELECT_SHEET USING L_NUM.
+*
+*  CONCATENATE '物料信息' '' INTO SHEET_NAME. "sheet命名
+*  CONDENSE SHEET_NAME.
+*  SET PROPERTY OF LO_SHEET 'NAME' = SHEET_NAME."命名SHEET.
+DATA lv_date TYPE sy-datum.
+  mac_fill_cell 1 1  lt_head-name1.
+  mac_fill_cell 2 1  lt_head-telf1.
+  mac_fill_cell 3 1  lt_head-street.
+  mac_fill_cell 6 6  lt_head-zxhm.           "PACKING NO
+  lv_date = sy-datum - 7.                     "Date 日期减7天 add by leimt 20180316
+  mac_fill_cell 7 6  lv_date.
+  mac_fill_cell 8 6  lt_head-land1.          "FOB
+
+  DESCRIBE TABLE it_main LINES lv_line.
+  lv_line = lv_line - 1.
+  IF lv_line > 0.
+    DO lv_line TIMES.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell EXPORTING #1 = 10 #2 = 1.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell1 EXPORTING #1 = 10 #2 = 6.
+      CALL METHOD OF lo_sheet 'Range' = lo_range EXPORTING #1 = lo_cell #2 = lo_cell1.
+      CALL METHOD OF lo_range 'Select' .
+      CALL METHOD OF lo_range 'Copy'.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell EXPORTING #1 = 11 #2 = 1.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell1 EXPORTING #1 = 11 #2 = 6.
+      CALL METHOD OF lo_sheet 'Range' = lo_range EXPORTING #1 = lo_cell #2 = lo_cell1.
+      CALL METHOD OF lo_range 'Insert'.
+    ENDDO.
+  ENDIF.
+
+  lv_row = 9.
+  SORT it_main BY matnr.
+  CLEAR:l_menge,l_ntgew.
+  LOOP AT it_main.
+
+    lv_col = lv_col + 2.
+    lv_row = lv_row + 1.
+
+    "物料编码
+    READ TABLE gt_item_total INTO gw_item WITH KEY matnr = it_main-matnr .
+    IF sy-subrc EQ 0.
+      mac_fill_cell lv_row lv_col gw_item-zxh.
+
+      "品名
+      lv_col = lv_col + 1.
+      mac_fill_cell lv_row lv_col gw_item-ztext.
+
+      lv_col = lv_col + 1.
+      mac_fill_cell lv_row lv_col it_main-menge.
+
+      lv_col = lv_col + 1.
+      gw_item-ntgew = gw_item-ntgew * it_main-menge.
+      mac_fill_cell lv_row lv_col gw_item-ntgew.
+
+
+      "汇总采购数量和净重
+      l_menge =  l_menge + it_main-menge.
+      l_ntgew =  l_ntgew + gw_item-ntgew.
+
+    ENDIF.
+
+    CLEAR:lv_col.
+  ENDLOOP.
+
+***合并单元格
+  CALL METHOD OF lo_sheet 'Cells' = lo_cell EXPORTING #1 = 10 #2 = 1.
+  CALL METHOD OF lo_sheet 'Cells' = lo_cell1 EXPORTING #1 = lv_row #2 = 1.
+  CALL METHOD OF lo_sheet 'Range' = lo_range EXPORTING #1 = lo_cell #2 = lo_cell1.
+  CALL METHOD OF lo_range 'MERGE' .
+  CALL METHOD OF lo_sheet 'Cells' = lo_cell EXPORTING #1 = 10 #2 = 6.
+  CALL METHOD OF lo_sheet 'Cells' = lo_cell1 EXPORTING #1 = lv_row #2 = 6.
+  CALL METHOD OF lo_sheet 'Range' = lo_range EXPORTING #1 = lo_cell #2 = lo_cell1.
+  CALL METHOD OF lo_range 'MERGE' .
+  lv_str = |01-{ lt_head-zmenge }|.
+  mac_fill_cell 10 1 lv_str.
+  mac_fill_cell 10 6 lt_head-brgew.
+
+  "TOTAL行 已跳出循环
+  lv_row = lv_row + 1.
+  SELECT SINGLE zbz INTO lv_zbz FROM ztmm004 WHERE zxhm = lt_head-zxhm.
+  mac_fill_cell lv_row 1 'TOTAL:'.
+  lv_str = |{ lt_head-zmenge }{ lv_zbz }|.
+  mac_fill_cell lv_row 2 lv_str.
+  mac_fill_cell lv_row 4 l_menge.
+  mac_fill_cell lv_row 5 l_ntgew.
+  mac_fill_cell lv_row 6 lt_head-brgew.
+
+
+  CALL METHOD OF lo_sheet 'CELLS' = lo_cell EXPORTING #1 = 1 #2 = 1.
+  CALL METHOD OF lo_cell 'SELECT'.
+  SET PROPERTY OF lo_excel 'CutCopyMode' = 0.
+
+  CALL METHOD OF lo_workbook 'SAVE'.
+  SET PROPERTY OF lo_excel 'VISIBLE' = 1.
+  FREE OBJECT:lo_excel,lo_workbooks,lo_workbook,lo_sheet,lo_range,lo_cell.
+ENDFORM.
+
+FORM sheet_copy  USING    p_n.
+  DATA: l TYPE i VALUE 0.
+  DO p_n TIMES.
+    l = l + 1.
+    CALL METHOD OF
+    lo_excel
+    'WORKSHEETS' = tmp_sheet
+    EXPORTING
+      #1           = l.
+    PERFORM err_hdl.
+    CALL METHOD OF
+      lo_sheet
+      'COPY'
+      EXPORTING
+        #1 = tmp_sheet.
+    PERFORM err_hdl.
+  ENDDO.
+ENDFORM.
+
+FORM err_hdl .
+  IF sy-subrc <> 0.
+    MESSAGE 'OLE error: Return code ='(010) TYPE 'S'.
+    EXIT.
+  ENDIF.
+ENDFORM.                    " ERR_HDL
+
+FORM frm_select_sheet  USING    pv_num.
+  CALL METHOD OF lo_excel 'WORKSHEETS' = lo_sheet
+  EXPORTING
+    #1 = pv_num.
+
+  CALL METHOD OF lo_sheet 'SELECT'.
+ENDFORM.
+
+
+MODULE status_9001 OUTPUT.
+  SET PF-STATUS 'ZRPMM029_STATUS'.
+  SET TITLEBAR '9001'.
+  CLEAR :sy-ucomm.
+ENDMODULE.                    "
+
+MODULE user_command_9001 INPUT.
+  DATA:it_ztmm004 LIKE ztmm004 OCCURS 0 WITH HEADER LINE.
+  DATA:it_ztmm005 LIKE ztmm005 OCCURS 0 WITH HEADER LINE.
+
+
+  DATA ucomm LIKE sy-ucomm.
+  ucomm = sy-ucomm.
+  CLEAR sy-ucomm.
+
+  CASE ucomm.
+    WHEN'C_OK'.
+
+      "是否至少勾选一条数据
+      IF lv_menge  IS NOT INITIAL AND
+        lv_zbz  IS NOT INITIAL AND
+         lv_brgew  IS NOT INITIAL .
+
+        IF gt_check[] IS NOT INITIAL .
+          PERFORM zxsb_report CHANGING lv_zxhm."先生成装箱单号(自动生成 不可输入)
+        ELSE.
+          MESSAGE '请勾选至少一条数据！' TYPE 'E'.
+        ENDIF.
+
+        "更新it_ztmm004[],it_ztmm005[]. 表
+        CLEAR:it_ztmm004[],it_ztmm005[].
+        LOOP AT gt_item INTO gw_item WHERE sel EQ 'X'.
+          it_ztmm005-zxhm = lv_zxhm.
+          it_ztmm005-ebeln = gw_item-ebeln.
+          APPEND it_ztmm005.
+
+        ENDLOOP.
+        "  以下是填一次就清空的 不需要循环取数
+        it_ztmm004-zxhm = lv_zxhm.
+        it_ztmm004-menge = lv_menge.
+        it_ztmm004-zbz  = lv_zbz.
+        it_ztmm004-brgew = lv_brgew.
+        APPEND it_ztmm004.
+
+        "排序 删除重复项
+        SORT it_ztmm005 BY zxhm.
+        DELETE ADJACENT DUPLICATES FROM it_ztmm005 COMPARING ALL FIELDS.
+
+        IF it_ztmm005[] IS NOT INITIAL .
+          MODIFY ztmm005 FROM TABLE it_ztmm005.
+        ENDIF.
+
+        IF it_ztmm004[] IS NOT INITIAL .
+          MODIFY ztmm004 FROM TABLE it_ztmm004.
+          IF sy-subrc EQ 0.
+            MESSAGE '生成装箱单号成功！' TYPE 'S'.
+            "更新内表装箱单号
+            LOOP AT gt_item INTO gw_item WHERE sel EQ 'X'.
+              gw_item-zxhm = lv_zxhm.
+              gw_item-zmenge = lv_menge.
+              gw_item-zbz    = lv_zbz.
+              gw_item-brgew  = lv_brgew.
+              MODIFY gt_item FROM gw_item.
+            ENDLOOP.
+            LEAVE TO SCREEN 0.
+          ELSE.
+            MESSAGE '生成装箱单号失败！' TYPE 'E'.
+            LEAVE TO SCREEN 0.
+          ENDIF.
+        ENDIF.
+
+      ELSE .
+        MESSAGE '请输入数量、包装、毛重' TYPE 'E'.
+      ENDIF.
+
+    WHEN 'C_EXIT' OR 'BACK' OR 'EXIT'.
+      LEAVE TO SCREEN 0.
+
+
+    WHEN OTHERS .
+
+  ENDCASE.
+
+ENDMODULE.                 "
+*&---------------------------------------------------------------------*
+*&      Form  ZXDH_DELETE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM zxdh_delete .
+  DATA:gl_ztmm005 LIKE ztmm005 OCCURS 0 WITH HEADER LINE.
+
+  READ TABLE gt_item INTO gw_item WITH KEY sel = 'X'.
+  IF sy-subrc <> 0.
+    MESSAGE '请选择需要删除的装箱单' TYPE 'E'.
+    EXIT.
+  ENDIF.
+
+  LOOP AT gt_item INTO gw_item WHERE sel = 'X'.
+    CLEAR: gl_ztmm005 .
+    MOVE-CORRESPONDING gw_item TO gl_ztmm005 .
+    gl_ztmm005-zflag = 'X'.
+    COLLECT gl_ztmm005.
+    CLEAR: gw_item.
+  ENDLOOP.
+
+  IF gl_ztmm005[] IS NOT INITIAL.
+    MODIFY ztmm005 FROM TABLE gl_ztmm005.
+    IF sy-subrc = 0.
+      COMMIT WORK AND WAIT.
+      LOOP AT gt_item INTO gw_item WHERE sel = 'X'.
+        CLEAR: gw_item-zxhm.
+        MODIFY gt_item FROM gw_item.
+      ENDLOOP.
+      MESSAGE '装箱单号删除成功！' TYPE 'S'.
+    ELSE.
+      ROLLBACK WORK .
+      MESSAGE '装箱单号删除失败！' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+ENDFORM.

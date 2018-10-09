@@ -1,0 +1,16 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPSD021S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_kunnr FOR knvv-kunnr,
+               s_kvgr1 FOR knvv-kvgr1,
+               s_zzxno FOR ztsd003zxdb-zzxno,
+               s_zfhrq FOR ztsd003zxdb-zfhrq,
+               s_erdat FOR ztsd003zxdb-erdat.
+SELECTION-SCREEN END OF BLOCK blc.
+
+SELECTION-SCREEN BEGIN OF BLOCK blc1 WITH FRAME TITLE TEXT-002.
+PARAMETERS:r1 RADIOBUTTON GROUP ra DEFAULT 'X',
+           r2 RADIOBUTTON GROUP ra.
+SELECTION-SCREEN END OF BLOCK blc1.

@@ -1,0 +1,149 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPCS002M01
+*&---------------------------------------------------------------------*
+*----------------------------------------------------------------------*
+***INCLUDE ZRPSD018M01.
+*----------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Module  STATUS_0100  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE status_0100 OUTPUT.
+  SET PF-STATUS '0100'.
+    CASE gv.
+    WHEN 1.
+      SET TITLEBAR '001A'.
+    WHEN 2.
+      SET TITLEBAR '001B'.
+    WHEN 3.
+      SET TITLEBAR '001C'.
+    WHEN 4.
+      SET TITLEBAR '001D'.
+    WHEN OTHERS.
+  ENDCASE.
+
+
+  DATA container TYPE REF TO cl_gui_custom_container.
+  DATA: picture       TYPE REF TO cl_gui_picture,
+        go_htmlviewer TYPE REF TO cl_gui_html_viewer.
+  DATA url(255).
+  DATA init.
+  CLEAR url.
+*创建对象
+*  CALL METHOD go_htmlviewer->free.
+  IF init IS INITIAL.
+    CREATE OBJECT container
+      EXPORTING
+        container_name = 'WEB1'.
+
+    CREATE OBJECT go_htmlviewer
+      EXPORTING
+        parent = container.
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+                 WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ENDIF.
+  ELSE.
+    CALL METHOD container->free.
+    CREATE OBJECT container
+      EXPORTING
+        container_name = 'WEB1'.
+
+    CREATE OBJECT go_htmlviewer
+      EXPORTING
+        parent = container.
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+                 WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ENDIF.
+  ENDIF.
+*定义通用函数取得图片地址
+  PERFORM load_pic_db USING gv CHANGING url.
+*显示图片
+  CALL METHOD go_htmlviewer->show_url
+    EXPORTING
+      url = url.
+  IF sy-subrc = 0.
+    init = 'X'.
+  ENDIF.
+
+ENDMODULE.
+
+*获取图片地址通用函数
+FORM load_pic_db USING pv CHANGING p_url.
+  DATA query_table LIKE w3query OCCURS 1 WITH HEADER LINE.
+  DATA html_table LIKE w3html OCCURS 1.
+  DATA return_code LIKE w3param-ret_code.
+  DATA content_type LIKE w3param-cont_type.
+  DATA content_length LIKE w3param-cont_len.
+  DATA pic_data LIKE w3mime OCCURS 0.
+  DATA pic_size TYPE i.
+
+  REFRESH query_table.
+*查询对象数据
+  CLEAR url.
+  query_table-name = '_OBJECT_ID'.
+*图片对象名称
+  CASE pv.
+    WHEN 1.
+      query_table-value = 'ZCS002A'.
+    WHEN 2.
+      query_table-value = 'ZCS002B'.
+    WHEN 3.
+      query_table-value = 'ZCS002C'.
+    WHEN 4.
+      query_table-value = 'ZCS002D'.
+    WHEN OTHERS.
+  ENDCASE.
+  APPEND query_table.
+*读取WWWDATA表，取得图片对象信息
+  CALL FUNCTION 'WWW_GET_MIME_OBJECT'
+    TABLES
+      query_string        = query_table
+      html                = html_table
+      mime                = pic_data
+    CHANGING
+      return_code         = return_code
+      content_type        = content_type
+      content_length      = content_length
+    EXCEPTIONS
+      object_not_found    = 1
+      parameter_not_found = 2
+      OTHERS              = 3.
+  IF sy-subrc EQ 0.
+    pic_size = content_length.
+  ENDIF.
+*创建图片URL地址
+  CALL FUNCTION 'DP_CREATE_URL'
+    EXPORTING
+      type                 = 'IMAGE'
+      subtype              = cndp_sap_tab_unknown
+      size                 = pic_size
+      lifetime             = cndp_lifetime_transaction
+    TABLES
+      data                 = pic_data
+    CHANGING
+      url                  = url
+    EXCEPTIONS
+      dp_invalid_parameter = 1
+      dp_error_put_table   = 2
+      dp_error_general     = 3
+      OTHERS               = 4.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0100  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_0100 INPUT.
+
+  DATA: ok_code TYPE sy-ucomm.
+  CASE ok_code.
+    WHEN 'CANCEL' OR 'BACK' OR 'EXIT'.
+*      CALL METHOD go_htmlviewer->free.
+      LEAVE TO SCREEN 0.
+    WHEN OTHERS.
+  ENDCASE.
+ENDMODULE.

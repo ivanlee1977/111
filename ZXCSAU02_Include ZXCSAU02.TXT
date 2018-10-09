@@ -1,0 +1,64 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZXCSAU02
+*&---------------------------------------------------------------------*
+DATA :lv_objek LIKE ausp-objek.
+DATA: ls_class      LIKE TABLE OF sclass WITH HEADER LINE,
+      ls_objectdata LIKE TABLE OF clobjdat WITH HEADER LINE.
+CLEAR :gw_bom_add.
+lv_objek = itemdata-idnrk.
+CALL FUNCTION 'CLAF_CLASSIFICATION_OF_OBJECTS'
+  EXPORTING
+*   CLASS              = ' '
+*   CLASSTEXT          = 'X'
+    classtype          = '001'
+*   CLINT              = 0
+*   FEATURES           = 'X'
+    language           = sy-langu
+    object             = lv_objek
+    objecttable        = 'MARA'
+*   KEY_DATE           = SY-DATUM
+*   INITIAL_CHARACT    = 'X'
+*   NO_VALUE_DESCRIPT  =
+*   CHANGE_SERVICE_CLF = 'X'
+*   INHERITED_CHAR     = ' '
+*   CHANGE_NUMBER      = ' '
+  TABLES
+    t_class            = ls_class
+    t_objectdata       = ls_objectdata
+*   I_SEL_CHARACTERISTIC       =
+*   T_NO_AUTH_CHARACT  =
+  EXCEPTIONS
+    no_classification  = 1
+    no_classtypes      = 2
+    invalid_class_type = 3
+    OTHERS             = 4.
+
+LOOP AT ls_objectdata WHERE ausp1 <> '?'.
+  CASE ls_objectdata-atnam.
+    WHEN 'ZROH_ICZYCS'.
+      gw_bom_add-zroh_iczycs = ls_objectdata-ausp1.
+    WHEN 'ZROH_PCBGY'.
+      gw_bom_add-zroh_pcbgy = ls_objectdata-ausp1.
+    WHEN 'ZROH_PCBCZ'.
+      gw_bom_add-zroh_pcbcz = ls_objectdata-ausp1.
+    WHEN 'ZROH_PCBCS'.
+      gw_bom_add-zroh_pcbcs = ls_objectdata-ausp1.
+    WHEN 'ZROH_BCDZLTH'.
+      gw_bom_add-zroh_bcdzlth = ls_objectdata-ausp1.
+    WHEN 'ZROH_BCCZ'.
+      gw_bom_add-zroh_bccz = ls_objectdata-ausp1.
+    WHEN 'ZROH_BCRZ'.
+      gw_bom_add-zroh_bcrz = ls_objectdata-ausp1.
+    WHEN 'ZROH_GYSXH'.
+      gw_bom_add-zroh_gysxh = ls_objectdata-ausp1.
+    WHEN 'ZROH_JGTH'.
+      gw_bom_add-zroh_jgth = ls_objectdata-ausp1.
+    WHEN 'ZROH_SYTH'.
+      gw_bom_add-zroh_syth = ls_objectdata-ausp1.
+    WHEN 'ZROH_MH'.
+      gw_bom_add-zroh_mh = ls_objectdata-ausp1.
+    WHEN 'ZROH_TSBZ'.
+      gw_bom_add-zroh_tsbz = ls_objectdata-ausp1.
+    WHEN OTHERS.
+  ENDCASE.
+ENDLOOP.

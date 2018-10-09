@@ -1,0 +1,164 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZSDRP014F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PROCESS_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_process_data .
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SUB_BUILD_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM sub_build_fieldcat .
+  REFRESH:g_it_fieldcat.
+  PERFORM sub_set_fieldcat1 USING 'X' 'SEL' '选择' ''  'X'  ''  'X'  ''  ''  '' '' ''.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  pf_status_set
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->RT_EXTAB   text
+*----------------------------------------------------------------------*
+FORM pf_status_set USING rt_extab TYPE slis_t_extab.
+  DATA:fcode           TYPE TABLE OF sy-ucomm.
+  REFRESH: fcode.
+  IF p_wjh EQ 'X' .
+    APPEND 'POST' TO fcode.
+    APPEND 'RPOST' TO fcode.
+    APPEND 'DELE' TO fcode.
+    APPEND 'PRINT' TO fcode.
+  ENDIF.
+  SET PF-STATUS 'ZSTANDARD' EXCLUDING fcode.
+ENDFORM. "pf_status_set
+
+
+*&---------------------------------------------------------------------*
+*&      Form  alv_user_command
+*&---------------------------------------------------------------------*
+*----------------------------------------------------------------------*
+*      -->UCOMM      text
+*      -->SELFIELD   text
+*----------------------------------------------------------------------*
+
+FORM alv_user_command USING ucomm LIKE sy-ucomm
+      selfield TYPE slis_selfield.
+
+  PERFORM sub_check_changed_data.
+
+*  CASE ucomm.
+*    WHEN 'ALL'.
+*      LOOP AT gt_alv WHERE sel IS INITIAL.
+*        gt_alv-sel = 'X'.
+*        MODIFY gt_alv TRANSPORTING sel.
+*        CLEAR: gt_alv.
+*      ENDLOOP.
+*    WHEN 'SALL'.
+*      LOOP AT gt_alv WHERE sel = 'X'.
+*        CLEAR:gt_alv-sel.
+*        MODIFY gt_alv TRANSPORTING sel.
+*        CLEAR: gt_alv.
+*      ENDLOOP.
+*    WHEN 'SAVE'.
+*      LOOP AT gt_alv WHERE sel EQ 'X'.
+*        READ TABLE gt_zmmt004 WITH KEY ebeln = gt_alv-ebeln zwwzj = gt_alv-zwwzj .
+*        IF sy-subrc = 0.
+*          MESSAGE e022 WITH gt_zmmt004-znums DISPLAY LIKE 'E'.
+*          EXIT.
+*        ENDIF.
+*        IF gt_alv-zwfs < gt_alv-zsqs.
+*          MESSAGE e012 WITH gt_alv-ebeln gt_alv-ebelp DISPLAY LIKE 'E'.
+*          EXIT.
+*        ENDIF.
+*      ENDLOOP.
+*      PERFORM frm_save_data .
+*    WHEN 'DELE'.  "已删除的不允许再次删除
+*      READ TABLE gt_alv WITH KEY sel = 'X' zstatus = '5'.
+*      IF sy-subrc = 0.
+*        MESSAGE e014 WITH gt_alv-znums '删除' '再次删除'.
+*        EXIT.
+*      ENDIF.
+*      LOOP AT gt_alv WHERE sel = 'X' AND zsfs NE 0.
+*        MESSAGE e014 WITH gt_alv-znums '发过料' '删除'.
+*        EXIT.
+*      ENDLOOP.
+*      PERFORM frm_dele_data.
+*    WHEN 'PRINT'."已删除的单据不允许打印
+*      READ TABLE gt_alv WITH KEY sel = 'X' zstatus = '5'.
+*      IF sy-subrc = 0.
+*        MESSAGE e014 WITH gt_alv-znums '删除' '打印'.
+*        EXIT.
+*      ENDIF.
+*      PERFORM frm_print_data.
+*    WHEN 'POST'.
+*    WHEN 'RPOST'.
+*    WHEN OTHERS.
+*  ENDCASE.
+  PERFORM sub_refresh_data.
+
+*  SELFIELD-REFRESH = 'X'."这个值可以让ALV制动刷新
+
+
+ENDFORM. "alv_user_command
+
+*&---------------------------------------------------------------------*
+*&      Form  SUB_BUILD_EVENTS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+
+FORM sub_build_events .
+  REFRESH: g_it_events.
+  g_it_events-name = 'CALLER_EXIT'.
+  g_it_events-form = 'FRM_BUTTON'.
+  APPEND g_it_events.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  FM_BUTTON
+*&---------------------------------------------------------------------*
+*       设置enter事件
+*----------------------------------------------------------------------*
+*      -->E_GRID     text
+*----------------------------------------------------------------------*
+
+FORM frm_button USING g_grid TYPE slis_data_caller_exit.
+* 设置enter事件
+  PERFORM sub_check_changed_data.
+  CALL METHOD ref->register_edit_event
+    EXPORTING
+      i_event_id = cl_gui_alv_grid=>mc_evt_enter
+    EXCEPTIONS
+      error      = 1
+      OTHERS     = 2.
+
+  CREATE OBJECT gt_event_receiver.
+
+  SET HANDLER   gt_event_receiver->handle_modify FOR ref.
+ENDFORM. "FM_BUTTON

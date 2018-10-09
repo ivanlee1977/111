@@ -1,0 +1,28 @@
+
+*& 程序名： ZRPFI010
+*& 创建者(公司)/日期： LIJS/20170728
+*& 程序描述：资产明细表(固定资产，无形资产)
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    LIJS           20170728      创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpfi010.
+
+INCLUDE zrpfi010_top.
+
+INCLUDE zrpfi010_f01.
+
+INCLUDE zrpfi010_f_excel.
+
+at SELECTION-SCREEN.
+  PERFORM frm_check_auth.
+
+START-OF-SELECTION.
+
+*  PERFORM frm_check_author.
+  PERFORM frm_get_data.
+  PERFORM frm_process_data.
+  PERFORM frm_output_alv.
+
+
+*  PERFORM frm_output_data."输出数据  EXCEL输出方式 20170810注释

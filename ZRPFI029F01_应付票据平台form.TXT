@@ -1,0 +1,1472 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI029F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_AUTHORITY
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_authority .
+  IF p_bukrs IS NOT INITIAL.
+    AUTHORITY-CHECK OBJECT 'F_BKPF_BUK'
+                  ID 'BUKRS' FIELD p_bukrs
+                  ID 'ACTVT' FIELD '03'.
+    IF sy-subrc <> 0.
+      MESSAGE '没有该公司的查看权限！' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM get_data .
+  DATA ls_stylerow TYPE lvc_s_styl.
+  DATA lt_styletab TYPE lvc_t_styl.
+  DATA:lv_belnr LIKE bkpf-belnr.
+
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE gt_alv
+    FROM zficotfkt
+    WHERE zgsdm = p_bukrs
+      AND zskrq IN s_zskrq
+      AND lifnr IN s_lifnr
+      AND zdjhm IN s_zdjhm
+      AND zskfs IN ('3','4')
+      AND zdjzt EQ '3'.
+
+  SORT gt_alv BY zdjhm.
+  IF p_zbb IS NOT INITIAL.
+    DELETE gt_alv WHERE zbb NE p_zbb.
+  ENDIF.
+  IF p_zhkr IS NOT INITIAL.
+    DELETE gt_alv WHERE zhkr NE p_zhkr.
+  ENDIF.
+  IF p_zskze IS NOT INITIAL.
+    DELETE gt_alv WHERE zskze NE p_zskze.
+  ENDIF.
+
+  LOOP AT gt_alv INTO gs_alv.
+    CLEAR:ls_stylerow,lt_styletab[].
+    IF gs_alv-zkjpzbh IS INITIAL.
+      gs_alv-zgzrq = sy-datum.
+      ls_stylerow-fieldname = 'ZGZRQ'.
+      ls_stylerow-style = cl_gui_alv_grid=>mc_style_enabled.
+      INSERT ls_stylerow INTO TABLE lt_styletab.
+    ELSE.
+      ls_stylerow-fieldname = 'ZGZRQ'.
+      ls_stylerow-style = cl_gui_alv_grid=>mc_style_disabled.
+      INSERT ls_stylerow INTO TABLE lt_styletab.
+    ENDIF.
+    CLEAR ls_stylerow.
+    ls_stylerow-fieldname = 'CHECK'.
+    ls_stylerow-style = cl_gui_alv_grid=>mc_style_enabled.
+    INSERT ls_stylerow INTO TABLE lt_styletab.
+
+    CASE gs_alv-zdjzt.
+      WHEN '1'.
+        gs_alv-txt = '已创建'.
+      WHEN '2'.
+        gs_alv-txt = '已审核'.
+      WHEN '3'.
+        gs_alv-txt = '已过账'.
+    ENDCASE.
+    CASE gs_alv-zskfs.
+      WHEN '1'.
+        gs_alv-txt_s = '银行转账'.
+      WHEN '2'.
+        gs_alv-txt_s = '现金支付'.
+      WHEN '3'.
+        gs_alv-txt_s = '银行承兑汇票'.
+      WHEN '4'.
+        gs_alv-txt_s = '商业承兑汇票'.
+      WHEN '5'.
+        gs_alv-txt_s = '信用证'.
+      WHEN '6'.
+        gs_alv-txt_s = '支票'.
+      WHEN '7'.
+        gs_alv-txt_s = 'POS机刷卡'.
+      WHEN OTHERS.
+    ENDCASE.
+***票据状态
+    CASE gs_alv-zpjzt.
+      WHEN '1'.
+        gs_alv-txt_pjzt = '付款'.
+      WHEN '2'.
+        gs_alv-txt_pjzt = '退票'.
+      WHEN OTHERS.
+        gs_alv-txt_pjzt = '持有中'.
+    ENDCASE.
+
+***获取汇率 和 本位币金额
+    IF gs_alv-zbb = 'CNY' OR gs_alv-zbb = 'RMB' .
+      gs_alv-kursf = '1'.
+    ELSE.
+      IF gs_alv-zdjzt = '3'.
+        CLEAR lv_belnr.
+        CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+          EXPORTING
+            input  = gs_alv-zkjpzbh
+          IMPORTING
+            output = lv_belnr.
+        SELECT SINGLE kursf INTO gs_alv-kursf FROM bkpf WHERE bukrs = gs_alv-zgsdm AND belnr = lv_belnr AND gjahr = gs_alv-zkjnd.
+      ELSE.
+        CALL FUNCTION 'READ_EXCHANGE_RATE'
+          EXPORTING
+            client           = sy-mandt
+            date             = gs_alv-zskrq
+            foreign_currency = gs_alv-zbb
+            local_currency   = 'CNY'
+            type_of_rate     = 'M'
+*           EXACT_DATE       = ' '
+          IMPORTING
+            exchange_rate    = gs_alv-kursf
+          EXCEPTIONS
+            no_rate_found    = 1
+            no_factors_found = 2
+            no_spread_found  = 3
+            derived_2_times  = 4
+            overflow         = 5
+            zero_rate        = 6
+            OTHERS           = 7.
+      ENDIF.
+    ENDIF.
+    gs_alv-zamount = gs_alv-zskze * gs_alv-kursf.
+
+    gs_alv-cellstyle = lt_styletab.
+    SELECT SINGLE name1 INTO gs_alv-name1 FROM lfa1 WHERE lifnr = gs_alv-lifnr.
+    MODIFY gt_alv FROM gs_alv.
+  ENDLOOP.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  F_CLASS_SET_TOOLBAR
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      <--P_E_OBJECT  text
+*----------------------------------------------------------------------*
+FORM f_class_set_toolbar  CHANGING p_e_object
+                          TYPE REF TO cl_alv_event_toolbar_set.
+  DATA: ls_toolbar TYPE stb_button.
+  CLEAR ls_toolbar-butn_type.
+  APPEND ls_toolbar TO p_e_object->mt_toolbar.
+
+  CLEAR ls_toolbar.
+  MOVE 'ALL' TO ls_toolbar-function."添加“全选”按钮
+  MOVE icon_select_all TO ls_toolbar-icon.
+  MOVE '全选' TO ls_toolbar-quickinfo.
+  MOVE '全选' TO ls_toolbar-text.
+  MOVE '' TO ls_toolbar-disabled.
+  APPEND ls_toolbar TO p_e_object->mt_toolbar.
+
+  CLEAR ls_toolbar.
+  MOVE 'DEALL' TO ls_toolbar-function."添加“取消全选”按钮
+  MOVE icon_deselect_all TO ls_toolbar-icon.
+  MOVE '取消全选' TO ls_toolbar-quickinfo.
+  MOVE '取消全选' TO ls_toolbar-text.
+  MOVE '' TO ls_toolbar-disabled.
+  APPEND ls_toolbar TO p_e_object->mt_toolbar.
+
+*  CLEAR ls_toolbar.
+*  MOVE 'ZBS' TO ls_toolbar-function."添加“背书”按钮
+*  MOVE icon_okay TO ls_toolbar-icon.
+*  MOVE '背书' TO ls_toolbar-quickinfo.
+*  MOVE '背书' TO ls_toolbar-text.
+*  MOVE '' TO ls_toolbar-disabled.
+*  APPEND ls_toolbar TO p_e_object->mt_toolbar.
+*
+*  CLEAR ls_toolbar.
+*  MOVE 'ZQXBS' TO ls_toolbar-function."添加“背书”按钮
+*  MOVE icon_cancel TO ls_toolbar-icon.
+*  MOVE '取消背书' TO ls_toolbar-quickinfo.
+*  MOVE '取消背书' TO ls_toolbar-text.
+*  MOVE '' TO ls_toolbar-disabled.
+*  APPEND ls_toolbar TO p_e_object->mt_toolbar.
+
+  CLEAR ls_toolbar.
+  MOVE 'ZFK' TO ls_toolbar-function."添加“退票”按钮
+  MOVE icon_okay TO ls_toolbar-icon.
+  MOVE '付款' TO ls_toolbar-quickinfo.
+  MOVE '付款' TO ls_toolbar-text.
+  MOVE '' TO ls_toolbar-disabled.
+  APPEND ls_toolbar TO p_e_object->mt_toolbar.
+
+  CLEAR ls_toolbar.
+  MOVE 'ZQXFK' TO ls_toolbar-function."添加“取消退票”按钮
+  MOVE icon_cancel TO ls_toolbar-icon.
+  MOVE '取消付款' TO ls_toolbar-quickinfo.
+  MOVE '取消付款' TO ls_toolbar-text.
+  MOVE '' TO ls_toolbar-disabled.
+  APPEND ls_toolbar TO p_e_object->mt_toolbar.
+
+  CLEAR ls_toolbar.
+  MOVE 'ZTP' TO ls_toolbar-function."添加“退票”按钮
+  MOVE icon_okay TO ls_toolbar-icon.
+  MOVE '退票' TO ls_toolbar-quickinfo.
+  MOVE '退票' TO ls_toolbar-text.
+  MOVE '' TO ls_toolbar-disabled.
+  APPEND ls_toolbar TO p_e_object->mt_toolbar.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  F_CLASS_TOOLBAR_USER_COMMAND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_E_UCOMM  text
+*----------------------------------------------------------------------*
+FORM f_class_toolbar_user_command  USING p_e_ucomm.
+  CASE p_e_ucomm.
+    WHEN 'ALL'.
+      PERFORM f_alv_all_select.
+    WHEN 'DEALL'.
+      PERFORM f_alv_all_deselect.
+    WHEN 'ZBS'. "背书
+      PERFORM frm_create_bs.
+    WHEN 'ZFK'. "付款
+      PERFORM frm_create_fk.
+    WHEN 'ZTP'. "退票
+      PERFORM frm_create_tp.
+    WHEN 'ZQXBS'."取消背书
+      PERFORM frm_cancel_bs.
+    WHEN 'ZQXFK'."取消付款
+      PERFORM frm_cancel_fk.
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  F_CLASS_ON_F4
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      <--P_E_FIELDNAME  text
+*      <--P_E_FIELDVALUE  text
+*      <--P_ES_ROW_NO  text
+*      <--P_ER_EVENT_DATA  text
+*      <--P_ET_BAD_CELLS  text
+*      <--P_E_DISPLAY  text
+*----------------------------------------------------------------------*
+FORM f_class_on_f4  CHANGING p_e_fieldname
+                             p_e_fieldvalue
+                             p_es_row_no
+                             p_er_event_data
+                             p_et_bad_cells
+                             p_e_display.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  F_ALV_SET_FIELDCATS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM f_alv_set_fieldcats .
+  CLEAR: gt_alv_fcat[],
+         gs_alv_fcat.
+  PERFORM f_alv_set_fieldcat USING:
+               "fd      txt  out edit pos ckbox key
+               'CHECK' '选择' '4'  '1' 'X' 'X' '' '' '',
+               'ZGSDM' '公司代码' '8'  '2' '' '' '' '' '',
+               'ZDJHM' '单据号码' '10'  '3' '' '' '' '' '',
+               'ZGZRQ' '过账日期' '10'  '4' '' '' 'zficotfkt' 'ZGZRQ' '',
+               'ZSKRQ' '付款日期' '10'  '5' '' '' '' '' '',
+               'LIFNR' '供应商编号' '10'  '6' '' '' '' '' '',
+               'NAME1' '供应商名称' '40'  '6' '' '' '' '' '',
+               'ZHPHM' '汇票号码' '10'  '7' '' '' '' '' '',
+               'ZHPDQR' '汇票到期日' '10'  '8' '' '' '' '' '',
+               'ZHRYH' '汇出银行账户' '20'  '9' '' '' '' '' '',
+               'ZYWY' '业务员' '10'  '12' '' '' '' '' '',
+               'ZSKFS' '付款方式' '8'  '13' '' '' 'zficotfkt' 'ZSKFS' '',
+               'TXT_S' '描述' '8'  '14' '' '' '' '' '',
+               'ZBB' '币别' '4'  '15' '' '' '' '' '',
+*               'ZHL' '汇率' '6'  '16' '' '' '' '' '',
+               'KURSF' '汇率' '6'  '16' '' '' '' '' '',
+               'ZAMOUNT' '本位币金额' '6'  '16' '' '' '' '' '',
+               'ZHKR' '汇款人' '6'  '17' '' '' '' '' '',
+               'ZSKZE' '付款总额' '13'  '18' '' '' '' '' '',
+               'ZDDFY' '代垫费用' '13'  '19' '' '' '' '' '',
+               'ZBZ' '备注' '20'  '20' '' '' '' '' '',
+               'ZDJZT' '单据状态' '8'  '21' '' '' 'zficotfkt' 'ZDJZT' '',
+               'TXT' '状态描述' '8'  '22' '' '' '' '' '',
+               'ZZDRQ' '制单日期' '10'  '23' '' '' '' '' '',
+               'ZSHRQ' '审核日期' '10'  '24' '' '' '' '' '',
+               'ZPZRQ' '凭证日期' '10'  '25' '' '' '' '' '',
+               'ZKJPZBH' '会计凭证编号' '12'  '26' '' '' '' '' 'X',
+               'ZKJND' '会计年度' '8'  '27' '' '' '' '' '',
+               'ZPJZT' '票据状态' '4'  '28' '' '' '' '' '',
+               'TXT_PJZT' '票据状态描述' '8'  '29' '' '' '' '' '',
+*              'ZBSKH' '背书客户' '10'  '30' '' '' 'zficotfkt' 'ZBSKH' '',
+*              'ZBSGYS' '背书供应商' '10'  '31' '' '' 'zficotfkt' 'ZBSGYS' '',
+               'ZTSYH'  '托收银行' '10'  '32' '' ''   'ZFICOTFKT' 'ZTSYH' '',
+               'ZPJCLRQ'  '票据处理日期' '10'  '33' '' ''   'ZFICOTFKT' 'ZPJCLRQ' '',
+               'ZPJPZBH'  '票据凭证编号' '10'  '34' '' ''   'ZFICOTFKT' 'ZPJPZBH' 'X',
+               'ZPJCLRY'  '票据处理人员' '10'  '35' '' ''   'ZFICOTFKT' 'ZPJCLRY' '',
+               'ZQFRQ'    '签发日期'     '10'  '36' '' ''   'ZFICOTFKT' 'ZQFRQ' '',
+               'ZCDR'     '承兑人'       '40'  '37' '' ''   'ZFICOTFKT' 'ZCDR'  '',
+               'ZCPR'     '出票人'       '40'  '38' '' ''   'ZFICOTFKT' 'ZCPR'  '',
+               'MESS' '消息' '100'  '39' '' '' '' '' ''.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  F_REFRESH_ALV_DISPLAY
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM f_refresh_alv_display .
+  CALL METHOD cl_alv->refresh_table_display
+    EXPORTING
+      is_stable      = gs_refresh
+      i_soft_refresh = ''.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  F_ALV_SET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0307   text
+*      -->P_0308   text
+*      -->P_0309   text
+*      -->P_0310   text
+*      -->P_0311   text
+*      -->P_0312   text
+*      -->P_0313   text
+*----------------------------------------------------------------------*
+FORM f_alv_set_fieldcat  USING fld
+                               txt
+                               out
+*                               EDIT
+                               pos
+                               ckbox
+                               key
+                               ref_table
+                               ref_field
+                               hotspot.
+  gs_alv_fcat-fieldname = fld.
+  gs_alv_fcat-coltext   = txt.
+  gs_alv_fcat-outputlen = out.
+*  GS_ALV_FCAT-EDIT      = EDIT.
+  gs_alv_fcat-col_pos   = pos.
+  gs_alv_fcat-checkbox  = ckbox.
+  gs_alv_fcat-just      = 'C'.
+  gs_alv_fcat-key       = key.
+  gs_alv_fcat-ref_table = ref_table.
+  gs_alv_fcat-ref_field = ref_field.
+  gs_alv_fcat-hotspot   = hotspot.
+  APPEND gs_alv_fcat TO gt_alv_fcat.
+  CLEAR: gs_alv_fcat.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  F_ALV_SET_LAYOUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM f_alv_set_layout .
+  CLEAR gs_layout.
+  gs_layout-smalltitle = ''.
+  gs_layout-grid_title = ''.
+  gs_layout-zebra      =  'X'.
+  gs_layout-sel_mode   = 'B'.
+  gs_layout-no_toolbar = ''.
+  gs_layout-no_rowmark = 'X'.
+  gs_layout-edit_mode  = ''.
+  gs_layout-detailinit = 'X'.
+*  GS_LAYOUT-CWIDTH_OPT = 'X'.
+  gs_layout-stylefname = 'CELLSTYLE'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  F_ALV_EXCLUDE_TOOLBAR
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM f_alv_exclude_toolbar .
+  CLEAR: gt_toolbar_excluding.
+  APPEND:
+    cl_gui_alv_grid=>mc_fc_print               TO gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_lystyle_drag_drop_rows TO gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_lystyle_no_delete_rows TO gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_lystyle_no_insert_rows TO gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_fc_to_office           TO gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_fc_call_abc            TO gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_fc_call_chain          TO gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_fc_call_crbatch        TO gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_fc_call_crweb          TO gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_fc_call_lineitems      TO gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_fc_call_master_data    TO gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_fc_call_more           TO gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_fc_call_report         TO gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_fc_call_xint           TO gt_toolbar_excluding,
+*    cl_gui_alv_grid=>mc_fc_call_xxl    to gt_toolbar_excluding,
+*    cl_gui_alv_grid=>mc_fc_check               TO gt_toolbar_excluding,
+*    cl_gui_alv_grid=>mc_mb_export    to gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_fc_graph               TO gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_fc_help                TO gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_fc_html                TO gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_fc_info                TO gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_fc_pc_file             TO gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_fc_views               TO gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_fc_loc_append_row      TO gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_fc_loc_copy            TO gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_fc_loc_copy_row        TO gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_fc_loc_cut             TO gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_fc_loc_delete_row      TO gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_fc_loc_insert_row      TO gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_fc_loc_move_row        TO gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_fc_loc_paste           TO gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_fc_loc_paste_new_row   TO gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_fc_refresh             TO gt_toolbar_excluding,
+    cl_gui_alv_grid=>mc_fc_loc_undo            TO gt_toolbar_excluding.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  F_ALV_ALL_SELECT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM f_alv_all_select .
+  DATA lv_tabix TYPE sy-tabix.
+  DATA lt_filtered TYPE lvc_t_fidx.
+  CALL METHOD cl_alv->get_filtered_entries
+    IMPORTING
+      et_filtered_entries = lt_filtered.
+
+  LOOP AT gt_alv INTO gs_alv.
+    lv_tabix = sy-tabix.
+    READ TABLE lt_filtered WITH KEY table_line = lv_tabix TRANSPORTING NO FIELDS.
+    IF sy-subrc NE 0.
+      gs_alv-check = 'X'.
+      MODIFY gt_alv FROM gs_alv.
+      CLEAR: gs_alv.
+    ENDIF.
+  ENDLOOP.
+  PERFORM f_refresh_alv_display.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  F_ALV_ALL_DESELECT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM f_alv_all_deselect .
+  LOOP AT gt_alv INTO gs_alv WHERE check = 'X'.
+    gs_alv-check = ''.
+    MODIFY gt_alv FROM gs_alv.
+    CLEAR: gs_alv.
+  ENDLOOP.
+  PERFORM f_refresh_alv_display.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  GET_NAME
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM get_name .
+  IF gwa_skt_9002-lifnr IS NOT INITIAL.
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+      EXPORTING
+        input  = gwa_skt_9002-lifnr
+      IMPORTING
+        output = gwa_skt_9002-lifnr.
+
+    SELECT SINGLE name1
+      INTO g_khmc
+      FROM lfa1
+      WHERE lifnr = gwa_skt_9002-lifnr.
+  ENDIF.
+
+  SELECT SINGLE txt20
+      INTO (g_zhmc)
+      FROM skat
+      WHERE spras = '1'
+        AND saknr = gwa_skt_9002-zhryh.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  DATE_INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM date_input .
+  DATA lt_fields TYPE TABLE OF sval WITH HEADER LINE.
+  DATA: lv_rc TYPE char1.
+  CLEAR lt_fields.
+  lt_fields-tabname = 'BKPF'.
+  lt_fields-fieldname = 'BUDAT'.
+  lt_fields-fieldtext = '冲销日期'.
+  APPEND lt_fields.
+
+  CLEAR lt_fields.
+  lt_fields-tabname = 'BAPIACREV'.
+  lt_fields-fieldname = 'REASON_REV'.
+  lt_fields-value = '01'.
+  lt_fields-fieldtext = '冲销原因'.
+  lt_fields-field_obl = 'X'.
+  APPEND lt_fields.
+
+  CALL FUNCTION 'POPUP_GET_VALUES'
+    EXPORTING
+      popup_title     = '填写所需字段'
+    IMPORTING
+      returncode      = lv_rc
+    TABLES
+      fields          = lt_fields[]
+    EXCEPTIONS
+      error_in_fields = 1
+      OTHERS          = 2.
+
+  IF lv_rc IS NOT INITIAL.
+    g_fag = 'X'.
+    MESSAGE '未填入相应数据，不可以过账！' TYPE  'I'.
+  ENDIF.
+
+*   先检查冲销原因，冲销原因如果是02，检查冲销日期是否为空
+  CLEAR lt_fields.
+  READ TABLE lt_fields INDEX 2.
+  gv_stgrd = lt_fields-value.
+
+  IF gv_stgrd = '02'.
+    CLEAR lt_fields.
+    READ TABLE lt_fields INDEX 1.
+    gv_rdat = lt_fields-value.
+    IF gv_rdat EQ space OR gv_rdat IS INITIAL.
+      g_fag = 'X'.
+      MESSAGE '请输入冲销日期' TYPE  'I'.
+    ENDIF.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CREATE_FI_DOC_BS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_create_bs .
+  READ TABLE gt_alv INTO gs_alv WITH KEY check = 'X'.
+  IF sy-subrc NE 0.
+    MESSAGE '请至少选择一行数据' TYPE 'I'.
+    EXIT.
+  ENDIF.
+  LOOP AT gt_alv INTO gs_alv WHERE check = 'X' AND  zpjzt NE space.
+    MESSAGE '选择了票据状态不为持有中的数据行，当前状态不允许进行此操作' TYPE 'I'.
+    EXIT.
+  ENDLOOP.
+  IF sy-subrc = 0.
+    EXIT.
+  ENDIF.
+
+  CLEAR gw_zbs.
+  CALL SCREEN 0200 STARTING AT 25  5 ENDING AT 50 10.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_data_bs.
+  IF gw_zbs-lifnr IS NOT INITIAL AND gw_zbs-lifnr IS NOT INITIAL .
+    MESSAGE '供应商和供应商不能同时输入' TYPE 'I'.
+    EXIT.
+  ENDIF.
+  IF gw_zbs-lifnr IS INITIAL AND gw_zbs-lifnr IS INITIAL.
+    MESSAGE '请输入供应商或供应商' TYPE 'I'.
+    EXIT.
+  ENDIF.
+  IF gw_zbs-budat IS INITIAL.
+    MESSAGE '请输入背书日期' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  PERFORM frm_create_fi_doc_zbs.
+  PERFORM f_refresh_alv_display.
+  LEAVE TO SCREEN 0.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Module  FRM_CHECK_DATA  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE frm_check_data INPUT.
+  IF gw_zbs-lifnr IS NOT INITIAL.
+    SELECT SINGLE * FROM lfa1 WHERE lifnr = gw_zbs-lifnr.
+    IF sy-subrc NE 0.
+      MESSAGE '供应商无效' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+  IF gw_zbs-lifnr IS NOT INITIAL .
+    SELECT SINGLE * FROM lfa1 WHERE lifnr = gw_zbs-lifnr.
+    IF sy-subrc NE 0.
+      MESSAGE '供应商无效' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CREATE_FI_DOC_ZBS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_create_fi_doc_zbs .
+  DATA: t_blntab LIKE TABLE OF blntab,
+        t_ftpost LIKE TABLE OF ftpost,
+        t_fttax  LIKE TABLE OF  fttax.
+  DATA: ls_blntab LIKE blntab,
+        ls_ftpost LIKE ftpost,
+        ls_fttax  LIKE fttax.
+
+  DATA: e_msgid LIKE sy-msgid,
+        e_msgno LIKE sy-msgno,
+        e_msgty LIKE sy-msgty,
+        e_msgv1 LIKE sy-msgv1,
+        e_msgv2 LIKE sy-msgv2,
+        e_msgv3 LIKE sy-msgv3,
+        e_msgv4 LIKE sy-msgv4,
+        e_subrc LIKE sy-subrc.
+
+  DATA: l_num   TYPE i,
+        l_index TYPE i.
+
+  DATA:lv_msg TYPE string.
+
+  DATA:l_dmt TYPE zficotfkt-zskze.
+  DATA:ls_skt TYPE zficotfkt.
+
+  DATA ls_stylerow TYPE lvc_s_styl.
+  DATA lt_styletab TYPE lvc_t_styl.
+
+  DATA: l_char(12) TYPE c.
+  DATA:lv_str(25) TYPE c.
+
+  DEFINE t_ftpost.
+    ls_ftpost-stype = &1.
+    ls_ftpost-count = &2.
+    ls_ftpost-fnam  = &3.
+    ls_ftpost-fval  = &4.
+    CONDENSE ls_ftpost-fval NO-GAPS.
+    APPEND ls_ftpost TO t_ftpost.
+  END-OF-DEFINITION.
+
+  LOOP AT gt_alv INTO gs_alv WHERE check = 'X' AND zpjzt EQ space.
+    l_index = sy-tabix.
+
+    REFRESH: t_ftpost,t_blntab,t_fttax.
+    CLEAR:t_ftpost,t_blntab,t_fttax,e_msgty,e_msgv1,lv_str.
+
+    t_ftpost: 'K' 1 'BKPF-BUKRS' gs_alv-zgsdm,    "公司代码
+              'K' 1 'BKPF-BLART' 'Z4',            "凭证类型
+              'K' 1 'BKPF-BLDAT' sy-datum,        "凭证日期
+              'K' 1 'BKPF-BUDAT' gw_zbs-budat,    "过帐日期
+              'K' 1 'BKPF-WAERS' gs_alv-zbb.      "币别
+
+***行1
+    CLEAR l_dmt.
+    l_dmt = abs( gs_alv-zcnqre ).
+
+    IF gw_zbs-lifnr IS NOT INITIAL.
+      IF gs_alv-zcnqre  < 0.
+        t_ftpost: 'P' 1 'BSEG-BSCHL'  '11'.              "记账码
+      ELSE.
+        t_ftpost: 'P' 1 'BSEG-BSCHL'  '01'.              "记账码
+      ENDIF.
+      t_ftpost: 'P' 1 'BSEG-HKONT'  gw_zbs-lifnr.      "科目
+    ELSEIF gw_zbs-lifnr IS NOT INITIAL.
+      IF gs_alv-zcnqre  < 0.
+        t_ftpost: 'P' 1 'BSEG-BSCHL'  '31'.              "记账码
+      ELSE.
+        t_ftpost: 'P' 1 'BSEG-BSCHL'  '21'.              "记账码
+      ENDIF.
+      t_ftpost: 'P' 1 'BSEG-HKONT'  gw_zbs-lifnr.      "科目
+    ENDIF.
+
+    t_ftpost: 'P' 1 'BSEG-WRBTR'  l_dmt,           "金额
+              'P' 1 'BSEG-SKFBT'  l_dmt,           "折扣基础
+              'P' 1 'BSEG-KKBER'  gs_alv-kkber,    "控制范围
+*             'P' 1 'BSEG-PRCTR'  gs_alv-prctr,    "利润中心
+              'P' 1 'BSEG-ZUONR'  gs_alv-zhphm.    "分配
+
+    IF gs_alv-zskfs = '3'.
+      IF gs_alv-zcnqre < 0.
+        t_ftpost: 'P' 2 'BSEG-BSCHL'  '09'.       "记账码
+      ELSE.
+        t_ftpost: 'P' 2 'BSEG-BSCHL'  '19'.       "记账码
+      ENDIF.
+      t_ftpost: 'P' 2 'BSEG-HKONT'  gs_alv-lifnr,  "科目
+                'P' 2 'RF05A-NEWUM' 'W',           "特殊总账
+                'P' 2 'BSEG-ZFBDT'  gs_alv-zhpdqr, "到期日
+                'P' 2 'BSEG-WRBTR'  l_dmt,         "金额
+*               'P' 2 'BSEG-PRCTR'  gs_alv-prctr,  "利润中心
+                'P' 2 'BSEG-ZUONR'  gs_alv-zhphm.  "分配
+    ELSEIF gs_alv-zskfs = '4'.
+      IF gs_alv-zcnqre < 0.
+        t_ftpost: 'P' 2 'BSEG-BSCHL'  '09'.       "记账码
+      ELSE.
+        t_ftpost: 'P' 2 'BSEG-BSCHL'  '19'.       "记账码
+      ENDIF.
+      t_ftpost: 'P' 2 'BSEG-HKONT'  gs_alv-lifnr,  "科目
+                'P' 2 'RF05A-NEWUM' 'S',             "特殊总账
+                'P' 2 'BSEG-ZFBDT'  gs_alv-zhpdqr, "到期日
+                'P' 2 'BSEG-WRBTR'  l_dmt,           "金额
+*               'P' 2 'BSEG-PRCTR'  gs_alv-prctr,  "利润中心
+                'P' 2 'BSEG-ZUONR'  gs_alv-zhphm.  "分配
+    ENDIF.
+
+    DELETE t_ftpost WHERE fval = space.
+    DELETE t_ftpost WHERE fval = '00000000'.
+
+    IF t_ftpost[] IS NOT INITIAL.
+      CALL FUNCTION 'POSTING_INTERFACE_START'
+        EXPORTING
+          i_function         = 'C'
+          i_keep             = 'X' "I_KEEP
+          i_mode             = 'E' "I_MODE
+        EXCEPTIONS
+          client_incorrect   = 1
+          function_invalid   = 2
+          group_name_missing = 3
+          mode_invalid       = 4
+          update_invalid     = 5
+          OTHERS             = 6.
+
+      CALL FUNCTION 'POSTING_INTERFACE_DOCUMENT'
+        EXPORTING
+          i_tcode                  = 'FB01'
+        IMPORTING
+          e_msgid                  = e_msgid
+          e_msgno                  = e_msgno
+          e_msgty                  = e_msgty
+          e_msgv1                  = e_msgv1
+          e_msgv2                  = e_msgv2
+          e_msgv3                  = e_msgv3
+          e_msgv4                  = e_msgv4
+          e_subrc                  = e_subrc
+        TABLES
+          t_blntab                 = t_blntab
+          t_ftpost                 = t_ftpost
+          t_fttax                  = t_fttax
+        EXCEPTIONS
+          account_missing          = 1
+          company_code_missing     = 2
+          posting_key_invalid      = 3
+          posting_key_missing      = 4
+          record_type_invalid      = 5
+          transaction_code_invalid = 6
+          amount_format_error      = 7
+          too_many_line_items      = 8
+          company_code_invalid     = 9
+          screen_not_found         = 10
+          no_authorization         = 11
+          OTHERS                   = 12.
+
+      IF e_msgty = 'S' AND e_msgv1 <> ''.
+        CONCATENATE  '过账成功' e_msgv1 INTO lv_msg.
+        MOVE lv_msg TO gs_alv-mess.
+        MOVE e_msgv1 TO gs_alv-zpjpzbh.    "凭证号
+        gs_alv-zpjzt = '1'.                "票据单据状态(已背书)
+        gs_alv-txt_pjzt = '背书'.
+        gs_alv-zbskh = gw_zbs-lifnr.       "背书供应商
+        gs_alv-zbsgys = gw_zbs-lifnr.      "背书供应商
+        gs_alv-zpjclrq = gw_zbs-budat.     "票据处理日期
+        gs_alv-zpjkjnd = gw_zbs-budat+0(4)."年度
+        gs_alv-zpjclry = sy-uname.         "处理人
+
+        "过账日期不可编辑
+        ls_stylerow-fieldname = 'ZGZRQ'.
+        ls_stylerow-style = cl_gui_alv_grid=>mc_style_disabled.
+        INSERT ls_stylerow INTO TABLE lt_styletab.
+        gs_alv-cellstyle = lt_styletab.
+        CLEAR ls_stylerow.
+
+        ls_stylerow-fieldname = 'CHECK'.
+        ls_stylerow-style = cl_gui_alv_grid=>mc_style_enabled.
+        INSERT ls_stylerow INTO TABLE lt_styletab.
+        gs_alv-cellstyle = lt_styletab.
+
+        CLEAR ls_skt.
+        MOVE-CORRESPONDING gs_alv TO ls_skt.
+        MODIFY zficotfkt FROM ls_skt.
+        IF sy-subrc = 0.
+          COMMIT WORK.
+        ELSE.
+          ROLLBACK WORK.
+        ENDIF.
+        MESSAGE gs_alv-mess TYPE 'S'.
+      ELSE.
+        CONCATENATE e_msgid e_msgno e_msgty e_msgv1
+                    e_msgv2 e_msgv3 e_msgv4
+               INTO gs_alv-mess.
+        MESSAGE gs_alv-mess TYPE 'S' DISPLAY LIKE 'E'.
+      ENDIF.
+    ENDIF.
+    MODIFY gt_alv FROM gs_alv INDEX l_index.
+  ENDLOOP.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CREATE_TS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_create_fk .
+  DATA:lv_line TYPE i.
+
+  READ TABLE gt_alv INTO gs_alv WITH KEY check = 'X'.
+  IF sy-subrc NE 0.
+    MESSAGE '请至少选择一行数据' TYPE 'I'.
+    EXIT.
+  ENDIF.
+  LOOP AT gt_alv INTO gs_alv WHERE check = 'X' AND  zpjzt NE space.
+    MESSAGE '选择了票据状态不为持有中的数据行，当前状态不允许进行此操作' TYPE 'I'.
+    EXIT.
+  ENDLOOP.
+  IF sy-subrc = 0.
+    EXIT.
+  ENDIF.
+
+  LOOP AT gt_alv INTO gs_alv WHERE check = 'X' AND  zpjzt EQ space.
+    lv_line = lv_line + 1.
+  ENDLOOP.
+  IF lv_line > 1.
+    MESSAGE '每次只能选择一行数据进行过账' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  CLEAR gw_zts.
+  CALL SCREEN 0300 STARTING AT 25  5 ENDING AT 100 10.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_DATA_TS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_data_ts .
+  DATA:lv_dmbtr LIKE bseg-dmbtr.
+
+  IF gw_zts-saknr IS INITIAL.
+    MESSAGE '请输入付款银行1' TYPE 'I'.
+    EXIT.
+  ENDIF.
+  IF gw_zts-budat IS INITIAL.
+    MESSAGE '请输入付款日期' TYPE 'I'.
+    EXIT.
+  ENDIF.
+  IF gw_zts-zyhlsh IS INITIAL.
+    MESSAGE '请输入银行流水号1' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  IF gw_zts-dmbtr IS INITIAL.
+    MESSAGE '请输入金额1' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  IF gw_zts-saknr1 IS NOT INITIAL.
+    IF gw_zts-zyhlsh1 IS INITIAL.
+      MESSAGE '请输入银行流水号2' TYPE 'I'.
+      EXIT.
+    ENDIF.
+
+    IF gw_zts-dmbtr1 IS INITIAL.
+      MESSAGE '请输入金额2' TYPE 'I'.
+      EXIT.
+    ENDIF.
+  ENDIF.
+
+  lv_dmbtr = gw_zts-dmbtr + gw_zts-dmbtr1.
+  READ TABLE gt_alv INTO gs_alv WITH KEY check = 'X'.
+  IF sy-subrc = 0.
+    IF lv_dmbtr NE gs_alv-zcnqre.
+      MESSAGE '金额合计不等于收款金额' TYPE 'I'.
+      EXIT.
+    ENDIF.
+  ENDIF.
+
+  PERFORM frm_create_fi_doc_zts.
+  PERFORM f_refresh_alv_display.
+  LEAVE TO SCREEN 0.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CREATE_FI_DOC_ZTS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_create_fi_doc_zts .
+  DATA: t_blntab LIKE TABLE OF blntab,
+        t_ftpost LIKE TABLE OF ftpost,
+        t_fttax  LIKE TABLE OF  fttax.
+  DATA: ls_blntab LIKE blntab,
+        ls_ftpost LIKE ftpost,
+        ls_fttax  LIKE fttax.
+
+  DATA: e_msgid LIKE sy-msgid,
+        e_msgno LIKE sy-msgno,
+        e_msgty LIKE sy-msgty,
+        e_msgv1 LIKE sy-msgv1,
+        e_msgv2 LIKE sy-msgv2,
+        e_msgv3 LIKE sy-msgv3,
+        e_msgv4 LIKE sy-msgv4,
+        e_subrc LIKE sy-subrc.
+
+  DATA: l_num   TYPE i,
+        l_index TYPE i.
+
+  DATA:lv_msg TYPE string.
+
+  DATA:l_dmt TYPE zficotfkt-zskze.
+  DATA:ls_skt TYPE zficotfkt.
+
+  DATA ls_stylerow TYPE lvc_s_styl.
+  DATA lt_styletab TYPE lvc_t_styl.
+
+  DATA: l_char(12) TYPE c.
+
+  DEFINE t_ftpost.
+    ls_ftpost-stype = &1.
+    ls_ftpost-count = &2.
+    ls_ftpost-fnam  = &3.
+    ls_ftpost-fval  = &4.
+    CONDENSE ls_ftpost-fval NO-GAPS.
+    APPEND ls_ftpost TO t_ftpost.
+  END-OF-DEFINITION.
+  DATA:lv_bktxt LIKE bkpf-bktxt.
+
+
+  LOOP AT gt_alv INTO gs_alv WHERE check = 'X' AND zpjzt EQ space.
+    l_index = sy-tabix.
+
+    REFRESH: t_ftpost,t_blntab,t_fttax.
+    CLEAR:t_ftpost,t_blntab,t_fttax,e_msgty,e_msgv1.
+
+    t_ftpost: 'K' 1 'BKPF-BUKRS' gs_alv-zgsdm,    "公司代码
+              'K' 1 'BKPF-BLART' 'Z4',            "凭证类型
+              'K' 1 'BKPF-BLDAT' sy-datum,        "凭证日期
+              'K' 1 'BKPF-BUDAT' gw_zts-budat,    "过帐日期
+              'K' 1 'BKPF-WAERS' gs_alv-zbb.      "币别
+    CONCATENATE gs_alv-zhphm '票据到期付款' INTO lv_bktxt.
+    t_ftpost: 'K' 1 'BKPF-BKTXT' lv_bktxt.
+
+***行1
+    CLEAR l_dmt.
+    l_dmt = abs( gw_zts-dmbtr ).
+
+    IF gs_alv-zcnqre  < 0.
+      t_ftpost: 'P' 1 'BSEG-BSCHL'  '40'.         "记账码
+    ELSE.
+      t_ftpost: 'P' 1 'BSEG-BSCHL'  '50'.         "记账码
+    ENDIF.
+    t_ftpost: 'P' 1 'BSEG-HKONT'  gw_zts-saknr.   "科目
+
+    t_ftpost: 'P' 1 'BSEG-WRBTR'  l_dmt,          "金额
+              'P' 1 'BSEG-SKFBT'  l_dmt,          "折扣基础
+              'P' 1 'BSEG-KKBER'  gs_alv-kkber,   "控制范围
+*             'P' 1 'BSEG-PRCTR'  gs_alv-prctr,   "利润中心
+              'P' 1 'BSEG-RSTGR'  '121',          "原因代码
+              'P' 1 'BSEG-ZUONR'  gw_zts-zyhlsh.   "分配
+
+    IF gw_zts-saknr1 IS NOT INITIAL.
+      CLEAR l_dmt.
+      l_dmt = abs( gw_zts-dmbtr1 ).
+
+      IF gs_alv-zcnqre  < 0.
+        t_ftpost: 'P' 2 'BSEG-BSCHL'  '40'.         "记账码
+      ELSE.
+        t_ftpost: 'P' 2 'BSEG-BSCHL'  '50'.         "记账码
+      ENDIF.
+      t_ftpost: 'P' 2 'BSEG-HKONT'  gw_zts-saknr1.   "科目
+
+      t_ftpost: 'P' 2 'BSEG-WRBTR'  l_dmt,          "金额
+                'P' 2 'BSEG-SKFBT'  l_dmt,          "折扣基础
+                'P' 2 'BSEG-KKBER'  gs_alv-kkber,   "控制范围
+*             'P' 2 'BSEG-PRCTR'  gs_alv-prctr,   "利润中心
+                'P' 2 'BSEG-RSTGR'  '121',          "原因代码
+                'P' 2 'BSEG-ZUONR'  gw_zts-zyhlsh1.   "分配
+      l_num = 3.
+    ELSE.
+      l_num = 2.
+    ENDIF.
+
+    l_dmt = abs( gs_alv-zcnqre ).
+    IF gs_alv-zskfs = '3'.
+      IF gs_alv-zcnqre < 0.
+        t_ftpost: 'P' l_num 'BSEG-BSCHL'  '39'.              "记账码
+      ELSE.
+        t_ftpost: 'P' l_num 'BSEG-BSCHL'  '29'.               "记账码
+      ENDIF.
+      t_ftpost: 'P' l_num 'BSEG-HKONT'  gs_alv-lifnr,         "科目
+                'P' l_num 'RF05A-NEWUM' 'W',                 "特殊总账
+                'P' l_num 'BSEG-ZFBDT'  gs_alv-zhpdqr,       "到期日
+                'P' l_num 'BSEG-WRBTR'  l_dmt,                "金额
+*               'P' l_num 'BSEG-PRCTR'  gs_alv-prctr,        "利润中心
+                'P' l_num 'BSEG-ZUONR'  gs_alv-zhphm.        "分配
+    ELSEIF gs_alv-zskfs = '4'.
+      IF gs_alv-zcnqre < 0.
+        t_ftpost: 'P' l_num 'BSEG-BSCHL'  '39'.       "记账码
+      ELSE.
+        t_ftpost: 'P' l_num 'BSEG-BSCHL'  '29'.       "记账码
+      ENDIF.
+      t_ftpost: 'P' l_num 'BSEG-HKONT'  gs_alv-lifnr,  "科目
+                'P' l_num 'RF05A-NEWUM' 'S',           "特殊总账
+                'P' l_num 'BSEG-ZFBDT'  gs_alv-zhpdqr, "到期日
+                'P' l_num 'BSEG-WRBTR'  l_dmt,         "金额
+*               'P' l_num 'BSEG-PRCTR'  gs_alv-prctr,  "利润中心
+                'P' l_num 'BSEG-ZUONR'  gs_alv-zhphm.  "分配
+    ENDIF.
+
+    DELETE t_ftpost WHERE fval = space.
+    DELETE t_ftpost WHERE fval = '00000000'.
+
+    IF t_ftpost[] IS NOT INITIAL.
+      CALL FUNCTION 'POSTING_INTERFACE_START'
+        EXPORTING
+          i_function         = 'C'
+          i_keep             = 'X' "I_KEEP
+          i_mode             = 'E' "I_MODE
+        EXCEPTIONS
+          client_incorrect   = 1
+          function_invalid   = 2
+          group_name_missing = 3
+          mode_invalid       = 4
+          update_invalid     = 5
+          OTHERS             = 6.
+
+      CALL FUNCTION 'POSTING_INTERFACE_DOCUMENT'
+        EXPORTING
+          i_tcode                  = 'FB01'
+        IMPORTING
+          e_msgid                  = e_msgid
+          e_msgno                  = e_msgno
+          e_msgty                  = e_msgty
+          e_msgv1                  = e_msgv1
+          e_msgv2                  = e_msgv2
+          e_msgv3                  = e_msgv3
+          e_msgv4                  = e_msgv4
+          e_subrc                  = e_subrc
+        TABLES
+          t_blntab                 = t_blntab
+          t_ftpost                 = t_ftpost
+          t_fttax                  = t_fttax
+        EXCEPTIONS
+          account_missing          = 1
+          company_code_missing     = 2
+          posting_key_invalid      = 3
+          posting_key_missing      = 4
+          record_type_invalid      = 5
+          transaction_code_invalid = 6
+          amount_format_error      = 7
+          too_many_line_items      = 8
+          company_code_invalid     = 9
+          screen_not_found         = 10
+          no_authorization         = 11
+          OTHERS                   = 12.
+
+      IF e_msgty = 'S' AND e_msgv1 <> ''.
+        CONCATENATE  '过账成功' e_msgv1 INTO lv_msg.
+        MOVE lv_msg TO gs_alv-mess.
+        MOVE e_msgv1 TO gs_alv-zpjpzbh.    "凭证号
+        gs_alv-zpjzt = '1'.                "票据单据状态(已托付)
+        gs_alv-txt_pjzt = '付款'.
+        gs_alv-ztsyh = gw_zts-saknr.       "托付银行
+        gs_alv-zpjclrq = gw_zts-budat.     "票据处理日期
+        gs_alv-zpjkjnd = gw_zts-budat+0(4)."年度
+        gs_alv-zpjclry = sy-uname.         "处理人
+
+        "过账日期不可编辑
+        ls_stylerow-fieldname = 'ZGZRQ'.
+        ls_stylerow-style = cl_gui_alv_grid=>mc_style_disabled.
+        INSERT ls_stylerow INTO TABLE lt_styletab.
+        gs_alv-cellstyle = lt_styletab.
+        CLEAR ls_stylerow.
+
+        ls_stylerow-fieldname = 'CHECK'.
+        ls_stylerow-style = cl_gui_alv_grid=>mc_style_enabled.
+        INSERT ls_stylerow INTO TABLE lt_styletab.
+        gs_alv-cellstyle = lt_styletab.
+
+        CLEAR ls_skt.
+        MOVE-CORRESPONDING gs_alv TO ls_skt.
+        MODIFY zficotfkt FROM ls_skt.
+        IF sy-subrc = 0.
+          COMMIT WORK.
+        ELSE.
+          ROLLBACK WORK.
+        ENDIF.
+        MESSAGE gs_alv-mess TYPE 'S'.
+      ELSE.
+        CONCATENATE e_msgid e_msgno e_msgty e_msgv1
+                    e_msgv2 e_msgv3 e_msgv4
+               INTO gs_alv-mess.
+        MESSAGE gs_alv-mess TYPE 'S' DISPLAY LIKE 'E'.
+      ENDIF.
+    ENDIF.
+    MODIFY gt_alv FROM gs_alv INDEX l_index.
+  ENDLOOP.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CREATE_TP
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_create_tp .
+  READ TABLE gt_alv INTO gs_alv WITH KEY check = 'X'.
+  IF sy-subrc NE 0.
+    MESSAGE '请至少选择一行数据' TYPE 'I'.
+    EXIT.
+  ENDIF.
+  LOOP AT gt_alv INTO gs_alv WHERE check = 'X' AND  zpjzt NE space.
+    MESSAGE '选择了票据状态不为持有中的数据行，当前状态不允许进行此操作' TYPE 'I'.
+    EXIT.
+  ENDLOOP.
+  IF sy-subrc = 0.
+    EXIT.
+  ENDIF.
+
+  gv_zpjzt = space.
+
+  CLEAR gw_ztp.
+  CALL SCREEN 0400 STARTING AT 25  5 ENDING AT 50 10.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_DATA_TP
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_data_tp .
+  DATA:lv_belnr TYPE bkpf-belnr.
+  DATA: lt_blntab LIKE TABLE OF blntab WITH HEADER LINE,
+        lv_msgid  LIKE sy-msgid,
+        lv_msgno  LIKE sy-msgno,
+        lv_msgty  LIKE sy-msgty,
+        lv_msgv1  LIKE sy-msgv1,
+        lv_msgv2  LIKE sy-msgv2,
+        lv_msgv3  LIKE sy-msgv3,
+        lv_msgv4  LIKE sy-msgv4,
+        lv_subrc  LIKE sy-subrc.
+
+  DATA ls_stylerow TYPE lvc_s_styl.
+  DATA lt_styletab TYPE lvc_t_styl.
+  DATA:ls_skt TYPE zficotfkt.
+  DATA:lv_index LIKE sy-tabix.
+
+  IF gw_ztp-stgrd IS INITIAL.
+    MESSAGE '请输入冲销原因' TYPE 'I'.
+    EXIT.
+  ENDIF.
+  IF gw_ztp-budat IS INITIAL.
+    MESSAGE '请输入过账日期' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+
+  LOOP AT gt_alv INTO gs_alv WHERE check = 'X' AND zpjzt EQ gv_zpjzt.
+    lv_index = sy-tabix.
+
+    IF gv_zpjzt EQ space. "退票
+      CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+        EXPORTING
+          input  = gs_alv-zkjpzbh
+        IMPORTING
+          output = lv_belnr.
+    ELSEIF gv_zpjzt EQ '1'. "取消付款
+      lv_belnr = gs_alv-zpjpzbh.
+*    ELSEIF gv_zpjzt EQ '2'. "取消托付
+*      lv_belnr = gs_alv-zpjpzbh.
+    ENDIF.
+
+    CALL FUNCTION 'POSTING_INTERFACE_START'
+      EXPORTING
+        i_function         = 'C'
+        i_keep             = 'X' "I_KEEP
+        i_mode             = 'E' "I_MODE
+      EXCEPTIONS
+        client_incorrect   = 1
+        function_invalid   = 2
+        group_name_missing = 3
+        mode_invalid       = 4
+        update_invalid     = 5
+        OTHERS             = 6.
+
+    REFRESH:lt_blntab.
+    CLEAR:lt_blntab,lv_msgty,lv_msgv1,lv_msgv2,lv_msgv3,lv_msgv4,lv_msgno.
+
+    CALL FUNCTION 'POSTING_INTERFACE_REVERSE_DOC'
+      EXPORTING
+        i_belns                  = lv_belnr
+        i_bukrs                  = gs_alv-zgsdm
+        i_budat                  = gw_ztp-budat
+        i_stgrd                  = gw_ztp-stgrd
+        i_tcode                  = 'FB08'
+      IMPORTING
+        e_msgid                  = lv_msgid
+        e_msgno                  = lv_msgno
+        e_msgty                  = lv_msgty
+        e_msgv1                  = lv_msgv1
+        e_msgv2                  = lv_msgv2
+        e_msgv3                  = lv_msgv3
+        e_msgv4                  = lv_msgv4
+        e_subrc                  = lv_subrc
+      TABLES
+        t_blntab                 = lt_blntab
+      EXCEPTIONS
+        transaction_code_invalid = 1
+        no_authorization         = 2
+        OTHERS                   = 3.
+    IF lv_msgty NE  'S' ."成功
+      CONCATENATE  '过账失败!原因：' lv_msgty
+                   lv_msgid lv_msgno lv_msgv1
+                   lv_msgv2 lv_msgv3 lv_msgv4
+             INTO gs_alv-mess.
+      MESSAGE gs_alv-mess TYPE 'S' DISPLAY LIKE 'E'.
+    ELSE.
+      CONCATENATE  '过账成功' lv_msgv1 INTO gs_alv-mess.
+      IF gv_zpjzt EQ space. "退票
+        gs_alv-zpjpzbh = lv_msgv1.        "凭证号
+        gs_alv-zpjzt = '2'.               "票据单据状态(已退票)
+        gs_alv-txt_pjzt = '退票'.
+        gs_alv-zpjclrq = gw_ztp-budat.     "票据处理日期
+        gs_alv-zpjkjnd = gw_ztp-budat+0(4)."年度
+        gs_alv-zpjclry = sy-uname.         "处理人
+      ELSEIF gv_zpjzt EQ '1' OR gv_zpjzt EQ '2'. "取消背书或付款
+        CLEAR:gs_alv-zpjpzbh,gs_alv-zpjzt,gs_alv-zbskh,gs_alv-zbsgys,gs_alv-ztsyh,gs_alv-zpjclrq,gs_alv-zpjkjnd,gs_alv-zpjclry.
+        gs_alv-txt_pjzt = '持有中'.
+      ENDIF.
+
+      "过账日期不可编辑
+      ls_stylerow-fieldname = 'ZGZRQ'.
+      ls_stylerow-style = cl_gui_alv_grid=>mc_style_disabled.
+      INSERT ls_stylerow INTO TABLE lt_styletab.
+      gs_alv-cellstyle = lt_styletab.
+      CLEAR ls_stylerow.
+
+      ls_stylerow-fieldname = 'CHECK'.
+      ls_stylerow-style = cl_gui_alv_grid=>mc_style_enabled.
+      INSERT ls_stylerow INTO TABLE lt_styletab.
+      gs_alv-cellstyle = lt_styletab.
+
+      CLEAR ls_skt.
+      MOVE-CORRESPONDING gs_alv TO ls_skt.
+      MODIFY zficotfkt FROM ls_skt.
+      IF sy-subrc = 0.
+        COMMIT WORK.
+      ELSE.
+        ROLLBACK WORK.
+      ENDIF.
+      MESSAGE gs_alv-mess TYPE 'S'.
+    ENDIF.
+    MODIFY gt_alv FROM gs_alv INDEX lv_index.
+  ENDLOOP.
+
+  PERFORM f_refresh_alv_display.
+  LEAVE TO SCREEN 0.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Module  FRM_CHECK_SAKNR  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE frm_check_saknr INPUT.
+  DATA:lv_saknr LIKE skb1-saknr.
+  IF gw_zts-saknr IS NOT INITIAL.
+    SELECT SINGLE saknr
+      INTO lv_saknr
+      FROM skb1
+     WHERE saknr LIKE '1002%'
+       AND saknr = gw_zts-saknr.
+    IF sy-subrc NE 0.
+      MESSAGE '输入的付款银行1不正确' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  FRM_CHECK_STGRD  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE frm_check_stgrd INPUT.
+  DATA:lv_stgrd LIKE t041c-stgrd.
+  IF gw_ztp-stgrd IS NOT INITIAL.
+    SELECT SINGLE stgrd INTO lv_stgrd FROM t041c WHERE stgrd = gw_ztp-stgrd.
+    IF sy-subrc NE 0.
+      MESSAGE '冲销原因不正确' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CANCEL_BS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_cancel_bs .
+  READ TABLE gt_alv INTO gs_alv WITH KEY check = 'X'.
+  IF sy-subrc NE 0.
+    MESSAGE '请至少选择一行数据' TYPE 'I'.
+    EXIT.
+  ENDIF.
+  LOOP AT gt_alv INTO gs_alv WHERE check = 'X' AND  zpjzt NE '1'.
+    MESSAGE '选择了票据状态不为背书的数据行，不允许取消背书' TYPE 'I'.
+    EXIT.
+  ENDLOOP.
+  IF sy-subrc = 0.
+    EXIT.
+  ENDIF.
+
+  gv_zpjzt = '1'.
+
+  CLEAR gw_ztp.
+  CALL SCREEN 0400 STARTING AT 25  5 ENDING AT 50 10.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CANCEL_TS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_cancel_fk .
+  READ TABLE gt_alv INTO gs_alv WITH KEY check = 'X'.
+  IF sy-subrc NE 0.
+    MESSAGE '请至少选择一行数据' TYPE 'I'.
+    EXIT.
+  ENDIF.
+  LOOP AT gt_alv INTO gs_alv WHERE check = 'X' AND  zpjzt NE '1'.
+    MESSAGE '选择了票据状态不为付款的数据行，不允许取消付款' TYPE 'I'.
+    EXIT.
+  ENDLOOP.
+  IF sy-subrc = 0.
+    EXIT.
+  ENDIF.
+
+  gv_zpjzt = '1'.
+
+  CLEAR gw_ztp.
+  CALL SCREEN 0400 STARTING AT 25  5 ENDING AT 50 10.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Module  FRM_CHECK_SAKNR1  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE frm_check_saknr1 INPUT.
+  IF gw_zts-saknr1 IS NOT INITIAL.
+    SELECT SINGLE saknr
+      INTO lv_saknr
+      FROM skb1
+     WHERE saknr LIKE '1002%'
+       AND saknr = gw_zts-saknr1.
+    IF sy-subrc NE 0.
+      MESSAGE '输入的付款银行2不正确' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SAKNR_F4
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0222   text
+*      -->P_0223   text
+*----------------------------------------------------------------------*
+FORM frm_saknr_f4  USING  u_retfield LIKE dfies-fieldname
+                          u_dynprofield LIKE help_info-dynprofld.
+
+  DATA:BEGIN OF lt_skb1 OCCURS 0,
+         bukrs LIKE skb1-bukrs,
+         saknr LIKE skb1-saknr,
+         txt50 LIKE skat-txt50,
+       END OF lt_skb1.
+
+  SELECT a~bukrs
+         a~saknr
+         b~txt50
+    INTO CORRESPONDING FIELDS OF TABLE lt_skb1
+    FROM skb1 AS a
+    LEFT JOIN skat AS b
+    ON a~saknr = b~saknr
+    AND b~spras = sy-langu
+    AND b~ktopl = '1000'
+    WHERE a~saknr LIKE '1002%'.
+
+  CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+    EXPORTING
+*     DDIC_STRUCTURE  = ' '
+      retfield        = u_retfield
+*     PVALKEY         = ' '
+      dynpprog        = sy-repid
+      dynpnr          = sy-dynnr
+      dynprofield     = u_dynprofield
+*     STEPL           = 0
+*     WINDOW_TITLE    =
+*     VALUE           = ' '
+      value_org       = 'S'
+*     MULTIPLE_CHOICE = ' '
+*     DISPLAY         = ' '
+*     CALLBACK_PROGRAM       = ' '
+*     CALLBACK_FORM   = ' '
+*     CALLBACK_METHOD =
+*     MARK_TAB        =
+*     IMPORTING
+*     USER_RESET      =
+    TABLES
+      value_tab       = lt_skb1
+*     FIELD_TAB       =
+*     RETURN_TAB      =
+*     DYNPFLD_MAPPING =
+    EXCEPTIONS
+      parameter_error = 1
+      no_values_found = 2
+      OTHERS          = 3.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.

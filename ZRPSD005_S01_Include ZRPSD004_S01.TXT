@@ -1,0 +1,29 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPSD004_S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+PARAMETERS s_vkorg TYPE likp-vkorg OBLIGATORY DEFAULT '1200'.
+
+*PARAMETERS :p_zprint AS LISTBOX VISIBLE LENGTH 10 .
+
+SELECT-OPTIONS:
+s_kunag FOR likp-kunag,
+s_vbeln FOR likp-vbeln,
+s_erdat FOR likp-erdat,
+s_bzirk FOR vbkd-bzirk,
+s_kvgr1 FOR vbak-kvgr1,
+s_kvgr2 FOR vbak-kvgr2,
+s_vgbel FOR lips-vgbel,
+s_matnr FOR lips-matnr.
+*s_ernam FOR vbak-ernam DEFAULT sy-uname.
+
+
+SELECTION-SCREEN  SKIP  2.
+PARAMETERS :s_zprint AS CHECKBOX  .
+
+SELECTION-SCREEN  SKIP  1.
+
+*PARAMETERS: zmf  RADIOBUTTON GROUP rad1 DEFAULT 'X',
+*            zth  RADIOBUTTON GROUP rad1.
+
+SELECTION-SCREEN END OF BLOCK blc.

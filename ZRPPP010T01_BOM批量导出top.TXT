@@ -1,0 +1,32 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPPP010T01
+*&---------------------------------------------------------------------*
+TABLES:mast,stko,stpo.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       aennr     LIKE aeoi-aennr,
+       oitxt     LIKE aeoi-oitxt,
+       matnr     LIKE mast-matnr,
+       maktx_f   LIKE makt-maktx,
+       posnr     LIKE stpo-posnr,
+       idnrk(25) TYPE c,
+       maktx_z   LIKE makt-maktx,
+       menge     LIKE stpo-menge,
+       meins     LIKE stpo-meins,
+       zwh(5000) TYPE c,
+       postp     LIKE stpo-postp,
+       potx1     LIKE stpo-potx1,
+       potx2     LIKE stpo-potx2,
+       sortf     LIKE stpo-sortf,
+       werks     LIKE mast-werks,
+       stlan     LIKE mast-stlan,
+       stlal     LIKE mast-stlal,
+       bmeng     LIKE stko-bmeng,
+       stlst     LIKE stko-stlst,
+       nfeag     LIKE stpo-nfeag,
+       nfgrp     LIKE stpo-nfgrp,
+       alpgr     LIKE stpo-alpgr,
+       alprf     LIKE stpo-alprf,
+       alpst     LIKE stpo-alpst,
+       ewahr     LIKE stpo-ewahr,
+     END OF gt_out.

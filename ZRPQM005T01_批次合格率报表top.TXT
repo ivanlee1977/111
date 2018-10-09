@@ -1,0 +1,70 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM013T01
+*&---------------------------------------------------------------------*
+TABLES:qals,mara.
+
+DATA: BEGIN OF gt_alv OCCURS 0,
+        box(1),
+        prueflos   LIKE qals-prueflos, "检验批号
+        ebeln      LIKE qals-ebeln,    "采购凭证
+        pastrterm  LIKE qals-pastrterm, "检验开始日期
+        paendterm  LIKE qals-paendterm, "检验结束日期
+        werk       LIKE qals-werk, "工厂
+        charg      LIKE qals-charg,    "批次
+        gyspc(30),                     "供应商批次
+        sellifnr   LIKE qals-sellifnr,    "供应商
+        sortl      LIKE lfa1-sortl,    "供应商简称
+        matkl      LIKE mara-matkl,    "物料组
+        wlfl       LIKE dd07v-ddtext, "物料分类
+        selmatnr   LIKE qals-selmatnr, "物料编码
+        maktx      LIKE makt-maktx,    "物料描述
+        losmenge   LIKE qals-losmenge, "数量
+        gesstichpr LIKE qals-gesstichpr, "抽检数量
+        cjbls      LIKE qmfe-anzfehler, "抽检不良数
+        cjbll(20),                      "抽检不良率
+        fecod      LIKE qmfe-fecod,     "缺陷代码
+        kurztext   LIKE qpct-kurztext,  "缺陷代码描述
+        qxsl       LIKE qmfe-anzfehler, "缺陷数量
+        urcod      LIKE qmur-urcod,     "不良原因代码
+        blyyms     LIKE qpct-kurztext,  "不良原因代码描述
+        zzcljg(50),                     "最终处理结果
+        sjjyts     TYPE int4,           "实际检验天数
+        vdatum     LIKE qave-vdatum, "检验决策日期
+        xmfl(10),            "项目分类
+      END OF gt_alv,
+      gt_alv_col LIKE gt_alv OCCURS 0 WITH HEADER LINE.
+
+DATA: BEGIN OF gt_out OCCURS 0,
+        box(1),
+        xmfl     LIKE dd07v-ddtext, "项目分类
+        llpc     TYPE int4, "来料批次
+        hgpc     TYPE int4, "合格批次
+        blpc     TYPE int4, "不良批次
+        pchgl    TYPE p DECIMALS 3, "批次合格率
+        zmbz     TYPE zvalue, "目标值
+        sfdb(5),             "是否达标
+        sysj     TYPE p DECIMALS 3, "上个月数据
+        qs(10),              "趋势
+        sellifnr LIKE qals-sellifnr,    "供应商
+        zwlfl    LIKE ztqm003-zwlfl, "物料分类
+      END OF gt_out.
+
+* 检验处理：使用决策
+DATA: gt_qave LIKE qave OCCURS 0 WITH HEADER LINE.
+* 取根据检验批取检验缺陷
+DATA: gt_qmfel   LIKE qmfel OCCURS 0 WITH HEADER LINE,
+      gt_qmfel_a LIKE qmfel OCCURS 0 WITH HEADER LINE,
+      gt_qmfel_b LIKE qmfel OCCURS 0 WITH HEADER LINE.
+*  根据质量通知单取不良原因
+DATA: gt_qmur LIKE qmur OCCURS 0 WITH HEADER LINE.
+* 取缺陷文本
+DATA: gt_qpct LIKE qpct OCCURS 0 WITH HEADER LINE.
+* 取供应商信息
+DATA:gt_lfa1 LIKE lfa1 OCCURS 0 WITH HEADER LINE.
+*  物料组信息
+DATA:gt_mara LIKE mara OCCURS 0 WITH HEADER LINE,
+     gt_makt LIKE makt OCCURS 0 WITH HEADER LINE.
+* 取物料组对应的物料分类
+DATA:gt_ztqm003 LIKE ztqm003 OCCURS 0 WITH HEADER LINE.
+
+DATA: gv_zwlfl LIKE dd07v-domvalue_l.

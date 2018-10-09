@@ -1,0 +1,27 @@
+*&---------------------------------------------------------------------*
+*& Report ZRPSD004
+*&---------------------------------------------------------------------*
+*&海外PI打印
+*&-制作人：雷鸣涛
+*&-制作日期：2017。07。31
+*&---------------------------------------------------------------------*
+REPORT zrpsd004.
+
+
+INCLUDE zrpsd004_t01.
+INCLUDE zrpsd004_s01.
+INCLUDE zrpsd004_f01.
+
+INITIALIZATION.
+  PERFORM frm_creatlist.
+
+AT SELECTION-SCREEN OUTPUT.
+
+AT SELECTION-SCREEN.
+  PERFORM FRM_CHECK_AUTH.
+
+START-OF-SELECTION.
+
+  PERFORM frm_getdata.
+  PERFORM frm_getfact.
+  PERFORM frm_show.

@@ -1,0 +1,34 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZSDRP014S01
+*&---------------------------------------------------------------------*
+***选择屏幕
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+PARAMETERS:p_r1 RADIOBUTTON GROUP r1 DEFAULT 'X' USER-COMMAND r0,
+           p_r2 RADIOBUTTON GROUP r1.
+SELECTION-SCREEN END OF BLOCK b1.
+
+SELECTION-SCREEN BEGIN OF BLOCK b2 WITH FRAME TITLE TEXT-002.
+SELECT-OPTIONS:s_erdat FOR vbak-erdat,"订单日期
+               s_vbeln FOR vbak-vbeln,"销售订单
+               s_augru FOR vbak-augru,"订单原因
+               s_abgru FOR vbap-abgru,"拒绝原因
+               s_matnr FOR vbap-matnr."物料号
+SELECTION-SCREEN END OF BLOCK b2.
+
+SELECTION-SCREEN BEGIN OF BLOCK b3 WITH FRAME TITLE TEXT-003.
+SELECT-OPTIONS:s_vtweg FOR knvv-vtweg,"分销渠道
+               s_bzirk FOR knvv-bzirk,"销售大区
+               s_vkbur FOR knvv-vkbur,"行办
+               s_vkgrp FOR knvv-vkgrp,"销售组
+               s_kvgr1 FOR knvv-kvgr1,"业务员
+               s_kvgr2 FOR knvv-kvgr2,"商务
+               s_kunnr FOR knvv-kunnr."客户
+SELECTION-SCREEN END OF BLOCK b3.
+
+SELECTION-SCREEN BEGIN OF BLOCK b4 WITH FRAME TITLE TEXT-004.
+SELECT-OPTIONS:s_cpx FOR ausp-atwrt,"产品线
+               s_xl FOR ausp-atwrt,"系列
+               s_spart FOR mara-spart,"产品组
+               s_matkl FOR mara-matkl,"物料组
+               s_pp FOR ausp-atwrt."品牌/厂家
+SELECTION-SCREEN END OF BLOCK b4.

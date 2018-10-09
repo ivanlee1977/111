@@ -1,0 +1,1013 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZSDRP014F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  REFRESH:gt_alv.
+  DATA: lv_year  TYPE char4,lv_mon1 TYPE char2,lv_mon2 TYPE char2,lv_mon TYPE char2,lv_total TYPE ztfi002-zje.
+  DATA: lv_je  TYPE ztfi002-zje,lv_day TYPE sy-datum,lv_je1  TYPE ztfi002-zje.
+  DATA: date TYPE vtbbewe-dvalut,
+        flag TYPE trff_flg,
+        days TYPE trff_type_n_2.
+
+  IF p_r2 = 'X'.
+    CLEAR:gt_alv.
+    REFRESH gt_alv.
+    CONCATENATE p_gjahr s_monat-low '01' INTO lv_day.
+*    CALL FUNCTION 'FIMA_DATE_CREATE'
+*      EXPORTING
+*        i_date = lv_day "输入日期
+*        i_days = -1      "-1天后的日期。可为负数，表示N天前的日期
+*      IMPORTING
+*        e_date = date.    "返回的日期为当前月份的最后一天
+    date = lv_day - 1.
+    SELECT SUM( zje ) INTO lv_je FROM ztfi002 WHERE bukrs = p_bukrs AND prctr IN s_prctr AND zyhzh = p_zyhzh AND zjyrq <= date.
+
+*    SORT gt_alv BY zjyrq.
+*    LOOP AT gt_alv .
+*
+*      IF gt_alv-zjyrq <= date.
+*        lv_je = lv_je + gt_alv-zje.
+*      ENDIF.
+*    ENDLOOP.
+    lv_je1 = lv_je.
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE gt_alv FROM ztfi002 WHERE bukrs = p_bukrs AND prctr IN s_prctr AND zyhzh = p_zyhzh .
+    CHECK gt_alv[] IS NOT INITIAL.
+    SORT gt_alv BY zyhlsh.
+    LOOP AT gt_alv .
+
+      lv_year  = gt_alv-zjyrq+0(4).
+      IF lv_year <> p_gjahr AND p_gjahr <> ''.
+        DELETE gt_alv.
+        CONTINUE.
+      ENDIF.
+      lv_mon = gt_alv-zjyrq+4(2).
+      IF lv_mon BETWEEN  s_monat-low AND s_monat-high .
+      ELSE.
+        DELETE gt_alv.
+        CONTINUE.
+      ENDIF.
+
+      gt_alv-zye = lv_je + gt_alv-zje.
+      lv_je =  gt_alv-zye.
+      IF gt_alv-zje < 0 .
+        gt_alv-zje2 = gt_alv-zje * -1.
+        gt_alv-zje1 = 0.
+      ELSE.
+        gt_alv-zje1 = gt_alv-zje.
+        gt_alv-zje2 = 0.
+      ENDIF.
+      MODIFY gt_alv.
+    ENDLOOP.
+    CLEAR gt_alv.
+    gt_alv-box = ''.
+*      gt_alv-bukrs = p_bukrs.
+*      gt_alv-prctr = 'P1'.
+*      gt_alv-zyhzh = '1001010000'.
+    gt_alv-zjyrq = date.
+    gt_alv-zzy = '期初余额'.
+    gt_alv-zye = lv_je1.
+    INSERT gt_alv INDEX 1.
+
+    CLEAR gt_sort.
+    gt_sort-fieldname = 'ZJYRQ'.
+    gt_sort-spos = 1.
+    gt_sort-up = 'X'.
+    gt_sort-subtot = 'X'.
+    APPEND gt_sort.
+  ELSE.
+
+    DO 10 TIMES.
+      CLEAR: gt_alv.
+      gt_alv-box = 'X'.
+      gt_alv-bukrs = p_bukrs.
+      gt_alv-prctr = 'P1000'.
+      gt_alv-zyhzh = '1001010000'.
+      gt_alv-zjyrq = sy-datum.
+      gt_alv-zsfdz = ''.
+      APPEND gt_alv.
+    ENDDO.
+
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PROCESS_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_process_data .
+  DATA: lv_tabix LIKE sy-tabix.
+
+*  LOOP AT gt_alv.
+
+  lv_tabix = sy-tabix.
+
+*  执行录入， 如果是手工录入，则允许修改数量、交货单号及行项目允许修改
+  IF p_r2 = 'X'.
+    REFRESH:lt_styletab.
+    CLEAR:ls_stylerow.
+    ls_stylerow-fieldname = 'ZZY'. "
+    ls_stylerow-style = cl_gui_alv_grid=>mc_style_disabled. "
+    INSERT ls_stylerow INTO  TABLE lt_styletab.
+    CLEAR ls_stylerow.
+    ls_stylerow-fieldname = 'ZJE1'. "
+    ls_stylerow-style = cl_gui_alv_grid=>mc_style_disabled. "
+    INSERT ls_stylerow INTO  TABLE lt_styletab.
+    CLEAR ls_stylerow.
+    ls_stylerow-fieldname = 'ZJE2'. "
+    ls_stylerow-style = cl_gui_alv_grid=>mc_style_disabled. "
+    INSERT ls_stylerow INTO  TABLE lt_styletab.
+    CLEAR ls_stylerow.
+    ls_stylerow-fieldname = 'ZFJS'. "
+    ls_stylerow-style = cl_gui_alv_grid=>mc_style_disabled. "
+    INSERT ls_stylerow INTO  TABLE lt_styletab.
+    CLEAR ls_stylerow.
+    ls_stylerow-fieldname = 'ZBZ'. "
+    ls_stylerow-style = cl_gui_alv_grid=>mc_style_disabled. "
+    INSERT ls_stylerow INTO  TABLE lt_styletab.
+    gt_alv-style = lt_styletab.
+    CLEAR:ls_stylerow.
+    ls_stylerow-fieldname = 'BOX'. "
+    ls_stylerow-style = cl_gui_alv_grid=>mc_style_disabled. "
+    INSERT ls_stylerow INTO  TABLE lt_styletab.
+
+*      IF lt_styletab IS NOT INITIAL.
+*        gt_alv-style = lt_styletab.
+*      ENDIF.
+    MODIFY gt_alv INDEX 1.
+  ENDIF.
+
+*  ENDLOOP.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  F_CLASS_SET_TOOLBAR
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      <--P_E_OBJECT  text
+*----------------------------------------------------------------------*
+FORM f_class_set_toolbar  CHANGING p_e_object
+  TYPE REF TO cl_alv_event_toolbar_set.
+  DATA: ls_toolbar TYPE stb_button.
+  CLEAR ls_toolbar-butn_type.
+  APPEND ls_toolbar TO p_e_object->mt_toolbar.
+
+  CLEAR ls_toolbar.
+  MOVE 'ALL' TO ls_toolbar-function."添加“全选”按钮
+  MOVE icon_select_all TO ls_toolbar-icon.
+  MOVE '全选' TO ls_toolbar-quickinfo.
+  MOVE '全选' TO ls_toolbar-text.
+  MOVE '' TO ls_toolbar-disabled.
+  APPEND ls_toolbar TO p_e_object->mt_toolbar.
+
+  CLEAR ls_toolbar.
+  MOVE 'SALL' TO ls_toolbar-function."添加“取消全选”按钮
+  MOVE icon_deselect_all TO ls_toolbar-icon.
+  MOVE '取消全选' TO ls_toolbar-quickinfo.
+  MOVE '取消全选' TO ls_toolbar-text.
+  MOVE '' TO ls_toolbar-disabled.
+  APPEND ls_toolbar TO p_e_object->mt_toolbar.
+
+  IF p_r1 = 'X'.
+    CLEAR ls_toolbar.
+    MOVE 'INSERT' TO ls_toolbar-function."添加“新增”按钮
+    MOVE icon_insert_multiple_lines TO ls_toolbar-icon.
+    MOVE '新增' TO ls_toolbar-quickinfo.
+    MOVE '新增' TO ls_toolbar-text.
+    MOVE '' TO ls_toolbar-disabled.
+    APPEND ls_toolbar TO p_e_object->mt_toolbar.
+  ENDIF.
+  CLEAR ls_toolbar.
+  MOVE 'DELETE' TO ls_toolbar-function."添加“删除”按钮
+  MOVE icon_delete TO ls_toolbar-icon.
+  MOVE '删除' TO ls_toolbar-quickinfo.
+  MOVE '删除' TO ls_toolbar-text.
+  MOVE '' TO ls_toolbar-disabled.
+  APPEND ls_toolbar TO p_e_object->mt_toolbar.
+
+  CLEAR ls_toolbar.
+  MOVE 'SAVE' TO ls_toolbar-function."添加“保存”按钮
+  MOVE icon_system_save TO ls_toolbar-icon.
+  MOVE '保存' TO ls_toolbar-quickinfo.
+  MOVE '保存' TO ls_toolbar-text.
+  MOVE '' TO ls_toolbar-disabled.
+  APPEND ls_toolbar TO p_e_object->mt_toolbar.
+
+
+*  IF p_r2 EQ 'X'.
+*    CLEAR ls_toolbar.
+*    MOVE 'PRINT' TO ls_toolbar-function."添加“打印”按钮
+*    MOVE icon_system_print TO ls_toolbar-icon.
+*    MOVE '打印' TO ls_toolbar-quickinfo.
+*    MOVE '打印' TO ls_toolbar-text.
+*    MOVE '' TO ls_toolbar-disabled.
+*    APPEND ls_toolbar TO p_e_object->mt_toolbar.
+*  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  F_CLASS_TOOLBAR_USER_COMMAND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_E_UCOMM  text
+*----------------------------------------------------------------------*
+FORM f_class_toolbar_user_command  USING p_e_ucomm.
+  CASE p_e_ucomm.
+    WHEN 'ALL'.
+      PERFORM f_alv_all_select.
+    WHEN 'SALL'.
+      PERFORM f_alv_all_deselect.
+    WHEN 'INSERT'.
+      PERFORM f_alv_insert.
+    WHEN 'DELETE'.
+      PERFORM f_alv_delete.
+    WHEN 'SAVE'.
+      PERFORM f_alv_save.
+    WHEN 'PRINT'.
+*      PERFORM f_alv_print.
+  ENDCASE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  F_CLASS_ON_F4
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      <--P_E_FIELDNAME  text
+*      <--P_E_FIELDVALUE  text
+*      <--P_ES_ROW_NO  text
+*      <--P_ER_EVENT_DATA  text
+*      <--P_ET_BAD_CELLS  text
+*      <--P_E_DISPLAY  text
+*----------------------------------------------------------------------*
+FORM f_class_on_f4  CHANGING p_e_fieldname
+                             p_e_fieldvalue
+                             p_es_row_no
+                             p_er_event_data
+                             p_et_bad_cells
+                             p_e_display.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  F_ALV_SET_FIELDCATS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM f_alv_set_fieldcats .
+  CLEAR: gt_alv_fcat[],
+  gs_alv_fcat.
+  IF p_r1 EQ 'X'.
+    PERFORM f_alv_set_fieldcat USING  'BUKRS'          '公司代码'     '6'    ''  'X'  '' '' 'ZTFI002' 'BUKRS'.
+    PERFORM f_alv_set_fieldcat USING  'PRCTR'          '利润中心'     '10'    ''  'X'  '' '' 'ZTFI002' 'PRCTR'.
+    PERFORM f_alv_set_fieldcat USING  'ZYHZH'          '现金科目'     '15'    'X'  'X'  '' '' 'SKA1' 'SAKNR'.
+    PERFORM f_alv_set_fieldcat USING 'BOX'             '选择'         '4'     'X'  ''   'X' 'X' '' '' .
+    PERFORM f_alv_set_fieldcat USING  'ZJYRQ'          '交易日期'     '10'    'X'  'X'  '' '' 'ZTFI002' 'ZJYRQ'.
+    PERFORM f_alv_set_fieldcat USING  'ZZY'          '摘要'     '50'    'X'  'X'  '' '' '' ''.
+*    PERFORM f_alv_set_fieldcat USING  'ZJE'          '金额'     '13'    'X'  'X'  '' '' 'ZTFI002' 'ZJE'.
+    PERFORM f_alv_set_fieldcat USING  'ZJE1'          '借方金额'     '13'    'X'  'X'  '' '' 'ZTFI002' 'ZJE'.
+    PERFORM f_alv_set_fieldcat USING  'ZJE2'          '贷方金额'     '13'    'X'  'X'  '' '' 'ZTFI002' 'ZJE'.
+    PERFORM f_alv_set_fieldcat USING  'ZFJS'          '附件数'     '8'    'X'  'X'  '' '' 'ZTFI002' 'ZFJS'.
+    PERFORM f_alv_set_fieldcat USING  'ZBZ'          '备注'     '30'    'X'  'X'  '' '' 'ZTFI002' 'ZBZ'.
+  ELSE.
+    PERFORM f_alv_set_fieldcat USING  'BUKRS'          '公司代码'     '6'    ''  'X'  '' '' 'ZTFI002' 'BUKRS'.
+    PERFORM f_alv_set_fieldcat USING  'PRCTR'          '利润中心'     '10'    ''  'X'  '' '' 'ZTFI002' 'PRCTR'.
+    PERFORM f_alv_set_fieldcat USING  'ZYHZH'          '现金科目'     '15'    ''  'X'  '' '' 'SKA1' 'SAKNR'.
+    PERFORM f_alv_set_fieldcat USING 'BOX'             '选择'         '4'     'X'  ''   'X' 'X' '' '' .
+    PERFORM f_alv_set_fieldcat USING  'ZJYRQ'          '交易日期'     '10'    ''  'X'  '' '' 'ZTFI002' 'ZJYRQ'.
+    PERFORM f_alv_set_fieldcat USING  'ZZY'          '摘要'     '50'    'X'  'X'  '' '' '' ''.
+    PERFORM f_alv_set_fieldcat USING  'ZYHLSH'          '银行流水号'     '15'    ''  'X'  '' '' 'ZTFI002' 'ZYHLSH'.
+*    PERFORM f_alv_set_fieldcat USING  'ZJE'          '金额'     '13'    'X'  ''  '' '' 'ZTFI002' 'ZJE'.
+    PERFORM f_alv_set_fieldcat USING  'ZJE1'          '借方金额'     '13'    'X'  'X'  '' '' 'ZTFI002' 'ZJE'.
+    PERFORM f_alv_set_fieldcat USING  'ZJE2'          '贷方金额'     '13'    'X'  'X'  '' '' 'ZTFI002' 'ZJE'.
+    PERFORM f_alv_set_fieldcat USING  'ZYE'          '余额'     '13'    ''  'X'  '' '' 'ZTFI002' 'ZJE'.
+    PERFORM f_alv_set_fieldcat USING  'ZFJS'          '附件数'     '8'    'X'  'X'  '' '' 'ZTFI002' 'ZFJS'.
+    PERFORM f_alv_set_fieldcat USING  'ZUSER'          '制单人'     '8'    ''  'X'  '' '' 'ZTFI002' 'ZUSER'.
+    PERFORM f_alv_set_fieldcat USING  'ZBZ'          '备注'     '30'    ''  'X'  '' '' 'ZTFI002' 'ZBZ'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  F_ALV_SET_LAYOUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM f_alv_set_layout .
+  CLEAR gs_layout.
+  gs_layout-smalltitle = ''.
+  gs_layout-grid_title = ''.
+  gs_layout-zebra      =  'X'.
+  gs_layout-sel_mode   = 'B'.
+  gs_layout-no_toolbar = ''.
+  gs_layout-no_rowmark = 'X'.
+  gs_layout-edit_mode  = ''.
+  gs_layout-detailinit = 'X'.
+*  gs_layout-cwidth_opt = 'X'.
+  gs_layout-stylefname = 'STYLE'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  F_ALV_EXCLUDE_TOOLBAR
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM f_alv_exclude_toolbar .
+  CLEAR: gt_toolbar_excluding.
+  APPEND:
+  cl_gui_alv_grid=>mc_fc_print               TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_lystyle_drag_drop_rows TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_lystyle_no_delete_rows TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_lystyle_no_insert_rows TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_to_office           TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_call_abc            TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_call_chain          TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_call_crbatch        TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_call_crweb          TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_call_lineitems      TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_call_master_data    TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_call_more           TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_call_report         TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_call_xint           TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_graph               TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_help                TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_html                TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_info                TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_pc_file             TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_views               TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_loc_append_row      TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_loc_copy            TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_loc_copy_row        TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_loc_cut             TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_loc_delete_row      TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_loc_insert_row      TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_loc_move_row        TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_loc_paste           TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_loc_paste_new_row   TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_refresh             TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_loc_undo            TO gt_toolbar_excluding.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  F_ALV_SET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0425   text
+*      -->P_0426   text
+*      -->P_0427   text
+*      -->P_0428   text
+*      -->P_0429   text
+*      -->P_0430   text
+*      -->P_0431   text
+*      -->P_0432   text
+*      -->P_0433   text
+*----------------------------------------------------------------------*
+FORM f_alv_set_fieldcat  USING p_field
+                               p_text
+                               p_outlen
+                               p_edit
+                               p_zero
+                               p_ckbox
+                               p_key
+                               p_reftable
+                               p_reffield.
+  gs_alv_fcat-fieldname = p_field.
+  gs_alv_fcat-coltext   = p_text.
+  gs_alv_fcat-outputlen = p_outlen.
+  gs_alv_fcat-edit      = p_edit.
+  gs_alv_fcat-no_zero   = p_zero.
+  gs_alv_fcat-checkbox  = p_ckbox.
+  gs_alv_fcat-just      = 'C'.
+  gs_alv_fcat-key       = p_key.
+  gs_alv_fcat-ref_table = p_reftable.
+  gs_alv_fcat-ref_field = p_reffield.
+  IF ( p_field = 'ZJE1' OR p_field = 'ZJE2') AND p_r2 ='X'.
+    gs_alv_fcat-do_sum = 'X'.
+  ENDIF.
+  APPEND gs_alv_fcat TO gt_alv_fcat.
+  CLEAR: gs_alv_fcat.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  F_REFRESH_ALV_DISPLAY
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM f_refresh_alv_display .
+  CALL METHOD cl_alv->refresh_table_display
+    EXPORTING
+      is_stable      = gs_refresh
+      i_soft_refresh = ''.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  F_ALV_ALL_SELECT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM f_alv_all_select .
+  LOOP AT gt_alv WHERE box EQ space.
+    gt_alv-box = 'X'.
+    MODIFY gt_alv TRANSPORTING box.
+    CLEAR: gt_alv.
+  ENDLOOP.
+  PERFORM f_refresh_alv_display.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  F_ALV_ALL_DESELECT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM f_alv_all_deselect .
+  LOOP AT gt_alv WHERE box EQ 'X'.
+    CLEAR:gt_alv-box .
+    MODIFY gt_alv TRANSPORTING box.
+    CLEAR: gt_alv.
+  ENDLOOP.
+  PERFORM f_refresh_alv_display.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  F_ALV_INSERT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM f_alv_insert .
+  DO 10 TIMES.
+    CLEAR: gt_alv.
+    gt_alv-box = 'X'.
+*    gt_alv-zsgcl = 'X'.
+*    gt_alv-datatypes = '0'.
+    gt_alv-bukrs = p_bukrs.
+    gt_alv-prctr = 'P1000'.
+    gt_alv-zyhzh = '1001010000'.
+    gt_alv-zjyrq = sy-datum.
+    gt_alv-zsfdz = ''.
+    APPEND gt_alv.
+  ENDDO.
+  PERFORM f_refresh_alv_display.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  F_ALV_DELETE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM f_alv_delete .
+  DATA: lt_ztfi002  LIKE ztfi002 OCCURS 0 WITH HEADER LINE. "金税接口更新表
+*
+*  判断是否选中行项目，没有报错
+  READ TABLE gt_alv WITH KEY box = 'X'.
+  IF sy-subrc <> 0.
+    MESSAGE s001 DISPLAY LIKE 'E'.
+    EXIT.
+  ENDIF.
+
+
+**  判断选中的栏位是否有金税传过来的单据，如果有，不允许删除
+*  READ TABLE gt_alv WITH KEY box = 'X' zwhbs = 'X'.
+*  IF sy-subrc = 0.
+*    MESSAGE s024 DISPLAY LIKE 'E'.
+*    EXIT.
+*  ENDIF.
+*
+  LOOP AT gt_alv WHERE box = 'X'.
+    MOVE-CORRESPONDING gt_alv TO lt_ztfi002.
+    APPEND lt_ztfi002.
+  ENDLOOP.
+*    MODIFY ztfi002 FROM TABLE lt_ztfi002 .
+
+  DELETE ztfi002 FROM TABLE lt_ztfi002 .
+  IF sy-subrc = 0.
+    DELETE gt_alv WHERE box = 'X'.
+    COMMIT WORK AND WAIT.
+    MESSAGE s029 WITH '删除' DISPLAY LIKE 'S'.
+  ELSE.
+    ROLLBACK WORK.
+    MESSAGE s030 WITH '删除' DISPLAY LIKE 'E'.
+  ENDIF.
+
+
+  PERFORM f_refresh_alv_display.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  F_ALV_SAVE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM f_alv_save .
+  DATA lt_usr LIKE TABLE OF user_addr WITH HEADER LINE.
+  DATA: lt_ztfi002  LIKE ztfi002 OCCURS 0 WITH HEADER LINE. "日记表更新
+  DATA :lv_zyhlsh TYPE ztfi002-zyhlsh,lv_num TYPE numc4,lv_total TYPE ztfi002-zje.
+*  判断是否选中行项目，没有报错
+  READ TABLE gt_alv WITH KEY box = 'X'.
+  IF sy-subrc <> 0.
+    MESSAGE s001 DISPLAY LIKE 'E'.
+    EXIT.
+  ENDIF.
+*  检查数量、金税发票号码、开票金额、金税开票日期是否有输入，如果未填，报错
+*  将GT_ALV中空行全部删除
+  DELETE gt_alv WHERE zje1 IS INITIAL AND zje2 IS INITIAL.
+
+  LOOP AT gt_alv WHERE box = 'X'.
+*  检查数量、金税发票号码、开票金额、金税开票日期是否有输入，如果未填，报错
+    CLEAR lv_total.
+    IF gt_alv-zje1 <> '' AND gt_alv-zje2 <> ''.
+      MESSAGE s000 WITH '借方贷方不能同时输入' DISPLAY LIKE 'E'.
+      EXIT.
+    ENDIF.
+    IF p_r1 = 'X'.
+      SELECT zyhlsh INTO CORRESPONDING FIELDS OF TABLE lt_ztfi002 FROM ztfi002 WHERE zjyrq = gt_alv-zjyrq and zyhzh = '1001010000'.
+      IF sy-subrc = 0.
+        SORT lt_ztfi002 BY zyhlsh DESCENDING.
+        READ TABLE lt_ztfi002 INDEX 1.
+        lv_num = lt_ztfi002-zyhlsh+8(4).
+        lv_num = lv_num + 1.
+      ELSE.
+        lv_num = '0001'.
+      ENDIF.
+      CLEAR:lt_ztfi002.
+      REFRESH lt_ztfi002.
+      MOVE-CORRESPONDING gt_alv TO lt_ztfi002 .
+      SELECT SINGLE * INTO CORRESPONDING FIELDS OF lt_usr FROM user_addr WHERE bname = sy-uname.
+      CONCATENATE lt_usr-name_last lt_usr-name_first INTO  lt_ztfi002-zuser.
+      IF gt_alv-zje2 <> ''.
+        lt_ztfi002-zje = gt_alv-zje2 * -1.
+      ELSE.
+        lt_ztfi002-zje = gt_alv-zje1 .
+      ENDIF.
+      CONCATENATE lt_ztfi002-zjyrq lv_num INTO lt_ztfi002-zyhlsh.
+      APPEND lt_ztfi002.
+    ENDIF.
+    IF p_r2 = 'X'.
+      MOVE-CORRESPONDING gt_alv TO lt_ztfi002.
+      IF gt_alv-zje2 <> ''.
+        lt_ztfi002-zje = gt_alv-zje2 * -1.
+      ELSE.
+        lt_ztfi002-zje = gt_alv-zje1 .
+      ENDIF.
+      APPEND lt_ztfi002.
+    ENDIF.
+    IF p_r1 = 'X'.
+      INSERT INTO ztfi002 VALUES lt_ztfi002 .
+    ENDIF.
+    IF p_r2 = 'X'.
+      MODIFY ztfi002 FROM TABLE lt_ztfi002.
+    ENDIF.
+    IF sy-subrc = 0.
+      COMMIT WORK AND WAIT.
+      MESSAGE s027 WITH '录入' DISPLAY LIKE 'S'.
+    ELSE.
+      ROLLBACK WORK.
+      MESSAGE s028 WITH '录入' DISPLAY LIKE 'E'.
+    ENDIF.
+    CLEAR: gt_alv.
+  ENDLOOP.
+  LEAVE TO SCREEN 0.
+*  PERFORM f_refresh_alv_display.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  f_class_data_changed
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM f_class_data_changed USING data_changed TYPE REF TO cl_alv_changed_data_protocol.
+
+  FIELD-SYMBOLS: <fs_mod_rows> TYPE STANDARD TABLE,
+                 <fs_cells>    TYPE lvc_t_modi,
+                 <fs_cell_wa>  TYPE lvc_s_modi,
+                 <fs>          LIKE LINE OF gt_alv.
+  DATA: lv_tabix LIKE sy-tabix.
+
+  IF NOT data_changed->mp_mod_rows IS INITIAL.
+    ASSIGN data_changed->mp_mod_rows->* TO <fs_mod_rows>.
+    ASSIGN data_changed->mt_mod_cells TO <fs_cells>.
+    LOOP AT <fs_mod_rows> ASSIGNING <fs>.
+*   获取列名
+      READ TABLE <fs_cells> WITH KEY tabix = sy-tabix ASSIGNING <fs_cell_wa>.
+*   获取列值
+      lv_row = <fs_cell_wa>-row_id.
+      lv_tabix = lv_row.
+      READ TABLE gt_alv INDEX lv_tabix.
+      IF sy-subrc = 0.
+        gt_alv-box = 'X'.
+*        IF gt_alv-zwhbs = 'X'.
+*          gt_alv-zsgcl = 'X'.
+*        ENDIF.
+*        IF <fs>-vsart IS INITIAL.
+*          gt_alv-vsart = 'A1'.
+*        ELSE.
+*          gt_alv-vsart = <fs>-vsart.
+*        ENDIF.
+*        SELECT SINGLE bezei INTO gt_alv-bezei FROM t173t WHERE vsart = gt_alv-vsart AND spras = sy-langu.
+        MODIFY gt_alv INDEX lv_tabix.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+  PERFORM f_refresh_alv_display.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_MESS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LV_MSGID  text
+*      -->P_LV_MSGV1  text
+*      -->P_LV_FIELDNAME  text
+*      -->P_LV_ROW  text
+*----------------------------------------------------------------------*
+FORM frm_get_mess  USING data_changed TYPE REF TO cl_alv_changed_data_protocol
+                          lv_msgv1 TYPE any
+                          lv_fieldname TYPE lvc_fname
+                          lv_row TYPE int4.
+
+  CALL METHOD data_changed->add_protocol_entry
+    EXPORTING
+      i_msgid     = 'Z001'
+      i_msgty     = 'E'
+      i_msgno     = '000'
+      i_msgv1     = lv_msgv1
+      i_fieldname = lv_fieldname
+      i_row_id    = lv_row.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  F_CLASS_DATA_CHANGED_FINISHED
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_E_MODIFIED  text
+*      -->P_ET_GOOD_CELLS  text
+*----------------------------------------------------------------------*
+FORM f_class_data_changed_finished  USING  e_modified TYPE char1
+                                            et_good_cells TYPE  lvc_t_modi.
+*  DATA: wa_alv   LIKE gt_alv,
+*        wa_cells TYPE lvc_s_modi,
+*        lv_tabix LIKE sy-tabix.
+*
+*  DATA: lv_fieldname TYPE lvc_fname,
+*        lv_flag      TYPE c,
+*        lv_fkimg     LIKE vbrp-fkimg.
+*
+*  DATA: BEGIN OF lt_vbrp OCCURS 0,
+*          vbeln LIKE vbrp-vbeln,
+*          posnr LIKE vbrp-posnr,
+*          vgbel LIKE vbrp-vgbel,
+*          vgpos LIKE vbrp-vgpos,
+*          aubel LIKE vbrp-aubel,
+*          aupos LIKE vbrp-aupos,
+*          matnr LIKE vbrp-matnr,
+*          arktx LIKE vbrp-arktx,
+*          kzwi1 LIKE vbrp-kzwi1,
+*          fkimg LIKE vbrp-fkimg,
+*          kunag LIKE vbrk-kunag,
+*          bukrs LIKE vbrk-bukrs,
+*          vkorg LIKE vbrk-vkorg,
+*        END OF lt_vbrp,
+*        lt_vbak LIKE gt_vbak OCCURS 0 WITH HEADER LINE,
+*        ls_kna1 LIKE kna1.
+*
+*  DATA: lt_ztfi002 LIKE ztfi002 OCCURS 0 WITH HEADER LINE.
+*
+*  LOOP AT gt_alv INTO wa_alv WHERE vgbel IS NOT INITIAL AND box = 'X'.
+*    REFRESH:lt_vbrp,lt_vbak,lt_ztfi002.
+*    CLEAR: ls_kna1.
+*    lv_tabix = sy-tabix.
+**  检查交货单号是否为空，不为空判断是否在VBRP表中存在
+*    IF wa_alv-vgbel IS INITIAL .
+*      MESSAGE s000 WITH '交货单号不能为空' DISPLAY LIKE 'E'.
+*      EXIT.
+*    ELSE.
+*      REFRESH:lt_vbrp,lt_ztfi002. CLEAR:lv_fkimg.
+*      SELECT a~vbeln a~posnr a~vgbel a~vgpos a~aubel a~aupos
+*             a~matnr a~arktx a~kzwi1 a~fkimg b~kunag b~bukrs b~vkorg
+*        INTO CORRESPONDING FIELDS OF TABLE lt_vbrp
+*        FROM vbrp AS a INNER JOIN vbrk AS b ON a~vbeln = b~vbeln
+*        WHERE vgbel = wa_alv-vgbel.
+*      IF lt_vbrp[] IS NOT INITIAL.
+*        SELECT * INTO TABLE lt_ztfi002
+*          FROM ztfi002
+*          FOR ALL ENTRIES IN lt_vbrp
+*          WHERE vbeln = lt_vbrp-vbeln
+*            AND posnr = lt_vbrp-posnr
+*            AND zsfqx = space
+*            AND datatypes = '0'.
+**        SELECT vbeln kunnr kvgr1 kvgr2 vkorg vtweg
+**          INTO CORRESPONDING FIELDS OF TABLE lt_vbak
+**          FROM vbak
+**          FOR ALL ENTRIES IN lt_vbrp
+**          WHERE vbeln = lt_vbrp-aubel.
+**        SORT lt_vbak BY vbeln.
+*      ENDIF.
+*      IF lt_vbrp[] IS INITIAL.
+*        CONCATENATE '交货单号:' wa_alv-vgbel '不存在' INTO lv_msgv1.  CONDENSE lv_msgv1.
+*        MESSAGE s000 WITH lv_msgv1 DISPLAY LIKE 'E'.
+*        EXIT.
+*      ENDIF.
+*    ENDIF.
+**   检查交货单行项目是否为空，
+*    IF wa_alv-vgpos IS INITIAL .
+*      lv_msgv1 = '交货单行项目号不能为空'.
+*      MESSAGE s000 WITH lv_msgv1 DISPLAY LIKE 'E'.
+*      EXIT.
+*    ELSE.
+*      READ TABLE lt_vbrp WITH KEY vgbel = wa_alv-vgbel vgpos = wa_alv-vgpos.
+*      IF sy-subrc <> 0.
+*        CONCATENATE '交货单号:' wa_alv-vgbel '不存在行项目' wa_alv-vgpos INTO lv_msgv1.  CONDENSE lv_msgv1.
+*        MESSAGE s000 WITH lv_msgv1 DISPLAY LIKE 'E'.
+*        EXIT.
+*      ENDIF.
+*    ENDIF.
+*
+**    逻辑说明：判断是否为金税接口传输
+**    如果为金税传输，当更新金税发票号、开票金额、金税开票日期时 手工处理栏位ZSGCL = 'X’
+**    如果为手工维护的发票信息，手工处理栏位全部标识X
+*    READ TABLE lt_vbrp WITH KEY vgbel = wa_alv-vgbel vgpos = wa_alv-vgpos.
+*    IF sy-subrc = 0.
+*      wa_alv-vbeln = lt_vbrp-vbeln.
+*      wa_alv-posnr = lt_vbrp-posnr.
+*      wa_alv-kunnr = lt_vbrp-kunag.
+*      wa_alv-matnr = lt_vbrp-matnr.
+*      wa_alv-arktx = lt_vbrp-arktx.
+*      wa_alv-zsgcl = wa_alv-zsgcl.
+*      wa_alv-bukrs = lt_vbrp-bukrs.
+*      wa_alv-vkorg = lt_vbrp-vkorg.
+**      wa_alv-aubel = lt_vbrp-aubel.
+**      wa_alv-aupos = lt_vbrp-aupos.
+*      SELECT SINGLE * INTO ls_kna1 FROM kna1 WHERE kunnr = wa_alv-kunnr.
+*      CONCATENATE ls_kna1-name1 ls_kna1-name2 INTO wa_alv-name1 .  CONDENSE wa_alv-name1.
+*      wa_alv-adrnr = ls_kna1-adrnr.
+**        计算出本次录入的数量（根据交货单及行项目取出数量-已经录入的数量）
+*      lv_fkimg = lt_vbrp-fkimg.
+*      LOOP AT lt_ztfi002 WHERE vbeln = lt_vbrp-vbeln AND posnr = lt_vbrp-posnr AND zsjls NE wa_alv-zsjls.
+*        lv_fkimg = lv_fkimg - lt_ztfi002-fkimg.
+*      ENDLOOP.
+**        如果修改交货单和行项目号，自动计算出未开票数量
+**        如果修改数量单位，检查数量是否大于应录入数量
+*      IF wa_alv-fkimg IS INITIAL.
+*        wa_alv-fkimg = lv_fkimg.
+*      ENDIF.
+*      IF wa_alv-fkimg > lv_fkimg.
+*        lv_msgv1 = lv_fkimg. CONDENSE lv_msgv1.
+*        CONCATENATE '数量不能大于' lv_msgv1 INTO lv_msgv1. CONDENSE lv_msgv1.
+*        MESSAGE s000 WITH lv_msgv1 DISPLAY LIKE 'E'.
+*        EXIT.
+*      ENDIF.
+**     根据交货单及行项目过滤已录入的数量
+*      IF lt_vbrp-fkimg NE 0.
+*        wa_alv-zpric = lt_vbrp-kzwi1 / lt_vbrp-fkimg * wa_alv-fkimg.
+*      ENDIF.
+*    ENDIF.
+***   根据销售订单取商务和业务员
+**    READ TABLE lt_vbak WITH KEY vbeln = wa_alv-aubel BINARY SEARCH.
+**    IF sy-subrc = 0 .
+**      wa_alv-kvgr1 = lt_vbak-kvgr1.
+**      wa_alv-kvgr2 = lt_vbak-kvgr2.
+**    ENDIF.
+*    MODIFY gt_alv FROM wa_alv.
+*    IF wa_alv-fkimg IS INITIAL .
+*      lv_msgv1 = '请根据交货单及行项目检查是否已全部录完'.
+*      MESSAGE s000 WITH lv_msgv1 DISPLAY LIKE 'E'.
+*      EXIT.
+*    ENDIF.
+*  ENDLOOP.
+
+  PERFORM f_refresh_alv_display.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  F_ALV_PRINT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM f_alv_print .
+* 检查金税发票号和金税开票金额是否有维护，如果未维护，不允许打印
+*  LOOP AT gt_alv WHERE box = 'X' AND ( invoicenumber IS INITIAL OR invoiceamount = 0 ).
+*    MESSAGE s025 DISPLAY LIKE 'E'.
+*    EXIT.
+*  ENDLOOP.
+*
+*  CHECK sy-subrc NE 0.
+*  DATA fm_name TYPE rs38l_fnam.
+*  DATA:xssfctrlop        LIKE ssfctrlop,
+*       w_job_output_info TYPE ssfcrescl,
+*       lv_name           TYPE rs38l_fnam.
+*
+*  DATA:wa_head LIKE zszsd020_head.
+*  DATA: BEGIN OF gt_head OCCURS 0,
+*          invoicenumber LIKE ztfi002-invoicenumber,
+*          invoiceamount LIKE ztfi002-invoiceamount,
+*        END OF gt_head.
+*
+*  cl_alv->set_visible( '' ).  "将之前ALV屏幕隐藏，解决OO ALV打印时界面不显示的问题
+*
+*  CLEAR: lv_name.
+*  CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
+*    EXPORTING
+*      formname           = 'ZSFZSD020'
+*    IMPORTING
+*      fm_name            = lv_name
+*    EXCEPTIONS
+*      no_form            = 1
+*      no_function_module = 2
+*      OTHERS             = 3.
+*  IF sy-subrc <> 0.
+*    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+*  ENDIF.
+*
+*  xssfctrlop-no_open = 'X'.
+*  xssfctrlop-no_close = 'X'.
+*
+*  CALL FUNCTION 'SSF_OPEN'
+*    EXPORTING
+*      control_parameters = xssfctrlop
+*    EXCEPTIONS
+*      formatting_error   = 1
+*      internal_error     = 2
+*      send_error         = 3
+*      user_canceled      = 4
+*      OTHERS             = 5.
+*  IF sy-subrc <> 0.
+** Implement suitable error handling here
+*  ENDIF.
+*
+**  处理抬头数据
+*  DATA: lv_amount TYPE c LENGTH 25.
+*  REFRESH:lt_kunnr,gt_head.
+*  LOOP AT gt_alv WHERE box = 'X'.
+*    CLEAR: lt_kunnr.
+*    lt_kunnr-kunnr = gt_alv-kunnr.
+*    lt_kunnr-name1 = gt_alv-name1.
+*    lt_kunnr-adrnr = gt_alv-adrnr.
+*    lt_kunnr-kvgr1 = gt_alv-kvgr1.
+*    lt_kunnr-kvgr2 = gt_alv-kvgr2.
+*    lt_kunnr-vkorg = gt_alv-vkorg.
+*    COLLECT lt_kunnr.
+*  ENDLOOP.
+*
+*  LOOP AT lt_kunnr.
+*    CLEAR: wa_head.
+*    wa_head-name1 = lt_kunnr-name1.
+**  取客户对账联系人，根据联系人取电话，
+**    PERFORM frm_get_tel_number USING lt_kunnr CHANGING wa_head.
+*
+**  判断是国内还是国外：国内：VKORG = 1100 ，根据KVGR2从表ZTSD002中取TEL和FAX
+**                      国外：VKORG = 1200 ，根据KVGR1从表ZTSD002中取TEL和FAX
+*    CASE lt_kunnr-vkorg.
+*      WHEN '1100'.
+*        SELECT SINGLE tel fax INTO (wa_head-tel,wa_head-fax) FROM ztsd002 WHERE kvgr2 = lt_kunnr-kvgr2.
+*        SELECT SINGLE bezei INTO wa_head-zdr FROM tvv2t WHERE kvgr2 = lt_kunnr-kvgr2.
+*      WHEN '1200'.
+*        SELECT SINGLE tel fax INTO (wa_head-tel,wa_head-fax) FROM ztsd002 WHERE kvgr1 = lt_kunnr-kvgr1.
+*        SELECT SINGLE bezei INTO wa_head-zdr FROM tvv1t WHERE kvgr1 = lt_kunnr-kvgr1.
+*      WHEN OTHERS.
+*    ENDCASE.
+*    LOOP AT gt_alv WHERE box = 'X' AND kunnr = lt_kunnr-kunnr.
+*      CLEAR: gt_head.
+*      MOVE-CORRESPONDING gt_alv TO gt_head.
+*      COLLECT gt_head.
+*      CLEAR: gt_alv.
+*    ENDLOOP.
+*
+*    LOOP AT gt_head.
+*      IF wa_head-invoicenumber IS INITIAL.
+*        wa_head-invoicenumber = gt_head-invoicenumber.
+*      ELSE.
+*        CONCATENATE wa_head-invoicenumber gt_head-invoicenumber INTO wa_head-invoicenumber SEPARATED BY '/'.
+*      ENDIF.
+*      lv_amount = gt_head-invoiceamount.
+*      CONDENSE lv_amount.
+*      IF wa_head-invoiceamount IS INITIAL.
+*        wa_head-invoiceamount = lv_amount.
+*      ELSE.
+*        CONCATENATE wa_head-invoiceamount lv_amount INTO wa_head-invoiceamount SEPARATED BY '/'.
+*      ENDIF.
+*    ENDLOOP.
+*
+*    CONDENSE wa_head-invoicenumber.
+*    CONDENSE wa_head-invoiceamount.
+*
+*    CALL FUNCTION lv_name
+*      EXPORTING
+*        control_parameters = xssfctrlop
+*        wa_head            = wa_head
+*      IMPORTING
+*        job_output_info    = w_job_output_info
+*      EXCEPTIONS
+*        formatting_error   = 1
+*        internal_error     = 2
+*        send_error         = 3
+*        user_canceled      = 4.
+*  ENDLOOP.
+*
+*  CALL FUNCTION 'SSF_CLOSE'
+*    EXCEPTIONS
+*      formatting_error = 1
+*      internal_error   = 2
+*      send_error       = 3
+*      OTHERS           = 4.
+*  IF sy-subrc <> 0.
+** Implement suitable error handling here
+*  ENDIF.
+*
+*  cl_alv->set_visible( 'X' ).  "屏幕显示
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_TEL_NUMBER
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LT_KUNNR  text
+*      <--P_WA_HEAD  text
+*----------------------------------------------------------------------*
+FORM frm_get_tel_number  USING lt_kunnr STRUCTURE lt_kunnr
+                       CHANGING wa_head STRUCTURE zszsd020_head.
+*  DATA:lt_knvk LIKE knvk OCCURS 0 WITH HEADER LINE,
+*       lt_adr2 LIKE adr2 OCCURS 0 WITH HEADER LINE.
+*
+*  REFRESH: lt_knvk,lt_adr2.
+*
+*  SELECT  * INTO TABLE lt_adr2 FROM adr2 WHERE addrnumber = lt_kunnr-adrnr.
+*  SELECT * INTO TABLE lt_knvk FROM knvk  WHERE kunnr = lt_kunnr-kunnr.
+*  READ TABLE lt_knvk WITH KEY pafkt = 'Z1'.
+*  IF sy-subrc = 0.
+*    LOOP AT lt_adr2 WHERE addrnumber = lt_kunnr-adrnr AND persnumber = lt_knvk-prsnr .
+*      IF lt_adr2-consnumber = '1'.
+*        wa_head-tel_number =  lt_adr2-tel_number.
+*      ELSEIF lt_adr2-consnumber = '2'.
+*        wa_head-mob_number =  lt_adr2-tel_number.
+*      ENDIF.
+*    ENDLOOP.
+*  ELSE.
+*    READ TABLE lt_knvk WITH KEY pafkt = 'Z2'.
+*    IF sy-subrc = 0.
+*      LOOP AT lt_adr2 WHERE addrnumber = lt_kunnr-adrnr AND persnumber = lt_knvk-prsnr .
+*        IF lt_adr2-consnumber = '1'.
+*          wa_head-tel_number =  lt_adr2-tel_number.
+*        ELSEIF lt_adr2-consnumber = '2'.
+*          wa_head-mob_number =  lt_adr2-tel_number.
+*        ENDIF.
+*      ENDLOOP.
+*    ELSE.
+*      LOOP AT lt_adr2 WHERE addrnumber = lt_kunnr-adrnr AND persnumber IS INITIAL.
+*        IF lt_adr2-consnumber = '1'.
+*          wa_head-tel_number =  lt_adr2-tel_number.
+*        ELSEIF lt_adr2-consnumber = '2'.
+*          wa_head-mob_number =  lt_adr2-tel_number.
+*        ENDIF.
+*      ENDLOOP.
+*    ENDIF.
+*  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHK_INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_chk_input .
+  IF p_r2 = 'X'.
+    IF s_monat-high = ''.
+      MESSAGE s000 WITH '期间值输入不完整 ' DISPLAY LIKE 'E'.
+      LEAVE TO SCREEN 0 .
+    ENDIF.
+    IF s_monat-high < s_monat-low.
+      MESSAGE s000 WITH '期间值输入错误 ' DISPLAY LIKE 'E'.
+      LEAVE TO SCREEN 0 .
+    ENDIF.
+
+  ENDIF.
+ENDFORM.

@@ -1,0 +1,575 @@
+*&---------------------------------------------------------------------*
+*& 程序名： ZRPFI004
+*& 创建者(公司)/日期： QUYT/20170714
+*& 程序描述：会计凭证打印
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    QUYT           20170714      创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpfi004.
+
+TYPE-POOLS: slis. "ALV使用到的类库
+
+TABLES:nast,tnapr,bkpf,bseg,skat,t001,adrp,usr21.
+
+"ALV用到的类型定义
+DATA: it_fieldcat   TYPE slis_t_fieldcat_alv WITH HEADER LINE,
+      lt_sort       TYPE        slis_t_sortinfo_alv WITH HEADER LINE,
+      it_events     TYPE        slis_t_event,
+      lt_event_exit TYPE        slis_t_event_exit,
+      ls_event_exit TYPE        slis_event_exit,
+      gs_print      TYPE        slis_print_alv,
+      gs_layout     TYPE        slis_layout_alv,
+      lr_grid       TYPE REF TO cl_gui_alv_grid.        "用于刷新ALV
+
+DATA: it_bkpf LIKE zfis001_head OCCURS 0 WITH HEADER LINE,
+      it_bseg LIKE zfis001_item OCCURS 0 WITH HEADER LINE.
+
+DATA: li_strlen TYPE i,
+      v_dmbtr_s TYPE dmbtr,
+      v_dmbtr_h TYPE dmbtr.
+
+DATA: BEGIN OF gt_out OCCURS 0,
+        box(1).
+    INCLUDE STRUCTURE zfis001_head.
+DATA: bldat LIKE bkpf-bldat,  "凭证日期
+      monat LIKE bkpf-monat, "会计期间
+      cpudt LIKE bkpf-cpudt, "输入日期
+      cputm LIKE bkpf-cputm, "输入时间
+      tcode LIKE bkpf-tcode, "事务码
+      stblg LIKE bkpf-stblg, "冲销凭证号
+      bktxt LIKE bkpf-bktxt, "凭证抬头文本
+      namez TYPE c LENGTH 20, "用户名名称
+      END OF gt_out .
+DATA: BEGIN OF gt_bseg OCCURS 0,
+        bukrs LIKE bseg-bukrs,
+        belnr LIKE bseg-belnr,
+        gjahr LIKE bseg-gjahr,
+        buzei LIKE bseg-buzei,
+        hkont LIKE bseg-hkont,
+      END OF gt_bseg.
+
+DATA:gv_char(26) TYPE c.
+***选择屏幕
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+PARAMETERS: p_bukrs LIKE bkpf-bukrs OBLIGATORY DEFAULT '1000' MEMORY ID buk.
+SELECT-OPTIONS:s_belnr FOR bkpf-belnr,
+               s_gjahr FOR bkpf-gjahr OBLIGATORY DEFAULT sy-datum+0(4),
+               s_monat FOR bkpf-monat OBLIGATORY DEFAULT sy-datum+4(2).
+PARAMETER: p_rldnr LIKE bkpf-rldnr DEFAULT '0L'.
+SELECTION-SCREEN END OF BLOCK b1 .
+
+SELECTION-SCREEN BEGIN OF BLOCK b2 WITH FRAME TITLE TEXT-002.
+SELECT-OPTIONS: s_hkont FOR bseg-hkont ,"总账科目
+                 s_blart FOR bkpf-blart,"凭证类型
+                 s_budat FOR bkpf-budat,"过帐日期
+                 s_cpudt FOR bkpf-cpudt,"输入日期
+*                 s_xblnr FOR bkpf-xblnr_alt,"参考编号
+                 s_xblnr FOR gv_char,"参考编号
+                 s_awtyp FOR bkpf-awtyp,"参考交易
+                 s_awkey FOR bkpf-awkey,"参考代码
+                 s_usnam FOR usr21-bname."用户名
+SELECTION-SCREEN END OF BLOCK b2.
+
+AT SELECTION-SCREEN .
+  "检查公司权限
+  PERFORM frm_check_authority.
+
+START-OF-SELECTION.
+  PERFORM get_data."取数
+  PERFORM show_data."ALV显示数据
+*&---------------------------------------------------------------------*
+*&      Form  GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+
+FORM get_data .
+  DATA: l_firstn LIKE adrp-name_first,
+        l_lastn  LIKE adrp-name_last.
+  REFRESH: gt_out,gt_bseg.
+
+  SELECT bukrs belnr gjahr blart bldat budat monat cpudt cputm waers kursf usnam tcode stblg bktxt xblnr_alt numpg ppnam
+    INTO CORRESPONDING FIELDS OF TABLE gt_out
+    FROM bkpf
+    WHERE bukrs EQ p_bukrs
+      AND belnr IN s_belnr
+      AND gjahr IN s_gjahr
+      AND monat IN s_monat
+*      AND rldnr EQ p_rldnr
+      AND blart IN s_blart
+      AND budat IN s_budat
+      AND cpudt IN s_cpudt
+      AND xblnr_alt IN s_xblnr
+      AND awtyp IN s_awtyp
+      AND awkey IN s_awkey
+      AND usnam IN s_usnam.
+
+  IF s_hkont IS NOT INITIAL AND gt_out[] IS NOT INITIAL.
+    SELECT bukrs belnr gjahr buzei hkont
+      INTO CORRESPONDING FIELDS OF TABLE gt_bseg
+      FROM bseg
+      FOR ALL ENTRIES IN gt_out
+      WHERE bukrs = gt_out-bukrs
+        AND belnr = gt_out-belnr
+        AND gjahr = gt_out-gjahr
+        AND hkont IN s_hkont.
+    SORT gt_bseg BY bukrs belnr gjahr.
+  ENDIF.
+
+  LOOP AT gt_out.
+    IF s_hkont IS NOT INITIAL.
+      READ TABLE gt_bseg WITH KEY bukrs = gt_out-bukrs belnr = gt_out-belnr gjahr = gt_out-gjahr.
+      IF sy-subrc NE 0.
+        DELETE TABLE gt_out.
+        CONTINUE.
+      ENDIF.
+    ENDIF.
+    SELECT SINGLE butxt INTO gt_out-butxt FROM t001 WHERE bukrs = gt_out-bukrs .
+    CLEAR: l_firstn,l_lastn.
+    SELECT SINGLE b~name_first b~name_last INTO (l_firstn,l_lastn)
+      FROM usr21 AS a INNER JOIN adrp AS b ON a~persnumber = b~persnumber
+      WHERE a~bname EQ gt_out-usnam.
+    CONCATENATE l_lastn l_firstn INTO gt_out-namez.
+    MODIFY gt_out.
+  ENDLOOP.
+
+  SORT gt_out BY bukrs belnr gjahr .
+ENDFORM. " GET_DATA
+
+*&---------------------------------------------------------------------*
+*&      Form  SHOW_DATA
+*&---------------------------------------------------------------------*
+*     ALV需要定义的
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+
+FORM show_data .
+  PERFORM build_fieldcat.
+  PERFORM build_sortcat. "#置排序和分###
+  PERFORM build_layout. "#置#出格式
+  PERFORM display_alv.
+ENDFORM. " SHOW_DATA
+
+*&---------------------------------------------------------------------*
+*&      Form  BUILD_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM build_fieldcat .
+  DEFINE m_fieldcat.
+    it_fieldcat-key = &1.
+    it_fieldcat-fieldname = &2.
+    it_fieldcat-reptext_ddic = &3.
+    it_fieldcat-no_zero = &4. "为输出隐藏0
+    it_fieldcat-do_sum = &5.
+    it_fieldcat-outputlen = &6.
+    it_fieldcat-edit = &7."ALV可编辑
+    it_fieldcat-ref_tabname =  &8.
+    it_fieldcat-ref_fieldname = &9.
+
+    APPEND it_fieldcat.
+  END-OF-DEFINITION.
+  REFRESH:it_fieldcat.
+  m_fieldcat  'X'  'BUKRS'    '公司'           ''   ''  '4'  ''  '' ''.
+  m_fieldcat  'X'  'BUTXT'    '公司名称'       ''   ''  '25'  ''  '' ''.
+  m_fieldcat  'X'  'GJAHR'    '会计年度'       'X'   ''  '4'  ''  '' ''.
+  m_fieldcat  'X'  'MONAT'    '会计期间'       'X'   ''  '2'  ''  '' ''.
+  m_fieldcat  'X'  'BELNR'    '会计凭证号'     'X'   ''  '10'  ''  '' ''.
+  m_fieldcat  ''   'BLART'    '凭证类型'       ''  ''  '2'  ''  '' ''.
+  m_fieldcat  ''   'BLDAT'    '凭证日期'       ''  ''  '8'  ''  '' ''.
+  m_fieldcat  ''   'BUDAT'    '过账日期'       ''  ''  '8'  ''  '' ''.
+  m_fieldcat  ''   'CPUDT'    '输入日期'       ''   ''  '8'  ''  '' ''.
+  m_fieldcat  ''   'CPUTM'    '输入时间'       ''   ''  '6'  ''  '' ''.
+  m_fieldcat  ''   'NAMEZ'    '用户名'         ''   ''  '20'  ''  '' ''.
+  m_fieldcat  ''   'TCODE'    '事务码'         ''   ''  '20'  ''  '' ''.
+  m_fieldcat  ''   'STBLG'    '冲销凭证号'     ''   ''  '10'  ''  '' ''.
+  m_fieldcat  ''   'BKTXT'    '凭证抬头文本'   ''   ''  '25'  ''  '' ''.
+  m_fieldcat  ''   'WAERS'    '货币码'        ''   ''  '5'  ''  '' ''.
+  m_fieldcat  ''   'KURSF'    '汇率'          ''   ''  '14'  ''  '' ''.
+  m_fieldcat  ''   'NUMPG'    '发票的页数'     ''   ''  '3'  ''  '' ''.
+  m_fieldcat  ''   'XBLNR_ALT' '月凭证编号'    ''  ''  ''  ''  '' ''.
+ENDFORM. " BUILD_FIELDCAT
+*&---------------------------------------------------------------------*
+*&      Form  BUILD_SORTCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM build_sortcat .
+  DEFINE m_sort.
+    lt_sort-tabname = &1.
+    lt_sort-fieldname = &2.
+    lt_sort-up        = &3.
+    APPEND lt_sort.
+  END-OF-DEFINITION.
+*  m_sort 'IT_TAB' 'BUKRS' 'X'.
+*  m_sort 'IT_TAB' 'BUTXT' 'X'.
+*  m_sort 'IT_TAB' 'GJAHR' 'X'.
+*  m_sort 'IT_TAB' 'BELNR' 'X'.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  BUILD_LAYOUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM build_layout .
+  gs_layout-zebra                = 'X'."使ALV 界面呈现颜色交替
+  gs_layout-no_vline             = ''.
+  gs_layout-colwidth_optimize    = 'X'."自动优化列宽
+  gs_layout-detail_popup         = 'X'.
+  gs_layout-detail_initial_lines = 'X'.
+  gs_layout-detail_titlebar      = sy-tcode.
+  gs_layout-confirmation_prompt  = ''.
+  gs_layout-box_fieldname = 'BOX'.
+ENDFORM. " BUILD_LAYOUT
+*&---------------------------------------------------------------------*
+*&      Form  DISPLAY_ALV
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM display_alv .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+      i_callback_program       = sy-repid
+      i_callback_user_command  = 'ALV_USER_COMMAND'
+      i_callback_pf_status_set = 'PF_STATUS_SET'
+      it_fieldcat              = it_fieldcat[]
+      it_events                = it_events[]
+      i_save                   = 'X'
+      is_layout                = gs_layout
+      is_print                 = gs_print
+      it_sort                  = lt_sort[]
+    TABLES
+      t_outtab                 = gt_out
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+ENDFORM. " DISPLAY_ALV
+FORM alv_user_command USING ucomm LIKE sy-ucomm
+      selfield TYPE slis_selfield.
+  CASE ucomm.
+    WHEN '&IC1'.
+      READ TABLE gt_out INDEX selfield-tabindex.
+      CASE selfield-fieldname.
+        WHEN 'BELNR'.
+          SET PARAMETER ID 'BLN' FIELD gt_out-belnr.
+          SET PARAMETER ID 'BUK' FIELD gt_out-bukrs.
+          SET PARAMETER ID 'GJR' FIELD gt_out-gjahr.
+          CALL TRANSACTION 'FB03' AND SKIP FIRST SCREEN.
+        WHEN OTHERS.
+      ENDCASE.
+    WHEN 'ZPRINT'.
+      PERFORM frm_zprint.
+  ENDCASE.
+ENDFORM.
+FORM pf_status_set USING rt_extab TYPE slis_t_extab.
+  SET PF-STATUS 'ZSTANDARD'.
+ENDFORM. "pf_status_set
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_Zprint
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+
+FORM frm_zprint .
+  DATA fm_name TYPE rs38l_fnam.
+  DATA:xssfctrlop LIKE ssfctrlop.
+  DATA: lt_bseg     LIKE zfis001_item OCCURS 0 WITH HEADER LINE,
+        lt_bseg_col LIKE zfis001_item OCCURS 0 WITH HEADER LINE, "针对RV RE类型的
+        lt_item     LIKE zfis001_item OCCURS 0 WITH HEADER LINE,
+        lt_item1    LIKE zfis001_item OCCURS 0 WITH HEADER LINE,
+        lt_head     LIKE zfis001_head OCCURS 0 WITH HEADER LINE.
+  DATA: l_curpage    TYPE i,
+        l_totalpages TYPE i,
+        l_rows       TYPE i,
+        l_mod        TYPE i,
+        l_last       TYPE c.
+  RANGES: r_blart FOR bkpf-blart.
+  CLEAR: l_last.
+  DATA: BEGIN OF gt_waers OCCURS 0,
+          waers LIKE bkpf-waers,
+        END OF gt_waers.
+  DATA: p_lines TYPE i.
+
+  REFRESH:it_bkpf,it_bseg,lt_head.
+  LOOP AT gt_out WHERE box EQ 'X'.
+    MOVE-CORRESPONDING gt_out TO it_bkpf.
+    IF it_bkpf-ppnam IS INITIAL.
+      it_bkpf-ppnam = it_bkpf-usnam.
+    ENDIF.
+    APPEND it_bkpf.
+    MOVE-CORRESPONDING gt_out TO gt_waers.
+    APPEND gt_waers.
+  ENDLOOP.
+
+  SORT gt_waers BY waers.
+  DELETE ADJACENT DUPLICATES FROM gt_waers.
+
+  p_lines = lines( gt_waers ).
+
+*  IF p_lines = 1.
+*    READ TABLE gt_waers INDEX 1.
+*    IF gt_waers-waers = 'CNY'.
+*      CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
+*        EXPORTING
+*          formname           = 'ZFIF001A'
+*        IMPORTING
+*          fm_name            = fm_name
+*        EXCEPTIONS
+*          no_form            = 1
+*          no_function_module = 2
+*          OTHERS             = 3.
+*    ELSE.
+  CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
+    EXPORTING
+      formname           = 'ZFIF001'
+    IMPORTING
+      fm_name            = fm_name
+    EXCEPTIONS
+      no_form            = 1
+      no_function_module = 2
+      OTHERS             = 3.
+*    ENDIF.
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+  SELECT bukrs belnr gjahr buzei sgtxt hkont shkzg dmbtr wrbtr xnegp kunnr lifnr kostl koart fkber
+    INTO CORRESPONDING FIELDS OF TABLE it_bseg
+    FROM bseg
+    FOR ALL ENTRIES IN it_bkpf
+    WHERE bukrs = it_bkpf-bukrs
+      AND gjahr = it_bkpf-gjahr
+      AND belnr = it_bkpf-belnr.
+*  ELSE.
+*    MESSAGE e398(00) WITH '请选择相同币别的凭证' DISPLAY LIKE 'E'.
+*    EXIT.
+*  ENDIF.
+
+  LOOP AT it_bseg.
+*   取出科目描述
+    IF it_bseg-hkont IS NOT INITIAL.
+      SELECT SINGLE txt20 INTO it_bseg-txt20 FROM skat WHERE ktopl = '1000' AND saknr = it_bseg-hkont AND spras = sy-langu.
+    ENDIF.
+*    判断科目类型
+    CASE it_bseg-koart.
+      WHEN 'K'.
+        SELECT SINGLE name1 INTO it_bseg-name1 FROM lfa1 WHERE lifnr = it_bseg-lifnr.
+      WHEN 'D'.
+        SELECT SINGLE name1 INTO it_bseg-name1 FROM kna1 WHERE kunnr = it_bseg-kunnr.
+      WHEN 'S'.
+        IF it_bseg-hkont+0(1) = '6' AND it_bseg-kostl IS NOT INITIAL.
+          SELECT SINGLE ktext INTO it_bseg-name1 FROM cskt WHERE kokrs = '1000' AND kostl = it_bseg-kostl AND spras = sy-langu.
+          IF it_bseg-fkber IS NOT INITIAL.
+            SELECT SINGLE fkbtx INTO it_bseg-fkbtx FROM tfkbt WHERE fkber = it_bseg-fkber AND spras = sy-langu .
+          ENDIF.
+        ENDIF.
+      WHEN OTHERS.
+    ENDCASE.
+    MODIFY it_bseg.
+  ENDLOOP.
+
+  lt_head[] = it_bkpf[].
+
+  SORT lt_head BY bukrs belnr gjahr budat waers kursf numpg xblnr_alt.
+  DELETE ADJACENT DUPLICATES FROM lt_head.
+
+  LOOP AT lt_head .
+    AT LAST.
+      l_last = 'S'.
+    ENDAT.
+
+    AT FIRST.
+      xssfctrlop-no_close = 'X'.
+    ENDAT.
+    AT LAST.
+      xssfctrlop-no_close = ''.
+    ENDAT.
+
+    REFRESH:lt_bseg.
+    IF lt_head-belnr NE space.
+      LOOP AT it_bseg WHERE bukrs EQ lt_head-bukrs AND gjahr = lt_head-gjahr AND belnr EQ lt_head-belnr.
+        MOVE-CORRESPONDING it_bseg TO lt_bseg.
+        IF lt_bseg-xnegp EQ 'X'.
+          lt_bseg-dmbtr = 0 - lt_bseg-dmbtr.
+          lt_bseg-wrbtr = 0 - lt_bseg-wrbtr.
+        ENDIF.
+        CASE lt_bseg-shkzg.
+          WHEN 'S'.
+            IF lt_bseg-xnegp EQ 'X'.
+*              lt_bseg-dmbtr_s = lt_bseg-dmbtr.
+*              lt_bseg-wrbtr_s = lt_bseg-wrbtr.
+              lt_bseg-dmbtr_h = lt_bseg-dmbtr.
+              lt_bseg-wrbtr_h = lt_bseg-wrbtr.
+            ELSE.
+              lt_bseg-dmbtr_s = abs( lt_bseg-dmbtr ).
+              lt_bseg-wrbtr_s = abs( lt_bseg-wrbtr ).
+            ENDIF.
+          WHEN 'H'.
+            IF lt_bseg-xnegp EQ 'X'.
+*              lt_bseg-dmbtr_h = lt_bseg-dmbtr.
+*              lt_bseg-wrbtr_h = lt_bseg-wrbtr.
+              lt_bseg-dmbtr_s = lt_bseg-dmbtr.
+              lt_bseg-wrbtr_s = lt_bseg-wrbtr.
+            ELSE.
+              lt_bseg-dmbtr_h = abs( lt_bseg-dmbtr ).
+              lt_bseg-wrbtr_h = abs( lt_bseg-wrbtr ).
+            ENDIF.
+          WHEN OTHERS.
+        ENDCASE.
+        IF lt_head-blart EQ 'RV' OR lt_head-blart EQ 'RE'.
+          CLEAR: lt_bseg-buzei.
+          COLLECT lt_bseg.
+        ELSE.
+          APPEND lt_bseg.
+        ENDIF.
+      ENDLOOP.
+    ELSE.
+*      CLEAR: lt_head-numpg,lt_head-usnam,lt_head-namezd,lt_head-xblnr_alt.
+      lt_head-xblnr_alt = lt_head-blart.
+      LOOP AT it_bkpf WHERE blart EQ lt_head-blart.
+        ADD it_bkpf-numpg TO lt_head-numpg.
+        LOOP AT it_bseg WHERE bukrs = it_bkpf-bukrs AND gjahr = it_bkpf-gjahr AND belnr = it_bkpf-belnr.
+          IF lt_head-blart IN r_blart.
+            CLEAR: it_bseg-name1.
+          ENDIF.
+          MOVE-CORRESPONDING it_bseg TO lt_bseg.
+          CLEAR: lt_bseg-belnr,lt_bseg-buzei.
+          SELECT SINGLE txt20 INTO lt_bseg-txt20 FROM skat WHERE saknr = lt_bseg-hkont AND spras = sy-langu.
+          IF lt_bseg-xnegp EQ 'X'.
+            lt_bseg-dmbtr = 0 - lt_bseg-dmbtr.
+          ENDIF.
+          CASE lt_bseg-shkzg.
+            WHEN 'S'.
+              lt_bseg-dmbtr_s = abs( lt_bseg-dmbtr ).
+            WHEN 'H'.
+              lt_bseg-dmbtr_h = abs( lt_bseg-dmbtr ).
+            WHEN OTHERS.
+          ENDCASE.
+          CLEAR: lt_bseg-sgtxt.
+          COLLECT lt_bseg.
+        ENDLOOP.
+      ENDLOOP.
+    ENDIF.
+
+******** 为了按照 buzei 排序。 将下面代码放到排序之后
+*    CLEAR: l_rows,l_mod,l_curpage,l_totalpages.
+*    l_rows = lines( lt_bseg ).
+*    l_mod = l_rows MOD 5.
+*    IF l_mod NE 0.
+*      l_mod = 5 - l_mod.
+*      DO l_mod TIMES.
+*        CLEAR: lt_bseg.
+*        APPEND lt_bseg.
+*        ADD 1 TO l_rows.
+*      ENDDO.
+*    ENDIF.
+*    lt_head-numtp = l_rows DIV 5.
+*    CLEAR: lt_head-numcp.
+
+
+    REFRESH: lt_item.
+    lt_item[] = lt_bseg[].
+*    ADD BY XULE 20160606
+    LOOP AT lt_item.
+      READ TABLE it_bseg WITH KEY hkont = lt_item-hkont buzei = lt_item-buzei.
+      IF sy-subrc = 0.
+        lt_item-buzei = it_bseg-buzei.
+      ENDIF.
+      "ADD BY CHENCY 20160714
+      IF lt_item-wrbtr_s = 0.
+        lt_item-wrbtr_s = lt_item-wrbtr_h.
+      ENDIF.
+      MODIFY lt_item TRANSPORTING buzei wrbtr_s.
+    ENDLOOP.
+*    END BY XULE 20160606
+    ADD 1 TO lt_head-numcp.
+    IF lt_head-blart EQ 'RV'.
+      SORT lt_item BY shkzg DESCENDING buzei ASCENDING.
+    ELSE.
+      SORT lt_item BY shkzg DESCENDING.
+    ENDIF.
+
+    IF lt_head-blart EQ 'DZ'.
+      SORT lt_item BY buzei.
+    ENDIF.
+
+    CLEAR: l_rows,l_mod,l_curpage,l_totalpages.
+    l_rows = lines( lt_item ).
+    l_mod = l_rows MOD 5.
+    IF l_mod NE 0.
+      l_mod = 5 - l_mod.
+      DO l_mod TIMES.
+        CLEAR: lt_item.
+        APPEND lt_item.
+        ADD 1 TO l_rows.
+      ENDDO.
+    ENDIF.
+    lt_head-numtp = l_rows DIV 5.
+    CLEAR: lt_head-numcp.
+
+*    REFRESH lt_item1.
+*    LOOP AT lt_item.
+*      MOVE-CORRESPONDING lt_item TO lt_item1.
+*      COLLECT lt_item1.
+*      CLEAR lt_item1.
+*    ENDLOOP.
+    CALL FUNCTION fm_name
+      EXPORTING
+        control_parameters = xssfctrlop
+        wa_head            = lt_head
+      TABLES
+        it_item            = lt_item
+      EXCEPTIONS
+        formatting_error   = 1
+        internal_error     = 2
+        send_error         = 3
+        user_canceled      = 4.
+    xssfctrlop-no_open = 'X'.
+
+  ENDLOOP.
+  IF sy-subrc NE 0.
+    MESSAGE s000(oo) WITH '请先选择要打印的记录' DISPLAY LIKE 'E'.
+  ENDIF.
+  FREE: lt_head,it_bkpf,it_bseg.
+ENDFORM. " FRM_Zprint
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_AUTHORITY
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_authority .
+  IF p_bukrs IS NOT INITIAL.
+    AUTHORITY-CHECK OBJECT 'F_BKPF_BUK'
+                  ID 'BUKRS' FIELD p_bukrs
+                  ID 'ACTVT' FIELD '03'.
+    IF sy-subrc <> 0.
+      MESSAGE '没有该公司的查看权限！' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+ENDFORM.

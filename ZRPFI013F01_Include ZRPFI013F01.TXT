@@ -1,0 +1,347 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI013F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:lt_faglflext TYPE TABLE OF faglflext,
+       ls_faglflext TYPE faglflext.
+  DATA lv_fieldname TYPE fieldname.
+
+  FIELD-SYMBOLS <fs_hslvt>   TYPE hslvt12.
+
+  IF s_rpmax-high IS NOT INITIAL AND s_rpmax-low IS NOT INITIAL .
+    lv_rpmin = s_rpmax-low.
+    lv_rpmax = s_rpmax-high.
+  ELSEIF s_rpmax-low IS NOT INITIAL AND s_rpmax-high IS INITIAL.
+    lv_rpmin = s_rpmax-low.
+    lv_rpmax = s_rpmax-low.
+  ELSEIF s_rpmax-low IS INITIAL AND s_rpmax-high IS NOT INITIAL.
+    lv_rpmin = s_rpmax-high.
+    lv_rpmax = s_rpmax-high.
+  ENDIF.
+
+  SELECT * INTO TABLE lt_faglflext
+    FROM faglflext
+   WHERE ryear EQ p_ryear
+     AND rbukrs IN r_bukrs
+     AND prctr IN s_prctr
+     AND racct LIKE '22110%'.
+
+  LOOP AT lt_faglflext INTO ls_faglflext.
+    CLEAR:gt_item.
+    IF lv_rpmax = 12.
+      lv_rpmax = 16.
+    ENDIF.
+    "本期应付= HSL*(*表示屏幕输入期间)，且借贷标志DRCRK为H，取出后乘以-1；
+    IF ls_faglflext-drcrk EQ 'H'."ls_faglflext-rpmax BETWEEN  lv_rpmin  AND lv_rpmax AND
+      lv_index = lv_rpmin.
+      DO lv_rpmax - lv_rpmin + 1 TIMES.
+        lv_index = lv_index.
+        CONCATENATE 'HSL' lv_index INTO lv_fieldname.
+        ASSIGN COMPONENT lv_fieldname OF STRUCTURE ls_faglflext TO <fs_hslvt>.
+        IF sy-subrc EQ 0.
+          gt_item-zamount_gf = gt_item-zamount_gf + <fs_hslvt>."期末
+        ENDIF.
+        lv_index = lv_index + 1.
+      ENDDO.
+      gt_item-zamount_gf = gt_item-zamount_gf * -1.
+    ENDIF.
+
+    "本期已付= HSL*(*表示屏幕输入期间)，且借贷标志DRCRK为S；
+    IF  ls_faglflext-drcrk EQ 'S'."ls_faglflext-rpmax BETWEEN  lv_rpmin  AND lv_rpmax AND
+      lv_index = lv_rpmin.
+      DO lv_rpmax - lv_rpmin + 1 TIMES.
+        lv_index = lv_index.
+        CONCATENATE 'HSL' lv_index INTO lv_fieldname.
+        ASSIGN COMPONENT lv_fieldname OF STRUCTURE ls_faglflext TO <fs_hslvt>.
+        IF sy-subrc EQ 0.
+          gt_item-zamount_yf = gt_item-zamount_yf + <fs_hslvt>."期末
+        ENDIF.
+        lv_index = lv_index + 1.
+      ENDDO.
+    ENDIF.
+    "期初数=HSLVT+HSL01+HSL02+HSL(*-1)，(*表示屏幕输入期间)，取出后乘以-1；
+    gt_item-zamount_qc = gt_item-zamount_qc + ls_faglflext-hslvt.
+    DO lv_rpmin - 1 TIMES.
+      lv_index = sy-index.
+      CONCATENATE 'HSL' lv_index INTO lv_fieldname.
+      ASSIGN COMPONENT lv_fieldname OF STRUCTURE ls_faglflext TO <fs_hslvt>.
+      IF sy-subrc EQ 0.
+        gt_item-zamount_qc  = gt_item-zamount_qc + <fs_hslvt>."期末
+      ENDIF.
+    ENDDO.
+    gt_item-zamount_qc = gt_item-zamount_qc * -1.
+
+    gt_item-zamount_qm = gt_item-zamount_qc + gt_item-zamount_gf - gt_item-zamount_yf.
+
+    IF  ls_faglflext-racct+0(6) EQ '221101'."短期薪酬
+      gt_item-zexno = 5.
+      COLLECT gt_item.
+      CLEAR gt_item-zexno.
+    ENDIF.
+    IF ls_faglflext-racct BETWEEN  '2211010100' AND '2211010200'. "一、工资、奖金、津贴和补贴
+      gt_item-zexno = 6.
+      COLLECT gt_item.
+      CLEAR gt_item-zexno.
+    ENDIF.
+    IF ls_faglflext-racct+0(8) EQ '22110104'."社会保险费
+      gt_item-zexno = 8.
+      COLLECT gt_item.
+      CLEAR gt_item-zexno.
+    ENDIF.
+    IF ls_faglflext-racct BETWEEN '2211010401' AND '2211010402'."1.医疗保险费
+      gt_item-zexno = 9.
+      COLLECT gt_item.
+      CLEAR gt_item-zexno.
+    ENDIF.
+    IF ls_faglflext-racct BETWEEN '2211020101'AND '2211020102'. "（2）设定提存计划
+      gt_item-zexno = 17.
+      COLLECT gt_item.
+      CLEAR gt_item-zexno.
+    ENDIF.
+    IF ls_faglflext-racct BETWEEN '2211020201'AND '2211020202'. "设定受益计划
+      gt_item-zexno = 21.
+      COLLECT gt_item.
+      CLEAR gt_item-zexno.
+    ENDIF.
+    IF ls_faglflext-racct+0(6) EQ '221104'."（5）其他长期职工福利
+      gt_item-zexno = 25.
+      COLLECT gt_item.
+      CLEAR gt_item-zexno.
+    ENDIF.
+
+    CASE ls_faglflext-racct.
+      WHEN  '2211010300' ."职工福利费
+        gt_item-zexno = 7.
+        COLLECT gt_item.
+        CLEAR gt_item-zexno.
+      WHEN '2211010403'. " 2.工伤保险费
+        gt_item-zexno = 10.
+        COLLECT gt_item.
+        CLEAR gt_item-zexno.
+      WHEN '2211010404'."3.生育保险费
+        gt_item-zexno = 11.
+        COLLECT gt_item.
+        CLEAR gt_item-zexno.
+      WHEN '2211010500'. "住房公积金
+        gt_item-zexno = 12.
+        COLLECT gt_item.
+        CLEAR gt_item-zexno.
+      WHEN '2211010600'."工会经费和职工教育经费
+        gt_item-zexno = 13.
+        COLLECT gt_item.
+        CLEAR gt_item-zexno.
+      WHEN '2211010700'."短期带薪缺勤
+        gt_item-zexno = 14.
+        COLLECT gt_item.
+        CLEAR gt_item-zexno.
+      WHEN '2211010800'."七、短期利润分享计划
+        gt_item-zexno = 15.
+        COLLECT gt_item.
+        CLEAR gt_item-zexno.
+      WHEN '2211020101'."一、基本养老保险费
+        gt_item-zexno = 18.
+        COLLECT gt_item.
+        CLEAR gt_item-zexno.
+      WHEN '2211020102'."二、失业保险费
+        gt_item-zexno = 19.
+        COLLECT gt_item.
+        CLEAR gt_item-zexno.
+      WHEN '2211020201'."一、补充退休金
+        gt_item-zexno = 22.
+        COLLECT gt_item.
+        CLEAR gt_item-zexno.
+      WHEN '2211020202'."二、统筹外离退休福利
+        gt_item-zexno = 23.
+        COLLECT gt_item.
+        CLEAR gt_item-zexno.
+      WHEN '2211030000'."（4） 辞退补偿
+        gt_item-zexno = 24.
+        COLLECT gt_item.
+        CLEAR gt_item-zexno.
+    ENDCASE.
+  ENDLOOP.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+********数据定义*******
+  DATA:lv_file   TYPE string,
+       lv_result TYPE c. "标识: 空表示文件不存在;否则,表示存在
+  DATA lv_answer TYPE c.
+  DATA:li_lines TYPE i.
+  DATA:ls_key   TYPE wwwdatatab,
+       lv_subrc TYPE sy-subrc.
+  DATA lv_file1 LIKE rlgrap-filename.
+*******初始化*******
+*******程序主体*******
+
+  CONCATENATE 'C:\FI\' sy-title '-'   sy-datum '.xls' INTO lv_file.
+
+  CALL METHOD cl_gui_frontend_services=>file_exist
+    EXPORTING
+      file                 = lv_file
+    RECEIVING
+      result               = lv_result
+    EXCEPTIONS
+      cntl_error           = 1
+      error_no_gui         = 2
+      wrong_parameter      = 3
+      not_supported_by_gui = 4
+      OTHERS               = 5.
+  IF lv_result IS NOT  INITIAL. "文件已经存在
+    CALL FUNCTION 'POPUP_TO_CONFIRM'
+      EXPORTING
+        titlebar              = '请确认'
+        text_question         = '文件已经存在，是否要覆盖?'
+        text_button_1         = '是'
+        text_button_2         = '否'
+        default_button        = '2' "缺省选中按钮: 1 是; 2 否
+        display_cancel_button = ''  "标识: 为空,不显示 取消按钮
+      IMPORTING
+        answer                = lv_answer "标识： 1 是;
+      EXCEPTIONS
+        text_not_found        = 1
+        OTHERS                = 2.
+    IF lv_answer NE '1'.
+      EXIT.
+    ENDIF.
+  ENDIF.
+
+  ls_key-relid = 'MI'.
+  ls_key-objid = gcst_excel_template.
+  lv_file1 = lv_file.
+  CALL FUNCTION 'DOWNLOAD_WEB_OBJECT'
+    EXPORTING
+      key         = ls_key
+      destination = lv_file1
+    IMPORTING
+      rc          = lv_subrc.
+  IF lv_subrc <> 0.
+    MESSAGE '下载模板出错，请检查，谢谢' TYPE 'E'.
+    EXIT.
+  ENDIF.
+
+***填充EXCEL数据
+  PERFORM frm_filldata_excel USING lv_file.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FILLDATA_EXCEL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LV_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_filldata_excel  USING  iv_file TYPE string.
+*******数据定义*******
+  DATA:lo_excel     TYPE ole2_object,
+       lo_workbooks TYPE ole2_object,
+       lo_workbook  TYPE ole2_object,
+       lo_sheet     TYPE ole2_object,
+       lo_range     TYPE ole2_object,
+       lo_cell      TYPE ole2_object,
+       lo_cell1     TYPE ole2_object.
+  DATA lv_file LIKE rlgrap-filename.
+  DATA:lt_excel_in                    "内表：从源文件中读取到的数据
+         TYPE STANDARD TABLE OF alsmex_tabline WITH HEADER LINE.
+  DATA lv_value TYPE char200.
+
+  DATA lv_row TYPE i.
+  DATA lv_col TYPE i.
+
+  DEFINE mac_fill_cell.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+      EXPORTING
+        #1 = &1
+        #2 = &2.
+    SET PROPERTY OF lo_cell 'VALUE' = &3.
+  END-OF-DEFINITION.
+
+*******程序主体*******
+*读取模板数
+
+
+
+
+*填充excel
+  CREATE OBJECT lo_excel 'EXCEL.APPLICATION'.
+  CALL METHOD OF lo_excel 'WORKBOOKS' = lo_workbooks.
+  CALL METHOD OF lo_workbooks 'OPEN' = lo_workbook EXPORTING #1 = iv_file.
+  CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = 1.
+
+
+  "数值
+  LOOP AT gt_item.
+    lv_col = lv_col + 2.
+    "excel模版的行数
+    CONDENSE gt_item-zexno.
+    lv_row = gt_item-zexno.
+    mac_fill_cell lv_row lv_col gt_item-zamount_qc.
+    lv_col = lv_col + 1.
+    mac_fill_cell lv_row lv_col gt_item-zamount_gf.
+    lv_col = lv_col + 1.
+    mac_fill_cell lv_row lv_col gt_item-zamount_yf.
+    lv_col = lv_col + 1.
+    mac_fill_cell lv_row lv_col gt_item-zamount_qm.
+    CLEAR:lv_col.
+  ENDLOOP.
+
+  CALL METHOD OF lo_sheet 'CELLS' = lo_cell EXPORTING #1 = 1 #2 = 1.
+  CALL METHOD OF lo_cell 'SELECT'.
+  SET PROPERTY OF lo_excel 'CutCopyMode' = 0.
+
+  CALL METHOD OF lo_workbook 'SAVE'.
+  SET PROPERTY OF lo_excel 'VISIBLE' = 1.
+  FREE OBJECT:lo_excel,lo_workbooks,lo_workbook,lo_sheet,lo_range,lo_cell.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_AUTH
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_auth .
+  DATA:BEGIN OF lt_bukrs OCCURS 0,
+         bukrs LIKE t001-bukrs,
+       END OF lt_bukrs.
+  CHECK sy-ucomm = 'ONLI'.
+  REFRESH r_bukrs.
+
+  SELECT bukrs INTO TABLE lt_bukrs FROM t001 WHERE bukrs IN s_bukrs.
+  IF sy-subrc NE 0.
+    MESSAGE '输入公司代码无效' TYPE 'E'.
+  ELSE.
+    LOOP AT lt_bukrs.
+      AUTHORITY-CHECK OBJECT 'F_BKPF_BUK'
+                    ID 'BUKRS' FIELD lt_bukrs-bukrs
+                    ID 'ACTVT' FIELD '03'.
+      IF sy-subrc <> 0.
+        DELETE lt_bukrs.
+      ELSE.
+        r_bukrs = 'IEQ'.
+        r_bukrs-low = lt_bukrs-bukrs.
+        APPEND r_bukrs.
+        CLEAR r_bukrs.
+      ENDIF.
+    ENDLOOP.
+    IF r_bukrs[] IS INITIAL.
+      MESSAGE '你没有公司代码的权限' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+ENDFORM.

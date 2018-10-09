@@ -1,0 +1,77 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZXQQMTOP
+*&---------------------------------------------------------------------*
+TABLES:ztcs002,qpcd.
+DATA:BEGIN OF gt_data OCCURS 0.
+    INCLUDE STRUCTURE ztcs001.
+DATA:maktx      LIKE makt-maktx,     "物料描述
+     name1      LIKE lfa1-name1,     "供应商名称
+***故障代码及描述
+     fegrp      LIKE qmfe-fegrp,     "代码组 - 问题
+     fecod      LIKE qmfe-fecod,     "问题或损坏代码
+     txtcdfe    LIKE riwo00-txtcdfe, "故障描述
+***原因代码及描述
+     urgrp      LIKE ztcs004-urgrp,  "代码组－责任方
+     urcod      LIKE ztcs004-urcod,  "责任方的代码
+     txtcdur    LIKE riwo00-txtcdur, "原因描述
+     ztext      LIKE ztcs002-ztext,  "维修状态描述
+     lifnr_o    LIKE lfa1-lifnr,     "旧的供应商
+     zwxzt_o    LIKE ztcs002-zstat,  "旧的维修状态
+
+     zkdgs      LIKE t173t-bezei,    "快递公司
+     zkhms(100) TYPE c,              "客户描述
+
+     check      TYPE c,              "选择
+     END OF gt_data.
+
+DATA:gw_data LIKE LINE OF gt_data.
+***故障描述表
+DATA:BEGIN OF gt_ztcs003 OCCURS 0.
+    INCLUDE STRUCTURE ztcs003.
+DATA:txtcdfe LIKE riwo00-txtcdfe, "故障描述
+     check   TYPE c,
+     END OF gt_ztcs003.
+DATA:gt_ztcs003_total LIKE gt_ztcs003 OCCURS 0 WITH HEADER LINE.
+
+***原因描述表
+DATA:BEGIN OF gt_ztcs004 OCCURS 0.
+    INCLUDE STRUCTURE ztcs004.
+DATA:txtcdfe LIKE riwo00-txtcdfe, "原因描述
+     check   TYPE c,
+     END OF gt_ztcs004.
+DATA:gt_ztcs004_total LIKE gt_ztcs004 OCCURS 0 WITH HEADER LINE.
+
+DATA:gv_aktyp LIKE t365-aktyp.
+DATA:gv_zindx(6) TYPE n.
+DATA:gv_flag TYPE c.
+
+DATA:BEGIN OF gt_qpcd OCCURS 0,
+       codegruppe LIKE qpcd-codegruppe,
+       code       LIKE qpcd-code,
+       kurztext   LIKE qpct-kurztext,
+     END OF gt_qpcd.
+
+DATA:BEGIN OF gt_zstat OCCURS 0,
+       zstat LIKE ztcs002-zstat,
+       ztext LIKE ztcs002-ztext,
+     END OF gt_zstat.
+
+*   ADD BY PFT 20171108
+DATA: BEGIN OF gt_zwxy OCCURS 0,
+        ZCODE LIKE ztcs005-ZCODE,
+        zwxy LIKE ztcs005-zwxy,
+      END OF gt_zwxy.
+*  END BY PFT 20171108
+
+*&SPWIZARD: 0100 screen
+CONTROLS: ztdata TYPE TABLEVIEW USING SCREEN 0100.
+DATA:     g_ztdata_lines  LIKE sy-loopc.
+DATA:     ok_code LIKE sy-ucomm.
+
+*&SPWIZARD: 0200 screen
+CONTROLS: ztgz TYPE TABLEVIEW USING SCREEN 0200.
+DATA:     g_ztgz_lines  LIKE sy-loopc.
+
+*&SPWIZARD: 0300 screen
+CONTROLS: ztyy TYPE TABLEVIEW USING SCREEN 0300.
+DATA:     g_ztyy_lines  LIKE sy-loopc.

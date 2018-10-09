@@ -1,0 +1,77 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPSD009T01
+*&---------------------------------------------------------------------*
+TABLES:ztsd003zxdb.
+
+DATA:BEGIN OF gt_out OCCURS 0.
+    INCLUDE STRUCTURE ztsd003zxdb.
+DATA:name1  LIKE kna1-name1,
+     bezei  LIKE t173t-bezei,
+     check  TYPE c,
+     stytab TYPE lvc_t_styl,
+     END OF gt_out.
+
+***alv data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE,
+     gt_events TYPE slis_t_event WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  gt_fcat-edit      = &5.
+  gt_fcat-outputlen = &6.
+  IF &1 = 'ZWCBS'.
+    gt_fcat-checkbox = 'X'.
+  ENDIF.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.
+
+DATA: gv_grid TYPE REF TO cl_gui_alv_grid.
+*----------------------------------------------------------------------*
+*       CLASS lcl_event_receiver DEFINITION
+*----------------------------------------------------------------------*
+CLASS lcl_event_receiver DEFINITION.
+  PUBLIC SECTION.
+    METHODS handle_modify
+                  FOR EVENT data_changed_finished OF cl_gui_alv_grid
+      IMPORTING e_modified et_good_cells.
+ENDCLASS. "LCL_EVENT_RECEIVER DEFINITION
+*----------------------------------------------------------------------*
+*       CLASS LCL_EVENT_RECEIVER IMPLEMENTATION
+*----------------------------------------------------------------------*
+CLASS lcl_event_receiver IMPLEMENTATION.
+  METHOD handle_modify.
+    DATA: wa_cells   TYPE lvc_s_modi,
+          lv_enter   TYPE REF TO cl_gui_event,
+          lv_eventid TYPE i,
+          lv_tabix   LIKE sy-tabix.
+    DATA:ls_out LIKE LINE OF gt_out.
+
+*   获取当前事件
+    lv_enter   = gv_grid->cur_event.
+*   实例化成功的时候
+    IF lv_enter IS NOT INITIAL.
+      lv_eventid = lv_enter->eventid.
+    ENDIF.
+*   只有在[回车]事件的时候，再进行检查(19:代表回车事件)
+    IF lv_eventid = 19 AND sy-ucomm   = ''.
+      LOOP AT et_good_cells INTO wa_cells.
+        READ TABLE gt_out INTO ls_out INDEX wa_cells-row_id.
+        lv_tabix = sy-tabix.
+        SELECT SINGLE bezei INTO ls_out-bezei FROM t173t WHERE spras = sy-langu AND vsart = ls_out-vsart.
+        MODIFY gt_out FROM ls_out INDEX lv_tabix TRANSPORTING bezei.
+      ENDLOOP.
+    ENDIF.
+    CALL METHOD gv_grid->refresh_table_display( ).
+
+  ENDMETHOD.
+  "HANDLE_MODIFY
+ENDCLASS. "LCL_EVENT_RECEIVER IMPLEMENTATION
+DATA:gt_event_receiver TYPE REF TO lcl_event_receiver.

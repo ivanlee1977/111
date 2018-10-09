@@ -1,0 +1,38 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPFI018_F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+
+*  DATA : BEGIN OF lw_bsik ,
+*           bukrs LIKE  bsik-bukrs,
+*           prctr LIKE  bsik-prctr,
+*           lifnr LIKE  bsik-lifnr,
+*           hkont LIKE  bsik-hkont,
+*           budat LIKE  bsik-budat,
+*           dmbtr LIKE  bsik-dmbtr,
+*           shkzg LIKE  bsik-shkzg,
+*           gjahr LIKE  bsik-gjahr,
+*           monat LIKE  bsik-monat,
+*         END OF lw_bsik,
+*         lt_bsik  like lw_bsik occurs 0 WITH HEADER LINE.
+*
+*DATA : BEGIN OF gw_ZFICOTSKT ,
+*       ZSKRQ like ZFICOTSKT-ZSKRQ,
+*       ZDJZT like ZFICOTSKT-ZDJZT,
+*       ZKHBM like ZFICOTSKT-ZKHBM,
+*       ZSKZE like ZFICOTSKT-ZSKZE,
+*       END OF gw_ZFICOTSKT,
+*       gt_ZFICOTSKT like gw_ZFICOTSKT occurs 0.
+*
+*
+*SELECT ZSKRQ ZDJZT  ZKHBM  ZSKZE FROM ZFICOTSKT INTO CORRESPONDING FIELDS OF TABLE gt_ZFICOTSKT.
+
+ENDFORM.

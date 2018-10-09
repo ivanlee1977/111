@@ -1,0 +1,14 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPMM039S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:
+s_matnr FOR mara-matnr,
+s_lifnr FOR lfa1-lifnr,
+s_matkl FOR mara-matkl,
+s_ekgrp FOR eine-ekgrp,
+s_infnr FOR eina-infnr.
+
+PARAMETERS p1 AS CHECKBOX.
+SELECTION-SCREEN END OF BLOCK blc.

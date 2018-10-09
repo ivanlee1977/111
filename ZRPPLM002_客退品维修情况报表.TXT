@@ -1,0 +1,19 @@
+*&---------------------------------------------------------------------*
+*& Report ZRPPLM002
+*&---------------------------------------------------------------------*
+*&制作人：leimt 制作日期：20171121
+*&---------------------------------------------------------------------*
+REPORT ZRPPLM002.
+
+INCLUDE ZRPPLM002_T01.
+INCLUDE ZRPPLM002_S01.
+INCLUDE ZRPPLM002_F01.
+
+INITIALIZATION.
+
+START-OF-SELECTION.
+
+PERFORM frm_gedata.
+PERFORM frm_processdata.
+PERFORM frm_fieldcat.
+PERFORM frm_show.

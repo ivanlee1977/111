@@ -1,0 +1,91 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP025_T01
+*&---------------------------------------------------------------------*
+TYPE-POOLS:truxs,slis.
+
+TABLES:afpo,afru,aufm,ztpp001.
+********************ALV 事件****************
+DATA:
+  it_fieldcat TYPE lvc_t_fcat,
+  wa_fieldcat LIKE LINE OF it_fieldcat,
+  gs_layout   TYPE lvc_s_layo,
+  it_events   TYPE slis_t_event, ""事件属性
+  wa_events   TYPE slis_alv_event.
+
+DATA:
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DATA:BEGIN OF gt_pp OCCURS 0,
+       zindex TYPE i.
+    INCLUDE STRUCTURE  ztpp001.
+DATA END OF gt_pp.
+
+DATA: BEGIN OF gt_afru OCCURS 0,
+        gmnga    TYPE afru-gmnga,
+        matnr    TYPE makt-matnr,
+        dauat    TYPE afpo-dauat,
+        vornr    TYPE afru-vornr,
+        arbpl    TYPE crhd-arbpl,
+        ism01    TYPE afru-ism01,
+        budat    TYPE aufm-budat,
+        aedat(6) TYPE c,
+        zjhcpfl  TYPE ztpp001-zjhcpfl,
+        steus    TYPE crhd-steus,
+        xmnga    TYPE afru-xmnga,
+      END OF gt_afru.
+
+DATA: BEGIN OF gt_afpo OCCURS 0,
+        matnr    TYPE makt-matnr,
+        dauat    TYPE afpo-dauat,
+        psmng    TYPE afpo-psmng,
+        gstrp    TYPE afko-gstrp,
+        pgmng    TYPE afpo-pgmng,
+        aedat(6) TYPE c,
+        zjhcpfl  TYPE ztpp001-zjhcpfl,
+      END OF gt_afpo.
+
+DATA: BEGIN OF gt_aufm OCCURS 0,
+        matnr    TYPE makt-matnr,
+        dauat    TYPE afpo-dauat,
+        menge    TYPE aufm-menge,
+        budat    TYPE aufm-budat,
+        aedat(6) TYPE c,
+        zjhcpfl  TYPE ztpp001-zjhcpfl,
+      END OF gt_aufm.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       aedat(6) TYPE c,
+       z1       TYPE p DECIMALS 3,
+       z2       TYPE p DECIMALS 3,
+       z3       TYPE p DECIMALS 3,
+       z4       TYPE p DECIMALS 3,
+       z5       TYPE p DECIMALS 3,
+       z6       TYPE p DECIMALS 3,
+       z7       TYPE p DECIMALS 3,
+       z8       TYPE p DECIMALS 3,
+       z9       TYPE p DECIMALS 3,
+       z10      TYPE p DECIMALS 3,
+       z11      TYPE p DECIMALS 3,
+       z12      TYPE p DECIMALS 3,
+       z13      TYPE p DECIMALS 3,
+       z14      TYPE p DECIMALS 3,
+       z15      TYPE p DECIMALS 3,
+     END OF gt_out.
+
+DATA:BEGIN OF gt_col OCCURS 0,
+       zjhcpfl TYPE ztpp001-zjhcpfl,
+       table   TYPE char4,
+       dauat   TYPE afpo-dauat,
+       arbpl   TYPE crhd-arbpl,
+       zindex  TYPE i,
+     END OF gt_col.
+
+DATA:lo_excel     TYPE ole2_object,
+     lo_workbooks TYPE ole2_object,
+     lo_workbook  TYPE ole2_object,
+     lo_sheet     TYPE ole2_object,
+     lo_range     TYPE ole2_object,
+     lo_cell      TYPE ole2_object,
+     lo_cell1     TYPE ole2_object.
+
+DATA: date1 TYPE sy-datum,date2 TYPE sy-datum.

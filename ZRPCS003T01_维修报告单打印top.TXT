@@ -1,0 +1,78 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM013T01
+*&---------------------------------------------------------------------*
+TABLES:qmel,ztcs001,knvv.
+
+DATA:BEGIN OF gt_alv OCCURS 0,
+       box(1),
+       sel(1),
+       qmnum         LIKE qmel-qmnum, "通知单号
+       zindx         LIKE ztcs001-zindx, "项目
+       qmart         LIKE qmel-qmart, "通知单类型
+       qmtxt         LIKE qmel-qmtxt, "通知单描述
+       ernam         LIKE qmel-ernam, "创建人
+       erdat         LIKE qmel-erdat, "创建时间
+       kunum         LIKE qmel-kunum, "客户代码
+       adrnr         LIKE qmel-adrnr, "地址号码
+       name(80),"客户名称
+       extension1    LIKE adrc-extension1, "联系人
+       tel_number    LIKE adrc-tel_number, "联系方式
+       street(100),"客户地址
+       zbarcode      LIKE ztcs001-zbarcode, "序列号
+       matnr         LIKE ztcs001-matnr, "产品代码
+       maktx         LIKE makt-maktx, "产品描述
+       menge         LIKE ztcs001-menge, "数量
+       meins         LIKE mara-meins, "单位
+       zsjfy         LIKE ztcs001-zsjfy, "金额
+       zthwx         LIKE ztcs001-zthwx, "维修/退货
+       zthwx_ms(10),"维修/退货
+       zzjtg         LIKE ztcs001-zzjtg, "确认维修日期
+       zreason       LIKE ztcs001-zreason, "客户问题描述
+       fecod(50), "故障现象代码
+       fecod_ms(200),"故障现象描述
+       urcod(50) , "不良原因代码
+       urcod_ms(200),"不良原因代码描述
+       zwhwl1        LIKE ztcs001-zwhwl1, "更换物料及位号1
+       zwhwl2        LIKE ztcs001-zwhwl2, "更换物料及位号2
+       zwhwl3        LIKE ztcs001-zwhwl3, "更换物料及位号3
+       zwhwl4        LIKE ztcs001-zwhwl4, "更换物料及位号4
+       zwhwl5        LIKE ztcs001-zwhwl5, "更换物料及位号5
+       zgbbs         LIKE ztcs001-zgbbs, "是否保修内
+       zgbbs_ms(10),"是否保修内描述
+       zswbz         LIKE ztcs001-zswbz, "特殊要求
+       zsfsf(10),"是否收费
+       zwxzt         LIKE ztcs001-zwxzt, "维修状态
+       zwxcs         LIKE ztcs001-zwxcs, "维修次数
+***add by quyantao 20171203
+       zversion      LIKE ztcs001-zversion, "版本
+       bstnk         LIKE qmel-bstnk,
+       zwxy          LIKE ztcs001-zwxy, "维修员
+       zwczt         LIKE ztcs001-zwczt, "完成标识
+       zsfbs         LIKE ztcs001-zsfbs, "收发标识
+***end add
+     END OF gt_alv.
+DATA:gt_knvv    LIKE knvv OCCURS 0 WITH HEADER LINE,
+     gt_adrc    LIKE adrc OCCURS 0 WITH HEADER LINE,
+     gt_ztcs003 LIKE ztcs003 OCCURS 0 WITH HEADER LINE,
+     gt_ztcs004 LIKE ztcs004 OCCURS 0 WITH HEADER LINE,
+     gt_mara    LIKE mara OCCURS 0 WITH HEADER LINE,
+     gt_makt    LIKE makt OCCURS 0 WITH HEADER LINE,
+     gt_qpct    LIKE qpct OCCURS 0 WITH HEADER LINE.
+
+DATA:gt_tq80_t LIKE tq80_t OCCURS 0 WITH HEADER LINE.
+DATA: it_head LIKE zszcs003_head OCCURS 0 WITH HEADER LINE,
+      it_item LIKE zszcs003_item OCCURS 0 WITH HEADER LINE.
+
+DATA: BEGIN OF gt_zwxy OCCURS 0,
+        zcode LIKE ztcs005-zcode,
+        zwxy  LIKE ztcs005-zwxy,
+      END OF gt_zwxy.
+
+DATA: lv_flag TYPE c."用于切换打印类型转换维修状态
+DEFINE  mcr_zwxzt.
+  CLEAR: s_zwxzt.
+  s_zwxzt-sign = 'I'.
+  s_zwxzt-option = 'EQ'.
+  s_zwxzt-low = &1.
+  APPEND s_zwxzt.
+END-OF-DEFINITION.

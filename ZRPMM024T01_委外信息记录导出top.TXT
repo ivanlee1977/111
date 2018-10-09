@@ -1,0 +1,41 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM024T01
+*&---------------------------------------------------------------------*
+TABLES:eina,eine.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       lifnr  LIKE eina-lifnr,
+       name1  LIKE lfa1-name1,
+       werks  LIKE eine-werks,
+       matnr  LIKE eina-matnr,
+       maktx  LIKE makt-maktx,
+       ekorg  LIKE eine-ekorg,
+       esokz  LIKE eine-esokz,
+       mwskz  LIKE eine-mwskz,
+       minbm  LIKE eine-minbm,
+       meins  LIKE eina-meins,
+       BPUMN  LIKE EINE-BPUMN,
+       BPUMZ  LIKE EINE-BPUMZ,
+       peinh  LIKE eine-peinh,
+       netpr1 LIKE eine-netpr, "<1K价格
+       netpr2 LIKE eine-netpr, "1--3K价格
+       netpr3 LIKE eine-netpr, "3--5K价格
+       netpr4 LIKE eine-netpr, "5--10K价格
+       netpr5 LIKE eine-netpr, "10--20K价格
+     END OF gt_out.
+
+***alv data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

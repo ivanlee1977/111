@@ -1,0 +1,458 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPQM007F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:BEGIN OF lt_makt OCCURS 0,
+         matnr LIKE mara-matnr,
+         maktx LIKE makt-maktx,
+       END OF lt_makt.
+
+  DATA:BEGIN OF lt_bom_data OCCURS 0,
+         matnr LIKE mast-matnr,
+         werks LIKE mast-werks,
+         stlan LIKE mast-stlan,
+         stlnr LIKE mast-stlnr,
+         stlal LIKE mast-stlal,
+         stlkn LIKE stpo-stlkn,
+         stpoz LIKE stpo-stpoz,
+         idnrk LIKE stpo-idnrk,
+         ebort LIKE stpu-ebort,
+       END OF lt_bom_data.
+
+  DATA:BEGIN OF lt_qapo OCCURS 0,
+         prueflos LIKE qals-prueflos,
+         aufpl    LIKE v_qapo-aufpl,
+         vorglfnr LIKE v_qapo-vorglfnr,
+         vornr    LIKE v_qapo-vornr,
+         vorktxt  LIKE v_qapo-vorktxt,
+       END OF lt_qapo.
+
+  DATA:ls_ekko LIKE ekko,
+       lv_str  TYPE string.
+***抓取满足条件的数据
+  IF s_dauat[] IS INITIAL.
+    SELECT a~erdat
+           a~qmnum
+           b~fertaufnr
+           b~matnr
+           b~revlv
+           b~prueflos
+           c~pnlkn
+           c~prueflinr
+           c~fetxt
+           c~fenum
+           c~fekat
+           c~fegrp
+           c~fecod
+           a~urkat
+           a~urgrp
+           a~urcod
+           a~urtxt
+           b~matnr AS objkt
+           c~otkat
+           c~otgrp
+           c~oteil
+      INTO CORRESPONDING FIELDS OF TABLE gt_out
+      FROM qmur AS a
+      INNER JOIN qmfe AS c
+      ON a~qmnum = c~qmnum
+      AND a~fenum = c~fenum
+      INNER JOIN qmel AS b
+      ON b~qmnum = c~qmnum
+      WHERE a~erdat IN s_erdat
+        AND a~qmnum IN s_qmnum
+        AND b~matnr IN s_matnr
+        AND c~fetxt IN s_fetxt
+        AND c~fecod IN s_fecod
+        AND a~urcod IN s_urcod
+        AND b~qmart EQ 'Z2'
+        AND c~kzloesch EQ space
+        AND a~kzloesch EQ space.
+  ELSE.
+    SELECT a~erdat
+           a~qmnum
+           b~fertaufnr
+           b~matnr
+           b~revlv
+           b~prueflos
+           c~pnlkn
+           c~prueflinr
+           c~fetxt
+           c~fenum
+           c~fekat
+           c~fegrp
+           c~fecod
+           a~urcod
+           a~urtxt
+           a~urkat
+           a~urgrp
+           a~urcod
+           a~urtxt
+           b~matnr AS objkt
+           c~otkat
+           c~otgrp
+           c~oteil
+    INTO CORRESPONDING FIELDS OF TABLE gt_out
+    FROM qmur AS a
+    INNER JOIN qmfe AS c
+    ON a~qmnum = c~qmnum
+    AND a~fenum = c~fenum
+    INNER JOIN qmel AS b
+    ON b~qmnum = c~qmnum
+      INNER JOIN aufk AS d
+      ON b~fertaufnr = d~aufnr
+    WHERE a~erdat IN s_erdat
+      AND a~qmnum IN s_qmnum
+      AND b~matnr IN s_matnr
+      AND c~fetxt IN s_fetxt
+      AND c~fecod IN s_fecod
+      AND a~urcod IN s_urcod
+      AND d~auart IN s_dauat
+      AND b~qmart EQ 'Z2'
+      AND c~kzloesch EQ space
+      AND a~kzloesch EQ space.
+  ENDIF.
+
+  CHECK gt_out[] IS NOT INITIAL.
+***抓取物料描述
+  SELECT matnr
+         maktx
+    INTO CORRESPONDING FIELDS OF TABLE lt_makt
+    FROM makt
+    FOR ALL ENTRIES IN gt_out
+    WHERE matnr = gt_out-matnr
+      AND spras = sy-langu.
+
+***获取BOM位置号信息
+  SELECT a~matnr
+         a~werks
+         a~stlan
+         a~stlnr
+         a~stlal
+         b~stlkn
+         b~stpoz
+         b~idnrk
+         c~ebort
+    INTO CORRESPONDING FIELDS OF TABLE lt_bom_data
+    FROM mast AS a
+    INNER JOIN stpo AS b
+    ON a~stlnr = b~stlnr
+    AND b~stlty = 'M'
+    INNER JOIN stpu AS c
+    ON b~stlty = c~stlty
+    AND b~stlnr = c~stlnr
+    AND b~stlkn = c~stlkn
+    AND b~stpoz = c~stpoz
+    FOR ALL ENTRIES IN gt_out
+    WHERE c~ebort = gt_out-urtxt(20).
+
+***不良工序及名称
+  SELECT a~prueflos
+         b~aufpl
+         b~vorglfnr
+         b~vornr
+         b~vorktxt
+    INTO CORRESPONDING FIELDS OF TABLE lt_qapo
+    FROM qals AS a
+    INNER JOIN v_qapo AS b
+    ON a~aufpl = b~aufpl
+    FOR ALL ENTRIES IN gt_out
+    WHERE a~prueflos = gt_out-prueflos
+      AND b~vorglfnr = gt_out-pnlkn.
+
+  SORT lt_makt BY matnr.
+  SORT lt_qapo BY prueflos vorglfnr.
+
+  LOOP AT gt_out.
+***物料描述
+    READ TABLE lt_makt WITH KEY matnr = gt_out-matnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-maktx = lt_makt-maktx.
+    ENDIF.
+***产品组
+    SELECT SINGLE b~vtext INTO gt_out-vtext FROM mara AS a INNER JOIN tspat AS b ON a~spart = b~spart WHERE a~matnr = gt_out-matnr AND spras = sy-langu.
+***获取产品分类信息
+    PERFORM frm_get_class_data.
+***订单类型
+    IF gt_out-fertaufnr IS NOT INITIAL.
+      SELECT SINGLE auart INTO gt_out-dauat FROM aufk WHERE aufnr = gt_out-fertaufnr.
+    ENDIF.
+***委外厂 & 半成品PCBA料号 & 描述
+    IF gt_out-prueflinr IS NOT INITIAL.
+      CLEAR:ls_ekko,lv_str.
+      CONCATENATE '%' gt_out-prueflinr+4(5) INTO lv_str.
+      SELECT SINGLE * INTO CORRESPONDING FIELDS OF ls_ekko FROM ekko WHERE ebeln LIKE lv_str AND bsart = 'Z004'.
+      IF sy-subrc = 0.
+        SELECT SINGLE matnr txz01 INTO (gt_out-zpcba,gt_out-zpcba_txt) FROM ekpo WHERE ebeln = ls_ekko-ebeln AND loekz EQ space.
+        SELECT SINGLE sortl INTO gt_out-sortl FROM lfa1 WHERE lifnr = ls_ekko-lifnr.
+      ENDIF.
+    ENDIF.
+***不良工序 & 描述
+    READ TABLE lt_qapo WITH KEY prueflos = gt_out-prueflos vorglfnr = gt_out-pnlkn BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-vornr = lt_qapo-vornr.
+      gt_out-vorktxt = lt_qapo-vorktxt.
+    ENDIF.
+***不良描述
+    SELECT SINGLE kurztext INTO gt_out-fecod_txt FROM qpct WHERE katalogart = gt_out-fekat AND codegruppe = gt_out-fegrp AND code = gt_out-fecod AND sprache = sy-langu.
+***原因描述
+    SELECT SINGLE kurztext INTO gt_out-urcod_txt FROM qpct WHERE katalogart = gt_out-urkat AND codegruppe = gt_out-urgrp AND code = gt_out-urcod AND sprache = sy-langu.
+***更换元器件物料编码 & 名称
+    READ TABLE lt_bom_data WITH KEY ebort = gt_out-urtxt.
+    IF sy-subrc = 0.
+      gt_out-idnrk = lt_bom_data-idnrk.
+      SELECT SINGLE maktx INTO gt_out-idnrk_txt FROM makt WHERE matnr = gt_out-idnrk AND spras = sy-langu.
+***不良元器件分类
+      SELECT SINGLE a~wgbez INTO gt_out-wgbez FROM t023t AS a INNER JOIN mara AS b ON a~matkl = b~matkl WHERE b~matnr = gt_out-idnrk AND a~spras = sy-langu.
+    ENDIF.
+***插件料/贴片料/BGA
+    SELECT SINGLE kurztext INTO gt_out-kurztext FROM qpct WHERE katalogart = gt_out-otkat AND codegruppe = gt_out-otgrp AND code = gt_out-oteil AND sprache = sy-langu.
+***抓取维修员 & 备注
+    SELECT SINGLE erlnam matxt INTO (gt_out-erlnam,gt_out-matxt) FROM qmsm WHERE qmnum = gt_out-qmnum AND manum = gt_out-fenum AND kzloesch EQ space.
+    MODIFY gt_out.
+  ENDLOOP.
+
+  SORT gt_out BY qmnum.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_CLASS_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_class_data .
+  DATA:lv_object LIKE ausp-objek.
+  DATA:lt_class      LIKE sclass OCCURS 0 WITH HEADER LINE,
+       lt_objectdata LIKE clobjdat OCCURS 0 WITH HEADER LINE.
+
+  lv_object = gt_out-matnr.
+  CALL FUNCTION 'CLAF_CLASSIFICATION_OF_OBJECTS'
+    EXPORTING
+*     CLASS              = ' '
+*     CLASSTEXT          = 'X'
+      classtype          = '001'
+*     CLINT              = 0
+*     FEATURES           = 'X'
+      language           = sy-langu
+      object             = lv_object
+      objecttable        = 'MARA'
+      key_date           = sy-datum
+      initial_charact    = space
+    TABLES
+      t_class            = lt_class
+      t_objectdata       = lt_objectdata
+    EXCEPTIONS
+      no_classification  = 1
+      no_classtypes      = 2
+      invalid_class_type = 3
+      OTHERS             = 4.
+
+  LOOP AT lt_objectdata.
+    CASE lt_objectdata-atnam.
+      WHEN 'ZFER_CPX'.    "产品线
+        gt_out-zline     = lt_objectdata-ausp1.
+      WHEN 'ZFER_XL'.     "产品系列
+        gt_out-zcpxl     = lt_objectdata-ausp1.
+      WHEN 'ZFER_ZXL'.    "子系列
+        gt_out-zcpxl_sub = lt_objectdata-ausp1.
+      WHEN 'ZFER_DYZXH'.  "主型号
+        gt_out-zcpxh_m   = lt_objectdata-ausp1.
+      WHEN 'ZFER_CPMC'.   "产品名称
+        gt_out-zcpmc     = lt_objectdata-ausp1.
+      WHEN 'ZFER_CPXH'.   "产品型号
+        gt_out-zcpxh     = lt_objectdata-ausp1.
+      WHEN OTHERS.
+    ENDCASE.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  mcr_build_fieldcat:'ERDAT'      '日期'                 'ERDAT'       'QMUR'     ''       '',
+                     'QMNUM'      '单据编号'             'QMNUM'       'QMEL'     ''       '',
+                     'FERTAUFNR'  '生产订单号'           'FERTAUFNR'   'QMEL'     ''       '',
+                     'DAUAT'      '订单类型'             'DAUAT'       'AFPO'     ''       '',
+                     'VTEXT'      '产品组'               'VTEXT'       'TSPAT'    ''       '',
+                     'ZLINE'      '产品线'               ''            ''         'C'      '30',
+                     'ZCPXL'      '产品系列'             ''            ''         'C'      '30',
+                     'ZCPXL_SUB'  '产品子系列'           ''            ''         'C'      '30',
+                     'ZCPXH_M'    '产品主型号'           ''            ''         'C'      '30',
+                     'ZCPMC'      '产品名称'             ''            ''         'C'      '30',
+                     'ZCPXH'      '产品型号'             ''            ''         'C'      '30',
+                     'MATNR'      '物料编码'             'MATNR'       'QMEL'     ''       '',
+                     'MAKTX'      '物料名称'             'MAKTX'       'MAKT'     ''       '',
+                     'REVLV'      'SAP版本'              'REVLV'       'AEOI'     ''       '',
+                     'FETXT'      '成品S/N码'            'FETXT'       'QMFE'     ''       '',
+                     'SORTL'      '委外厂'               'SORTL'       'LFA1'     ''       '',
+                     'PRUEFLINR'  '不良半成品S/N码'      'PRUEFLINR'   'QMFE'     ''       '',
+                     'ZPCBA'      '半成品PCBA料号'       'MATNR'       'MARA'     ''       '',
+                     'ZPCBA_TXT'  '半成品PCBA名称'       'MAKTX'       'MAKT'     ''       '',
+                     'FECOD'      '不良代码'             'FECOD'       'QMFE'     ''       '',
+                     'FECOD_TXT'  '不良描述'             'KURZTEXT'    'QPCT'     ''       '',
+                     'VORNR'      '不良工序'             'VORNR'       'V_QAPO'   ''       '',
+                     'VORKTXT'    '不良工序描述'         'VORKTXT'     'V_QAPO'   ''       '',
+                     'URCOD'      '原因代码'             'URCOD'       'QMUR'     ''       '',
+                     'URCOD_TXT'  '原因描述'             'KURZTEXT'    'QPCT'     ''       '',
+                     'URTXT'      '不良元器件BOM位置号'  'URTXT'       'QMUR'     ''       '',
+                     'IDNRK'      '更换元器件物料编码'   'IDNRK'       'STPO'     ''       '',
+                     'IDNRK_TXT'  '更换元器件名称'       'MAKTX'       'MAKT'     ''       '',
+                     'WGBEZ'      '不良元器件分类'       'WGBEZ'       'V023'     ''       '',
+                     'KURZTEXT'   '插件料/贴片料/BGA'    'KURZTEXT'    'QPCT'     ''       '',
+                     'ERLNAM'     '维修员'               'ERLNAM'      'QMSM'     ''       '',
+                     'MATXT'      '备注'                 'MATXT'       'QMSM'     ''       ''.
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK  = ' '
+*     I_BYPASSING_BUFFER =
+*     I_BUFFER_ACTIVE    =
+      i_callback_program = sy-repid
+*     I_CALLBACK_PF_STATUS_SET          = ' '
+*     I_CALLBACK_USER_COMMAND           = ' '
+*     I_CALLBACK_TOP_OF_PAGE            = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME   =
+*     I_BACKGROUND_ID    = ' '
+*     I_GRID_TITLE       =
+*     I_GRID_SETTINGS    =
+      is_layout_lvc      = gs_layout
+      it_fieldcat_lvc    = gt_fcat[]
+*     IT_EXCLUDING       =
+*     IT_SPECIAL_GROUPS_LVC             =
+*     IT_SORT_LVC        =
+*     IT_FILTER_LVC      =
+*     IT_HYPERLINK       =
+*     IS_SEL_HIDE        =
+      i_default          = 'X'
+      i_save             = 'A'
+*     IS_VARIANT         =
+*     IT_EVENTS          =
+*     IT_EVENT_EXIT      =
+*     IS_PRINT_LVC       =
+*     IS_REPREP_ID_LVC   =
+*     I_SCREEN_START_COLUMN             = 0
+*     I_SCREEN_START_LINE               = 0
+*     I_SCREEN_END_COLUMN               = 0
+*     I_SCREEN_END_LINE  = 0
+*     I_HTML_HEIGHT_TOP  =
+*     I_HTML_HEIGHT_END  =
+*     IT_ALV_GRAPHICS    =
+*     IT_EXCEPT_QINFO_LVC               =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER           =
+*     ES_EXIT_CAUSED_BY_USER            =
+    TABLES
+      t_outtab           = gt_out[]
+    EXCEPTIONS
+      program_error      = 1
+      OTHERS             = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SUB_SEARCH_HELP_ZXL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0019   text
+*      -->P_0020   text
+*      -->P_0021   text
+*----------------------------------------------------------------------*
+FORM sub_search_help_fecode USING lv_field LIKE dfies-fieldname
+                               lv_dynfield LIKE help_info-dynprofld.
+  DATA: lv_pvalkey TYPE ddshpvkey.
+
+  DATA: lt_fecode LIKE gt_f4_code OCCURS 0 WITH HEADER LINE.
+
+select * INTO CORRESPONDING FIELDS OF TABLE lt_fecode from qpct where KATALOGART = '9' and SPRACHE = '1'.
+
+  SORT lt_fecode BY codegruppe code.
+
+  lv_pvalkey = lv_field.
+  CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+    EXPORTING
+      retfield        = lv_field
+      pvalkey         = lv_pvalkey
+      dynpprog        = sy-repid
+      dynpnr          = sy-dynnr
+      dynprofield     = lv_dynfield
+      window_title    = '选择'
+      value           = ' '
+      value_org       = 'S'
+    TABLES
+      value_tab       = lt_fecode
+    EXCEPTIONS
+      parameter_error = 1
+      no_values_found = 2
+      OTHERS          = 3.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SUB_SEARCH_HELP_URCODE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0024   text
+*      -->P_0025   text
+*----------------------------------------------------------------------*
+FORM sub_search_help_urcode USING lv_field LIKE dfies-fieldname
+                               lv_dynfield LIKE help_info-dynprofld.
+  DATA: lv_pvalkey TYPE ddshpvkey.
+
+  DATA: lt_fecode LIKE gt_f4_code OCCURS 0 WITH HEADER LINE.
+
+select * INTO CORRESPONDING FIELDS OF TABLE lt_fecode from qpct where KATALOGART = '5' and SPRACHE = '1'.
+
+  SORT lt_fecode BY codegruppe code.
+
+  lv_pvalkey = lv_field.
+  CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+    EXPORTING
+      retfield        = lv_field
+      pvalkey         = lv_pvalkey
+      dynpprog        = sy-repid
+      dynpnr          = sy-dynnr
+      dynprofield     = lv_dynfield
+      window_title    = '选择'
+      value           = ' '
+      value_org       = 'S'
+    TABLES
+      value_tab       = lt_fecode
+    EXCEPTIONS
+      parameter_error = 1
+      no_values_found = 2
+      OTHERS          = 3.
+ENDFORM.
+*&------------------------------

@@ -1,0 +1,48 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP019T01
+*&---------------------------------------------------------------------*
+TABLES:marc,mara.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       matnr       LIKE mara-matnr,   "物料号码
+       maktx       LIKE makt-maktx,   "物料描述
+       werks       LIKE marc-werks,   "工厂
+       beskz       LIKE marc-beskz,   "采购类型
+       sobsl       LIKE marc-sobsl,   "特殊采购类型
+       dispo       LIKE marc-dispo,   "MRP控制者
+       eisbe       LIKE marc-eisbe,   "安全库存
+       plifz       LIKE marc-plifz,   "采购周期
+       bstrf       LIKE marc-bstrf,   "最小包装量
+       menge_kc    TYPE p DECIMALS 3, "库存
+       menge_qm    TYPE p DECIMALS 3, "质检数量
+       menge_dn    TYPE p DECIMALS 3, "在途内向交货单数量
+       menge_po    TYPE p DECIMALS 3, "在途采购订单数量
+       menge_pr    TYPE p DECIMALS 3, "采购申请数量
+       menge_pp    TYPE p DECIMALS 3, "在制数量
+       menge_wx    TYPE p DECIMALS 3, "已开单外协需求数
+       menge_1     TYPE p DECIMALS 3, "期间需求1
+       menge_2     TYPE p DECIMALS 3, "期间需求2
+       menge_3     TYPE p DECIMALS 3, "期间需求3
+       menge_total TYPE p DECIMALS 3, "总需求
+       maabc       LIKE marc-maabc,   "专用料标识
+       ztdl        LIKE mara-matnr,   "被取代的旧料
+       nfmat       LIKE marc-nfmat,   "后继物料
+     END OF gt_out.
+
+***alv data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  gt_fcat-inttype = &5.
+  gt_fcat-intlen = &6.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

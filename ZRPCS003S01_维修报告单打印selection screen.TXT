@@ -1,0 +1,38 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPMM013S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK bl WITH FRAME TITLE TEXT-001.
+PARAMETERS: p_r0 RADIOBUTTON GROUP r0 DEFAULT 'X' USER-COMMAND r1,
+            p_r1 RADIOBUTTON GROUP r0.
+SELECTION-SCREEN END OF BLOCK bl.
+
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-002.
+SELECT-OPTIONS:s_vkorg FOR qmel-vkorg OBLIGATORY ,
+               s_qmart FOR qmel-qmart,
+               s_qmnum FOR qmel-qmnum,
+               s_matnr FOR qmel-matnr,
+               s_kunum FOR qmel-kunum,
+               s_zwxzt FOR ztcs001-zwxzt,
+               s_kvgr2 FOR knvv-kvgr2,
+               s_erdat FOR ztcs001-erdat,
+               s_zkhqr FOR ztcs001-zkhqr,
+               s_zcpfh FOR ztcs001-zcpfh,
+               s_zwxy  FOR ztcs001-zwxy,
+               s_zthwx FOR ztcs001-zthwx.
+SELECTION-SCREEN END OF BLOCK blc.
+
+SELECTION-SCREEN BEGIN OF BLOCK blc1 WITH FRAME TITLE TEXT-002.
+PARAMETERS:p_zwczt AS CHECKBOX.
+SELECTION-SCREEN END OF BLOCK blc1.
+*
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_zwxzt-low.
+  PERFORM sub_search_help_zwxzt.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_zwxzt-high.
+  PERFORM sub_search_help_zwxzt.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_zwxy-low.
+  PERFORM frm_zwxy_f4 USING 'S_ZWXY-LOW'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_zwxy-high.
+  PERFORM frm_zwxy_f4 USING 'S_ZWXY-HIGH'.

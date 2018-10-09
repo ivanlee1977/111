@@ -1,0 +1,1001 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP020F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_INITIAL_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_initial_data .
+*******数据定义*******
+  INCLUDE <icon>.
+  DATA ls_functxt TYPE smp_dyntxt.
+  DATA:gt_exbut TYPE TABLE OF sy-ucomm.
+*******初始化*******
+*******程序主体******
+  "屏幕工具栏中按饼
+  "启用自定义工具
+  CLEAR ls_functxt.
+  ls_functxt-icon_text = '模板下载'."'Download Template'.
+  ls_functxt-icon_id   = '@49@'.
+  ls_functxt-quickinfo =  '模板下载'.
+  sscrfields-functxt_01 = ls_functxt.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FILENAME_FIND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      <--P_P_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_filename_find CHANGING xc_file.
+  CALL FUNCTION 'WS_FILENAME_GET'
+    EXPORTING
+      def_filename     = xc_file
+      def_path         = 'C:\'
+      mask             = ',*.XLS.'
+      mode             = 'O'
+      title            = '文件名'
+    IMPORTING
+      filename         = xc_file
+    EXCEPTIONS
+      inv_winsys       = 1
+      no_batch         = 2
+      selection_cancel = 3
+      selection_error  = 4
+      OTHERS           = 5.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DOWNLOAD_TEMPLATE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0036   text
+*      <--P_P_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_download_template USING u_objid LIKE wwwdatatab-objid CHANGING ic_file.
+  DATA:l_path   TYPE string.
+
+  CALL METHOD zcl_ole_excel=>download_templet
+    EXPORTING
+      iv_objid        = u_objid
+      iv_win_title    = '请指定下载路径'
+      iv_df_extension = 'XLSX'
+    IMPORTING
+      ev_fullpath     = l_path.
+
+  CALL METHOD cl_gui_frontend_services=>execute
+    EXPORTING
+      document = l_path
+    EXCEPTIONS
+      OTHERS   = 10.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_UPLOAD_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_upload_data .
+  CALL FUNCTION 'ZALSM_EXCEL_TO_INTERNAL_TABLE'
+    EXPORTING
+      filename                = p_file
+      i_begin_col             = 1
+      i_begin_row             = 2
+      i_end_col               = 10
+      i_end_row               = 99999
+    TABLES
+      intern                  = gt_upload
+    EXCEPTIONS
+      inconsistent_parameters = 1
+      upload_ole              = 2
+      OTHERS                  = 3.
+***将数据整理到内表中
+
+  LOOP AT gt_upload ASSIGNING <fs_upload>.
+    AT NEW row.
+      CLEAR gs_excel.
+    ENDAT.
+    CASE <fs_upload>-col.
+      WHEN '1'.  "物料号码
+        gs_excel-matnr = <fs_upload>-value.
+      WHEN '2'.  "物料描述
+        gs_excel-maktx = <fs_upload>-value.
+      WHEN '3'.  "第1周需求
+        gs_excel-menge1 = <fs_upload>-value.
+      WHEN '4'.  "第2周需求
+        gs_excel-menge2 = <fs_upload>-value.
+      WHEN OTHERS.
+    ENDCASE.
+    AT END OF row.
+      PERFORM frm_check_data.
+      APPEND gs_excel TO gt_excel.
+      CLEAR gs_excel.
+    ENDAT.
+  ENDLOOP.
+  READ TABLE gt_excel WITH KEY zicon = icon_led_red.
+  IF sy-subrc = 0.
+    PERFORM frm_get_fieldcat USING 'A'.
+    PERFORM frm_output_data TABLES gt_excel gt_fcat.
+  ELSE.
+    PERFORM frm_explo_bom.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_data .
+  IF gs_excel-matnr IS INITIAL.
+    gs_excel-zmsg = '物料为空'.
+  ELSE.
+    CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+      EXPORTING
+        input        = gs_excel-matnr
+      IMPORTING
+        output       = gs_excel-matnr
+      EXCEPTIONS
+        length_error = 1
+        OTHERS       = 2.
+    SELECT SINGLE * FROM mara WHERE matnr = gs_excel-matnr.
+    IF sy-subrc NE 0.
+      gs_excel-zmsg = '物料不存在'.
+    ELSE.
+*      IF gs_excel-maktx IS INITIAL.
+      SELECT SINGLE maktx INTO gs_excel-maktx FROM makt WHERE matnr = gs_excel-matnr AND spras = sy-langu.
+*      ENDIF.
+      SELECT SINGLE * FROM mast WHERE matnr = gs_excel-matnr AND werks = '1000' AND stlan = '1'.
+      IF sy-subrc NE 0.
+        IF gs_excel-zmsg IS INITIAL.
+          gs_excel-zmsg = '不存在BOM'.
+        ELSE.
+          CONCATENATE gs_excel-zmsg ',不存在BOM' INTO gs_excel-zmsg.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+  IF gs_excel-menge1 IS INITIAL AND gs_excel-menge2 IS INITIAL.
+    IF gs_excel-zmsg IS INITIAL.
+      gs_excel-zmsg = '请输入周需求数量'.
+    ELSE.
+      CONCATENATE gs_excel-zmsg ',请输入周需求数量' INTO gs_excel-zmsg.
+    ENDIF.
+  ENDIF.
+  IF gs_excel-zmsg IS NOT INITIAL.
+    gs_excel-zicon = icon_led_red.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat USING u_flag TYPE c.
+
+  IF u_flag = 'A'.
+    mcr_build_fieldcat:gt_fcat  'ZICON'   '状态'        ''          ''         'C'    '30'  '',
+                       gt_fcat  'MATNR'   '物料号码'    'MATNR'     'MARA'     ''     ''    '',
+                       gt_fcat  'MAKTX'   '物料描述'    'MAKTX'     'MAKT'     ''     ''    '',
+                       gt_fcat  'MENGE1'  '第1周需求'   ''          ''         'P'    '15'  '',
+                       gt_fcat  'MENGE2'  '第2周需求'   ''          ''         'P'    '15'  '',
+                       gt_fcat  'ZMSG'    '消息'        ''          ''         'C'    '500' ''.
+  ELSE.
+    mcr_build_fieldcat:gt_fcat  'MATNR'   '物料号码'            'MATNR'     'MARA'     ''     ''    '',
+                       gt_fcat  'MAKTX'   '物料描述'            'MAKTX'     'MAKT'     ''     ''    '',
+
+                       gt_fcat  'IDNRK'   '半成品物料号码'            'MATNR'     'MARA'     ''     ''    '',
+                       gt_fcat  'ZMAKT'   '半成品物料描述'            'MAKTX'     'MAKT'     ''     ''    '',
+                       gt_fcat  'ZMENG1'  '第1周需求'           ''          ''         'P'    '15'  'X',
+                       gt_fcat  'ZMENG2'  '第2周需求'           ''          ''         'P'    '15'  'X',
+                       gt_fcat  'KCUNS'   '库存数'    ''          ''         'P'    '15'  '',
+                       gt_fcat  'ZJIANS'   '质检数'    ''          ''         'P'    '15'  '',
+                       gt_fcat  'ZZHIS'   '在制数'    ''          ''         'P'    '15'  '',
+                       gt_fcat  'XZTUS'   '在途数'    ''          ''         'P'    '15'  ''.
+
+
+  ENDIF.
+
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data TABLES t_data TYPE STANDARD TABLE
+                            t_fcat TYPE lvc_t_fcat.
+
+  DATA: wa_sort_lvc TYPE lvc_s_sort,
+        it_sort_lvc TYPE lvc_t_sort.
+
+* 设置排序参数
+  wa_sort_lvc-spos        = 1 .           " 排序顺序
+  wa_sort_lvc-fieldname   = 'MATNR' .  " 排序字段
+  wa_sort_lvc-up          = 'X' .         " 升序
+  APPEND wa_sort_lvc TO it_sort_lvc .
+  CLEAR wa_sort_lvc .
+
+  wa_sort_lvc-spos        = 2 .           " 排序顺序
+  wa_sort_lvc-fieldname   = 'MAKTX' .  " 排序字段
+  wa_sort_lvc-up          = 'X' .         " 升序
+  APPEND wa_sort_lvc TO it_sort_lvc .
+  CLEAR wa_sort_lvc .
+
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK        = ' '
+*     I_BYPASSING_BUFFER       =
+*     I_BUFFER_ACTIVE          =
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'FRM_SET_PF_STATUS'
+      i_callback_user_command  = 'FRM_USER_COMMAND'
+*     I_CALLBACK_TOP_OF_PAGE   = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME         =
+*     I_BACKGROUND_ID          = ' '
+*     I_GRID_TITLE             =
+*     I_GRID_SETTINGS          =
+      is_layout_lvc            = gs_layout
+      it_fieldcat_lvc          = t_fcat[]
+*     IT_EXCLUDING             =
+*     IT_SPECIAL_GROUPS_LVC    =
+      it_sort_lvc              = it_sort_lvc
+*     IT_FILTER_LVC            =
+*     IT_HYPERLINK             =
+*     IS_SEL_HIDE              =
+      i_default                = 'X'
+      i_save                   = 'A'
+*     IS_VARIANT               =
+*     IT_EVENTS                =
+*     IT_EVENT_EXIT            =
+*     IS_PRINT_LVC             =
+*     IS_REPREP_ID_LVC         =
+*     I_SCREEN_START_COLUMN    = 0
+*     I_SCREEN_START_LINE      = 0
+*     I_SCREEN_END_COLUMN      = 0
+*     I_SCREEN_END_LINE        = 0
+*     I_HTML_HEIGHT_TOP        =
+*     I_HTML_HEIGHT_END        =
+*     IT_ALV_GRAPHICS          =
+*     IT_EXCEPT_QINFO_LVC      =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER  =
+*     ES_EXIT_CAUSED_BY_USER   =
+    TABLES
+      t_outtab                 = t_data
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_EXPLO_BOM
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_explo_bom .
+  DATA:lt_stb LIKE stpox OCCURS 0 WITH HEADER LINE.
+  LOOP AT gt_excel.
+    CLEAR lt_stb.
+    REFRESH lt_stb.
+
+    CALL FUNCTION 'CS_BOM_EXPL_MAT_V2'
+      EXPORTING
+        capid                 = 'PP01'
+        datuv                 = sy-datum
+        emeng                 = '1000'
+        mtnrv                 = gt_excel-matnr
+        werks                 = '1000'
+      TABLES
+        stb                   = lt_stb
+      EXCEPTIONS
+        alt_not_found         = 1
+        call_invalid          = 2
+        material_not_found    = 3
+        missing_authorization = 4
+        no_bom_found          = 5
+        no_plant_data         = 6
+        no_suitable_bom_found = 7
+        conversion_error      = 8
+        OTHERS                = 9.
+    LOOP AT lt_stb WHERE postp NE 'D' AND mtart = 'Z002'.
+
+      gt_bom_data1-matnr = gt_excel-matnr.
+      gt_bom_data1-maktx = gt_excel-maktx.
+      gt_bom_data1-idnrk = lt_stb-idnrk.
+      gt_bom_data1-zmakt = lt_stb-ojtxp.
+      IF lt_stb-alpgr IS NOT INITIAL.
+        gt_bom_data1-zmeng1 = lt_stb-mnglg * lt_stb-ewahr / 100 * gt_excel-menge1 / 1000.
+        gt_bom_data1-zmeng2 = lt_stb-mnglg * lt_stb-ewahr / 100 * gt_excel-menge2 / 1000.
+      ELSE.
+        gt_bom_data1-zmeng1 = lt_stb-mnglg * gt_excel-menge1 / 1000.
+        gt_bom_data1-zmeng2 = lt_stb-mnglg * gt_excel-menge2 / 1000.
+      ENDIF.
+      gt_bom_data1-menge1 = gt_excel-menge1.
+      gt_bom_data1-menge2 = gt_excel-menge2.
+      APPEND gt_bom_data1.
+      READ TABLE gt_bom_data WITH  KEY idnrk = lt_stb-idnrk.
+      IF sy-subrc <> 0.
+        gt_bom_data-matnr = gt_excel-matnr.
+        gt_bom_data-maktx = gt_excel-maktx.
+        gt_bom_data-idnrk = lt_stb-idnrk.
+        gt_bom_data-zmakt = lt_stb-ojtxp.
+        IF lt_stb-alpgr IS NOT INITIAL.
+          gt_bom_data-zmeng1 = lt_stb-mnglg * lt_stb-ewahr / 100 * gt_excel-menge1 / 1000.
+          gt_bom_data-zmeng2 = lt_stb-mnglg * lt_stb-ewahr / 100 * gt_excel-menge2 / 1000.
+        ELSE.
+          gt_bom_data-zmeng1 = lt_stb-mnglg * gt_excel-menge1 / 1000.
+          gt_bom_data-zmeng2 = lt_stb-mnglg * gt_excel-menge2 / 1000.
+        ENDIF.
+        gt_bom_data-menge1 = gt_excel-menge1.
+        gt_bom_data-menge2 = gt_excel-menge2.
+        APPEND gt_bom_data.
+
+        CLEAR gt_bom_data.
+        IF lt_stb-nfmat IS NOT INITIAL."考虑后继物料信息，不计算需求，只计算后面的在途库存等信息,只计算一次
+*          gt_bom_data-idnrk = lt_stb-nfmat.
+          SELECT SINGLE maktx INTO gt_bom_data-zmakt FROM makt WHERE matnr = lt_stb-nfmat AND spras = sy-langu.
+          COLLECT gt_bom_data.
+          CLEAR gt_bom_data.
+        ENDIF.
+      ELSE.
+        gt_bom_data-zmeng1 = gt_bom_data-zmeng1 + lt_stb-mnglg * gt_excel-menge1 / 1000.
+        gt_bom_data-zmeng2 = gt_bom_data-zmeng2 + lt_stb-mnglg * gt_excel-menge2 / 1000.
+        MODIFY gt_bom_data INDEX sy-tabix.
+*        gt_bom_data1-zmeng1 = gt_bom_data1-zmeng1 + lt_stb-mnglg * gt_excel-menge1 / 1000.
+*        gt_bom_data1-zmeng2 = gt_bom_data1-zmeng2 + lt_stb-mnglg * gt_excel-menge2 / 1000.
+*        MODIFY gt_bom_data1 INDEX sy-tabix.
+      ENDIF.
+    ENDLOOP.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_COUNT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_select_data .
+  CHECK gt_bom_data[] IS NOT INITIAL.
+
+***抓取已开单生产欠料数信息
+*  SELECT  a~rsnum
+*          a~rspos
+*          a~aufnr
+*          c~matnr
+*          a~matnr AS idnrk
+*          a~bdmng    "需求数量
+*          a~enmng    "已发数量
+*    INTO CORRESPONDING FIELDS OF TABLE gt_scql_data
+*    FROM resb AS a
+*    INNER JOIN afko AS b
+*    ON a~rsnum = b~rsnum
+*    INNER JOIN afpo AS c
+*    ON b~aufnr = c~aufnr
+*    FOR ALL ENTRIES IN gt_bom_data
+*    WHERE a~matnr = gt_bom_data-idnrk
+**      AND c~matnr = gt_bom_data-matnr
+*      AND a~bdart = 'AR'
+*      AND a~xloek EQ space
+*      AND a~kzear EQ space.
+*
+*  SORT gt_bom_data BY matnr idnrk.
+*  LOOP AT gt_scql_data.
+*    SELECT SINGLE maktx INTO gt_scql_data-maktx FROM makt WHERE matnr = gt_scql_data-matnr AND spras = sy-langu.
+*    SELECT SINGLE maktx INTO gt_scql_data-zmakt FROM makt WHERE matnr = gt_scql_data-idnrk AND spras = sy-langu.
+*    "欠料数量
+*    gt_scql_data-zqlsl = gt_scql_data-bdmng - gt_scql_data-enmng.
+*    MODIFY gt_scql_data.
+*  ENDLOOP.
+*  DELETE gt_scql_data WHERE zqlsl EQ 0.
+*
+****已开单外协需求数
+*  SELECT  a~rsnum
+*          a~rspos
+*          a~ebeln
+*          a~ebelp
+*          c~matnr
+*          a~matnr AS idnrk
+*          a~bdmng    "需求数量
+*          a~enmng    "已发数量
+*    INTO CORRESPONDING FIELDS OF TABLE gt_wxxq_data
+*    FROM resb AS a
+*    INNER JOIN eket AS b
+*    ON a~rsnum = b~rsnum
+*    INNER JOIN ekpo AS c
+*    ON b~ebeln = c~ebeln
+*    AND b~ebelp = c~ebelp
+*    FOR ALL ENTRIES IN gt_bom_data
+*    WHERE a~matnr = gt_bom_data-idnrk
+**     AND c~matnr = gt_bom_data-matnr
+*      AND a~bdart = 'BB'
+*      AND a~xloek EQ space
+*      AND a~kzear EQ space.
+*  LOOP AT gt_wxxq_data.
+*    SELECT SINGLE maktx INTO gt_wxxq_data-maktx FROM makt WHERE matnr = gt_wxxq_data-matnr AND spras = sy-langu.
+*    SELECT SINGLE maktx INTO gt_wxxq_data-zmakt FROM makt WHERE matnr = gt_wxxq_data-idnrk AND spras = sy-langu.
+*    "欠料数量
+*    gt_wxxq_data-zqlsl = gt_wxxq_data-bdmng - gt_wxxq_data-enmng.
+*    MODIFY gt_wxxq_data.
+*  ENDLOOP.
+*  DELETE gt_wxxq_data WHERE zqlsl EQ 0.
+*
+*****供应商库存
+*  SELECT *
+*    INTO CORRESPONDING FIELDS OF TABLE gt_mssl
+*    FROM mssl
+*    FOR ALL ENTRIES IN gt_bom_data
+*    WHERE matnr = gt_bom_data-idnrk
+*      AND werks = '1000'
+*      AND sobkz = 'O'.
+
+***库存（包含原材料仓，生产现场仓）
+  SELECT matnr werks lgort labst insme
+    INTO CORRESPONDING FIELDS OF TABLE gt_mard
+    FROM mard
+    FOR ALL ENTRIES IN gt_bom_data
+    WHERE matnr = gt_bom_data-idnrk
+      AND werks = '1000'
+      AND lgort IN ('1010','1170').
+
+****在制数
+  SELECT psmng wemng matnr INTO CORRESPONDING FIELDS OF TABLE gt_afpo FROM afpo
+    FOR ALL ENTRIES IN gt_bom_data
+      WHERE matnr = gt_bom_data-idnrk
+        AND dwerk = '1000'.
+
+****在途数
+  SELECT a~menge b~wemng a~matnr
+    INTO CORRESPONDING FIELDS OF TABLE gt_eket
+    FROM ekpo AS a    INNER JOIN eket AS b    ON a~ebeln = b~ebeln    AND a~ebelp = b~ebelp
+    FOR ALL ENTRIES IN gt_bom_data
+    WHERE a~matnr = gt_bom_data-idnrk
+      AND a~werks = '1000'
+      AND a~loekz EQ space
+      AND a~elikz EQ space.
+
+***未清采购订单数量
+*  SELECT a~ebeln
+*         a~ebelp
+*         a~matnr
+*         a~txz01
+*         b~etenr
+*         b~eindt
+*         b~menge
+*         b~wemng
+*         a~umrez
+*         a~umren
+*    INTO CORRESPONDING FIELDS OF TABLE gt_po_data
+*    FROM ekpo AS a
+*    INNER JOIN eket AS b
+*    ON a~ebeln = b~ebeln
+*    AND a~ebelp = b~ebelp
+*    FOR ALL ENTRIES IN gt_bom_data
+*    WHERE a~matnr = gt_bom_data-idnrk
+*      AND a~werks = '1000'
+*      AND a~loekz EQ space
+*      AND a~elikz EQ space.
+*
+*  LOOP AT gt_po_data.
+*    gt_po_data-menge =  gt_po_data-menge * gt_po_data-umrez / gt_po_data-umren.
+*    gt_po_data-wemng =  gt_po_data-wemng * gt_po_data-umrez / gt_po_data-umren.
+*    "未清数量
+*    gt_po_data-zwqsl = gt_po_data-menge - gt_po_data-wemng.
+*    MODIFY gt_po_data.
+*  ENDLOOP.
+
+****内向交货单数量
+*  SELECT ebeln
+*         ebelp
+*         vbeln
+*         vbelp
+*         eindt
+*         menge
+*         dabmg
+*   INTO CORRESPONDING FIELDS OF TABLE gt_ekes
+*    FROM ekes
+*    FOR ALL ENTRIES IN gt_po_data
+*    WHERE ebeln = gt_po_data-ebeln
+*      AND ebelp = gt_po_data-ebelp.
+*
+*  SORT gt_po_data BY ebeln ebelp.
+*  LOOP AT gt_ekes.
+*    READ TABLE gt_po_data WITH KEY ebeln = gt_ekes-ebeln ebelp = gt_ekes-ebelp BINARY SEARCH.
+*    IF sy-subrc = 0.
+*      gt_ekes-matnr = gt_po_data-matnr.
+*      gt_ekes-txz01 = gt_po_data-txz01.
+*      gt_ekes-menge = gt_ekes-menge * gt_po_data-umrez / gt_po_data-umren.
+*      gt_ekes-dabmg = gt_ekes-dabmg * gt_po_data-umrez / gt_po_data-umren.
+*    ENDIF.
+*    gt_ekes-zwqsl = gt_ekes-menge - gt_ekes-dabmg.
+*    MODIFY gt_ekes.
+*  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PREPARE_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_prepare_data .
+  DATA:BEGIN OF lt_marc OCCURS 0,
+         matnr LIKE marc-matnr,
+         werks LIKE marc-werks,
+         nfmat LIKE marc-nfmat,
+         dispo LIKE marc-dispo,
+       END OF lt_marc.
+
+***整理数据到输出表
+  LOOP AT gt_bom_data.
+    IF gt_bom_data-matnr <> ''.
+      gt_out-matnr = gt_bom_data-matnr.
+      gt_out-maktx = gt_bom_data-maktx.
+      gt_out-idnrk = gt_bom_data-idnrk.
+      gt_out-zmakt = gt_bom_data-zmakt.
+      gt_out-zmeng1 = gt_bom_data-zmeng1.
+      gt_out-zmeng2 = gt_bom_data-zmeng2.
+      COLLECT gt_out.
+      CLEAR gt_out.
+
+    ENDIF.
+  ENDLOOP.
+
+  CHECK gt_out[] IS NOT INITIAL.
+
+***抓取MARC数据
+  SELECT matnr werks nfmat dispo
+    INTO CORRESPONDING FIELDS OF TABLE lt_marc
+    FROM marc
+    FOR ALL ENTRIES IN gt_out
+    WHERE matnr = gt_out-idnrk
+      AND werks = '1000'.
+
+  SORT lt_marc BY matnr werks.
+  LOOP AT gt_out.
+***已开单生产欠料数
+*    LOOP AT gt_scql_data WHERE idnrk = gt_out-idnrk.
+*      gt_out-zscql = gt_out-zscql + gt_scql_data-zqlsl.
+*    ENDLOOP.
+****已开单外协需求数
+*    LOOP AT gt_wxxq_data WHERE idnrk = gt_out-idnrk.
+*      gt_out-zwxxq = gt_out-zwxxq + gt_wxxq_data-zqlsl.
+*    ENDLOOP.
+****供应商库存
+*    LOOP AT gt_mssl WHERE matnr = gt_out-idnrk.
+*      gt_out-zgyskc = gt_out-zgyskc + gt_mssl-sllab.
+*    ENDLOOP.
+***外协欠料数
+*    gt_out-zwxql = gt_out-zwxxq - gt_out-zgyskc.
+***库存（包含原材料仓，生产现场仓）
+    LOOP AT gt_mard WHERE matnr = gt_out-idnrk.
+      gt_out-kcuns = gt_out-kcuns + gt_mard-labst.
+      gt_out-zjians = gt_out-zjians + gt_mard-insme.
+    ENDLOOP.
+    LOOP AT gt_afpo WHERE matnr = gt_out-idnrk.
+      gt_out-zzhis = gt_out-zzhis + gt_afpo-psmng - gt_afpo-wemng.
+    ENDLOOP.
+    LOOP AT gt_eket WHERE matnr = gt_out-idnrk.
+      gt_out-xztus = gt_out-xztus + gt_eket-menge - gt_eket-wemng.
+    ENDLOOP.
+***欠料数量
+*    gt_out-zqlsl = gt_out-zmeng1 + gt_out-zmeng2 + gt_out-zscql + gt_out-zwxql - gt_out-zkc.
+***后继物料
+*    READ TABLE lt_marc WITH KEY matnr = gt_out-idnrk werks = '1000' BINARY SEARCH.
+*    IF sy-subrc = 0.
+*      gt_out-nfmat = lt_marc-nfmat.
+*      gt_out-dispo = lt_marc-dispo.
+*    ENDIF.
+****被取代物料
+*    SELECT SINGLE matnr INTO gt_out-zqdwl FROM marc WHERE nfmat = gt_out-idnrk AND werks = '1000'.
+*
+****未清PO数量
+*    LOOP AT gt_po_data WHERE matnr = gt_out-idnrk.
+*      gt_out-zwqpo = gt_out-zwqpo + gt_po_data-zwqsl.
+*    ENDLOOP.
+*
+****内向交货数量
+*    LOOP AT gt_ekes WHERE matnr = gt_out-idnrk.
+*      gt_out-znxjh = gt_out-znxjh + gt_ekes-zwqsl.
+*    ENDLOOP.
+    MODIFY gt_out.
+  ENDLOOP.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_USER_COMMAND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_user_command USING r_ucomm LIKE sy-ucomm
+                            rs_selfield TYPE slis_selfield..
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CASE r_ucomm.
+    WHEN '&IC1'.
+      PERFORM frm_show_detail_data USING rs_selfield.
+    WHEN 'ZDOWNLOAD'. "下载数据
+*      PERFORM frm_download_data.
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SHOW_DETAIL_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_RS_SELFIELD  text
+*----------------------------------------------------------------------*
+FORM frm_show_detail_data  USING rs_selfield TYPE slis_selfield.
+  DATA:ls_out LIKE LINE OF gt_out.
+  DATA:lt_bom_data  LIKE gt_bom_data OCCURS 0 WITH HEADER LINE,
+       lt_scql_data LIKE gt_scql_data OCCURS 0 WITH HEADER LINE,
+       lt_wxxq_data LIKE gt_wxxq_data OCCURS 0 WITH HEADER LINE,
+       lt_mssl      LIKE mssl OCCURS 0 WITH HEADER LINE,
+       lt_mard      LIKE gt_mard OCCURS 0 WITH HEADER LINE,
+       lt_po_data   LIKE gt_po_data OCCURS 0 WITH HEADER LINE,
+       lt_ekes      LIKE gt_ekes OCCURS 0 WITH HEADER LINE.
+
+  DATA:lt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+  DEFINE mcr_build_fcat.
+    lt_fcat-fieldname = &1.
+    lt_fcat-coltext   = &2.
+*    lt_fcat-scrtext_l = &2.
+*    lt_fcat-scrtext_m = &2.
+*    lt_fcat-scrtext_s = &2.
+    lt_fcat-ref_field = &3.
+    lt_fcat-ref_table = &4.
+    lt_fcat-inttype   = &5.
+    lt_fcat-intlen    = &6.
+    APPEND lt_fcat.
+    CLEAR lt_fcat.
+  END-OF-DEFINITION.
+
+  FIELD-SYMBOLS:<fs_tab> TYPE STANDARD TABLE.
+
+  READ TABLE gt_out INTO ls_out INDEX rs_selfield-tabindex.
+
+  CASE  rs_selfield-fieldname.
+    WHEN 'ZMENG1' OR 'ZMENG2'.  "第一周需求 & 第二周需求
+      LOOP AT gt_bom_data1 WHERE idnrk = ls_out-idnrk.
+        MOVE-CORRESPONDING gt_bom_data1 TO lt_bom_data.
+        APPEND lt_bom_data.
+        CLEAR lt_bom_data.
+      ENDLOOP.
+      IF rs_selfield-fieldname = 'ZMENG1'.
+        mcr_build_fcat:'MATNR'  '物料号码'   'MATNR'   'MARA'    ''      '',
+                       'MAKTX'  '物料描述'   'MAKTX'   'MAKT'    ''      '',
+                       'MENGE1' '数量'       ''        ''        'P'     '15',
+                       'IDNRK'  '本料号'     'IDNRK'   'STPO'    ''      '',
+                       'ZMAKT'  '本料号描述' 'MAKTX'   'MAKT'    ''      '',
+                       'ZMENG1' '需求数量'   ''        ''        'P'     '15'.
+      ELSE.
+        mcr_build_fcat:'MATNR'  '物料号码'   'MATNR'   'MARA'    ''      '',
+                       'MAKTX'  '物料描述'   'MAKTX'   'MAKT'    ''      '',
+                       'MENGE2' '数量'       ''        ''        'P'     '15',
+                       'IDNRK'  '本料号'     'IDNRK'   'STPO'    ''      '',
+                       'ZMAKT'  '本料号描述' 'MAKTX'   'MAKT'    ''      '',
+                       'ZMENG2' '需求数量'   ''        ''        'P'     '15'.
+      ENDIF.
+      ASSIGN lt_bom_data[] TO  <fs_tab>.
+*    WHEN 'ZSCQL'.   "已开单生产欠料数
+*      LOOP AT gt_scql_data WHERE idnrk = ls_out-idnrk.
+*        MOVE-CORRESPONDING gt_scql_data TO lt_scql_data.
+*        APPEND lt_scql_data.
+*        CLEAR lt_scql_data.
+*      ENDLOOP.
+*      mcr_build_fcat:'AUFNR'  '工单号'       'AUFNR'   'AFPO'    ''      '',
+*                     'MATNR'  '工单头料号'   'MATNR'   'MARA'    ''      '',
+*                     'MAKTX'  '物料描述'     'MAKTX'   'MAKT'    ''      '',
+*                     'IDNRK'  '本料号'       'IDNRK'   'STPO'    ''      '',
+*                     'ZMAKT'  '本料号描述'   'MAKTX'   'MAKT'    ''      '',
+*                     'BDMNG'  '需求数量'     'BDMNG'   'RESB'    ''      '',
+*                     'ENMNG'  '已发数量'     'ENMNG'   'RESB'    ''      '',
+*                     'ZQLSL'  '欠料数量'     'ENMNG'   'RESB'    ''      ''.
+*      ASSIGN lt_scql_data[] TO  <fs_tab>.
+*    WHEN 'ZWXXQ'.   "已开单外协需求数
+*      LOOP AT gt_wxxq_data WHERE idnrk = ls_out-idnrk.
+*        MOVE-CORRESPONDING gt_wxxq_data TO lt_wxxq_data.
+*        APPEND lt_wxxq_data.
+*        CLEAR lt_wxxq_data.
+*      ENDLOOP.
+*      mcr_build_fcat:'EBELN'  '委外采购订单号'       'EBELN'   'EKPO'    ''      '',
+*                     'EBELP'  '项次'                 'EBELP'   'EKPO'    ''      '',
+*                     'MATNR'  '物料号码'             'MATNR'   'MARA'    ''      '',
+*                     'MAKTX'  '物料描述'             'MAKTX'   'MAKT'    ''      '',
+*                     'IDNRK'  '本料号'               'IDNRK'   'STPO'    ''      '',
+*                     'ZMAKT'  '本料号描述'           'MAKTX'   'MAKT'    ''      '',
+*                     'BDMNG'  '需求数量'             'BDMNG'   'RESB'    ''      '',
+*                     'ENMNG'  '已发数量'             'ENMNG'   'RESB'    ''      '',
+*                     'ZQLSL'  '欠料数量'             'ENMNG'   'RESB'    ''      ''.
+*      ASSIGN lt_wxxq_data[] TO  <fs_tab>.
+*    WHEN 'ZGYSKC'.  "供应商库存
+*      LOOP AT gt_mssl WHERE matnr = ls_out-idnrk.
+*        MOVE-CORRESPONDING gt_mssl TO lt_mssl.
+*        APPEND lt_mssl.
+*        CLEAR lt_mssl.
+*      ENDLOOP.
+*      mcr_build_fcat:'MATNR'  '物料号码'             'MATNR'   'MSSL'    ''      '',
+*                     'WERKS'  '工厂'                 'WERKS'   'MSSL'    ''      '',
+*                     'LIFNR'  '供应商代码'           'LIFNR'   'MSSL'    ''      '',
+*                     'SLLAB'  '库存数量'             'SLLAB'   'MSSL'    ''      ''.
+*      ASSIGN lt_mssl[] TO  <fs_tab>.
+*    WHEN 'ZKC' OR 'ZDJKC'.     "库存 & 待检库存
+*      LOOP AT gt_mard WHERE matnr = ls_out-idnrk.
+*        MOVE-CORRESPONDING gt_mard TO lt_mard.
+*        APPEND lt_mard.
+*        CLEAR lt_mard.
+*      ENDLOOP.
+*      mcr_build_fcat:'MATNR'  '物料号码'             'MATNR'   'MARD'    ''      '',
+*                     'WERKS'  '工厂'                 'WERKS'   'MARD'    ''      '',
+*                     'LGORT'  '库位'                 'LGORT'   'MARD'    ''      ''.
+*      IF rs_selfield-fieldname = 'ZKC'.
+*        mcr_build_fcat:'LABST'  '库存数量'             'LABST'   'MARD'    ''      ''.
+*      ELSE.
+*        mcr_build_fcat:'INSME'  '质检数量'             'INSME'   'MARD'    ''      ''.
+*      ENDIF.
+*      ASSIGN lt_mard[] TO  <fs_tab>.
+*    WHEN 'ZWQPO'.   "未清采购订单数量
+*      LOOP AT gt_po_data WHERE matnr = ls_out-idnrk.
+*        MOVE-CORRESPONDING gt_po_data TO lt_po_data.
+*        APPEND lt_po_data.
+*        CLEAR lt_po_data.
+*      ENDLOOP.
+*      mcr_build_fcat:'EBELN'  '采购订单号'           'EBELN'   'EKPO'    ''      '',
+*                     'EBELP'  '项次'                 'EBELP'   'EKPO'    ''      '',
+*                     'MATNR'  '物料号码'             'MATNR'   'EKPO'    ''      '',
+*                     'TXZ01'  '物料描述'             'TXZ01'   'EKPO'    ''      '',
+*                     'ETENR'  '计划行'               'ETENR'   'EKET'    ''      '',
+*                     'EINDT'  '计划交货日期'         'EINDT'   'EKET'    ''      '',
+*                     'MENGE'  '订单数量'             'MENGE'   'EKET'    ''      '',
+*                     'WEMNG'  '已收货数量'           'WEMNG'   'EKET'    ''      '',
+*                     'ZWQSL'  '未清数量'             'WEMNG'   'EKET'    ''      ''.
+*      ASSIGN lt_po_data[] TO  <fs_tab>.
+*    WHEN 'ZNXJH'.   "内向交货数量
+*      LOOP AT gt_ekes WHERE matnr = ls_out-idnrk.
+*        MOVE-CORRESPONDING gt_ekes TO lt_ekes.
+*        APPEND lt_ekes.
+*        CLEAR lt_ekes.
+*      ENDLOOP.
+*      mcr_build_fcat:'EBELN'  '采购订单号'           'EBELN'   'EKPO'    ''      '',
+*                     'EBELP'  '项次'                 'EBELP'   'EKPO'    ''      '',
+*                     'MATNR'  '物料号码'             'MATNR'   'EKPO'    ''      '',
+*                     'TXZ01'  '物料描述'             'TXZ01'   'EKPO'    ''      '',
+*                     'VBELN'  '内向交货单号'         'VBELN'   'EKES'    ''      '',
+*                     'EINDT'  '交货日期'             'EINDT'   'EKES'    ''      '',
+*                     'MENGE'  '内向交货单数量'       'MENGE'   'EKES'    ''      '',
+*                     'DABMG'  '已交货数量'           'DABMG'   'EKES'    ''      '',
+*                     'ZWQSL'  '未清数量'             'WEMNG'   'EKES'    ''      ''.
+*      ASSIGN lt_ekes[] TO  <fs_tab>.
+    WHEN OTHERS.
+      EXIT.
+  ENDCASE.
+
+***调用ALV展示明细数据
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program = sy-repid
+      is_layout_lvc      = gs_layout
+      it_fieldcat_lvc    = lt_fcat[]
+    TABLES
+      t_outtab           = <fs_tab>
+    EXCEPTIONS
+      program_error      = 1
+      OTHERS             = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SET_PF_STATUS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_set_pf_status USING rt_extab TYPE slis_t_extab.
+  SET PF-STATUS 'PF_0100'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DOWNLOAD_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+*FORM frm_download_data .
+*  DATA:ls_key   TYPE wwwdatatab,
+*       lv_subrc TYPE sy-subrc.
+*  DATA lv_file LIKE rlgrap-filename.
+*  DATA:lv_sortl LIKE kna1-sortl.
+*
+*
+*  CONCATENATE 'C:\PP\'  sy-datum '-' sy-uzeit '-ZPP024.xlsx' INTO lv_file.
+*
+*  ls_key-relid = 'MI'.
+*  ls_key-objid = 'ZPP024'.
+*  CALL FUNCTION 'DOWNLOAD_WEB_OBJECT'
+*    EXPORTING
+*      key         = ls_key
+*      destination = lv_file
+*    IMPORTING
+*      rc          = lv_subrc.
+*  IF lv_subrc <> 0.
+*    MESSAGE '下载模板出错，请检查，谢谢' TYPE 'E'.
+*    EXIT.
+*  ENDIF.
+****填充EXCEL数据
+*  PERFORM frm_filldata_excel USING lv_file.
+
+
+*ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FILLDATA_EXCEL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LV_FILE  text
+*----------------------------------------------------------------------*
+*FORM frm_filldata_excel  USING iv_file TYPE rlgrap-filename.
+********数据定义*******
+*  DATA:lo_excel     TYPE ole2_object,
+*       lo_workbooks TYPE ole2_object,
+*       lo_workbook  TYPE ole2_object,
+*       lo_sheet     TYPE ole2_object,
+*       lo_range     TYPE ole2_object,
+*       lo_cell      TYPE ole2_object,
+*       lo_cell1     TYPE ole2_object,
+*       activewindow TYPE ole2_object.
+*  DATA lv_file LIKE rlgrap-filename.
+*
+*  DATA lv_row TYPE i.
+*  DATA lv_col TYPE i.
+*  DATA:lv_times TYPE i,
+*       lv_mod   TYPE i.
+*  DATA:lv_row_c TYPE i,
+*       lv_row_l TYPE i.
+*
+*  DEFINE mac_fill_cell.
+*    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+*      EXPORTING
+*        #1 = &1
+*        #2 = &2.
+*    SET PROPERTY OF lo_cell 'VALUE' = &3.
+*  END-OF-DEFINITION.
+*
+*  DEFINE mac_mer_cell.
+*    CALL METHOD OF lo_sheet 'RANGE' = lo_cell
+*      EXPORTING
+*      #1 = &1.
+*    CALL METHOD OF lo_cell  'MERGE'.
+*  END-OF-DEFINITION.               "mergerange
+*
+*  DATA:lt_data      LIKE gt_out OCCURS 0 WITH HEADER LINE,
+*       lt_data_temp LIKE gt_out OCCURS 0 WITH HEADER LINE,
+*       ls_data      LIKE LINE OF gt_out.
+*
+**填充excel
+*  CREATE OBJECT lo_excel 'EXCEL.APPLICATION'.
+*  SET PROPERTY OF lo_excel 'VISIBLE' = 0.
+*  CALL METHOD OF lo_excel 'WORKBOOKS' = lo_workbooks.
+*
+*  CALL METHOD OF lo_workbooks 'OPEN' = lo_workbook EXPORTING #1 = iv_file.
+*  CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = 1.
+*  CALL METHOD OF lo_sheet 'ACTIVATE'.
+*  CALL METHOD OF lo_excel 'ACTIVEWINDOW' = activewindow.
+*  SET PROPERTY OF activewindow 'DISPLAYGRIDLINES' = 0.
+*
+*********************************************************************************************
+****----------------------填充第一周需求    ----------------------------------------------***
+*********************************************************************************************
+*  CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = '第一周需求'.
+*  CALL METHOD OF lo_sheet 'ACTIVATE'.
+*  lv_row = 1.
+*  LOOP AT gt_bom_data.
+*    lv_row = lv_row + 1.
+*    mac_fill_cell lv_row  'A'  gt_bom_data-matnr. "物料号码
+*    mac_fill_cell lv_row  'B'  gt_bom_data-maktx. "物料描述
+*    mac_fill_cell lv_row  'C'  gt_bom_data-menge1."数量1
+*    mac_fill_cell lv_row  'D'  gt_bom_data-idnrk. "本料号
+*    mac_fill_cell lv_row  'E'  gt_bom_data-zmakt. "本料号描述
+*    mac_fill_cell lv_row  'F'  gt_bom_data-zmeng1."需求数量
+*  ENDLOOP.
+*
+*********************************************************************************************
+****----------------------填充第二周需求    ----------------------------------------------***
+*********************************************************************************************
+*  CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = '第二周需求'.
+*  CALL METHOD OF lo_sheet 'ACTIVATE'.
+*  lv_row = 1.
+*  LOOP AT gt_bom_data.
+*    lv_row = lv_row + 1.
+*    mac_fill_cell lv_row  'A'  gt_bom_data-matnr. "物料号码
+*    mac_fill_cell lv_row  'B'  gt_bom_data-maktx. "物料描述
+*    mac_fill_cell lv_row  'C'  gt_bom_data-menge2."数量2
+*    mac_fill_cell lv_row  'D'  gt_bom_data-idnrk. "本料号
+*    mac_fill_cell lv_row  'E'  gt_bom_data-zmakt. "本料号描述
+*    mac_fill_cell lv_row  'F'  gt_bom_data-zmeng2."需求数量
+*  ENDLOOP.
+*********************************************************************************************
+****----------------------填充未清采购订单    ----------------------------------------------***
+*********************************************************************************************
+*  CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = '未清采购订单'.
+*  CALL METHOD OF lo_sheet 'ACTIVATE'.
+*  lv_row = 1.
+*  LOOP AT gt_po_data.
+*    lv_row = lv_row + 1.
+*    mac_fill_cell lv_row  'A'  gt_po_data-ebeln. "采购订单号
+*    mac_fill_cell lv_row  'B'  gt_po_data-ebelp. "项次
+*    mac_fill_cell lv_row  'C'  gt_po_data-matnr. "物料号码
+*    mac_fill_cell lv_row  'D'  gt_po_data-txz01. "物料描述
+*    mac_fill_cell lv_row  'E'  gt_po_data-etenr. "计划行
+*    mac_fill_cell lv_row  'F'  gt_po_data-eindt. "计划交货日期
+*    mac_fill_cell lv_row  'G'  gt_po_data-menge. "订单数量
+*    mac_fill_cell lv_row  'H'  gt_po_data-wemng. "已收货数量
+*    mac_fill_cell lv_row  'I'  gt_po_data-zwqsl. "未清数量
+*  ENDLOOP.
+*********************************************************************************************
+****----------------------填充内向交货单    ----------------------------------------------***
+*********************************************************************************************
+*  CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = '内向交货单'.
+*  CALL METHOD OF lo_sheet 'ACTIVATE'.
+*  lv_row = 1.
+*  LOOP AT gt_ekes .
+*    lv_row = lv_row + 1.
+*    mac_fill_cell lv_row  'A'  gt_ekes-ebeln. "采购订单号
+*    mac_fill_cell lv_row  'B'  gt_ekes-ebelp. "项次
+*    mac_fill_cell lv_row  'C'  gt_ekes-matnr. "物料号码
+*    mac_fill_cell lv_row  'D'  gt_ekes-txz01. "物料描述
+*    mac_fill_cell lv_row  'E'  gt_ekes-vbeln. "内向交货单号
+*    mac_fill_cell lv_row  'F'  gt_ekes-eindt. "交货日期
+*    mac_fill_cell lv_row  'G'  gt_ekes-menge. "内向交货单数量
+*    mac_fill_cell lv_row  'H'  gt_ekes-dabmg. "已交货数量
+*    mac_fill_cell lv_row  'I'  gt_ekes-zwqsl. "未清数量
+*  ENDLOOP.
+*
+*  CALL METHOD OF lo_sheet 'CELLS' = lo_cell EXPORTING #1 = 1 #2 = 1.
+*  CALL METHOD OF lo_cell 'SELECT'.
+*  SET PROPERTY OF lo_excel 'CutCopyMode' = 0.
+*
+*  CALL METHOD OF lo_workbook 'SAVE'.
+*  SET PROPERTY OF lo_excel 'VISIBLE' = 1.
+*  CALL METHOD OF lo_sheet 'CLOSE'.
+*  FREE OBJECT:lo_excel,lo_workbooks,lo_workbook,lo_sheet,lo_range,lo_cell.
+*ENDFORM.

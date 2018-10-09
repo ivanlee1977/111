@@ -1,0 +1,103 @@
+*&---------------------------------------------------------------------*
+*& 程序名： ZRPCRM001
+*& 创建者(公司)/日期： QUYT/20170802
+*& 程序描述: CRM Customer Service接口数据同步
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    QUYT           20171219      创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpcrm001.
+
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+PARAMETERS:p_name  LIKE ztservice-name,
+           p_date1 LIKE sy-datum OBLIGATORY,
+           p_date2 LIKE sy-datum OBLIGATORY DEFAULT sy-datum.
+SELECTION-SCREEN END OF BLOCK blc.
+
+************************************************************************
+*INITIALIZATION.
+************************************************************************
+INITIALIZATION.
+  p_date1 = sy-datum - 3.
+************************************************************************
+* AT SELECTION-SCREEN OUTPUT
+************************************************************************
+AT SELECTION-SCREEN OUTPUT.
+************************************************************************
+* AT SELECTION-SCREEN
+************************************************************************
+AT SELECTION-SCREEN.
+************************************************************************
+* START-OF-SELECTION
+************************************************************************
+START-OF-SELECTION.
+
+  PERFORM frm_get_data.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:cl_crm_customerservice_out TYPE REF TO zco_si_crm_customerservice_out.
+  DATA:cl_cx_ai_system_fault      TYPE REF TO cx_ai_system_fault,
+       cl_cx_ai_application_fault TYPE REF TO cx_ai_application_fault.
+  DATA:ls_output TYPE zget_bill_info1,
+       ls_input  TYPE zget_bill_info_response1.
+  DATA:lv_msg TYPE string.
+  DATA:lt_bill_data TYPE zbill_tab WITH HEADER LINE.
+  DATA:lt_data LIKE ztservice OCCURS 0 WITH HEADER LINE.
+
+  TRY.
+      CREATE OBJECT cl_crm_customerservice_out.
+    CATCH cx_ai_system_fault INTO cl_cx_ai_system_fault.
+      lv_msg = cl_cx_ai_system_fault->get_text( ).
+      WRITE:/ lv_msg.
+      EXIT.
+  ENDTRY.
+
+  ls_output-get_bill_info-arg0 = p_name.
+  ls_output-get_bill_info-arg1 = p_date1.
+  ls_output-get_bill_info-arg2 = p_date2.
+
+  TRY.
+      CALL METHOD cl_crm_customerservice_out->si_crm_customerservice_out
+        EXPORTING
+          output = ls_output
+        IMPORTING
+          input  = ls_input.
+    CATCH cx_ai_system_fault INTO cl_cx_ai_system_fault.
+      lv_msg =  cl_cx_ai_system_fault->get_text( ).
+      WRITE:/ lv_msg.
+      EXIT.
+    CATCH cx_ai_application_fault INTO cl_cx_ai_application_fault.
+      lv_msg = cl_cx_ai_application_fault->get_text( ).
+      WRITE:/ lv_msg.
+      EXIT.
+  ENDTRY.
+
+  COMMIT WORK AND WAIT.
+
+  lt_bill_data[]  = ls_input-get_bill_info_response-return.
+
+  LOOP AT lt_bill_data.
+    MOVE-CORRESPONDING lt_bill_data TO lt_data.
+    APPEND lt_data.
+    CLEAR lt_data.
+  ENDLOOP.
+  IF lt_data[] IS NOT INITIAL.
+    MODIFY ztservice FROM TABLE lt_data.
+    IF sy-subrc = 0.
+      COMMIT WORK AND WAIT.
+      WRITE:'同步数据成功'.
+    ELSE.
+      ROLLBACK WORK.
+      WRITE:'同步数据失败'.
+    ENDIF.
+  ELSE.
+    WRITE:'没有需要同步的数据'.
+  ENDIF.
+ENDFORM.

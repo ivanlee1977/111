@@ -1,0 +1,13 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPMM021_S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:
+                s_werks FOR marc-werks OBLIGATORY DEFAULT '1000',
+                s_matnr FOR marc-matnr,
+                s_lgort FOR mard-lgort,
+                s_mtart FOR mara-mtart,
+                s_matkl FOR mara-matkl .
+
+SELECTION-SCREEN END OF BLOCK b1.

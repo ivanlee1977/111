@@ -1,0 +1,29 @@
+*&---------------------------------------------------------------------*
+*& Report ZRPSD005
+*&---------------------------------------------------------------------*
+*&*&海外CI打印
+*&-制作人：雷鸣涛
+*&-制作日期：2017。08。01
+*&---------------------------------------------------------------------*
+REPORT zrpsd005.
+
+
+INCLUDE ZRPSD005_T01.
+INCLUDE ZRPSD005_S01.
+INCLUDE ZRPSD005_F01.
+
+
+INITIALIZATION.
+
+
+AT SELECTION-SCREEN OUTPUT.
+
+AT SELECTION-SCREEN.
+
+   PERFORM FRM_CHECK_AUTH.
+
+START-OF-SELECTION.
+
+  PERFORM frm_getdata.
+  PERFORM frm_getfact.
+  PERFORM frm_show.

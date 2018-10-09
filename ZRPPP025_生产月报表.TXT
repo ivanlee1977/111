@@ -1,0 +1,27 @@
+*&---------------------------------------------------------------------*
+*& Report ZRPPP025
+*& 创建者(公司)/日期： leimt/20180320
+*& 程序描述:
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    LEIMT           2018      创建程序
+*&---------------------------------------------------------------------*
+REPORT zrppp025.
+
+
+INCLUDE zrppp025_t01.
+INCLUDE zrppp025_s01.
+INCLUDE zrppp025_f01.
+
+
+INITIALIZATION.
+
+AT SELECTION-SCREEN OUTPUT.
+
+START-OF-SELECTION.
+
+  PERFORM get_data."取数据
+  PERFORM process_data."处理数据
+
+END-OF-SELECTION.
+  PERFORM get_alv."ALV显示界面

@@ -1,0 +1,11 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPMM024S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+PARAMETERS:p_ekorg LIKE eine-ekorg OBLIGATORY DEFAULT '1000'.
+SELECT-OPTIONS:s_matnr FOR eina-matnr,
+               s_ekgrp FOR eine-ekgrp DEFAULT '190',
+               s_lifnr FOR eina-lifnr,
+               s_esokz FOR eine-esokz DEFAULT '3'.
+SELECTION-SCREEN END OF BLOCK blc.

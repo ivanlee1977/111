@@ -1,0 +1,892 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI033F01
+*&---------------------------------------------------------------------*
+
+FORM frm_get_data .
+  DATA:lt_faglflext TYPE TABLE OF faglflext,
+       ls_faglflext TYPE faglflext.
+
+  DATA:it_skat LIKE skat OCCURS 0 WITH HEADER LINE .
+
+  DATA:BEGIN OF ls_bseg,
+         bukrs LIKE bseg-bukrs,
+         belnr LIKE bseg-belnr,
+         gjahr LIKE bseg-gjahr,
+         buzei LIKE bseg-buzei,
+         monat LIKE bkpf-monat, "期间
+         rstgr LIKE bseg-rstgr, "原因代码
+         dmbtr LIKE bseg-dmbtr, "金额
+         shkzg LIKE bseg-shkzg, "借贷标识
+         hkont LIKE bseg-hkont, "科目
+         prctr LIKE bseg-prctr, "利润中心
+       END OF ls_bseg,
+       lt_bseg LIKE ls_bseg OCCURS 0.
+
+  DATA lv_fieldname TYPE fieldname.
+  FIELD-SYMBOLS <fs_hslvt>   TYPE hslvt12.
+  IF s_rpmax-high IS NOT INITIAL AND s_rpmax-low IS NOT INITIAL .
+    lv_rpmin = s_rpmax-low.
+    lv_rpmax = s_rpmax-high.
+  ELSEIF s_rpmax-low IS NOT INITIAL AND s_rpmax-high IS INITIAL.
+    lv_rpmin = s_rpmax-low.
+    lv_rpmax = s_rpmax-low.
+  ELSEIF s_rpmax-low IS INITIAL AND s_rpmax-high IS NOT INITIAL.
+    lv_rpmin = s_rpmax-high.
+    lv_rpmax = s_rpmax-high.
+  ENDIF.
+
+  SELECT
+            a~bukrs
+            a~belnr
+            a~gjahr
+            a~buzei
+            b~monat "期间
+            a~rstgr "原因代码
+            a~dmbtr "金额
+            a~shkzg "借贷标识
+            a~hkont "科目
+            a~prctr "利润中心
+      INTO CORRESPONDING FIELDS OF TABLE lt_bseg
+    FROM bseg AS a
+    JOIN bkpf AS b ON a~bukrs EQ b~bukrs AND a~belnr EQ b~belnr AND a~gjahr EQ b~gjahr
+    FOR ALL ENTRIES IN gt_t001
+    WHERE a~bukrs EQ gt_t001-bukrs
+     AND  a~gjahr EQ p_ryear
+*     AND  b~monat IN s_rpmax
+     AND  a~prctr IN s_prctr
+     AND  a~hkont BETWEEN '1001000000' AND '1012999999'.
+
+  SELECT * INTO TABLE lt_faglflext
+    FROM faglflext
+    FOR ALL ENTRIES IN gt_t001
+   WHERE ryear EQ p_ryear
+     AND rbukrs EQ gt_t001-bukrs
+     AND prctr IN s_prctr
+     AND ( racct BETWEEN '1001000000' AND '1012999999'  OR racct LIKE '6602%' )
+    AND rldnr EQ '0L'.
+
+
+  IF lt_faglflext[] IS NOT INITIAL .
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE it_skat
+      FROM skat
+      FOR ALL ENTRIES IN lt_faglflext
+     WHERE ktopl EQ  lt_faglflext-kokrs
+      AND  saknr EQ lt_faglflext-racct
+      AND  spras EQ sy-langu.
+  ENDIF.
+
+  "排序问题 采用 A1 A2  B1 B2开始
+  LOOP AT lt_bseg INTO ls_bseg.
+    IF ls_bseg-rstgr+1(1) = '1' AND ls_bseg-shkzg EQ 'H'.
+      ls_bseg-dmbtr = -1 * ls_bseg-dmbtr.
+    ENDIF.
+    IF ls_bseg-rstgr+1(1) = '2' AND ls_bseg-shkzg EQ 'S'.
+      ls_bseg-dmbtr = -1 * ls_bseg-dmbtr.
+    ENDIF.
+
+    IF ls_bseg-monat BETWEEN  lv_rpmin  AND lv_rpmax.
+      gt_item-zamount = ls_bseg-dmbtr.  "本月数
+    ELSE.
+      CONTINUE.
+    ENDIF.
+
+    IF ls_bseg-rstgr = '111' OR ls_bseg-rstgr = '112' OR ls_bseg-rstgr = '113' OR ls_bseg-rstgr = '211'
+    OR ls_bseg-rstgr = '212' OR ls_bseg-rstgr = '213' OR ls_bseg-rstgr = '214' OR ls_bseg-rstgr = '311'
+    OR ls_bseg-rstgr = '312' OR ls_bseg-rstgr = '313'.
+      gt_item-zexno = 'B02'.
+      gt_item-zpro  = '二、现金流入'.
+      COLLECT gt_item.
+    ENDIF.
+    IF ls_bseg-rstgr =  '121' OR ls_bseg-rstgr = '122' OR ls_bseg-rstgr =  '123' OR ls_bseg-rstgr = '124' OR  ls_bseg-rstgr =  '221'
+    OR ls_bseg-rstgr =  '222' OR ls_bseg-rstgr = '223' OR ls_bseg-rstgr =  '321' OR ls_bseg-rstgr = '322' OR ls_bseg-rstgr =  '323'.
+      gt_item-zexno = 'B09'.
+      gt_item-zpro  = '三、现金流出'.
+      COLLECT gt_item.
+    ENDIF.
+
+    CASE ls_bseg-rstgr.
+      WHEN  '111'.
+        gt_item-zexno = 'B03'.
+        gt_item-zpro  = '1.销售回款'.
+      WHEN '312'.
+        gt_item-zexno = 'B04'.
+        gt_item-zpro  = '2.银行贷款'.
+      WHEN '112'.
+        gt_item-zexno = 'B05'.
+        gt_item-zpro  = '3、税费返还'.
+      WHEN '121'.
+        gt_item-zexno = 'B10'.
+        gt_item-zpro  = '1.采购货款'.
+      WHEN '123'.
+        gt_item-zexno = 'B12'.
+        gt_item-zpro  = '3.税款及附加费'.
+      WHEN '122'.
+        gt_item-zexno = 'B14'.
+        gt_item-zpro  = '其中:工资及奖金'.
+      WHEN '124'.
+        gt_item-zexno = 'B27'.
+        gt_item-zpro  = '其他'.
+      WHEN '321'.
+        gt_item-zexno = 'B31'.
+        gt_item-zpro  = '7.1  归还贷款'.
+      WHEN '322'.
+        gt_item-zexno = 'B32'.
+        gt_item-zpro  = '7.2  流动资金贷款利息'.
+      WHEN '221'.
+        gt_item-zexno = 'B34'.
+        gt_item-zpro  = '8.1 购置设备\信息化投入'.
+      WHEN '222'.
+        gt_item-zexno = 'B35'.
+        gt_item-zpro  = '8.2 购买股权(LT)'.
+      WHEN '400'.
+        gt_item-zexno = 'B38'.
+        gt_item-zpro  = '汇率变动的影响'.
+    ENDCASE.
+
+    COLLECT gt_item.
+    CLEAR gt_item.
+  ENDLOOP.
+
+
+  LOOP AT lt_faglflext INTO ls_faglflext.
+    IF lv_rpmax = 12.
+      lv_rpmax = 16.
+    ENDIF.
+
+    CASE ls_faglflext-racct+0(4).
+      WHEN '1001'.
+        gt_item-zexno = 'A02'.
+        gt_item-zpro  = '现金'.
+      WHEN '1002'.
+        gt_item-zexno = 'A03'.
+        gt_item-zpro  = '银行存款(分明细)'.
+      WHEN '1012'.
+        gt_item-zexno = 'B01'.
+        gt_item-zpro  = '理财产品'.
+    ENDCASE.
+
+    gt_item-zamount = gt_item-zamount + ls_faglflext-hslvt.
+
+    "汇总金额
+    CLEAR lv_index.
+    DO lv_rpmin - 1 TIMES.
+      lv_index = lv_index + 1.
+      CONCATENATE 'HSL' lv_index INTO lv_fieldname.
+      ASSIGN COMPONENT lv_fieldname OF STRUCTURE ls_faglflext TO <fs_hslvt>.
+      IF sy-subrc EQ 0.
+        gt_item-zamount  = gt_item-zamount + <fs_hslvt>."金额
+      ENDIF.
+    ENDDO.
+
+    "银行存款(分明细)
+    IF ls_faglflext-racct+0(4) EQ '1002'.
+      gt_racct-racct = ls_faglflext-racct.
+      gt_racct-kokrs = ls_faglflext-kokrs.
+      gt_racct-zhsl  = gt_item-zamount."金额
+      COLLECT gt_racct.
+      CLEAR gt_racct.
+    ENDIF.
+
+    COLLECT gt_item.
+
+    IF ls_faglflext-racct+0(4) =  '1001' OR  ls_faglflext-racct+0(4) = '1002'.
+      gt_item-zexno = 'A01'.
+      gt_item-zpro  = '一、期初余额'.
+      COLLECT gt_item.
+    ENDIF.
+
+    CLEAR gt_item.
+  ENDLOOP.
+
+
+  "拼接 B14 - B25
+  LOOP AT lt_faglflext INTO ls_faglflext.
+    IF lv_rpmax = 12.
+      lv_rpmax = 16.
+    ENDIF.
+
+    CASE ls_faglflext-racct.
+      WHEN '6602070100'.
+        gt_item-zexno = 'B15'.
+        gt_item-zpro  = '电话费'.
+      WHEN '6602100300' OR '6602100400'.
+        gt_item-zexno = 'B16'.
+        gt_item-zpro  = '水电费'.
+      WHEN '6602040100' OR '6602040200'.
+        gt_item-zexno = 'B17'.
+        gt_item-zpro  = '物业房租'.
+      WHEN '6602050100'.
+        gt_item-zexno = 'B18'.
+        gt_item-zpro  = '运输费'.
+      WHEN '6602010300' OR '6602010400'.
+        gt_item-zexno = 'B19'.
+        gt_item-zpro  = '社保费\公积金'.
+      WHEN '6602090100' OR '6602090200'.
+        gt_item-zexno = 'B20'.
+        gt_item-zpro  = '广告宣传费'.
+      WHEN '6602090300'.
+        gt_item-zexno = 'B21'.
+        gt_item-zpro  = '展会费用'.
+      WHEN '6602100100'.
+        gt_item-zexno = 'B23'.
+        gt_item-zpro  = '咨询顾问费'.
+      WHEN '6602060100'.
+        gt_item-zexno = 'B25'.
+        gt_item-zpro  = '招待费'.
+      WHEN '6602070200'.
+        gt_item-zexno = 'B26'.
+        gt_item-zpro  = '办公费'.
+    ENDCASE.
+
+    IF ls_faglflext-racct(6) = '660202'.
+      gt_item-zexno = 'B22'.
+      gt_item-zpro  = '差旅费'.
+    ENDIF.
+
+    CHECK gt_item-zexno IS NOT INITIAL.
+    "汇总金额
+    CLEAR lv_index.
+    lv_index = lv_rpmin - 1.
+    DO lv_rpmax - lv_rpmin + 1 TIMES.
+      lv_index = lv_index + 1.
+*      IF lv_index EQ p_ryear.
+      CONCATENATE 'HSL' lv_index INTO lv_fieldname.
+      ASSIGN COMPONENT lv_fieldname OF STRUCTURE ls_faglflext TO <fs_hslvt>.
+      IF sy-subrc EQ 0.
+        gt_item-zamount  = gt_item-zamount + <fs_hslvt>."金额
+      ENDIF.
+*      ENDIF.
+    ENDDO.
+
+    COLLECT gt_item.
+    CLEAR gt_item.
+  ENDLOOP.
+
+
+  DATA:lv_num(2) TYPE c VALUE 3.
+  CLEAR:gt_main[].
+  "将行数赋值进去
+  "存取银行存款明细
+  SORT gt_racct.
+  LOOP AT gt_racct.
+    lv_num = lv_num  + 1 .
+    CONCATENATE 'A' lv_num INTO gt_main-zexno.
+    READ TABLE it_skat WITH KEY ktopl = gt_racct-kokrs saknr = gt_racct-racct.
+    IF sy-subrc EQ 0.
+      gt_main-zpro  = it_skat-txt20.
+    ENDIF.
+    gt_main-zamount = gt_racct-zhsl.
+    COLLECT gt_main.
+    CLEAR gt_main.
+  ENDLOOP.
+
+  "A01
+  gt_main-zexno = 'A01'.
+  gt_main-zpro  = '一、期初余额'.
+  READ TABLE gt_item WITH KEY zexno = 'A01'.
+  IF sy-subrc EQ 0.
+    gt_main-zamount = gt_item-zamount.
+  ENDIF.
+  APPEND gt_main.
+  CLEAR gt_main.
+  "A02
+  gt_main-zexno = 'A02'.
+  gt_main-zpro  = '现金'.
+  READ TABLE gt_item WITH KEY zexno = 'A02'.
+  IF sy-subrc EQ 0.
+    gt_main-zamount = gt_item-zamount.
+  ENDIF.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "A03
+  gt_main-zexno = 'A03'.
+  gt_main-zpro  = '银行存款(分明细)'.
+  READ TABLE gt_item WITH KEY zexno = 'A03'.
+  IF sy-subrc EQ 0.
+    gt_main-zamount = gt_item-zamount.
+  ENDIF.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B01
+  gt_main-zexno = 'B01'.
+  gt_main-zpro  = '理财产品'.
+  READ TABLE gt_item WITH KEY zexno = 'B01'.
+  IF sy-subrc EQ 0.
+    gt_main-zamount = gt_item-zamount.
+  ENDIF.
+  APPEND gt_main.
+  CLEAR gt_main.
+  "B02
+  gt_main-zexno = 'B02'.
+  gt_main-zpro  = '二、现金流入'.
+  READ TABLE gt_item WITH KEY zexno = 'B02'.
+  IF sy-subrc EQ 0.
+    gt_main-zamount = gt_item-zamount.
+  ENDIF.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B03
+  gt_main-zexno = 'B03'.
+  gt_main-zpro  = '1.销售回款'.
+  READ TABLE gt_item WITH KEY zexno = 'B03'.
+  IF sy-subrc EQ 0.
+    gt_main-zamount = gt_item-zamount.
+  ENDIF.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B04
+  gt_main-zexno = 'B04'.
+  gt_main-zpro  = '2.银行贷款'.
+  READ TABLE gt_item WITH KEY zexno = 'B04'.
+  IF sy-subrc EQ 0.
+    gt_main-zamount = gt_item-zamount.
+  ENDIF.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B05
+  gt_main-zexno = 'B05'.
+  gt_main-zpro  = '3、税费返还'.
+  READ TABLE gt_item WITH KEY zexno = 'B05'.
+  IF sy-subrc EQ 0.
+    gt_main-zamount = gt_item-zamount.
+  ENDIF.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B09
+  gt_main-zexno = 'B09'.
+  gt_main-zpro  =  '三、现金流出'.
+  READ TABLE gt_item WITH KEY zexno = 'B09'.
+  IF sy-subrc EQ 0.
+    gt_main-zamount = gt_item-zamount.
+  ENDIF.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B10
+  gt_main-zexno = 'B10'.
+  gt_main-zpro  =   '1.采购货款'.
+  READ TABLE gt_item WITH KEY zexno = 'B10'.
+  IF sy-subrc EQ 0.
+    gt_main-zamount = gt_item-zamount.
+  ENDIF.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B12
+  gt_main-zexno = 'B12'.
+  gt_main-zpro  =  '3.税款及附加费'.
+  READ TABLE gt_item WITH KEY zexno = 'B12'.
+  IF sy-subrc EQ 0.
+    gt_main-zamount = gt_item-zamount.
+  ENDIF.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B14
+  gt_main-zexno = 'B14'.
+  gt_main-zpro  = '其中:工资及奖金'.
+  READ TABLE gt_item WITH KEY zexno = 'B14'.
+  IF sy-subrc EQ 0.
+    gt_main-zamount = gt_item-zamount.
+  ENDIF.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B27
+  gt_main-zexno = 'B27'.
+  gt_main-zpro  = '其他'.
+  READ TABLE gt_item WITH KEY zexno = 'B27'.
+  IF sy-subrc EQ 0.
+    gt_main-zamount = gt_item-zamount.
+  ENDIF.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B31
+  gt_main-zexno = 'B31'.
+  gt_main-zpro  = '7.1  归还贷款'.
+  READ TABLE gt_item WITH KEY zexno = 'B31'.
+  IF sy-subrc EQ 0.
+    gt_main-zamount = gt_item-zamount.
+  ENDIF.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B32
+  gt_main-zexno = 'B32'.
+  gt_main-zpro  = '7.2  流动资金贷款利息'.
+  READ TABLE gt_item WITH KEY zexno = 'B32'.
+  IF sy-subrc EQ 0.
+    gt_main-zamount = gt_item-zamount.
+  ENDIF.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B34
+  gt_main-zexno = 'B34'.
+  gt_main-zpro  = '8.1 购置设备\信息化投入'.
+  READ TABLE gt_item WITH KEY zexno = 'B34'.
+  IF sy-subrc EQ 0.
+    gt_main-zamount = gt_item-zamount.
+  ENDIF.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B35
+  gt_main-zexno = 'B35'.
+  gt_main-zpro  =  '8.2 购买股权(LT)'.
+  READ TABLE gt_item WITH KEY zexno = 'B35'.
+  IF sy-subrc EQ 0.
+    gt_main-zamount = gt_item-zamount.
+  ENDIF.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B38
+  gt_main-zexno = 'B38'.
+  gt_main-zpro  =  '汇率变动的影响'.
+  READ TABLE gt_item WITH KEY zexno = 'B38'.
+  IF sy-subrc EQ 0.
+    gt_main-zamount = gt_item-zamount.
+  ENDIF.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B15
+  gt_main-zexno = 'B15'.
+  gt_main-zpro  =  '电话费'.
+  READ TABLE gt_item WITH KEY zexno = 'B15'.
+  IF sy-subrc EQ 0.
+    gt_main-zamount = gt_item-zamount.
+  ENDIF.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B16
+  gt_main-zexno = 'B16'.
+  gt_main-zpro  =   '水电费'.
+  READ TABLE gt_item WITH KEY zexno = 'B16'.
+  IF sy-subrc EQ 0.
+    gt_main-zamount = gt_item-zamount.
+  ENDIF.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B17
+  gt_main-zexno = 'B17'.
+  gt_main-zpro  =   '物业房租'.
+  READ TABLE gt_item WITH KEY zexno = 'B17'.
+  IF sy-subrc EQ 0.
+    gt_main-zamount = gt_item-zamount.
+  ENDIF.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B18
+  gt_main-zexno = 'B18'.
+  gt_main-zpro  =  '运输费'.
+  READ TABLE gt_item WITH KEY zexno = 'B18'.
+  IF sy-subrc EQ 0.
+    gt_main-zamount = gt_item-zamount.
+  ENDIF.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B19
+  gt_main-zexno = 'B19'.
+  gt_main-zpro  =   '社保费\公积金'.
+  READ TABLE gt_item WITH KEY zexno = 'B19'.
+  IF sy-subrc EQ 0.
+    gt_main-zamount = gt_item-zamount.
+  ENDIF.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B20
+  gt_main-zexno = 'B20'.
+  gt_main-zpro  =   '广告宣传费'.
+  READ TABLE gt_item WITH KEY zexno = 'B20'.
+  IF sy-subrc EQ 0.
+    gt_main-zamount = gt_item-zamount.
+  ENDIF.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B21
+  gt_main-zexno = 'B21'.
+  gt_main-zpro  =  '展会费用'.
+  READ TABLE gt_item WITH KEY zexno = 'B21'.
+  IF sy-subrc EQ 0.
+    gt_main-zamount = gt_item-zamount.
+  ENDIF.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B22
+  gt_main-zexno = 'B22'.
+  gt_main-zpro  =  '差旅费'.
+  READ TABLE gt_item WITH KEY zexno = 'B22'.
+  IF sy-subrc EQ 0.
+    gt_main-zamount = gt_item-zamount.
+  ENDIF.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B23
+  gt_main-zexno = 'B23'.
+  gt_main-zpro  =  '咨询顾问费'.
+  READ TABLE gt_item WITH KEY zexno = 'B23'.
+  IF sy-subrc EQ 0.
+    gt_main-zamount = gt_item-zamount.
+  ENDIF.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B25
+  gt_main-zexno = 'B25'.
+  gt_main-zpro  = '招待费'.
+  READ TABLE gt_item WITH KEY zexno = 'B25'.
+  IF sy-subrc EQ 0.
+    gt_main-zamount = gt_item-zamount.
+  ENDIF.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B26
+  gt_main-zexno = 'B26'.
+  gt_main-zpro  =   '办公费'.
+  READ TABLE gt_item WITH KEY zexno = 'B26'.
+  IF sy-subrc EQ 0.
+    gt_main-zamount = gt_item-zamount.
+  ENDIF.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+
+
+  "B6
+  DATA:lv_zamount   TYPE tslvt12."金额
+  CLEAR lv_zamount.
+  LOOP AT gt_item WHERE zexno EQ 'B02' OR zexno EQ 'B03' OR zexno EQ 'B04' OR zexno EQ 'B05'.
+    IF gt_item-zexno EQ 'B02'.
+      lv_zamount = lv_zamount + gt_item-zamount.
+    ELSE.
+      lv_zamount = lv_zamount - gt_item-zamount.
+    ENDIF.
+  ENDLOOP.
+
+  gt_main-zexno = 'B06'.
+  gt_main-zpro  = '4.其他流入'.
+  gt_main-zamount = lv_zamount.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B07
+  gt_main-zexno = 'B07'.
+  gt_main-zpro  = '5、土地项目专项资金'.
+  gt_main-zamount = ''.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B08
+  gt_main-zexno = 'B08'.
+  gt_main-zpro  = '6、保证金退回'.
+  gt_main-zamount = ''.
+  APPEND gt_main.
+  CLEAR gt_main.
+  "B11
+  gt_main-zexno = 'B11'.
+  gt_main-zpro  = '2.分公司备用金'.
+  gt_main-zamount = ''.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B24
+  gt_main-zexno = 'B24'.
+  gt_main-zpro  = '劳务费用'.
+  gt_main-zamount = ''.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+
+  "B27
+  CLEAR lv_zamount.
+  "取之前的B27汇总的 124原因的值
+  READ TABLE gt_item WITH KEY zexno = 'B27'.
+  IF sy-subrc EQ 0.
+    lv_zamount = gt_item-zamount.
+  ENDIF.
+  "减去费用的值
+  LOOP AT gt_item WHERE zexno BETWEEN 'B15' AND 'B26'.
+    lv_zamount = lv_zamount - gt_item-zamount.
+  ENDLOOP.
+  "删除原有的值B27
+  DELETE gt_item WHERE zexno EQ 'B27'.
+  DELETE gt_main WHERE zexno EQ 'B27'.
+  gt_main-zexno = 'B27'.
+  gt_main-zpro  = '其他'.
+  gt_main-zamount = lv_zamount.
+  "赋值新的B27
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B13
+  CLEAR lv_zamount.
+  LOOP AT gt_item WHERE zexno BETWEEN 'B14' AND 'B27'.
+    lv_zamount = lv_zamount - gt_item-zamount.
+  ENDLOOP.
+  gt_main-zexno = 'B13'.
+  gt_main-zpro  = '4.费用'.
+  gt_main-zamount = lv_zamount.
+  APPEND gt_main.
+  CLEAR gt_main.
+  "B28
+  gt_main-zexno = 'B28'.
+  gt_main-zpro  = '5.各项临时性借款'.
+  gt_main-zamount = ''.
+  APPEND gt_main.
+  CLEAR gt_main.
+  "B29
+  gt_main-zexno = 'B29'.
+  gt_main-zpro  = '6.子公司借款'.
+  gt_main-zamount = ''.
+  APPEND gt_main.
+  CLEAR gt_main.
+  "B30
+  CLEAR lv_zamount.
+  LOOP AT gt_item WHERE zexno BETWEEN 'B31' AND 'B32'.
+    lv_zamount = lv_zamount - gt_item-zamount.
+  ENDLOOP.
+  gt_main-zexno = 'B30'.
+  gt_main-zpro  = '7.筹资支出'.
+  gt_main-zamount = lv_zamount.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B33
+  CLEAR lv_zamount.
+  LOOP AT gt_item WHERE zexno BETWEEN 'B34' AND 'B36'.
+    lv_zamount = lv_zamount - gt_item-zamount.
+  ENDLOOP.
+  gt_main-zexno = 'B33'.
+  gt_main-zpro  = '8.资本性支出'.
+  gt_main-zamount = lv_zamount.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B36
+  gt_main-zexno = 'B36'.
+  gt_main-zpro  = '8.3分配股利'.
+  gt_main-zamount = ''.
+  APPEND gt_main.
+  CLEAR gt_main.
+  "B37
+  CLEAR lv_zamount.
+  LOOP AT gt_item WHERE zexno EQ 'B02' OR zexno EQ 'B09'.
+    IF gt_item-zexno EQ 'B02'.
+      lv_zamount = lv_zamount + gt_item-zamount.
+    ELSE.
+      lv_zamount = lv_zamount - gt_item-zamount.
+    ENDIF.
+  ENDLOOP.
+  gt_main-zexno = 'B37'.
+  gt_main-zpro  = '本期收支净额(+/-)'.
+  gt_main-zamount = lv_zamount.
+  APPEND gt_main.
+  CLEAR gt_main.
+
+  "B39
+  CLEAR lv_zamount.
+  LOOP AT gt_item WHERE zexno EQ 'A01' OR zexno EQ 'B02' OR zexno EQ 'B38' OR zexno EQ 'B09'.
+    IF gt_item-zexno EQ 'A01' OR gt_item-zexno EQ 'B02'  OR gt_item-zexno EQ 'B38' .
+      lv_zamount = lv_zamount + gt_item-zamount.
+    ELSE.
+      lv_zamount = lv_zamount - gt_item-zamount.
+    ENDIF.
+  ENDLOOP.
+  gt_main-zexno = 'B39'.
+  gt_main-zpro  = '期末余额'.
+  gt_main-zamount = lv_zamount.
+  APPEND gt_main.
+  CLEAR gt_main.
+ENDFORM.
+
+FORM frm_output_data .
+********数据定义*******
+  DATA:lv_file   TYPE string,
+       lv_result TYPE c. "标识: 空表示文件不存在;否则,表示存在
+  DATA lv_answer TYPE c.
+  DATA:li_lines TYPE i.
+  DATA:ls_key   TYPE wwwdatatab,
+       lv_subrc TYPE sy-subrc.
+  DATA lv_file1 LIKE rlgrap-filename.
+*******初始化*******
+*******程序主体*******
+
+  CONCATENATE 'C:\FI\' sy-title '-'   sy-datum '.xls' INTO lv_file.
+
+  CALL METHOD cl_gui_frontend_services=>file_exist
+    EXPORTING
+      file                 = lv_file
+    RECEIVING
+      result               = lv_result
+    EXCEPTIONS
+      cntl_error           = 1
+      error_no_gui         = 2
+      wrong_parameter      = 3
+      not_supported_by_gui = 4
+      OTHERS               = 5.
+  IF lv_result IS NOT  INITIAL. "文件已经存在
+    CALL FUNCTION 'POPUP_TO_CONFIRM'
+      EXPORTING
+        titlebar              = '请确认'
+        text_question         = '文件已经存在，是否要覆盖?'
+        text_button_1         = '是'
+        text_button_2         = '否'
+        default_button        = '2' "缺省选中按钮: 1 是; 2 否
+        display_cancel_button = ''  "标识: 为空,不显示 取消按钮
+      IMPORTING
+        answer                = lv_answer "标识： 1 是;
+      EXCEPTIONS
+        text_not_found        = 1
+        OTHERS                = 2.
+    IF lv_answer NE '1'.
+      EXIT.
+    ENDIF.
+  ENDIF.
+
+  ls_key-relid = 'MI'.
+  ls_key-objid = gcst_excel_template.
+  lv_file1 = lv_file.
+  CALL FUNCTION 'DOWNLOAD_WEB_OBJECT'
+    EXPORTING
+      key         = ls_key
+      destination = lv_file1
+    IMPORTING
+      rc          = lv_subrc.
+  IF lv_subrc <> 0.
+    MESSAGE '下载模板出错，请检查，谢谢' TYPE 'E'.
+    EXIT.
+  ENDIF.
+
+***填充EXCEL数据
+  PERFORM frm_filldata_excel USING lv_file.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FILLDATA_EXCEL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LV_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_filldata_excel  USING  iv_file TYPE string.
+  DATA: comp_t(50) TYPE c.
+*******数据定义*******
+  DATA:lo_excel     TYPE ole2_object,
+       lo_workbooks TYPE ole2_object,
+       lo_workbook  TYPE ole2_object,
+       lo_sheet     TYPE ole2_object,
+       lo_range     TYPE ole2_object,
+       lo_cell      TYPE ole2_object,
+       borders_obj  TYPE ole2_object,
+       row_obj      TYPE ole2_object,
+       lo_cell1     TYPE ole2_object.
+  DATA lv_file LIKE rlgrap-filename.
+  DATA:lt_excel_in                    "内表：从源文件中读取到的数据
+         TYPE STANDARD TABLE OF alsmex_tabline WITH HEADER LINE.
+  DATA lv_value TYPE char200.
+
+  DATA lv_row TYPE i.
+  DATA lv_col TYPE i.
+  DATA:
+    row_c   TYPE char4,
+    row_1   TYPE i,
+    row_c_2 TYPE char4,
+    row_2   TYPE i,
+    cell    TYPE char9.
+  DEFINE mac_fill_cell.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+      EXPORTING
+        #1 = &1
+        #2 = &2.
+    SET PROPERTY OF lo_cell 'VALUE' = &3.
+  END-OF-DEFINITION.
+
+
+  DEFINE mac_bord_cell.
+    CALL METHOD OF
+      lo_sheet"lo_workbook
+      'RANGE' = lo_cell
+      EXPORTING
+      #1 = &1.
+    DO 4 TIMES .
+      CALL METHOD OF
+        lo_cell
+        'BORDERS' = borders_obj
+        EXPORTING
+        #1 = sy-index.
+      SET PROPERTY OF borders_obj 'LineStyle' = '1'.
+      SET PROPERTY OF borders_obj 'WEIGHT' = '2'.
+      SET PROPERTY OF borders_obj 'ColorIndex' = '1'.
+      FREE OBJECT borders_obj.
+    ENDDO.
+    FREE OBJECT borders_obj.
+    FREE OBJECT lo_cell.
+  END-OF-DEFINITION.
+*******程序主体*******
+*读取模板数
+
+
+
+
+*填充excel
+  CREATE OBJECT lo_excel 'EXCEL.APPLICATION'.
+  CALL METHOD OF lo_excel 'WORKBOOKS' = lo_workbooks.
+  CALL METHOD OF lo_workbooks 'OPEN' = lo_workbook EXPORTING #1 = iv_file.
+  CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = 1.
+  CLEAR:comp_t .
+  SELECT SINGLE butxt INTO comp_t FROM t001 WHERE bukrs EQ s_bukrs-low.
+  CONCATENATE '编制单位:' comp_t INTO comp_t .
+  mac_fill_cell 2 1 comp_t.
+  CLEAR:comp_t .
+  CONCATENATE '编制时间:' p_ryear '年' lv_rpmax '月' INTO comp_t .
+  mac_fill_cell 2 2 comp_t.
+  lv_row = 4.
+  "数值
+  SORT gt_main BY zexno.
+  LOOP AT gt_main.
+    "excel模版的行数
+    lv_row = lv_row + 1.
+
+    lv_col = lv_col + 1.
+    mac_fill_cell lv_row lv_col gt_main-zpro.
+
+    lv_col = lv_col + 1.
+    mac_fill_cell lv_row lv_col gt_main-zamount.
+
+    row_c = lv_row.
+    CONDENSE row_c NO-GAPS.
+
+    row_obj = row_c.
+    CALL METHOD OF row_obj 'AUTOFIT'."自适应
+    CONCATENATE 'A' row_c ':B' row_c INTO cell.
+    mac_bord_cell cell.
+
+    CLEAR:lv_col.
+
+  ENDLOOP.
+
+  CALL METHOD OF lo_sheet 'CELLS' = lo_cell EXPORTING #1 = 1 #2 = 1.
+  CALL METHOD OF lo_cell 'SELECT'.
+  SET PROPERTY OF lo_excel 'CutCopyMode' = 0.
+
+  CALL METHOD OF lo_workbook 'SAVE'.
+  SET PROPERTY OF lo_excel 'VISIBLE' = 1.
+  FREE OBJECT:lo_excel,lo_workbooks,lo_workbook,lo_sheet,lo_range,lo_cell.
+ENDFORM.

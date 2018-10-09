@@ -1,0 +1,23 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPQM011_S01
+*&---------------------------------------------------------------------*
+
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPMM021_S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:
+            s_matnr  FOR  mseg-matnr,
+            s_werks  FOR  mseg-werks OBLIGATORY DEFAULT '1000',
+            s_lgort  FOR  mseg-lgort,
+            s_mblnr  FOR  mseg-mblnr,
+            s_budat  FOR  mkpf-budat OBLIGATORY DEFAULT sy-datum.
+
+SELECTION-SCREEN END OF BLOCK b1.
+
+SELECTION-SCREEN BEGIN OF BLOCK b2 WITH FRAME TITLE TEXT-002.
+PARAMETERS: p1 RADIOBUTTON GROUP rd DEFAULT 'X',
+            p2 RADIOBUTTON GROUP rd,
+            p3 RADIOBUTTON GROUP rd.
+SELECTION-SCREEN END OF BLOCK b2.

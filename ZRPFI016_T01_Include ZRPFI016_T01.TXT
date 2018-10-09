@@ -1,0 +1,79 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI016_T01
+*&---------------------------------------------------------------------*
+TABLES:bkpf,bseg,ekpo,tcurr.
+TYPE-POOLS:sils.
+
+DATA: BEGIN OF gt_fi OCCURS 0,
+
+        bukrs LIKE bkpf-bukrs,
+        txtna LIKE t001t-txtna,
+        prctr LIKE bseg-prctr,
+        gjahr LIKE bkpf-gjahr,
+        monat LIKE bkpf-monat,
+        hkont LIKE bseg-hkont,
+        shkzg LIKE bseg-shkzg,
+        dmbtr LIKE bseg-dmbtr,
+        wrbtr LIKE bseg-wrbtr,
+        waers LIKE bkpf-waers,
+        ebeln LIKE bseg-ebeln,
+        ebelp LIKE bseg-ebelp,
+        lifnr LIKE bseg-lifnr,
+        wemng TYPE eket-wemng,
+        eindt TYPE eket-eindt,
+        matnr TYPE bseg-matnr,
+        hrkft TYPE bseg-hrkft,
+        bwtar TYPE bseg-bwtar,
+
+      END OF gt_fi.
+*DATA gt_fi LIKE TABLE OF bseg WITH HEADER LINE.
+
+DATA: BEGIN OF gt_last OCCURS 0,
+        lifnr      LIKE bseg-lifnr,
+        name1      LIKE lfa1-name1,
+        waers      LIKE bkpf-waers,
+        kbetr      TYPE t007v-kbetr,
+        dmbtr      LIKE bseg-dmbtr,
+        wrbtr      LIKE bseg-wrbtr,
+        menge      TYPE ekpo-menge,
+        menge1     TYPE ekpo-menge,
+        meins      TYPE ekpo-meins,
+        wemng      TYPE eket-wemng,
+        budat      TYPE bkpf-budat,
+        ebeln      LIKE bseg-ebeln,
+        ebelp      LIKE bseg-ebelp,
+        matnr      TYPE bseg-matnr,
+        maktx      TYPE makt-maktx,
+        hrkft      TYPE bseg-hrkft,
+        hrktx      TYPE tkkh2-hrktx,
+        bklas      TYPE mbew-bklas,
+        matkl      TYPE mara-matkl,
+        wgbez      TYPE t023t-wgbez,
+        zroh_pcbcs TYPE char30,
+        mwskz      LIKE ekpo-mwskz,
+        shkzg      TYPE bseg-shkzg,
+        zdj        TYPE p DECIMALS 4,  "不含税单价
+        zdj1       TYPE p DECIMALS 4,
+        zzj        LIKE ekpo-brtwr, "不含税总金额
+        zzj1       LIKE ekpo-brtwr,
+        zsum       LIKE ekpo-brtwr,
+
+        bzdj       TYPE p DECIMALS 4,  "不含税单价
+        bzdj1      TYPE p DECIMALS 4,
+        bzzj       LIKE ekpo-brtwr, "不含税总金额
+        bzzj1      LIKE ekpo-brtwr,
+        bzsum      LIKE ekpo-brtwr,
+      END OF gt_last.
+
+DATA:gt_t001 LIKE t001 OCCURS 0 WITH HEADER LINE.
+
+
+DATA: gt_fcat     TYPE lvc_t_fcat,
+      wa_fieldcat LIKE LINE OF  gt_fcat,
+      gs_layout   TYPE lvc_s_layo.
+
+DATA: gs_option  TYPE ssfcompop,
+      gs_control TYPE ssfctrlop.
+
+DATA lv_name TYPE rs38l_fnam.
+DATA gv_bb TYPE char1 VALUE 'B' .

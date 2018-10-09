@@ -1,0 +1,89 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM001_TOP
+*&---------------------------------------------------------------------*
+TYPE-POOLS:slis,vrm.
+
+TABLES:ekpo,ekko,resb,marc,zprintnum.
+
+
+DATA:BEGIN OF gt_item  OCCURS 0,"展示内表
+       chk(1) TYPE c,
+       lifnr  LIKE ekko-lifnr, "供应商
+       name1  LIKE lfa1-name1, "供应商名称
+       ebeln  LIKE ekpo-ebeln, "采购订单号
+       ebelp  LIKE ekpo-ebelp,
+       matnr  LIKE ekpo-matnr, "物料编码
+*       txz01  LIKE ekpo-txz01, "物料描述
+       maktx  LIKE makt-maktx,
+       menge  LIKE ekpo-menge, "订单数量
+       labst  LIKE mard-labst,
+       frgke  LIKE ekko-frgke,
+       zsum   LIKE zprintnum-zsum,
+
+     END OF gt_item.
+
+
+DATA:BEGIN OF gt_print  OCCURS 0,"展示内表
+*       zname  TYPE char100,
+       lifnr  LIKE ekko-lifnr,
+       matnr  LIKE ekpo-matnr, "物料编码
+       txz01  LIKE ekpo-txz01, "物料描述
+       bdmng  LIKE resb-bdmng, "订单数量
+       bstrf  LIKE marc-bstrf,
+       labst  LIKE mard-labst,
+       zmenge TYPE int4,
+       zlast  TYPE int4,
+     END OF gt_print.
+
+DATA      zname  TYPE char100.
+DATA:ok_code   TYPE sy-ucomm,
+     save_ok   TYPE sy-ucomm,
+     gv_type   TYPE char4,
+     errorcode TYPE i.
+
+DATA: gt_fcat   TYPE slis_t_fieldcat_alv WITH HEADER LINE,
+      gs_layout TYPE slis_layout_alv.
+
+
+DATA: gs_option          TYPE ssfcompop,
+      gs_control         TYPE ssfctrlop,
+      job_output_options TYPE ssfcresop. ""SF使用参数
+
+DATA lv_name TYPE rs38l_fnam.
+DEFINE g_fieldfcat .
+  gt_fcat-fieldname = &1.
+  gt_fcat-seltext_s = &2.
+  gt_fcat-ddictxt = 'S'.
+  gt_fcat-ref_fieldname = &3.
+  gt_fcat-ref_tabname = &4.
+  gt_fcat-decimals_out = &5.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.
+
+CONSTANTS:gcst_excel_template TYPE w3objid VALUE 'ZMM021'.
+
+DATA:lo_excel     TYPE ole2_object,
+     lo_workbooks TYPE ole2_object,
+     lo_workbook  TYPE ole2_object,
+     lo_sheet     TYPE ole2_object,
+     lo_range     TYPE ole2_object,
+     lo_cell      TYPE ole2_object,
+     lo_cell1     TYPE ole2_object,
+     activewindow TYPE ole2_object.
+DATA lv_file LIKE rlgrap-filename.
+
+DATA lv_row TYPE i.
+DATA lv_col TYPE i.
+DATA:lv_times TYPE i.
+DATA:lv_row_c TYPE i,
+     lv_row_l TYPE i.
+*  DATA lv_file LIKE rlgrap-filename.
+
+DEFINE mac_fill_cell.
+  CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+    EXPORTING
+      #1 = &1
+      #2 = &2.
+  SET PROPERTY OF lo_cell 'VALUE' = &3.
+END-OF-DEFINITION.

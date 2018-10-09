@@ -1,0 +1,55 @@
+*&---------------------------------------------------------------------*
+*& 程序名： ZRPMM002
+*& 创建者(公司)/日期： XIEHX/20170724
+*& 程序描述：物料凭证打印
+*&---------------------------------------------------------------------*
+*& 版本 修改者(公司) 日期 修改描述
+*& 1.0.0 XIEHX 20170724 创建程序
+*&---------------------------------------------------------------------*
+
+REPORT zrpmm002a.
+
+INCLUDE zrpmm002a_top.
+*INCLUDE zrpmm002_top.      "全局数据定义
+INCLUDE zrpmm002a_s01.
+*INCLUDE zrpmm002_s01.      "选择界面定义
+INCLUDE zrpmm002a_f01.
+*INCLUDE zrpmm002_f01.      "子程序定义
+
+INITIALIZATION.
+*  CONCATENATE sy-datum+0(6) '01' INTO s_budat-low.
+*  CALL FUNCTION 'LAST_DAY_OF_MONTHS'
+*    EXPORTING
+*      day_in            = sy-datum
+*    IMPORTING
+*      last_day_of_month = s_budat-high.
+*  APPEND s_budat.
+AT SELECTION-SCREEN OUTPUT.
+  lv_date = sy-datum - 1.
+  s_budat-sign = 'I'.
+  s_budat-option = 'EQ'.
+  s_budat-low = lv_date.
+  s_budat-high = sy-datum.
+  APPEND s_budat.
+
+  LOOP AT SCREEN.
+    IF screen-group1 = 'HID'.
+      screen-active = '0'.
+    ENDIF.
+    MODIFY SCREEN.
+  ENDLOOP.
+
+AT SELECTION-SCREEN.
+  PERFORM frm_authority_check.     "权限检查
+
+START-OF-SELECTION.
+
+  PERFORM get_data."取数据
+  PERFORM process_if."取数条件
+  PERFORM process_data."处理数据
+
+
+
+
+END-OF-SELECTION.
+  PERFORM get_alv."ALV显示界面

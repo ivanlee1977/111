@@ -1,0 +1,285 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPCO008F01
+*&---------------------------------------------------------------------*
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  REFRESH:gt_faglflext.
+*  从表FAGLFLEXT中取出科目为100100000-1002999999的数据
+  mcr_add_racct:'1001*',
+                '1002*'.
+
+  SELECT  *
+    INTO TABLE gt_faglflext
+    FROM faglflext
+    FOR ALL ENTRIES IN gt_t001
+   WHERE rbukrs EQ gt_t001-bukrs
+     AND prctr IN s_prctr
+     AND ryear EQ p_ryear
+     AND racct IN r_racct.
+*  取科目
+  SELECT *
+    INTO TABLE gt_skat
+    FROM skat
+    WHERE spras = sy-langu
+      AND ktopl = '1000'.
+  SORT gt_skat BY saknr.
+
+*  处理数据，将数据整理输出
+  lv_rpmax = p_rpmax .
+  IF lv_rpmax = 12.
+    lv_rpmax = 16.
+  ENDIF.
+
+  LOOP AT gt_faglflext.
+    CLEAR: gt_out.
+    gt_out-racct_km = gt_faglflext-racct+0(4).
+    gt_out-racct = gt_faglflext-racct.
+    gt_out-rtcur = gt_faglflext-rtcur.
+    READ TABLE gt_skat WITH KEY saknr = gt_out-racct BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-txt50 = gt_skat-txt50.
+    ENDIF.
+* 根据期间计算原币（TSL）和本币(HSL)
+    gt_out-tslvt = gt_faglflext-tslvt.
+    gt_out-hslvt = gt_faglflext-hslvt.
+    DO  lv_rpmax TIMES.
+      lv_index = sy-index.
+      CLEAR:lv_fieldname_tsl,lv_fieldname_hsl.
+***  原币
+      CONCATENATE 'TSL' lv_index INTO lv_fieldname_tsl.
+      ASSIGN COMPONENT lv_fieldname_tsl OF STRUCTURE gt_faglflext TO <fs_hslvt>.
+      IF sy-subrc EQ 0.
+        gt_out-tslvt  = gt_out-tslvt + <fs_hslvt>.
+      ENDIF.
+***  本币
+      CONCATENATE 'HSL' lv_index INTO lv_fieldname_hsl.
+      ASSIGN COMPONENT lv_fieldname_hsl OF STRUCTURE gt_faglflext TO <fs_hslvt>.
+      IF sy-subrc EQ 0.
+        gt_out-hslvt  = gt_out-hslvt + <fs_hslvt>.
+      ENDIF.
+    ENDDO.
+    COLLECT gt_out.
+    IF gt_out-racct_km = '1002'.
+      MOVE-CORRESPONDING gt_out TO gt_total.
+      COLLECT gt_total.
+      CLEAR gt_total.
+    ENDIF.
+  ENDLOOP.
+
+  SORT gt_out BY racct_km rtcur racct.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  DATA:ls_key   TYPE wwwdatatab,
+       lv_subrc TYPE sy-subrc.
+  DATA lv_file LIKE rlgrap-filename.
+
+  CONCATENATE 'C:\FI\' sy-title '-'   sy-datum '.xls' INTO lv_file.
+
+  ls_key-relid = 'MI'.
+  ls_key-objid = gcst_excel_template.
+  CALL FUNCTION 'DOWNLOAD_WEB_OBJECT'
+    EXPORTING
+      key         = ls_key
+      destination = lv_file
+    IMPORTING
+      rc          = lv_subrc.
+  IF lv_subrc <> 0.
+    MESSAGE '下载模板出错，请检查，谢谢' TYPE 'E'.
+    EXIT.
+  ENDIF.
+
+
+***填充EXCEL数据
+  PERFORM frm_filldata_excel USING lv_file.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FILLDATA_EXCEL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LV_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_filldata_excel  USING iv_file TYPE rlgrap-filename.
+
+  DEFINE mac_fill_cell.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+      EXPORTING
+        #1 = &1
+        #2 = &2.
+    SET PROPERTY OF lo_cell 'VALUE' = &3.
+  END-OF-DEFINITION.
+
+  DATA:lv_text  TYPE string,
+       lv_datum LIKE sy-datum.
+  DATA:lv_bezek LIKE t25a0-bezek.
+  DATA:lv_lines TYPE i."公司代码的条数，如果多个公司代码，编制单位为深圳雷赛
+  DATA:lt_out LIKE gt_out OCCURS 0 WITH HEADER LINE.
+*******程序主体*******
+  lv_lines = lines( gt_t001 ).
+*填充excel
+  CREATE OBJECT lo_excel 'EXCEL.APPLICATION'.
+  CALL METHOD OF lo_excel 'WORKBOOKS' = lo_workbooks.
+  CALL METHOD OF lo_workbooks 'OPEN' = lo_workbook EXPORTING #1 = iv_file.
+  CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = 1.
+
+*** 编制单位
+  IF lv_lines = 1.
+    READ TABLE gt_t001 INDEX 1.
+    IF sy-subrc = 0.
+      lv_text = gt_t001-butxt.
+    ENDIF.
+  ELSE.
+    lv_text = '深圳雷赛'.
+  ENDIF.
+  CONCATENATE '编制单位：' lv_text  INTO lv_text.
+  CONDENSE lv_text.
+  mac_fill_cell 3 1  lv_text.
+
+*** 年月
+  CONCATENATE p_ryear p_rpmax '01' INTO lv_datum.
+  CALL FUNCTION 'BKK_GET_MONTH_LASTDAY'
+    EXPORTING
+      i_date = lv_datum
+    IMPORTING
+      e_date = lv_datum.
+  mac_fill_cell 3 6  lv_datum.  "年月
+*
+*** 输出现金1001开头
+  lv_row = 5.
+  REFRESH:lt_out.
+  APPEND LINES OF gt_out TO lt_out.
+  DELETE lt_out WHERE racct_km NE '1001'.   "现金表
+  DELETE gt_out WHERE racct_km EQ '1001'.   "银行存款科目
+
+  PERFORM frm_output_excel TABLES lt_out USING '1' CHANGING lv_row .
+  lv_row = lv_row + 1.
+  PERFORM frm_output_excel TABLES gt_out USING '2' CHANGING lv_row.
+
+
+
+  CALL METHOD OF lo_sheet 'CELLS' = lo_cell EXPORTING #1 = 1 #2 = 1.
+  CALL METHOD OF lo_cell 'SELECT'.
+  SET PROPERTY OF lo_excel 'CutCopyMode' = 0.
+
+  CALL METHOD OF lo_workbook 'SAVE'.
+  SET PROPERTY OF lo_excel 'VISIBLE' = 1.
+  FREE OBJECT:lo_excel,lo_workbooks,lo_workbook,lo_sheet,lo_range,lo_cell.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_EXCEL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LT_OUT  text
+*----------------------------------------------------------------------*
+FORM frm_output_excel  TABLES   lt_out STRUCTURE gt_out
+                       USING u_flag TYPE c
+                       CHANGING lv_row TYPE i.
+  FIELD-SYMBOLS:<fs_data> LIKE gt_out.
+
+  DATA:lv_times TYPE i.
+  lv_row_c = lv_row.
+
+  DESCRIBE TABLE lt_out LINES lv_times.
+  lv_times = lv_times - 2.
+  IF u_flag EQ '2'.
+    lv_times = lv_times + lines( gt_total ).
+  ENDIF.
+
+  DO lv_times TIMES.
+    CALL METHOD OF lo_sheet 'Cells' = lo_cell   "起始单元格
+    EXPORTING #1 = lv_row
+              #2 = 1.
+
+    CALL METHOD OF lo_sheet 'Cells' = lo_cell1   "终止单元格
+      EXPORTING #1 = lv_row
+                #2 = 6.
+
+    CALL METHOD OF lo_sheet 'Range' = lo_range   "生成区域
+      EXPORTING
+        #1 = lo_cell
+        #2 = lo_cell1.
+
+    CALL METHOD OF lo_range 'Select' . "选中区域
+    CALL METHOD OF lo_range 'Copy'. "复制
+
+    lv_row = lv_row + 1.
+    CALL METHOD OF lo_sheet 'Cells' = lo_cell   "起始单元格
+       EXPORTING #1 = lv_row
+                 #2 = 1.
+    CALL METHOD OF lo_sheet 'Cells' = lo_cell1   "终止单元格
+      EXPORTING #1 = lv_row
+                #2 = 6.
+    CALL METHOD OF lo_sheet 'Range' = lo_range   "生成区域
+      EXPORTING
+        #1 = lo_cell
+        #2 = lo_cell1.
+    CALL METHOD OF lo_range 'Insert'.
+  ENDDO.
+
+***  填数
+  LOOP AT lt_out ASSIGNING <fs_data>.
+    IF sy-tabix = 1.
+      CASE <fs_data>-racct_km.
+        WHEN '1001'.
+          mac_fill_cell lv_row_c 1 '一、现金1001*'.
+        WHEN '1002'.
+          mac_fill_cell lv_row_c 1 '二、银行存款1002*'.
+        WHEN OTHERS.
+      ENDCASE.
+    ENDIF.
+    mac_fill_cell lv_row_c 2 <fs_data>-racct.  "科目
+    mac_fill_cell lv_row_c 3 <fs_data>-txt50.  "科目名称
+    mac_fill_cell lv_row_c 4 <fs_data>-rtcur.  "币种
+    mac_fill_cell lv_row_c 5 <fs_data>-tslvt.  "原币金额
+    mac_fill_cell lv_row_c 6 <fs_data>-hslvt.  "本币金额
+    lv_row_c = lv_row_c + 1.
+    AT END OF rtcur.
+      IF u_flag EQ '2'.
+        READ TABLE gt_total WITH KEY  rtcur = <fs_data>-rtcur.
+        IF sy-subrc = 0.
+          mac_fill_cell lv_row_c 4 gt_total-rtcur.  "币种
+          mac_fill_cell lv_row_c 5 gt_total-tslvt.  "原币金额
+          mac_fill_cell lv_row_c 6 gt_total-hslvt.  "本币金额
+          lv_row_c = lv_row_c + 1.
+        ENDIF.
+      ENDIF.
+    ENDAT.
+    CASE u_flag.
+      WHEN '1'.
+        lv_xj_sum = lv_xj_sum + <fs_data>-hslvt.
+      WHEN '2'.
+        lv_yhck_sum = lv_yhck_sum + <fs_data>-hslvt.
+      WHEN OTHERS.
+    ENDCASE.
+    lv_sum = lv_sum + <fs_data>-hslvt.
+  ENDLOOP.
+
+*  输出小计
+  CASE u_flag.
+    WHEN '1'.
+      mac_fill_cell lv_row_c 6 lv_xj_sum.  "现金小计
+    WHEN '2'.
+      mac_fill_cell lv_row_c 6 lv_yhck_sum.  "银行存款小计
+      lv_row_c = lv_row_c + 1.
+      mac_fill_cell lv_row_c 6 lv_sum.  "合计
+    WHEN OTHERS.
+  ENDCASE.
+  lv_row = lv_row_c.
+ENDFORM.

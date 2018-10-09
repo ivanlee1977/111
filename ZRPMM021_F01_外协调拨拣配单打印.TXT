@@ -1,0 +1,523 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM001_F01
+*&---------------------------------------------------------------------*
+
+
+FORM frm_show."ALV显示界面
+
+
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'SET_PF_STATUS'
+      i_callback_user_command  = 'ALV_USER_COMMAND'
+      is_layout                = gs_layout
+      it_fieldcat              = gt_fcat[]
+    TABLES
+      t_outtab                 = gt_item[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+           WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+ENDFORM.
+
+FORM set_pf_status USING rt_extab TYPE slis_t_extab.
+
+  DATA: wa_extab TYPE slis_extab.
+
+  SET PF-STATUS '0100' EXCLUDING rt_extab.
+
+ENDFORM.                    "set_pf_status1
+
+FORM alv_user_command USING r_ucomm LIKE sy-ucomm  rs_selfield TYPE slis_selfield.
+*   获取ALV中的鼠标勾选记录
+  DATA: l_grid TYPE REF TO cl_gui_alv_grid.
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = l_grid.
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  r_ucomm = sy-ucomm.
+  save_ok =  r_ucomm .
+  CASE r_ucomm.
+      "打印
+    WHEN 'ZPRINT'.
+      gv_type = 'FORM'.
+      PERFORM frm_print.
+    WHEN 'TOEXCEL'.
+      gv_type = 'EXCE'.
+      PERFORM frm_excel.
+  ENDCASE.
+
+
+ENDFORM.                    "alv_user_command
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GETDATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_getdata .
+  CLEAR:gt_item[].
+  SELECT
+       b~lifnr
+       a~ebeln
+       a~ebelp
+       a~matnr
+*       a~txz01
+       a~menge
+        a~bednr
+    b~frgke
+       INTO CORRESPONDING FIELDS OF TABLE gt_item
+        FROM ekpo AS a
+        INNER JOIN ekko AS b ON a~ebeln EQ b~ebeln
+        WHERE a~ebeln IN s_ebeln
+         AND  b~ekgrp IN s_ekgrp
+         AND  b~lifnr IN s_lifnr
+         AND  b~bedat IN s_bedat
+          AND a~bednr IN s_bednr
+         AND  b~loekz EQ space
+         AND  a~loekz EQ space
+         AND  a~pstyp = 3
+*         AND  b~frgke = 'R'
+.
+
+  LOOP AT gt_item .
+    IF r_1 = 'X'.
+      IF gt_item-frgke <> 'R'.
+        DELETE gt_item.
+        CONTINUE.
+      ENDIF.
+    ENDIF.
+    IF r_2 = 'X'.
+      IF gt_item-frgke = 'R'.
+        DELETE gt_item.
+        CONTINUE.
+      ENDIF.
+    ENDIF.
+    SELECT SINGLE maktx INTO gt_item-maktx FROM makt WHERE matnr = gt_item-matnr AND spras = 1.
+    SELECT SINGLE name1 INTO  gt_item-name1 FROM lfa1 WHERE lifnr = gt_item-lifnr.
+*    SELECT SINGLE labst INTO  gt_item-labst FROM mard WHERE matnr = gt_item-matnr.
+    SELECT SINGLE zsum INTO gt_item-zsum FROM zprintnum WHERE zpo = gt_item-ebeln AND zprgname = 'ZMM021' AND posnr = gt_item-ebelp.
+    MODIFY gt_item .
+  ENDLOOP.
+
+ENDFORM.
+
+FORM frm_getfact .
+  g_fieldfcat:
+    'LIFNR' '供应商代码' 'LIFNR' 'EKKO' '',
+    'NAME1' '供应商名称' 'NAME1' 'LFA1' '',
+    'EBELN' '采购订单号' 'EBELN' 'EKPO' '',
+    'EBELP' '采购行项目' 'EBELP' 'EKPO' '',
+    'MATNR' '物料' 'MATNR' 'EKPO' '',
+    'MAKTX' '描述' 'MAKTX' 'MAKT' '',
+    'MENGE' '订单数量' 'MENGE' 'MSEG' '0',
+    'ZSUM' '打印次数' 'MENGE' 'MSEG' '0'
+*    'BEDAT' '凭证日期' 'BEDAT' 'EKKO' ''
+  .
+
+  gs_layout-colwidth_optimize = 'X'.
+  gs_layout-box_fieldname = 'CHK'.
+  gs_layout-box_tabname = 'gt_item'.
+  gs_layout-zebra = 'X'.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PRINT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_print .
+  PERFORM frm_chkprint.
+
+*  PERFORM frm_open_print.
+
+  PERFORM frm_loopprint.
+
+  PERFORM frm_ssf_close.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHKPRINT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_chkprint .
+  READ TABLE gt_item WITH KEY chk = 'X' TRANSPORTING NO FIELDS.
+  IF sy-subrc NE 0.
+    MESSAGE '请至少选择一行进行打印' TYPE 'E'.
+    EXIT.
+  ENDIF.
+  SORT gt_item BY lifnr.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OPEN_PRINT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_open_print .
+  gs_control-no_open = 'X'.
+  gs_control-no_close = 'X'.
+*  gs_option-tdimmed  = 'X'.
+
+  CALL FUNCTION 'SSF_OPEN'
+    EXPORTING
+      control_parameters = gs_control
+    IMPORTING
+      job_output_options = job_output_options
+    EXCEPTIONS
+      formatting_error   = 1
+      internal_error     = 2
+      send_error         = 3
+      user_canceled      = 4
+      OTHERS             = 5.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+           WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+
+  CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
+    EXPORTING
+      formname           = 'ZSFMM_011'
+    IMPORTING
+      fm_name            = lv_name
+    EXCEPTIONS
+      no_form            = 1
+      no_function_module = 2
+      OTHERS             = 3.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_LOOPPRINT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_loopprint .
+  DATA: lv_tabix LIKE sy-tabix.
+
+  DATA lt_print2 LIKE TABLE OF gt_print WITH HEADER LINE.
+  DATA gt_item1 LIKE TABLE OF gt_item WITH HEADER LINE.
+  DATA: lv       TYPE int4,
+        lv1      TYPE int4,
+        lv2      TYPE int4,
+        lv_name1 TYPE char35,
+        lv_bstrf LIKE marc-bstrf,
+        lv_vbeln LIKE lips-vbeln,
+        lv_posnr LIKE lips-posnr.
+  DATA: lv_lifnr  LIKE ekko-lifnr,
+        lv_lifnr1 LIKE ekko-lifnr.
+  SORT gt_item BY ebeln ebelp.
+  DATA:BEGIN OF lt_print  OCCURS 0,"展示内表
+         lifnr  LIKE ekko-lifnr,
+         matnr  LIKE ekpo-matnr, "物料编码
+         txz01  LIKE ekpo-txz01, "物料描述
+         bdmng  LIKE resb-bdmng, "订单数量
+*         ebeln  LIKE ekko-ebeln,
+*         ebelp  LIKE ekpo-ebelp,
+         zmenge TYPE int4,
+       END OF lt_print.
+  DATA:BEGIN OF lt_eket  OCCURS 0,"展示内表
+         rsnum LIKE resb-rsnum,
+*         ebeln  LIKE ekpo-ebeln,
+*         ebelp  LIKE ekpo-ebelp,
+       END OF lt_eket.
+
+  SORT gt_item BY ebeln.
+
+  LOOP AT gt_item WHERE chk EQ 'X'.
+*    IF gt_item-chk EQ 'X'.
+    MOVE-CORRESPONDING gt_item TO  gt_item1.
+    APPEND gt_item1.
+*   CHANGE BY PFT 20171123  取消此段逻辑
+*    lv_vbeln = gt_item-ebeln.
+*    lv_posnr = gt_item-ebelp.
+*    PERFORM frm_addprintsum USING lv_vbeln lv_posnr.
+*   END BY PFT 20171123
+*    ENDIF.
+  ENDLOOP.
+
+  SELECT rsnum INTO CORRESPONDING FIELDS OF TABLE lt_eket FROM eket
+    FOR ALL ENTRIES IN gt_item1
+    WHERE ebeln = gt_item1-ebeln AND ebelp = gt_item1-ebelp .
+
+  SELECT  matnr bdmng lifnr INTO CORRESPONDING FIELDS OF TABLE lt_print
+  FROM  resb
+  FOR ALL ENTRIES IN lt_eket
+  WHERE rsnum = lt_eket-rsnum
+*  AND rgekz <> ''
+  .
+
+  LOOP AT lt_print.
+    MOVE-CORRESPONDING lt_print TO lt_print2.
+    COLLECT lt_print2.
+  ENDLOOP.
+  CHECK lt_print2[] IS NOT INITIAL.
+
+  LOOP AT lt_print2.
+    SELECT SINGLE bstrf INTO lt_print2-bstrf FROM marc WHERE matnr = lt_print2-matnr AND rgekz <> ''.
+    IF sy-subrc <> 0.
+      DELETE lt_print2.
+      CONTINUE.
+    ENDIF.
+    SELECT SINGLE maktx INTO lt_print2-txz01 FROM makt WHERE matnr = lt_print2-matnr AND spras = 1.
+
+*    lt_print2-zlast = lt_print2-zmenge - lt_print2-bdmng.
+    IF lt_print2-lifnr = '0000060087'.
+      SELECT SINGLE labst INTO lt_print2-zlast FROM mard WHERE matnr = lt_print2-matnr  AND lgort = '1160'.
+    ENDIF.
+    IF lt_print2-lifnr = '0000060089'.
+      SELECT SINGLE labst INTO lt_print2-zlast FROM mard WHERE matnr = lt_print2-matnr  AND lgort = '1170'.
+    ENDIF.
+    lt_print2-zmenge = lt_print2-bdmng - lt_print2-zlast.
+    IF lt_print2-bstrf NE 0.
+      IF lt_print2-zmenge MOD lt_print2-bstrf EQ 0.
+*        lt_print2-zmenge = lt_print2-bdmng - lt_print2-zlast.
+      ELSE.
+        lv = lt_print2-zmenge DIV lt_print2-bstrf + 1.
+        lt_print2-zmenge = lv * lt_print2-bstrf.
+      ENDIF.
+      IF lt_print2-zmenge < 0.
+        lt_print2-zmenge = 0.
+      ENDIF.
+    ENDIF.
+    MODIFY lt_print2.
+  ENDLOOP.
+
+  DATA:BEGIN OF lt_labst OCCURS 0,
+         labst LIKE mard-labst,
+         matnr LIKE mard-matnr,
+       END OF lt_labst.
+
+  SELECT labst matnr INTO CORRESPONDING FIELDS OF TABLE lt_labst FROM mard FOR ALL ENTRIES IN lt_print2 WHERE matnr = lt_print2-matnr.
+  LOOP AT lt_print2.
+
+    SELECT SINGLE name1 INTO  lv_name1 FROM lfa1 WHERE lifnr = lt_print2-lifnr.
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+      EXPORTING
+        input  = lt_print2-lifnr
+      IMPORTING
+        output = lv_lifnr1.
+
+    CONCATENATE lv_lifnr1 lv_name1 INTO zname.
+    LOOP AT lt_labst WHERE matnr = lt_print2-matnr.
+      lt_print2-labst = lt_print2-labst + lt_labst-labst.
+    ENDLOOP.
+    MODIFY lt_print2.
+    MOVE-CORRESPONDING lt_print2 TO gt_print.
+    APPEND gt_print.
+  ENDLOOP.
+
+  IF gv_type = 'EXCE'.
+*    ADD BY PFT 20171123  增加打印次数
+    LOOP AT gt_item1.
+      CLEAR: lv_vbeln,lv_posnr.
+      lv_vbeln = gt_item1-ebeln.
+      lv_posnr = gt_item1-ebelp.
+      PERFORM frm_addprintsum USING lv_vbeln lv_posnr.
+      READ TABLE gt_item WITH KEY chk = 'X' ebeln = gt_item1-ebeln ebelp = gt_item1-ebelp.
+      IF sy-subrc = 0.
+        lv_tabix = sy-tabix.
+        gt_item-zsum = gt_item-zsum + 1.
+        MODIFY gt_item INDEX lv_tabix.
+      ENDIF.
+    ENDLOOP.
+*   END BY PFT 20171123
+    CREATE OBJECT lo_excel 'EXCEL.APPLICATION'.
+    CALL METHOD OF lo_excel 'WORKBOOKS' = lo_workbooks.
+
+    CALL METHOD OF lo_workbooks 'OPEN' = lo_workbook EXPORTING #1 = lv_file.
+    CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = 1.
+    lv_row = 8.
+    mac_fill_cell  3  'B'  zname.
+    mac_fill_cell  5  'B'  sy-datum.
+    LOOP AT gt_print.
+      mac_fill_cell  lv_row  'A'  gt_print-matnr.
+      mac_fill_cell  lv_row  'B'  gt_print-txz01.
+      mac_fill_cell  lv_row  'C'  gt_print-bdmng .
+      mac_fill_cell  lv_row  'D'  gt_print-bstrf .
+      mac_fill_cell  lv_row  'E'  gt_print-zmenge.
+      mac_fill_cell  lv_row  'F'  gt_print-labst.
+      mac_fill_cell  lv_row  'G'  gt_print-zlast.
+      lv_row = lv_row + 1.
+    ENDLOOP.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell EXPORTING #1 = 1 #2 = 1.
+    CALL METHOD OF lo_cell 'SELECT'.
+    SET PROPERTY OF lo_excel 'CutCopyMode' = 0.
+
+    CALL METHOD OF lo_workbook 'SAVE'.
+    SET PROPERTY OF lo_excel 'VISIBLE' = 1.
+
+  ELSE.
+    PERFORM frm_open_print.
+    CALL FUNCTION lv_name
+      EXPORTING
+        control_parameters = gs_control
+        zname              = zname
+      EXCEPTIONS
+        formatting_error   = 1
+        internal_error     = 2
+        send_error         = 3
+        user_canceled      = 4
+        OTHERS             = 5.
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+             WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ELSE.
+      IF  job_output_options-tdpreview IS INITIAL. "是否输出到打印机
+        LOOP AT gt_item1.
+          CLEAR: lv_vbeln,lv_posnr.
+          lv_vbeln = gt_item1-ebeln.
+          lv_posnr = gt_item1-ebelp.
+          PERFORM frm_addprintsum USING lv_vbeln lv_posnr.
+          READ TABLE gt_item WITH KEY chk = 'X' ebeln = gt_item1-ebeln ebelp = gt_item1-ebelp.
+          IF sy-subrc = 0.
+            lv_tabix = sy-tabix.
+            gt_item-zsum = gt_item-zsum + 1.
+            MODIFY gt_item INDEX lv_tabix.
+          ENDIF.
+        ENDLOOP.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+
+  CLEAR:  gt_print,lt_eket,lt_print2,lt_eket,lt_print,gt_item1.
+  REFRESH: gt_print,lt_eket,lt_print2,lt_eket,lt_print,gt_item1.
+
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SSF_CLOSE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_ssf_close .
+  IF gv_type <> 'EXCE'.
+    CALL FUNCTION 'SSF_CLOSE'
+*    IMPORTING
+*      job_output_info  =
+      EXCEPTIONS
+        formatting_error = 1
+        internal_error   = 2
+        send_error       = 3
+        OTHERS           = 4.
+    IF sy-subrc <> 0.
+* Implement suitable error handling here
+    ENDIF.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_EXCEL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_excel .
+
+  PERFORM frm_chkprint.
+  DATA:ls_key   TYPE wwwdatatab,
+       lv_subrc TYPE sy-subrc.
+
+  DATA: fullpath    TYPE string,
+        filename    TYPE string,
+        path        TYPE string,
+        user_action TYPE i,
+        encoding    TYPE abap_encoding.
+
+  CALL METHOD cl_gui_frontend_services=>file_save_dialog
+    EXPORTING
+      window_title      = '下载到本地文件'
+      default_extension = 'XLSX'           "缺省文件类型
+      default_file_name = '外拨调配单.XLSX'
+      file_filter       = 'Excel 文件 (*.XLS)|*.XLS;*.XLSX|'
+      with_encoding     = 'X'
+      initial_directory = 'D:\'
+    CHANGING
+      filename          = filename    "获得用户输入文件名
+      path              = path        "获得用户所选路径
+      fullpath          = fullpath    "路径加文件名
+      user_action       = user_action
+      file_encoding     = encoding.
+
+  MOVE fullpath TO lv_file.
+
+*  CONCATENATE 'C:\MM\' sy-title '-'   sy-datum '.xlsx' INTO lv_file.
+
+  ls_key-relid = 'MI'.
+  ls_key-objid = gcst_excel_template.
+  CALL FUNCTION 'DOWNLOAD_WEB_OBJECT'
+    EXPORTING
+      key         = ls_key
+      destination = lv_file
+    IMPORTING
+      rc          = lv_subrc.
+  IF lv_subrc <> 0.
+    MESSAGE '下载模板出错，请检查，谢谢' TYPE 'E'.
+    EXIT.
+  ENDIF.
+  PERFORM frm_loopprint.
+***填充EXCEL数据
+
+*  PERFORM frm_filldata_excel USING lv_file.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FILLDATA_EXCEL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LV_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_addprintsum USING vbeln LIKE lips-vbeln posnr LIKE lips-posnr.
+  DATA wa LIKE TABLE OF zprintnum WITH HEADER LINE.
+  wa-zpo = vbeln.
+  wa-mandt = sy-mandt.
+  wa-zprgname = 'ZMM021'.
+  wa-zernam = sy-uname.
+  wa-zdate = sy-datum.
+  wa-ztime = sy-uzeit.
+  wa-posnr = posnr.
+
+  SELECT SINGLE * FROM zprintnum WHERE zpo = wa-zpo AND zprgname = 'ZMM021' AND posnr = wa-posnr.
+  IF sy-subrc EQ 0.
+    .
+    UPDATE zprintnum SET
+     zernam = @sy-uname,
+     zdate = @sy-datum,
+     ztime = @sy-uzeit,
+     zsum = zsum + 1
+     WHERE zpo = @wa-zpo  AND zprgname = 'ZMM021' AND posnr = @wa-posnr.
+
+  ELSE.
+    wa-zsum = 1.
+    INSERT INTO zprintnum VALUES @wa.
+  ENDIF.
+
+ENDFORM.

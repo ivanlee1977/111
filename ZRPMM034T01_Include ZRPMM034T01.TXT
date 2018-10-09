@@ -1,0 +1,80 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM034T01
+*&---------------------------------------------------------------------*
+TABLES :mara,"物料主数据
+        makt,"物料描述
+        marc,"物料工厂存储数据
+        sscrfields, "选择屏幕上的字段
+        rlgrap.
+
+DATA: functxt TYPE smp_dyntxt.
+
+DATA: it_raw TYPE truxs_t_text_data.
+TYPES: BEGIN OF t_datatab,
+         col01 TYPE char200,
+         col02 TYPE char200,
+         col03 TYPE char200,
+         col04 TYPE char200,
+         col05 TYPE char200,
+         col06 TYPE char200,
+         col07 TYPE char200,
+         col08 TYPE char200,
+         col09 TYPE char200,
+         col10 TYPE char200,
+       END OF t_datatab.
+DATA: itab TYPE STANDARD TABLE OF t_datatab WITH HEADER LINE.
+
+
+DATA: BEGIN OF gt_alv OCCURS 0,
+        box(1),
+        werks       LIKE mseg-werks, "工厂
+        lgort       LIKE mseg-lgort, "库存地点
+        matnr       LIKE mseg-matnr, "物料
+        menge       LIKE mseg-menge, "数量
+        charg       LIKE mseg-charg, "批次
+        dmbtr       LIKE mseg-dmbtr, "金额
+        sgtxt       LIKE mseg-sgtxt, "项目文本
+        maktx       LIKE makt-maktx, "物料描述
+        sernp       LIKE marc-sernp, "序列号参数文件，Z001自动产生序列号，Z002手工产生序列号
+        type        TYPE c LENGTH 1,  "信息类型2   --用于存放执行导入结果
+        text        TYPE c LENGTH 200, "信息文本2
+        zicon(30)   TYPE c,            "icon
+        rowcolor(4) TYPE c,
+      END OF gt_alv.
+
+DATA: BEGIN OF gt_out OCCURS 0,
+        matnr LIKE mseg-matnr, "物料
+        werks LIKE mseg-werks, "工厂
+        lgort LIKE mseg-lgort, "库存地点
+        sernr LIKE objk-sernr, "序列号
+        uii   LIKE objk-uii, "唯一项目标识符
+      END OF gt_out.
+
+
+*  取物料工厂库存地点、描述信息
+
+DATA: gt_mard LIKE mard OCCURS 0 WITH HEADER LINE,
+      gt_marc LIKE marc OCCURS 0 WITH HEADER LINE,
+      gt_makt LIKE makt OCCURS 0 WITH HEADER LINE.
+
+DATA: lv_exit TYPE c .
+
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  gt_fcat-inttype = &5.
+  gt_fcat-intlen = &6.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.
+
+
+*  调用BAPI定义

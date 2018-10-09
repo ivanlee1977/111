@@ -1,0 +1,33 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPSD024_S01
+*&---------------------------------------------------------------------*
+DATA c1 TYPE char30.
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+
+SELECT-OPTIONS:
+*      s_erdat FOR vbak-erdat MATCHCODE OBJECT zsh_erdat_f4 MODIF ID RD1, "CHANGED BY WUSK
+      s_erdat FOR vbak-erdat ,"CHANGED BY WUSK
+      s_vbeln FOR vbak-vbeln MATCHCODE OBJECT zsh_vbeln_f4 MODIF ID rd1,
+      s_vkorg FOR vbak-vkorg MODIF ID rd2 OBLIGATORY,
+      s_vtweg FOR knvv-vtweg,
+      s_bzirk FOR knvv-bzirk,
+      s_vkbur FOR knvv-vkbur,
+      s_vkgrp FOR vbak-vkgrp,
+      s_spart FOR vbap-spart,
+      s_matkl FOR vbap-matkl,
+      s_kvgr1 FOR knvv-kvgr1,
+      s_kvgr2 FOR knvv-kvgr2,
+      s_kunnr FOR vbak-kunnr,
+      s_matnr FOR vbap-matnr,
+      s_date1 FOR vbak-erdat,
+      s_cpx FOR c1,
+      s_xl FOR c1      .
+
+
+
+SELECTION-SCREEN  SKIP  2.
+*PARAMETERS :p_p1 RADIOBUTTON GROUP rad USER-COMMAND dis,
+*            p_p2     RADIOBUTTON GROUP rad.
+
+PARAMETERS p_p1 AS CHECKBOX USER-COMMAND singleclick.
+SELECTION-SCREEN END OF BLOCK blc.

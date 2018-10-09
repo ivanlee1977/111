@@ -1,0 +1,61 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPPLM002_T01
+*&---------------------------------------------------------------------*
+
+TABLES :ausp,ztcs001.
+
+DATA: BEGIN OF gt_plm OCCURS 0,
+        atwrt    TYPE ausp-atwrt,
+        matnr    TYPE ztcs001-matnr,
+        maktx    TYPE makt-maktx,
+        zversion TYPE ztcs001-zversion,
+        zmenge   TYPE ztcs001-menge,
+        zmenge_w TYPE ztcs001-menge,
+        zmenge_t TYPE ztcs001-menge,
+        zlfimg   TYPE lips-lfimg,
+        zgzl     TYPE p DECIMALS 4,
+        znum     TYPE i,
+        zwh      TYPE ztcs001-zwh1,
+        zwhwl    TYPE ztcs001-zwhwl1,
+        zmaktx   TYPE makt-maktx,
+        urcod    TYPE ztcs004-urcod,
+        zcs1     TYPE i,
+        zcs2     TYPE i,
+        kurztext TYPE qpct-kurztext,
+      END OF gt_plm.
+
+TYPES : BEGIN OF gs_cs001 ,
+          atwrt    TYPE ausp-atwrt,
+          matnr    TYPE  ztcs001-matnr,
+          zversion TYPE ztcs001-zversion,
+          menge    TYPE ztcs001-menge,
+          zwh1     TYPE ztcs001-zwh1,
+          zwh2     TYPE ztcs001-zwh1,
+          zwh3     TYPE ztcs001-zwh1,
+          zwh4     TYPE ztcs001-zwh1,
+          zwh5     TYPE ztcs001-zwh1,
+          qmnum    TYPE ztcs001-qmnum,
+          zindx    TYPE ztcs001-zindx,
+          zthwx    TYPE ztcs001-zthwx,
+        END OF gs_cs001.
+
+DATA: gt_cs001 TYPE TABLE OF gs_cs001 WITH HEADER LINE.
+
+DATA: gt_fcat   TYPE slis_t_fieldcat_alv WITH HEADER LINE,
+      gs_layout TYPE slis_layout_alv.
+
+
+DATA: gs_option  TYPE ssfcompop,
+      gs_control TYPE ssfctrlop.
+
+DATA lv_name TYPE rs38l_fnam.
+DEFINE g_fieldfcat .
+  gt_fcat-fieldname = &1.
+  gt_fcat-seltext_s = &2.
+  gt_fcat-ddictxt = 'S'.
+  gt_fcat-ref_fieldname = &3.
+  gt_fcat-ref_tabname = &4.
+  gt_fcat-decimals_out = &5.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

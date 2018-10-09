@@ -1,0 +1,192 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP008_F01
+*&---------------------------------------------------------------------*
+FORM get_data."取数据
+  SELECT
+        a~matnr
+        b~werks
+        b~nfmat
+        b~ausdt
+        INTO CORRESPONDING FIELDS OF TABLE gt_item
+        FROM mara AS a
+        JOIN marc AS b ON a~matnr EQ b~matnr
+       WHERE a~matnr IN s_matnr
+       AND   b~werks IN s_werks
+       AND   b~nfmat NE ''.
+
+  SORT gt_item BY matnr werks.
+  DELETE ADJACENT DUPLICATES FROM gt_item COMPARING matnr werks.
+ENDFORM.
+
+FORM process_data."处理数据
+  DATA:it_makt LIKE makt OCCURS 0 WITH HEADER LINE .
+  DATA:it_mard LIKE mard OCCURS 0 WITH HEADER LINE .
+  DATA:it_mslb LIKE mslb OCCURS 0 WITH HEADER LINE .
+
+  DATA: BEGIN OF lt_xtab OCCURS 10,
+          werks LIKE ekpo-werks,
+          lgort LIKE ekpo-lgort,
+          matnr LIKE ekpo-matnr,
+          menge LIKE ekpo-menge,
+          mengk LIKE ekpo-menge,
+        END OF lt_xtab.
+  DATA:lv_meins LIKE mara-meins.
+  RANGES:r_werks FOR mast-werks.
+
+  IF gt_item[] IS NOT INITIAL .
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE it_makt FROM makt
+      FOR ALL ENTRIES IN gt_item
+       WHERE matnr EQ gt_item-matnr
+        AND  spras EQ sy-langu.
+
+    SELECT * APPENDING CORRESPONDING FIELDS OF TABLE it_makt FROM makt
+      FOR ALL ENTRIES IN gt_item
+       WHERE matnr EQ gt_item-nfmat
+        AND  spras EQ sy-langu.
+
+
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE it_mard FROM mard
+      FOR ALL ENTRIES IN gt_item
+      WHERE matnr EQ gt_item-matnr
+       AND  werks EQ gt_item-werks
+       AND  lvorm EQ ''
+       AND  lgort IN ('1060','1010').
+
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE it_mslb FROM mslb
+      FOR ALL ENTRIES IN gt_item
+      WHERE matnr EQ gt_item-matnr
+       AND  werks EQ gt_item-werks
+       AND  lbspr EQ ''
+       AND  sobkz EQ 'O'.
+
+  ENDIF.
+
+  LOOP AT gt_item INTO gw_item.
+    "物料描述
+    READ TABLE it_makt WITH KEY matnr = gw_item-matnr.
+    IF sy-subrc EQ 0.
+      gw_item-maktx = it_makt-maktx.
+    ENDIF.
+
+    "替代物料描述
+    READ TABLE it_makt WITH KEY matnr = gw_item-nfmat.
+    IF sy-subrc EQ 0.
+      gw_item-nmaktx = it_makt-maktx.
+    ENDIF.
+
+
+    LOOP AT it_mard WHERE matnr EQ gw_item-matnr AND werks EQ gw_item-werks .
+      "物料号对应的（原材料仓库存1010（MARD-LABST + MARD-INSME）+生产现场仓库存1060(MARD-LABST )
+      IF it_mard-lgort EQ '1010'.
+        gw_item-zmkcsl = gw_item-zmkcsl + it_mard-labst + it_mard-insme .
+      ELSEIF  it_mard-lgort EQ '1060'.
+        gw_item-zmkcsl = gw_item-zmkcsl + it_mard-labst .
+      ENDIF.
+    ENDLOOP.
+
+    "两家外协供商的O库存(MSLB-LBLAB)
+    LOOP AT it_mslb WHERE matnr EQ gw_item-matnr AND werks EQ gw_item-werks .
+      gw_item-zmkcsl = gw_item-zmkcsl + it_mslb-lblab .
+    ENDLOOP.
+
+***未清采购订单数量
+    REFRESH :lt_xtab,r_werks.
+    CLEAR lv_meins.
+    SELECT SINGLE meins INTO lv_meins FROM mara WHERE matnr = gw_item-matnr.
+    r_werks = 'IEQ'.
+    r_werks-low = gw_item-werks.
+    APPEND r_werks.
+    CALL FUNCTION 'MB_ADD_PURCHASE_ORDER_QUANTITY'
+      EXPORTING
+        x_elikz = ' '
+        x_loekz = ' '
+        x_matnr = gw_item-matnr
+        x_meins = lv_meins
+      TABLES
+        xtab    = lt_xtab
+        xwerks  = r_werks.
+
+    LOOP AT lt_xtab.
+      gw_item-zddwjs = gw_item-zddwjs + lt_xtab-menge + lt_xtab-mengk.
+    ENDLOOP.
+
+    "5、“总可用数”(MZKYS)取值逻辑：库存数（MKCSL）+采购订单未交货数（DDWJS）。
+    gw_item-zmzkys = gw_item-zmkcsl + gw_item-zddwjs.
+
+    MODIFY gt_item FROM gw_item.
+    CLEAR gw_item.
+  ENDLOOP.
+
+
+ENDFORM.
+
+
+FORM get_alv."显示数据
+  DATA : col_pos TYPE i VALUE 1.
+
+  CLEAR:it_fieldcat,wa_fieldcat.
+
+  gs_layout-zebra = 'X'.
+  gs_layout-cwidth_opt = 'X'."
+  gs_layout-stylefname = 'FIELD_STYLE'. " 将内表中的字段名存入显示格式
+  gs_layout-box_fname        = 'SEL'.
+  i_grid_settings-edt_cll_cb = 'X'.
+*  wa_events-name = 'CALLER_EXIT'.
+*  wa_events-form = 'CALLER_EXIT'.
+*  APPEND wa_events TO it_events.
+
+  PERFORM fieldcat_int USING col_pos  'MATNR'   ' '   '物料编码'  ''  'MATNR' 'MARC' '' ''.
+  PERFORM fieldcat_int USING col_pos  'MAKTX'   ' '   '物料描述'   ''  'MAKTX' 'MAKT' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'ZMKCSL'   ' '   '库存数'   ''  'MSEG' 'MENGE' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'ZDDWJS'   ' '   '采购订单未交货数'   ''  'MSEG' 'MENGE' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'ZMZKYS'   ' '   '总可用数'   ''  'MSEG' 'MENGE' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'NFMAT'   ' '   '后继物料'   ''  'NFMAT' 'MARC' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'NMAKTX'   ' '   '后继物料描述'   ''  '' '' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'AUSDT'   ' '   '生效日期'   ''  '' '' ''   ''.
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program = sy-repid
+      is_layout_lvc      = gs_layout
+      it_fieldcat_lvc    = it_fieldcat
+      it_events          = it_events
+      i_save             = 'A'
+*     I_CALLBACK_PF_STATUS_SET    = 'SET_PF_STATUS'
+*     I_CALLBACK_USER_COMMAND     = 'ALV_USER_COMMAND'
+*     I_CALLBACK_HTML_TOP_OF_PAGE = 'ALV_TOP_OF_PAGE'
+      i_grid_settings    = i_grid_settings
+    TABLES
+      t_outtab           = gt_item[]
+    EXCEPTIONS
+      program_error      = 1
+      OTHERS             = 2.
+
+  IF sy-subrc <> 0.
+* MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+*         WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+  ENDIF.
+ENDFORM.
+
+FORM fieldcat_int  USING   p_col_pos         " 1
+                            p_fieldname       " 2
+                            p_key             " 3
+                            p_seltext_l       " 4
+                            p_zero
+                            p_filename
+                            p_talbename
+                            p_outputlen
+                            p_edit .
+
+  wa_fieldcat-col_pos       = p_col_pos.
+  wa_fieldcat-fieldname     = p_fieldname.
+  wa_fieldcat-key           = p_key.
+  wa_fieldcat-coltext     = p_seltext_l.
+  wa_fieldcat-no_zero        = p_zero.
+  wa_fieldcat-ref_field   = p_filename.
+  wa_fieldcat-ref_table    = p_talbename.
+  wa_fieldcat-tipddictxt       = 'L'.
+  wa_fieldcat-edit           = p_edit  .
+  APPEND wa_fieldcat TO it_fieldcat.
+  p_col_pos = p_col_pos + 1.
+  CLEAR: wa_fieldcat.
+ENDFORM.                    " FIELDCAT_INT

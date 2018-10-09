@@ -1,0 +1,63 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM013T01
+*&---------------------------------------------------------------------*
+TABLES:mseg,mkpf,mara.
+
+DATA:BEGIN OF gt_detail OCCURS 0,
+       werks LIKE mard-werks,
+       matnr LIKE mard-matnr,
+       maktx LIKE makt-maktx,
+       matkl LIKE mara-matkl,
+       spart LIKE mara-spart,
+       lgort LIKE mard-lgort,
+       lgobe LIKE t001l-lgobe,
+     END OF gt_detail.
+
+DATA: BEGIN OF gt_alv OCCURS 0,
+        box(1),
+        werks  LIKE mseg-werks, "工厂
+        matnr  LIKE mseg-matnr, "物料号
+        maktx  LIKE makt-maktx, "物料描述
+* ADD BY PFT 20180123
+        lgort  LIKE mseg-lgort, "库存地点
+        lgobe  LIKE t001l-lgobe,
+* END BY PFT 20180123
+        zsqjc  LIKE mseg-menge, "上期结存
+        cgsh   LIKE mseg-menge, "采购收货
+        scsh   LIKE mseg-menge, "生产收货
+        scfh   LIKE mseg-menge, "生产发货
+        xsfh   LIKE mseg-menge, "销售发货
+        wwfh   LIKE mseg-menge, "委外发货
+        qtfh   LIKE mseg-menge, "其他发货
+        qtsh   LIKE mseg-menge, "其他收货
+        bf     LIKE mseg-menge, "报废
+        pdtz   LIKE mseg-menge, "盘点调整
+        zdr    LIKE mseg-menge, "调入
+        zdc    LIKE mseg-menge, "调出
+        zbqjc  LIKE mseg-menge, "本期结存
+      END OF gt_alv.
+
+DATA:BEGIN OF gt_mseg OCCURS 0,
+       mblnr LIKE mseg-mblnr,
+       mjahr LIKE mseg-mjahr,
+       budat LIKE mseg-budat_mkpf,
+       zeile LIKE mseg-zeile,
+       bwart LIKE mseg-bwart,
+       matnr LIKE mseg-matnr,
+       werks LIKE mseg-werks,
+       lgort LIKE mseg-lgort,
+       menge LIKE mseg-menge,
+       shkzg LIKE mseg-shkzg,
+       ebeln LIKE mseg-ebeln,
+       aufnr LIKE mseg-aufnr,
+     END OF gt_mseg.
+
+* ADD BY PFT 20180123
+DATA: BEGIN OF gt_ekko OCCURS 0,
+        ebeln LIKE ekko-ebeln,
+        bsart LIKE ekko-bsart,
+      END OF gt_ekko.
+* END BY PFT 20180123
+
+
+DATA: gt_ztmm003 LIKE ztmm003 OCCURS 0 WITH HEADER LINE.

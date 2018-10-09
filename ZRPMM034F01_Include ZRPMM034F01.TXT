@@ -1,0 +1,416 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM034F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GENERATE_TEMPLATE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0035   text
+*----------------------------------------------------------------------*
+FORM frm_generate_template  USING  u_objid TYPE w3objid.
+  DATA: ls_object LIKE wwwdatatab,
+        lv_rc     TYPE sy-subrc,
+        lt_ft     TYPE filetable,
+        ls_ft     TYPE file_table,
+        lv_ua     TYPE i,
+        mess      TYPE string.
+  DATA:lwk_fn TYPE rlgrap-filename.
+
+*  查询模板
+  SELECT SINGLE relid objid
+  FROM wwwdata
+  INTO CORRESPONDING FIELDS OF ls_object
+  WHERE relid = 'MI'
+  AND srtf2 = 0
+  AND objid = u_objid.
+  IF sy-subrc <> 0 OR ls_object-objid = space.
+    CONCATENATE '未知的EXCEL模板' u_objid INTO mess.
+    MESSAGE mess TYPE 'S' DISPLAY LIKE 'E'.
+    EXIT.
+  ENDIF.
+
+  CALL METHOD cl_gui_frontend_services=>file_open_dialog
+    EXPORTING
+      file_filter             = cl_gui_frontend_services=>filetype_excel
+    CHANGING
+      file_table              = lt_ft
+      rc                      = lv_rc
+      user_action             = lv_ua
+    EXCEPTIONS
+      file_open_dialog_failed = 1
+      cntl_error              = 2
+      error_no_gui            = 3
+      not_supported_by_gui    = 4
+      OTHERS                  = 5.
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+    WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ELSE.
+    CHECK lv_ua = 0.
+    READ TABLE lt_ft INTO ls_ft INDEX 1.
+    lwk_fn = ls_ft-filename.
+
+
+*  下载模板
+
+    CALL FUNCTION 'DOWNLOAD_WEB_OBJECT'
+      EXPORTING
+        key         = ls_object
+        destination = lwk_fn
+      IMPORTING
+        rc          = lv_rc.
+    IF lv_rc <> 0.
+      MESSAGE '下载模板失败！' TYPE 'S' DISPLAY LIKE 'E'.
+      EXIT.
+    ENDIF.
+  ENDIF.
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  frm_upload_data
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0006   text
+*----------------------------------------------------------------------*
+FORM frm_upload_data .
+  CONSTANTS lc_frnum TYPE i VALUE 2.
+  REFRESH: itab.
+
+  CALL FUNCTION 'TEXT_CONVERT_XLS_TO_SAP'
+    EXPORTING
+      i_line_header        = ''
+      i_tab_raw_data       = it_raw " WORK TABLE
+      i_filename           = p_fname
+    TABLES
+      i_tab_converted_data = itab[] "ACTUAL DATA
+    EXCEPTIONS
+      conversion_failed    = 1
+      OTHERS               = 2.
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+    WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+
+
+  LOOP AT itab FROM lc_frnum.
+    CLEAR: gt_alv.
+    gt_alv-werks = itab-col01.
+    gt_alv-lgort = itab-col02.
+    gt_alv-matnr = itab-col03.
+    gt_alv-menge = itab-col04.
+    gt_alv-charg = itab-col05.
+    gt_alv-dmbtr = itab-col06.
+    gt_alv-sgtxt = itab-col07.
+    CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+      EXPORTING
+        input  = gt_alv-matnr
+      IMPORTING
+        output = gt_alv-matnr.
+    APPEND gt_alv .
+  ENDLOOP.
+
+  IF gt_alv[] IS NOT INITIAL.
+    SELECT *
+     INTO TABLE gt_mard
+     FROM mard
+     FOR ALL ENTRIES IN gt_alv
+    WHERE matnr = gt_alv-matnr
+      AND werks = gt_alv-werks
+      AND lgort = gt_alv-lgort.
+    SELECT *
+      INTO TABLE gt_marc
+      FROM marc
+      FOR ALL ENTRIES IN gt_alv
+    WHERE matnr = gt_alv-matnr
+      AND werks = gt_alv-werks.
+    SELECT *
+      INTO TABLE gt_makt
+      FROM makt
+      FOR ALL ENTRIES IN gt_alv
+    WHERE matnr = gt_alv-matnr
+      AND spras = sy-langu.
+  ENDIF.
+  SORT gt_mard BY matnr werks lgort.
+  SORT gt_marc BY matnr werks.
+  SORT gt_makt BY matnr .
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  frm_check_data
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_data .
+  LOOP AT gt_alv .
+*    检查物料
+    READ TABLE gt_marc WITH KEY matnr = gt_alv-matnr werks = gt_alv-werks.
+    IF sy-subrc <> 0.
+      gt_alv-text = '请检查物料'.
+      gt_alv-zicon = icon_led_red.
+    ELSE.
+      gt_alv-zicon = icon_led_green.
+    ENDIF.
+*  取物料描述
+    READ TABLE gt_makt WITH KEY matnr = gt_alv-matnr.
+    IF sy-subrc = 0.
+      gt_alv-maktx = gt_makt-maktx.
+    ENDIF.
+    MODIFY gt_alv.
+    CLEAR: gt_alv.
+  ENDLOOP.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'PF_STATUS_SET'
+      i_callback_user_command  = 'ALV_USER_COMMAND'
+      is_layout_lvc            = gs_layout
+      it_fieldcat_lvc          = gt_fcat[]
+      i_default                = 'X'
+      i_save                   = 'A'
+    TABLES
+      t_outtab                 = gt_alv[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SUB_BUILD_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM sub_build_fieldcat .
+  mcr_build_fieldcat: 'ZICON'   '状态'         ''        ''      'C'  '30',
+                    'WERKS'    '工厂'         ''        ''      'C'  '50',
+                    'LGORT'   '库存地点'      ''   ''  ''   '',
+                    'MATNR'   '物料号'        ''   ''  ''   '',
+                    'MENGE'   '数量'   ''   ''  ''   '',
+                    'CHARG'   '批次'  ''   ''  ''   '',
+                    'DMBTR'   '金额'      ''   ''  ''   '',
+                    'SGTXT'   '项目文本'    ''   ''  ''   '',
+                    'MAKTX'   '物料描述'       ''   ''  ''   '',
+                    'TEXT'   '消息'         ''   ''  ''   ''.
+
+  READ TABLE gt_alv WITH KEY zicon = icon_led_red.
+  IF sy-subrc NE 0.
+    LOOP AT gt_fcat WHERE fieldname = 'ZICON' OR fieldname = 'ZMSG'.
+      gt_fcat-tech = 'X'.
+      MODIFY gt_fcat.
+    ENDLOOP.
+  ENDIF.
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+  gs_layout-no_toolbar = 'X'.
+ENDFORM.
+*------------------------------------------------
+*  以下是界面按钮函数
+*------------------------------------------------
+FORM pf_status_set USING rt_extab TYPE slis_t_extab. "定义ALV结果界面的GUI状态
+  SET PF-STATUS 'ZSTANDARD' .
+ENDFORM. "ST
+*&---------------------------------------------------------------------*
+*&      FORM  AN_UCOMM
+*&---------------------------------------------------------------------*
+*       TEXT
+*----------------------------------------------------------------------*
+*      -->R_UCOMM      TEXT
+*      -->RS_SELFIELD  TEXT
+*----------------------------------------------------------------------*
+FORM alv_user_command USING r_ucomm LIKE sy-ucomm
+      rs_selfield TYPE slis_selfield.
+  DATA: lv_type TYPE c LENGTH 1,    "信息类型
+        lv_text TYPE c LENGTH 200. "信息文本
+
+  DATA:lv_grid TYPE REF TO cl_gui_alv_grid.
+
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = lv_grid.
+
+  CASE:r_ucomm.
+    WHEN 'ZUPLOAD'.
+
+*    检查数据是否有问题，如果有问题不允许导入
+      LOOP AT gt_alv WHERE zicon NE icon_led_green.
+        MESSAGE e398(00) WITH '数据仍有问题，请确保数据没问题再导入' DISPLAY LIKE 'E'.
+        EXIT.
+      ENDLOOP.
+
+*      检查如果已经点击过库存导入，不允许再次点击
+      IF lv_exit IS INITIAL.
+        lv_exit = 'X'.
+      ELSE.
+        MESSAGE e398(00) WITH '库存已导入，不允许再次导入' DISPLAY LIKE 'E'.
+      ENDIF.
+      PERFORM frm_update_data.
+      PERFORM frm_refresh_display USING lv_grid.
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM. "AN_UCOMM
+*&---------------------------------------------------------------------*
+*&      Form  FRM_UPDATE_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*---------------------------------------------------------------------*
+FORM frm_update_data .
+  DATA: ls_header  LIKE bapi2017_gm_head_01,
+        ls_gm_code LIKE bapi2017_gm_code,
+        lt_item    LIKE TABLE OF bapi2017_gm_item_create WITH HEADER LINE,
+        lt_sernr   LIKE TABLE OF bapi2017_gm_serialnumber WITH HEADER LINE,
+        lt_return  LIKE TABLE OF bapiret2 WITH HEADER LINE.
+  DATA: lv_mblnr TYPE mblnr,
+        lv_mjahr TYPE mjahr.
+  DATA:lv_msg     TYPE string,
+       lv_msg_all TYPE string.
+
+*  lv_doc_item = 1.
+*  lv_doc_item_end = 900.
+
+  ls_header-pstng_date = p_datum.  "过帐日期
+  ls_header-doc_date = p_datum."凭证日期
+  ls_header-pr_uname   = sy-uname..  "用户名
+  ls_gm_code-gm_code = '05'.
+
+  REFRESH:lt_item,lt_return.
+  LOOP AT gt_alv .
+    CLEAR:lv_mblnr,lv_mjahr.
+    lt_item-material   = gt_alv-matnr.
+    lt_item-plant   = gt_alv-werks. "工厂
+    lt_item-stge_loc = gt_alv-lgort. "库存地点
+    lt_item-batch = gt_alv-charg.  "批次
+    lt_item-move_type  = '561'. "MB1C库存移动类型
+    lt_item-entry_qnt = gt_alv-menge."数量
+    lt_item-amount_lc = gt_alv-dmbtr."金额
+    lt_item-item_text = gt_alv-sgtxt."项目文本
+    APPEND lt_item.
+    CLEAR lt_item.
+  ENDLOOP.
+
+*收货过账
+
+  CALL FUNCTION 'BAPI_GOODSMVT_CREATE'
+    EXPORTING
+      goodsmvt_header  = ls_header
+      goodsmvt_code    = ls_gm_code
+      testrun          = p_test
+    IMPORTING
+      materialdocument = lv_mblnr
+      matdocumentyear  = lv_mjahr
+    TABLES
+      goodsmvt_item    = lt_item
+      return           = lt_return[].
+
+  IF lt_return[] IS NOT INITIAL.
+    IF p_test IS INITIAL.
+      CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+    ENDIF.
+    LOOP AT lt_return WHERE type = 'E'.
+      CLEAR:lv_msg.
+      CALL FUNCTION 'MESSAGE_TEXT_BUILD'
+        EXPORTING
+          msgid               = lt_return-id
+          msgnr               = lt_return-number
+          msgv1               = lt_return-message_v1
+          msgv2               = lt_return-message_v2
+          msgv3               = lt_return-message_v3
+          msgv4               = lt_return-message_v4
+        IMPORTING
+          message_text_output = lv_msg.
+      IF lv_msg_all IS INITIAL.
+        lv_msg_all = lv_msg.
+      ELSE.
+        CONCATENATE lv_msg_all lv_msg INTO lv_msg_all SEPARATED BY ','.
+      ENDIF.
+    ENDLOOP.
+    LOOP AT gt_alv.
+      gt_alv-text = lv_msg_all.
+      gt_alv-zicon = icon_led_red.
+      MODIFY gt_alv INDEX sy-tabix.
+    ENDLOOP.
+  ELSE.
+    IF p_test IS INITIAL.
+      CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+        EXPORTING
+          wait = 'X'.
+    ENDIF.
+    LOOP AT gt_alv.
+      IF p_test IS INITIAL.
+        CONCATENATE '过账成功,凭证号:' lv_mblnr '年度:' lv_mjahr INTO gt_alv-text.
+      ENDIF.
+      gt_alv-zicon = icon_led_green.
+      MODIFY gt_alv INDEX sy-tabix.
+    ENDLOOP.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FNAME
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_P_FNAME  text
+*----------------------------------------------------------------------*
+FORM frm_get_fname USING p_fname LIKE rlgrap-filename.
+  CALL FUNCTION 'WS_FILENAME_GET'
+    EXPORTING
+      def_filename     = p_fname
+      def_path         = 'C:\'
+      mask             = ',*.XLS.'
+      mode             = 'O'
+      title            = '文件名'
+    IMPORTING
+      filename         = p_fname
+    EXCEPTIONS
+      inv_winsys       = 1
+      no_batch         = 2
+      selection_cancel = 3
+      selection_error  = 4
+      OTHERS           = 5.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_REFRESH_DISPLAY
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LV_GRID  text
+*----------------------------------------------------------------------*
+FORM frm_refresh_display  USING  u_grid TYPE REF TO cl_gui_alv_grid.
+  LOOP AT gt_fcat WHERE fieldname = 'ZICON' OR fieldname = 'TEXT'.
+    gt_fcat-tech = space.
+    MODIFY gt_fcat.
+  ENDLOOP.
+
+  CALL METHOD u_grid->set_frontend_fieldcatalog
+    EXPORTING
+      it_fieldcatalog = gt_fcat[].
+
+  CALL METHOD u_grid->set_frontend_layout
+    EXPORTING
+      is_layout = gs_layout.
+ENDFORM.

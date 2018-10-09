@@ -1,0 +1,313 @@
+*&---------------------------------------------------------------------*
+*& 程序名： ZRPWMS004
+*& 创建者(公司)/日期： PFT/20170927
+*& 程序描述: WMS接口：异常数据重新推送
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    PFT           20170927      创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpwms004.
+
+DATA: gt_ztwmslog LIKE ztwmslog OCCURS 0 WITH HEADER LINE.
+
+RANGES:r_ztype FOR ztwmslog-ztype .
+
+***selection screen define
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+PARAMETERS:p_r1 AS CHECKBOX USER-COMMAND r0,
+           p_r2 AS CHECKBOX,
+           p_r3 AS CHECKBOX,
+           p_r4 AS CHECKBOX,
+           p_r5 AS CHECKBOX,
+           p_r6 AS CHECKBOX.
+SELECTION-SCREEN END OF BLOCK blc.
+
+START-OF-SELECTION.
+  PERFORM frm_get_send_data.
+*&---------------------------------------------------------------------*
+*&      Form  frm_get_send_data
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_send_data .
+*  从表ZTWMSLOG中取出发送失败的信息记录
+
+  IF p_r1 EQ 'X'.   "生产订单下达
+    PERFORM frm_send_data1.
+  ENDIF.
+  IF p_r2 EQ 'X' . "采购订单下达
+    PERFORM frm_send_data2.
+  ENDIF.
+  IF p_r3 EQ 'X' . "生产订单领(退)料
+    PERFORM frm_send_data3.
+  ENDIF.
+  IF p_r4 EQ 'X' . "销售订单发(退)货
+    PERFORM frm_send_data4.
+  ENDIF.
+  IF p_r5 EQ 'X' . "其它出入库
+    PERFORM frm_send_data5.
+  ENDIF.
+  IF p_r6 EQ 'X' . "库存地点转移
+    PERFORM frm_send_data6.
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SEND_DATA1
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_send_data1 .
+  DATA: lt_data LIKE zswms_pp_order_data OCCURS 0 WITH HEADER LINE.
+  DATA: lv_objnr LIKE aufk-objnr,
+        lv_line  TYPE bsvx-sttxt.
+
+  REFRESH:gt_ztwmslog.
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE gt_ztwmslog
+    FROM ztwmslog
+    WHERE ztype = '01'.
+
+  CHECK gt_ztwmslog[] IS NOT INITIAL.
+  SELECT a~aufnr a~erdat b~gstrp b~gltrs a~ernam  a~auart AS dauat
+         c~matnr c~charg b~gamng
+    INTO CORRESPONDING FIELDS OF TABLE lt_data
+    FROM aufk AS a INNER JOIN afko AS b ON a~aufnr = b~aufnr
+                   INNER JOIN afpo AS c ON a~aufnr = c~aufnr
+    FOR ALL ENTRIES IN gt_ztwmslog
+    WHERE a~aufnr = gt_ztwmslog-aufnr.
+
+  LOOP AT lt_data.
+    CLEAR: lv_objnr,lv_line.
+    SELECT SINGLE objnr INTO lv_objnr FROM aufk WHERE aufnr = lt_data-aufnr.
+
+    CALL FUNCTION 'STATUS_TEXT_EDIT'
+      EXPORTING
+        objnr            = lv_objnr
+        only_active      = 'X'
+        spras            = sy-langu
+      IMPORTING
+        line             = lv_line
+      EXCEPTIONS
+        object_not_found = 1.
+    lt_data-stat = lv_line.
+
+    CALL FUNCTION 'ZF_WMS_PP_ORDER_SEND'
+      EXPORTING
+        i_data  = lt_data
+        i_batch = 'X'.
+    CLEAR:lt_data.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SEND_DATA2
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_send_data2 .
+  DATA: lt_header     LIKE ekko OCCURS 0 WITH HEADER LINE,
+        lt_item       LIKE uekpo OCCURS 0 WITH HEADER LINE,
+        lt_schedule   LIKE ueket OCCURS 0 WITH HEADER LINE,
+        lt_item_o     LIKE uekpo OCCURS 0 WITH HEADER LINE,
+        lt_schedule_o LIKE ueket OCCURS 0 WITH HEADER LINE.
+
+  REFRESH:gt_ztwmslog.
+  SELECT * APPENDING CORRESPONDING FIELDS OF TABLE gt_ztwmslog
+    FROM ztwmslog
+    WHERE ztype = '02'.
+
+  CHECK gt_ztwmslog[] IS NOT INITIAL.
+  SELECT * INTO TABLE lt_header
+    FROM ekko
+    FOR ALL ENTRIES IN gt_ztwmslog
+    WHERE ebeln = gt_ztwmslog-ebeln.
+
+  SELECT * INTO TABLE lt_item
+    FROM ekpo
+    FOR ALL ENTRIES IN gt_ztwmslog
+    WHERE ebeln = gt_ztwmslog-ebeln
+      AND matnr <> space.
+
+  SELECT * INTO TABLE lt_schedule
+     FROM eket
+     FOR ALL ENTRIES IN gt_ztwmslog
+     WHERE ebeln = gt_ztwmslog-ebeln.
+
+  LOOP AT lt_header.
+    REFRESH: lt_item_o,lt_schedule_o.
+    LOOP AT lt_item WHERE ebeln = lt_header-ebeln.
+      APPEND lt_item TO lt_item_o.
+    ENDLOOP.
+
+    LOOP AT lt_schedule WHERE ebeln = lt_header-ebeln.
+      APPEND lt_schedule TO lt_schedule_o.
+    ENDLOOP.
+
+    IF lt_item_o[] IS NOT INITIAL.
+      CALL FUNCTION 'ZF_WMS_PO_SEND'
+        EXPORTING
+          i_header      = lt_header
+          i_batch       = 'X'
+        TABLES
+          t_po_item     = lt_item_o
+          t_po_schedule = lt_schedule_o.
+    ENDIF.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SEND_DATA3
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_send_data3 .
+  DATA: lt_mkpf LIKE mkpf OCCURS 0 WITH HEADER LINE,
+        lt_mseg LIKE mseg OCCURS 0 WITH HEADER LINE.
+
+  REFRESH:gt_ztwmslog.
+  SELECT * APPENDING CORRESPONDING FIELDS OF TABLE gt_ztwmslog
+    FROM ztwmslog
+    WHERE ztype = '03'.
+
+  CHECK gt_ztwmslog[] IS NOT INITIAL.
+  SELECT * INTO TABLE lt_mkpf
+    FROM mkpf
+    FOR ALL ENTRIES IN gt_ztwmslog
+    WHERE mblnr = gt_ztwmslog-mblnr
+      AND mjahr = gt_ztwmslog-mjahr.
+
+  SELECT * INTO TABLE lt_mseg
+    FROM mseg
+    FOR ALL ENTRIES IN gt_ztwmslog
+    WHERE mblnr = gt_ztwmslog-mblnr
+      AND mjahr = gt_ztwmslog-mjahr.
+
+  CALL FUNCTION 'ZF_WMS_MBLNR_SEND_ALL'
+    EXPORTING
+      l_batch = 'X'
+    TABLES
+      lt_mkpf = lt_mkpf
+      lt_mseg = lt_mseg.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SEND_DATA4
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_send_data4 .
+  DATA: lt_mkpf LIKE mkpf OCCURS 0 WITH HEADER LINE,
+        lt_mseg LIKE mseg OCCURS 0 WITH HEADER LINE.
+
+  REFRESH:gt_ztwmslog.
+  SELECT * APPENDING CORRESPONDING FIELDS OF TABLE gt_ztwmslog
+    FROM ztwmslog
+    WHERE ztype = '04'.
+
+  CHECK gt_ztwmslog[] IS NOT INITIAL.
+  SELECT * INTO TABLE lt_mkpf
+    FROM mkpf
+    FOR ALL ENTRIES IN gt_ztwmslog
+    WHERE mblnr = gt_ztwmslog-mblnr
+      AND mjahr = gt_ztwmslog-mjahr.
+
+  SELECT * INTO TABLE lt_mseg
+    FROM mseg
+    FOR ALL ENTRIES IN gt_ztwmslog
+    WHERE mblnr = gt_ztwmslog-mblnr
+      AND mjahr = gt_ztwmslog-mjahr.
+
+  CALL FUNCTION 'ZF_WMS_MBLNR_SEND_ALL'
+    EXPORTING
+      l_batch = 'X'
+    TABLES
+      lt_mkpf = lt_mkpf
+      lt_mseg = lt_mseg.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SEND_DATA5
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_send_data5 .
+  DATA: lt_mkpf LIKE mkpf OCCURS 0 WITH HEADER LINE,
+        lt_mseg LIKE mseg OCCURS 0 WITH HEADER LINE.
+
+  REFRESH:gt_ztwmslog.
+  SELECT * APPENDING CORRESPONDING FIELDS OF TABLE gt_ztwmslog
+    FROM ztwmslog
+    WHERE ztype = '05'.
+
+  CHECK gt_ztwmslog[] IS NOT INITIAL.
+  SELECT * INTO TABLE lt_mkpf
+    FROM mkpf
+    FOR ALL ENTRIES IN gt_ztwmslog
+    WHERE mblnr = gt_ztwmslog-mblnr
+      AND mjahr = gt_ztwmslog-mjahr.
+
+  SELECT * INTO TABLE lt_mseg
+    FROM mseg
+    FOR ALL ENTRIES IN gt_ztwmslog
+    WHERE mblnr = gt_ztwmslog-mblnr
+      AND mjahr = gt_ztwmslog-mjahr.
+
+  CALL FUNCTION 'ZF_WMS_MBLNR_SEND_ALL'
+    EXPORTING
+      l_batch = 'X'
+    TABLES
+      lt_mkpf = lt_mkpf
+      lt_mseg = lt_mseg.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SEND_DATA6
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_send_data6 .
+  DATA: lt_mkpf LIKE mkpf OCCURS 0 WITH HEADER LINE,
+        lt_mseg LIKE mseg OCCURS 0 WITH HEADER LINE.
+
+  REFRESH:gt_ztwmslog.
+  SELECT * APPENDING CORRESPONDING FIELDS OF TABLE gt_ztwmslog
+    FROM ztwmslog
+    WHERE ztype = '06'.
+
+  CHECK gt_ztwmslog[] IS NOT INITIAL.
+  SELECT * INTO TABLE lt_mkpf
+    FROM mkpf
+    FOR ALL ENTRIES IN gt_ztwmslog
+    WHERE mblnr = gt_ztwmslog-mblnr
+      AND mjahr = gt_ztwmslog-mjahr.
+
+  SELECT * INTO TABLE lt_mseg
+    FROM mseg
+    FOR ALL ENTRIES IN gt_ztwmslog
+    WHERE mblnr = gt_ztwmslog-mblnr
+      AND mjahr = gt_ztwmslog-mjahr.
+
+  CALL FUNCTION 'ZF_WMS_MBLNR_SEND_ALL'
+    EXPORTING
+      l_batch = 'X'
+    TABLES
+      lt_mkpf = lt_mkpf
+      lt_mseg = lt_mseg.
+ENDFORM.

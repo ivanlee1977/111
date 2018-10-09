@@ -1,0 +1,12 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPMM026S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+PARAMETERS:p_werks LIKE mard-werks OBLIGATORY DEFAULT '1000'.
+SELECT-OPTIONS:s_matnr FOR mard-matnr,
+               s_matkl FOR mara-matkl,
+               s_spart FOR mara-spart,
+               s_lgort FOR mard-lgort,
+               s_budat FOR mkpf-budat.
+SELECTION-SCREEN END OF BLOCK blc.

@@ -1,0 +1,63 @@
+*&---------------------------------------------------------------------*
+*& 程序名： ZRPQM012
+*& 创建者(公司)/日期： PFT/20171106
+*& 程序描述: 浴盆曲线报表
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0      PFT           20171106     创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpqm012.
+
+INCLUDE zrpqm012t01.
+INCLUDE zrpqm012s01.
+INCLUDE zrpqm012f01.
+
+************************************************************************
+*INITIALIZATION.
+************************************************************************
+INITIALIZATION.
+  PERFORM frm_get_ausp."取产品线和系列
+************************************************************************
+*AT SELECTION-SCREEN ON VALUE_REQUEST.
+************************************************************************
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_cpx-low.
+  PERFORM sub_search_help_zxl USING 'CPX' 'S_CPX'  'ZFER_CPX'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_cpx-high.
+  PERFORM sub_search_help_zxl USING 'CPX' 'S_CPX'  'ZFER_CPX'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_xl-low.
+  PERFORM sub_search_help_zxl USING 'XL' 'S_XL' 'ZFER_XL'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_xl-high.
+  PERFORM sub_search_help_zxl USING 'XL' 'S_XL'  'ZFER_XL'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_zxl-low.
+  PERFORM sub_search_help_zxl USING 'ZXL' 'S_ZXL' 'ZFER_ZXL'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_zxl-high.
+  PERFORM sub_search_help_zxl USING 'ZXL' 'S_ZXL'  'ZFER_ZXL'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_zxh-low.
+  PERFORM sub_search_help_zxl USING 'ZXH' 'S_ZXH' 'ZFER_DYZXH'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_zxh-high.
+  PERFORM sub_search_help_zxl USING 'ZXH' 'S_ZXH'  'ZFER_DYZXH'.
+
+************************************************************************
+* AT SELECTION-SCREEN OUTPUT
+************************************************************************
+AT SELECTION-SCREEN OUTPUT.
+************************************************************************
+* AT SELECTION-SCREEN
+************************************************************************
+AT SELECTION-SCREEN.
+************************************************************************
+* START-OF-SELECTION
+************************************************************************
+START-OF-SELECTION.
+
+  PERFORM frm_get_data.
+  PERFORM frm_process_data.
+  PERFORM frm_get_fieldcat.
+  PERFORM frm_output_data.

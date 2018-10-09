@@ -1,0 +1,325 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI021F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:BEGIN OF lt_bsik OCCURS 0,
+         bukrs LIKE bsik-bukrs,
+         gjahr LIKE bsik-gjahr,
+         belnr LIKE bsik-belnr,
+         buzei LIKE bsik-buzei,
+         lifnr LIKE bsik-lifnr,
+         budat LIKE bsik-budat,
+         dmbtr LIKE bsik-dmbtr,
+         wrbtr LIKE bsik-wrbtr,
+         waers LIKE bsik-waers,
+         shkzg LIKE bsik-shkzg,
+       END OF lt_bsik.
+
+  DATA:BEGIN OF lt_bseg OCCURS 0,
+         bukrs LIKE bseg-bukrs,
+         belnr LIKE bseg-belnr,
+         gjahr LIKE bseg-gjahr,
+         buzei LIKE bseg-buzei,
+         lifnr LIKE bseg-lifnr,
+         dmbtr LIKE bseg-dmbtr,
+         wrbtr LIKE bseg-wrbtr,
+         waers LIKE bkpf-waers,
+         shkzg LIKE bseg-shkzg,
+         budat LIKE bkpf-budat,
+       END OF lt_bseg.
+
+  DATA:lv_last_day LIKE sy-datum,
+       lv_date     LIKE sy-datum,
+       lv_year(4)  TYPE c.
+
+  DATA:lv_amount1_total TYPE p DECIMALS 2,
+       lv_amount2_total TYPE p DECIMALS 2,
+       lv_amount3_total TYPE p DECIMALS 2.
+  DATA:lv_percent1 TYPE p DECIMALS 2,
+       lv_percent2 TYPE p DECIMALS 2,
+       lv_percent3 TYPE p DECIMALS 2.
+
+  CONCATENATE p_gjahr p_monat '01' INTO lv_last_day.
+  CALL FUNCTION 'FKK_LAST_DAY_OF_MONTH'
+    EXPORTING
+      day_in            = lv_last_day
+    IMPORTING
+      last_day_of_month = lv_last_day
+    EXCEPTIONS
+      day_in_no_date    = 1
+      OTHERS            = 2.
+
+***去年同期最后一天
+  lv_year = p_gjahr - 1.
+  CONCATENATE lv_year p_monat '01' INTO lv_date.
+  CALL FUNCTION 'FKK_LAST_DAY_OF_MONTH'
+    EXPORTING
+      day_in            = lv_date
+    IMPORTING
+      last_day_of_month = lv_date
+    EXCEPTIONS
+      day_in_no_date    = 1
+      OTHERS            = 2.
+
+
+***获取BAIK数据
+  SELECT bukrs
+         gjahr
+         belnr
+         buzei
+         lifnr
+         budat
+         dmbtr
+         wrbtr
+         waers
+         shkzg
+    INTO CORRESPONDING FIELDS OF TABLE lt_bsik
+    FROM bsik
+    FOR ALL ENTRIES IN gt_t001
+   WHERE bukrs EQ gt_t001-bukrs
+     AND prctr IN s_prctr
+     AND lifnr IN s_lifnr
+     AND hkont IN s_hkont
+     AND budat <= lv_last_day.
+
+***获取BAAK数据
+  SELECT bukrs
+         gjahr
+         belnr
+         buzei
+         lifnr
+         budat
+         dmbtr
+         wrbtr
+         waers
+         shkzg
+   APPENDING CORRESPONDING FIELDS OF TABLE lt_bsik
+    FROM bsak
+    FOR ALL ENTRIES IN gt_t001
+   WHERE bukrs EQ gt_t001-bukrs
+     AND prctr IN s_prctr
+     AND lifnr IN s_lifnr
+     AND hkont IN s_hkont
+     AND budat <= lv_last_day.
+
+***获取BSEG数据
+  SELECT a~bukrs
+         a~belnr
+         a~gjahr
+         a~buzei
+         a~lifnr
+         a~dmbtr
+         a~shkzg
+         b~budat
+         a~wrbtr
+         b~waers
+    INTO CORRESPONDING FIELDS OF TABLE lt_bseg
+    FROM bseg AS a
+    INNER JOIN bkpf AS b
+    ON a~bukrs  = b~bukrs
+    AND a~belnr = b~belnr
+    AND a~gjahr = b~gjahr
+    FOR ALL ENTRIES IN gt_t001
+    WHERE a~bukrs EQ gt_t001-bukrs
+      AND a~prctr IN s_prctr
+      AND b~budat <= lv_last_day
+      AND a~lifnr IN s_lifnr
+      AND a~hkont = '2202990100'.
+
+***按照供应商汇总数据
+  LOOP AT lt_bsik.
+    gt_out-lifnr = lt_bsik-lifnr.
+    IF r1 = 'X'.  "本币显示
+      gt_out-waers = 'CNY'.
+    ELSEIF r2 = 'X'.
+      gt_out-waers = lt_bsik-waers.
+      lt_bsik-dmbtr = lt_bsik-wrbtr.
+    ENDIF.
+
+    IF lt_bsik-shkzg = 'S'.
+      lt_bsik-dmbtr = -1 * lt_bsik-dmbtr.
+    ENDIF.
+    gt_out-amount1 = lt_bsik-dmbtr.
+    gt_out-zyfzk1  = lt_bsik-dmbtr.
+    IF lt_bsik-budat <= lv_date.
+      gt_out-amount2 = lt_bsik-dmbtr.
+      gt_out-zyfzk2  = lt_bsik-dmbtr.
+    ENDIF.
+    gt_out-amount3 = gt_out-amount1 - gt_out-amount2.
+
+    lv_amount1_total = lv_amount1_total + gt_out-amount1.
+    lv_amount2_total = lv_amount2_total + gt_out-amount2.
+    lv_amount3_total = lv_amount3_total + gt_out-amount3.
+
+    COLLECT gt_out.
+    CLEAR gt_out.
+  ENDLOOP.
+
+  LOOP AT lt_bseg.
+    gt_out-lifnr = lt_bseg-lifnr.
+    IF r1 = 'X'.  "本币显示
+      gt_out-waers = 'CNY'.
+    ELSEIF r2 = 'X'.
+      gt_out-waers = lt_bseg-waers.
+      lt_bseg-dmbtr = lt_bseg-wrbtr.
+    ENDIF.
+
+    IF lt_bseg-shkzg = 'S'.
+      lt_bseg-dmbtr = -1 * lt_bseg-dmbtr.
+    ENDIF.
+    gt_out-amount1 = lt_bseg-dmbtr.
+    gt_out-zyfzg1  = lt_bseg-dmbtr.
+    IF lt_bseg-budat <= lv_date.
+      gt_out-amount2 = lt_bseg-dmbtr.
+      gt_out-zyfzg2  = lt_bseg-dmbtr.
+    ENDIF.
+    gt_out-amount3 = gt_out-amount1 - gt_out-amount2.
+
+    lv_amount1_total = lv_amount1_total + gt_out-amount1.
+    lv_amount2_total = lv_amount2_total + gt_out-amount2.
+    lv_amount3_total = lv_amount3_total + gt_out-amount3.
+
+    COLLECT gt_out.
+    CLEAR gt_out.
+  ENDLOOP.
+
+***计算占比
+  LOOP AT gt_out.
+***供应商名称
+    SELECT SINGLE name1 INTO gt_out-name1 FROM lfa1 WHERE lifnr = gt_out-lifnr.
+    CLEAR:lv_percent1,lv_percent2,lv_percent3.
+    IF lv_amount1_total NE 0.
+      lv_percent1 = gt_out-amount1 / lv_amount1_total * 100.
+      gt_out-percent1 = lv_percent1.
+      CONDENSE gt_out-percent1 NO-GAPS.
+      CONCATENATE gt_out-percent1 '%' INTO gt_out-percent1.
+    ENDIF.
+    IF lv_amount2_total NE 0.
+      lv_percent2 = gt_out-amount2 / lv_amount2_total * 100.
+      gt_out-percent2 = lv_percent2.
+      CONDENSE gt_out-percent2 NO-GAPS.
+      CONCATENATE gt_out-percent2 '%' INTO gt_out-percent2 .
+    ENDIF.
+    IF lv_amount3_total NE 0.
+      lv_percent3 = gt_out-amount3 / lv_amount3_total * 100.
+      gt_out-percent3 = lv_percent3.
+      CONDENSE gt_out-percent3 NO-GAPS.
+      CONCATENATE gt_out-percent3 '%' INTO gt_out-percent3.
+    ENDIF.
+    CONDENSE:gt_out-percent1,gt_out-percent2,gt_out-percent3 NO-GAPS.
+    MODIFY gt_out.
+  ENDLOOP.
+
+  SORT gt_out BY amount1 DESCENDING amount2 DESCENDING amount3 DESCENDING.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  DATA:lv_text(30) TYPE c,
+       lv_gjahr    LIKE bsik-gjahr.
+  mcr_build_fieldcat:'LIFNR'      '供应商'     'LIFNR'    'BSIK'    ''      '',
+                     'NAME1'      '供应商名称' 'NAME1'    'LFA1'    ''      '',
+                     'ZLB'        '类别'      ''         ''        'C'    '20',
+                     'WAERS'      '币别'      'WAERS'     'BKPF'   ''     ''.
+
+  CONCATENATE p_gjahr p_monat '应付账款' INTO lv_text.
+  mcr_build_fieldcat:  'ZYFZK1'    lv_text     ''         ''        'P'     '15'.
+  CONCATENATE p_gjahr p_monat '应付暂估' INTO lv_text.
+  mcr_build_fieldcat:  'ZYFZG1'    lv_text     ''         ''        'P'     '15'.
+
+  CONCATENATE p_gjahr p_monat '余额' INTO lv_text.
+  mcr_build_fieldcat:  'AMOUNT1'    lv_text     ''         ''        'P'     '15'.
+  CONCATENATE p_gjahr p_monat '占比' INTO lv_text.
+  mcr_build_fieldcat:  'PERCENT1'    lv_text     ''         ''        'C'     '20'.
+  lv_gjahr = p_gjahr - 1.
+
+  CONCATENATE p_gjahr p_monat '应付账款' INTO lv_text.
+  mcr_build_fieldcat:  'ZYFZK2'    lv_text     ''         ''        'P'     '15'.
+  CONCATENATE p_gjahr p_monat '应付暂估' INTO lv_text.
+  mcr_build_fieldcat:  'ZYFZG2'    lv_text     ''         ''        'P'     '15'.
+
+  CONCATENATE lv_gjahr p_monat '余额' INTO lv_text.
+  mcr_build_fieldcat:  'AMOUNT2'    lv_text     ''         ''        'P'     '15'.
+  CONCATENATE lv_gjahr p_monat '占比' INTO lv_text.
+  mcr_build_fieldcat:  'PERCENT2'    lv_text     ''         ''        'C'     '20'.
+  mcr_build_fieldcat:'AMOUNT3'      '增减额'    ''    ''    'P'      '15',
+                     'PERCENT3'     '%'        ''         ''        'C'     '20'.
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK  = ' '
+*     I_BYPASSING_BUFFER =
+*     I_BUFFER_ACTIVE    =
+      i_callback_program = sy-repid
+*     I_CALLBACK_PF_STATUS_SET          = ' '
+*     I_CALLBACK_USER_COMMAND           = ' '
+*     I_CALLBACK_TOP_OF_PAGE            = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME   =
+*     I_BACKGROUND_ID    = ' '
+*     I_GRID_TITLE       =
+*     I_GRID_SETTINGS    =
+      is_layout_lvc      = gs_layout
+      it_fieldcat_lvc    = gt_fcat[]
+*     IT_EXCLUDING       =
+*     IT_SPECIAL_GROUPS_LVC             =
+*     IT_SORT_LVC        =
+*     IT_FILTER_LVC      =
+*     IT_HYPERLINK       =
+*     IS_SEL_HIDE        =
+      i_default          = 'X'
+      i_save             = 'A'
+*     IS_VARIANT         =
+*     IT_EVENTS          =
+*     IT_EVENT_EXIT      =
+*     IS_PRINT_LVC       =
+*     IS_REPREP_ID_LVC   =
+*     I_SCREEN_START_COLUMN             = 0
+*     I_SCREEN_START_LINE               = 0
+*     I_SCREEN_END_COLUMN               = 0
+*     I_SCREEN_END_LINE  = 0
+*     I_HTML_HEIGHT_TOP  =
+*     I_HTML_HEIGHT_END  =
+*     IT_ALV_GRAPHICS    =
+*     IT_EXCEPT_QINFO_LVC               =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER           =
+*     ES_EXIT_CAUSED_BY_USER            =
+    TABLES
+      t_outtab           = gt_out[]
+    EXCEPTIONS
+      program_error      = 1
+      OTHERS             = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.

@@ -1,0 +1,79 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZXMCIU01
+*&---------------------------------------------------------------------*
+DATA:lv_str       TYPE string VALUE '(SAPLXQQM)GT_DATA[]',
+     lv_str_aktyp TYPE string VALUE '(SAPLXQQM)GV_AKTYP'.
+FIELD-SYMBOLS:<fs_data>  TYPE STANDARD TABLE,
+              <fs_line>  TYPE any,
+              <fs_aktyp> TYPE c.
+DATA:lt_data    TYPE ztcs001 OCCURS 0 WITH HEADER LINE,
+     lt_ztcs003 LIKE ztcs003 OCCURS 0 WITH HEADER LINE,
+     lt_ztcs004 LIKE ztcs004 OCCURS 0 WITH HEADER LINE.
+DATA:lt_data_del LIKE ztcs001 OCCURS 0 WITH HEADER LINE.
+
+CHECK sy-tcode(2) = 'IW'.
+TRY.
+    ASSIGN (lv_str_aktyp) TO <fs_aktyp>.
+    IF sy-subrc = 0 AND ( <fs_aktyp> = 'H' OR <fs_aktyp> = 'V' ).
+      ASSIGN (lv_str) TO <fs_data>.
+      IF sy-subrc = 0.
+        LOOP AT <fs_data> ASSIGNING <fs_line>.
+          MOVE-CORRESPONDING <fs_line> TO lt_data.
+          lt_data-qmnum = n_viqmel-qmnum.
+          APPEND lt_data.
+          CLEAR lt_data.
+        ENDLOOP.
+        IF lt_data[] IS NOT INITIAL.
+***将要彻底删除的记录转移到ZTCS001D表保存，用来推送到CRM系统
+          SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_data_del FROM ztcs001 WHERE qmnum = n_viqmel-qmnum.
+          DELETE FROM ztcs001 WHERE qmnum = n_viqmel-qmnum.
+          MODIFY ztcs001 FROM TABLE lt_data.
+          LOOP AT lt_data_del.
+            READ TABLE lt_data WITH KEY zindx = lt_data_del-zindx.
+            IF sy-subrc = 0.
+              DELETE lt_data_del.
+            ELSE.
+              lt_data_del-udate = sy-datum.
+              MODIFY lt_data_del.
+            ENDIF.
+          ENDLOOP.
+          DELETE FROM ztcs001d WHERE qmnum = n_viqmel-qmnum.
+          IF lt_data_del[] IS NOT INITIAL.
+            MODIFY ztcs001d FROM TABLE lt_data_del.
+          ENDIF.
+        ENDIF.
+        CLEAR:<fs_data>.  "清空数据
+      ENDIF.
+      lv_str = '(SAPLXQQM)GT_ZTCS003_TOTAL[]'.
+      ASSIGN (lv_str) TO <fs_data>.
+      IF sy-subrc = 0.
+        LOOP AT <fs_data> ASSIGNING <fs_line>.
+          MOVE-CORRESPONDING <fs_line> TO lt_ztcs003.
+          lt_ztcs003-qmnum = n_viqmel-qmnum.
+          APPEND lt_ztcs003.
+          CLEAR lt_ztcs003.
+        ENDLOOP.
+        IF lt_ztcs003[] IS NOT INITIAL.
+          DELETE FROM ztcs003 WHERE qmnum = n_viqmel-qmnum.
+          MODIFY ztcs003 FROM TABLE lt_ztcs003.
+        ENDIF.
+        CLEAR:<fs_data>. "清空数据
+      ENDIF.
+
+      lv_str = '(SAPLXQQM)GT_ZTCS004_TOTAL[]'.
+      ASSIGN (lv_str) TO <fs_data>.
+      IF sy-subrc = 0.
+        LOOP AT <fs_data> ASSIGNING <fs_line>.
+          MOVE-CORRESPONDING <fs_line> TO lt_ztcs004.
+          lt_ztcs004-qmnum = n_viqmel-qmnum.
+          APPEND lt_ztcs004.
+          CLEAR lt_ztcs004.
+        ENDLOOP.
+        IF lt_ztcs004[] IS NOT INITIAL.
+          DELETE FROM ztcs004 WHERE qmnum = n_viqmel-qmnum.
+          MODIFY ztcs004 FROM TABLE lt_ztcs004.
+        ENDIF.
+        CLEAR:<fs_data>. "清空数据
+      ENDIF.
+    ENDIF.
+ENDTRY.

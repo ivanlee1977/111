@@ -1,0 +1,2231 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPCS002F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:BEGIN OF lt_makt OCCURS 0,
+         matnr LIKE makt-matnr,
+         maktx LIKE makt-maktx,
+       END OF lt_makt.
+
+  DATA:BEGIN OF lt_adrc OCCURS 0,
+         addrnumber LIKE adrc-addrnumber,
+         extension1 LIKE adrc-extension1,
+         street     LIKE adrc-street,
+         str_suppl3 LIKE adrc-str_suppl3,
+         tel_number LIKE adrc-tel_number,
+         sort1      LIKE adrc-sort1,
+         name1      LIKE adrc-name1,
+         name2      LIKE adrc-name2,
+       END OF lt_adrc.
+
+  DATA:BEGIN OF lt_mara OCCURS 0,
+         matnr LIKE mara-matnr,
+         spart LIKE mara-spart,     "产品组
+         matkl LIKE mara-matkl,     "物料组
+       END OF lt_mara.
+
+  DATA:lt_t171t LIKE t171t OCCURS 0 WITH HEADER LINE,
+       lt_tvkbt LIKE tvkbt OCCURS 0 WITH HEADER LINE,
+       lt_tvgrt LIKE tvgrt OCCURS 0 WITH HEADER LINE,
+       lt_tvv1t LIKE tvv1t OCCURS 0 WITH HEADER LINE,
+       lt_tvv2t LIKE tvv2t OCCURS 0 WITH HEADER LINE,
+       lt_tspat LIKE tspat OCCURS 0 WITH HEADER LINE,
+       lt_t023t LIKE t023t OCCURS 0 WITH HEADER LINE.
+
+  DATA:lt_ztcs002 LIKE ztcs002 OCCURS 0 WITH HEADER LINE,
+       lt_ztcs003 LIKE ztcs003 OCCURS 0 WITH HEADER LINE,
+       lt_ztcs004 LIKE ztcs004 OCCURS 0 WITH HEADER LINE.
+
+  DATA:lv_wbstk LIKE vbuk-wbstk.
+
+  RANGES:r_zwxzt FOR ztcs001-zwxzt,
+         r_zwczt FOR ztcs001-zwczt,
+         r_zthwx FOR ztcs001-zthwx.
+
+  DEFINE mcr_del_zero.
+    IF strlen( &1 ) > 3.
+      CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+        EXPORTING
+          input         = &1
+       IMPORTING
+         output        = &1 .
+    ENDIF.
+  END-OF-DEFINITION.
+
+  DEFINE mcr_add_mat_zero.
+    IF &1 IS NOT INITIAL.
+      CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+        EXPORTING
+          input              = &1
+       IMPORTING
+         output             = &1
+       EXCEPTIONS
+         length_error       = 1
+         OTHERS             = 2.
+    ENDIF.
+  END-OF-DEFINITION.
+
+  DATA:lv_num   TYPE i,
+       lv_tabix LIKE sy-tabix,
+       lv_days  TYPE int4. "计算天数
+
+  IF r5 = 'X'.
+    r_zwxzt = 'EEQ'.
+    r_zwxzt-low = 'A9'.
+    APPEND r_zwxzt.
+
+    r_zwxzt = 'EEQ'.
+    r_zwxzt-low = 'B9'.
+    APPEND r_zwxzt.
+
+    r_zwczt = 'INE'.
+    r_zwczt-low = 'X'.
+    APPEND r_zwczt.
+    CLEAR r_zwczt.
+  ENDIF.
+
+  IF r6 = 'X'.
+    r_zthwx = 'IEQ'.
+    r_zthwx-low = 'X'.
+    APPEND r_zthwx.
+    CLEAR r_zthwx.
+    r_zthwx = 'IEQ'.
+    r_zthwx-low = 'Z'.
+    APPEND r_zthwx.
+    CLEAR r_zthwx.
+  ENDIF.
+
+  IF r7 = 'X'.
+    r_zwczt = 'IEQ'.
+    r_zwczt-low = 'X'.
+    APPEND r_zwczt.
+    CLEAR r_zwczt.
+  ENDIF.
+
+  SELECT   a~qmnum
+           a~zindx
+           a~matnr
+           a~zbarcode
+           a~menge
+           a~zreason
+           a~zgzsm
+           a~zyysm
+           a~zwxzt
+           a~zthwx
+           a~zwhwl1
+           a~zwh1
+           a~zwhwl2
+           a~zwh2
+           a~zwhwl3
+           a~zwh3
+           a~zwhwl4
+           a~zwh4
+           a~zwhwl5
+           a~zwh5
+           a~lifnr
+           a~erdat
+           a~zjhfy
+           a~zsjfy
+           a~zjhrq
+           a~zjsrq
+           a~zkhqr
+           a~zwxrq
+           a~zyjgys
+           a~zthrq
+           a~zwxwc
+           a~zzjtg
+           a~zcpfh
+           a~zyfkh
+           a~zwczt
+           a~zzjbz
+           a~zswbz
+           a~zwxbz
+           a~zkddh
+           a~vsart
+           a~zfhkh
+           a~kunnr
+           a~zgbbs
+           a~zwxcs
+           a~zycyw
+           a~zgyskdd
+           a~zbfh
+           a~zversion
+           a~zwfwx
+           a~zcb
+           a~zwxy
+           a~zwxgs
+           a~zso
+           a~zgyswxf
+           a~zrma
+           a~zsfbs
+           a~udate
+           a~zwxbj
+           a~zfhdd
+           a~zyfhdrq
+           b~kunum
+           b~qmart
+           b~adrnr
+           b~vbeln
+           c~vkbur
+           c~vkgrp
+           c~kvgr1
+           c~kvgr2
+           c~vkorg   "ADD BY PFT 20171116
+           b~qmtxt
+           b~bstnk
+     INTO CORRESPONDING FIELDS OF TABLE gt_out
+     FROM ztcs001 AS a
+     INNER JOIN qmel AS b
+     ON a~qmnum = b~qmnum
+     INNER JOIN knvv AS c
+     ON b~kunum = c~kunnr
+     FOR ALL ENTRIES IN gt_tq80_t
+     WHERE c~vkorg IN s_vkorg
+       AND b~qmart EQ gt_tq80_t-qmart
+       AND b~qmnum IN s_qmnum
+       AND a~matnr IN s_matnr
+       AND b~kunum IN s_kunum
+       AND b~qmtxt IN s_qmtxt
+       AND a~zwxzt IN s_zwxzt
+       AND c~kvgr1 IN s_kvgr1
+       AND c~kvgr2 IN s_kvgr2
+       AND c~loevm EQ space
+       AND c~aufsd EQ space
+       AND a~erdat IN s_erdat
+       AND a~zkhqr IN s_zkhqr
+       AND a~zzjtg IN s_zzjtg
+       AND a~zbarcode IN s_zbar
+       AND a~zwxy  IN s_zwxy
+       AND a~zwxzt IN r_zwxzt
+       AND a~zthwx IN r_zthwx
+       AND a~zwczt IN r_zwczt
+       AND a~zthwx IN s_zthwx
+       AND a~zsfbs IN s_zsfbs.
+
+  CHECK gt_out[] IS NOT INITIAL.
+  LOOP AT gt_out WHERE adrnr IS INITIAL.
+    IF gt_out-adrnr IS INITIAL.
+      SELECT SINGLE adrnr INTO gt_out-adrnr FROM kna1 WHERE kunnr = gt_out-kunum.
+    ENDIF.
+    mcr_add_mat_zero:gt_out-zwhwl1,gt_out-zwhwl2,gt_out-zwhwl3,gt_out-zwhwl4,gt_out-zwhwl5.
+    MODIFY gt_out.
+  ENDLOOP.
+
+***物料描述
+  SELECT matnr maktx
+    INTO CORRESPONDING FIELDS OF TABLE lt_makt
+    FROM makt
+    FOR ALL ENTRIES IN gt_out
+    WHERE ( matnr = gt_out-matnr
+       OR matnr = gt_out-zwhwl1+2(18)
+       OR matnr = gt_out-zwhwl2+2(18)
+       OR matnr = gt_out-zwhwl3+2(18)
+       OR matnr = gt_out-zwhwl4+2(18)
+       OR matnr = gt_out-zwhwl5+2(18)  )
+      AND spras = sy-langu.
+
+***抓取物料组 & 产品组信息
+  SELECT matnr
+         spart
+         matkl
+    INTO CORRESPONDING FIELDS OF TABLE lt_mara
+    FROM mara
+    FOR ALL ENTRIES IN gt_out
+    WHERE matnr = gt_out-matnr.
+
+***抓取地址信息
+  SELECT addrnumber
+         sort1
+         extension1
+         street
+         str_suppl3
+         tel_number
+         name1
+         name2
+    INTO CORRESPONDING FIELDS OF TABLE lt_adrc
+    FROM adrc
+    FOR ALL ENTRIES IN gt_out
+    WHERE addrnumber = gt_out-adrnr.
+
+  SELECT * INTO TABLE lt_t171t FROM t171t WHERE spras = sy-langu.
+  SELECT * INTO TABLE lt_tvkbt FROM tvkbt WHERE spras = sy-langu.
+  SELECT * INTO TABLE lt_tvgrt FROM tvgrt WHERE spras = sy-langu.
+  SELECT * INTO TABLE lt_tvv1t FROM tvv1t WHERE spras = sy-langu.
+  SELECT * INTO TABLE lt_tvv2t FROM tvv2t WHERE spras = sy-langu.
+  SELECT * INTO TABLE lt_tspat FROM tspat WHERE spras = sy-langu.
+  SELECT * INTO TABLE lt_t023t FROM t023t WHERE spras = sy-langu.
+
+  SELECT * INTO TABLE lt_ztcs002 FROM ztcs002.
+  SELECT * INTO TABLE lt_ztcs003 FROM ztcs003 FOR ALL ENTRIES IN gt_out WHERE qmnum = gt_out-qmnum AND zindx = gt_out-zindx.
+  SELECT * INTO TABLE lt_ztcs004 FROM ztcs004 FOR ALL ENTRIES IN gt_out WHERE qmnum = gt_out-qmnum AND zindx = gt_out-zindx.
+
+  SORT lt_makt  BY matnr.
+  SORT lt_adrc  BY addrnumber.
+  SORT lt_t171t BY bzirk.
+  SORT lt_tvkbt BY vkbur.
+  SORT lt_tvgrt BY vkgrp.
+  SORT lt_tvv1t BY kvgr1.
+  SORT lt_tvv2t BY kvgr2.
+  SORT lt_ztcs002 BY zstat.
+  SORT lt_mara BY matnr.
+  SORT lt_tspat BY spart.
+  SORT lt_t023t BY matkl.
+
+  DATA:lv_zwhwl LIKE ztcs001-zwhwl1.
+
+
+***整理数据到输出表
+  LOOP AT gt_out.
+***    ADD BY PFT 20171116
+*  增加销售组织和业务员的权限检查
+    lv_tabix = sy-tabix.
+    AUTHORITY-CHECK OBJECT 'V_VBAK_VKO'
+             ID 'VKORG' FIELD gt_out-vkorg
+             ID 'VTWEG' DUMMY
+             ID 'SPART' DUMMY
+             ID 'ACTVT' FIELD '03'.
+    IF sy-subrc <> 0.
+      DELETE gt_out INDEX lv_tabix .
+      CONTINUE.
+    ENDIF.
+    AUTHORITY-CHECK OBJECT 'Z_KVGR1'
+             ID 'KVGR1' FIELD gt_out-kvgr1.
+    IF sy-subrc <> 0.
+      DELETE gt_out INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+**** END BY PFT 20171116
+    READ TABLE lt_makt WITH KEY matnr = gt_out-matnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-maktx = lt_makt-maktx.
+    ENDIF.
+
+*** changed by wusk 20180307
+    IF gt_out-zwhwl1 IS NOT INITIAL.
+      CLEAR:lv_zwhwl.
+      lv_zwhwl = gt_out-zwhwl1.
+      mcr_add_mat_zero:lv_zwhwl.
+      SELECT SINGLE maktx FROM makt INTO gt_out-maktx1  WHERE matnr = lv_zwhwl+2 .
+    ENDIF.
+    IF gt_out-zwhwl2 IS NOT INITIAL.
+      CLEAR:lv_zwhwl.
+      lv_zwhwl = gt_out-zwhwl2.
+      mcr_add_mat_zero:lv_zwhwl.
+      SELECT SINGLE maktx FROM makt INTO gt_out-maktx2  WHERE matnr = lv_zwhwl+2 .
+    ENDIF.
+    IF gt_out-zwhwl3 IS NOT INITIAL.
+      CLEAR:lv_zwhwl.
+      lv_zwhwl = gt_out-zwhwl3.
+      mcr_add_mat_zero:lv_zwhwl.
+      SELECT SINGLE maktx FROM makt INTO gt_out-maktx3  WHERE matnr = lv_zwhwl+2 .
+    ENDIF.
+    IF gt_out-zwhwl4 IS NOT INITIAL.
+      CLEAR:lv_zwhwl.
+      lv_zwhwl = gt_out-zwhwl4.
+      mcr_add_mat_zero:lv_zwhwl.
+      SELECT SINGLE maktx FROM makt INTO gt_out-maktx4  WHERE matnr = lv_zwhwl+2 .
+    ENDIF.
+    IF gt_out-zwhwl5 IS NOT INITIAL.
+      CLEAR:lv_zwhwl.
+      lv_zwhwl = gt_out-zwhwl5.
+      mcr_add_mat_zero:lv_zwhwl.
+      SELECT SINGLE maktx FROM makt INTO gt_out-maktx5  WHERE matnr = lv_zwhwl+2 .
+    ENDIF.
+***encchanged
+***联系人信息
+    READ TABLE lt_adrc WITH KEY addrnumber = gt_out-adrnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-sortl = lt_adrc-sort1.                       "客户简称
+      gt_out-extension1 = lt_adrc-extension1.             "收货联系人
+      gt_out-zshdz  = lt_adrc-street && lt_adrc-str_suppl3."收货地址
+      gt_out-zshdh  = lt_adrc-tel_number.             "收货电话
+      SELECT SINGLE tel_number INTO gt_out-zshsj FROM adr2 WHERE addrnumber = gt_out-adrnr AND r3_user = '3'.
+      gt_out-zkhmc = lt_adrc-name1 && lt_adrc-name2.
+    ENDIF.
+***销售大区代码描述
+    READ TABLE lt_t171t WITH KEY bzirk = gt_out-bzirk BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-bzirk_txt = lt_t171t-bztxt.
+    ENDIF.
+***行办描述
+    READ TABLE lt_tvkbt WITH KEY vkbur = gt_out-vkbur BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-vkbur_txt = lt_tvkbt-bezei.
+    ENDIF.
+***销售组描述
+    READ TABLE lt_tvgrt WITH KEY vkgrp = gt_out-vkgrp BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-vkgrp_txt = lt_tvgrt-bezei.
+    ENDIF.
+***业务员描述
+    READ TABLE lt_tvv1t WITH KEY kvgr1 = gt_out-kvgr1 BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-kvgr1_txt = lt_tvv1t-bezei.
+    ENDIF.
+***商务描述
+    READ TABLE lt_tvv2t WITH KEY kvgr2 = gt_out-kvgr2 BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-kvgr2_txt = lt_tvv2t-bezei.
+    ENDIF.
+***维修状态描述
+    READ TABLE lt_ztcs002 WITH KEY zstat = gt_out-zwxzt BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-ztext = lt_ztcs002-ztext.
+    ENDIF.
+***快递公司
+    IF gt_out-vsart IS NOT INITIAL.
+      SELECT SINGLE bezei INTO gt_out-zkdgs FROM t173t WHERE spras = sy-langu AND vsart = gt_out-vsart.
+    ENDIF.
+***供应商名称
+    IF gt_out-lifnr IS NOT INITIAL.
+      SELECT SINGLE name1 INTO gt_out-name1 FROM lfa1 WHERE lifnr = gt_out-lifnr.
+    ENDIF.
+    READ TABLE lt_mara WITH KEY matnr = gt_out-matnr BINARY SEARCH.
+    IF sy-subrc = 0 .
+***产品组 & 描述
+      gt_out-spart = lt_mara-spart.
+      READ TABLE lt_tspat WITH KEY spart = gt_out-spart BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_out-spart_txt = lt_tspat-vtext.
+      ENDIF.
+***物料组 & 描述
+      gt_out-matkl = lt_mara-matkl.
+      READ TABLE lt_t023t WITH KEY matkl = gt_out-matkl BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_out-matkl_txt = lt_t023t-wgbez.
+      ENDIF.
+    ENDIF.
+
+***维修员名称
+    SELECT SINGLE zwxy INTO gt_out-zwxy FROM ztcs005 WHERE zcode = gt_out-zwxy.
+
+    CLEAR lv_num.
+    LOOP AT lt_ztcs003 WHERE  qmnum = gt_out-qmnum AND zindx = gt_out-zindx.
+      lv_num = lv_num + 1.
+      CASE lv_num.
+        WHEN 1.
+          gt_out-fecod1 = lt_ztcs003-fecod.
+          SELECT SINGLE kurztext INTO gt_out-txtcdfe1 FROM qpct WHERE katalogart = 'C' AND codegruppe = lt_ztcs003-fegrp AND code = lt_ztcs003-fecod AND sprache = '1'.
+        WHEN 2.
+          gt_out-fecod2 = lt_ztcs003-fecod.
+          SELECT SINGLE kurztext INTO gt_out-txtcdfe2 FROM qpct WHERE katalogart = 'C' AND codegruppe = lt_ztcs003-fegrp AND code = lt_ztcs003-fecod AND sprache = '1'.
+        WHEN 3.
+          gt_out-fecod3 = lt_ztcs003-fecod.
+          SELECT SINGLE kurztext INTO gt_out-txtcdfe3 FROM qpct WHERE katalogart = 'C' AND codegruppe = lt_ztcs003-fegrp AND code = lt_ztcs003-fecod AND sprache = '1'.
+        WHEN OTHERS.
+          EXIT.
+      ENDCASE.
+    ENDLOOP.
+
+    CLEAR lv_num.
+    LOOP AT lt_ztcs004 WHERE  qmnum = gt_out-qmnum AND zindx = gt_out-zindx.
+      lv_num = lv_num + 1.
+      CASE lv_num.
+        WHEN 1.
+          gt_out-urcod1 = lt_ztcs004-urcod.
+          SELECT SINGLE kurztext INTO gt_out-txtcdur1 FROM qpct WHERE katalogart = '5' AND codegruppe = lt_ztcs004-urgrp AND code = lt_ztcs004-urcod AND sprache = '1'.
+        WHEN 2.
+          gt_out-urcod2 = lt_ztcs004-urcod.
+          SELECT SINGLE kurztext INTO gt_out-txtcdur2 FROM qpct WHERE katalogart = '5' AND codegruppe = lt_ztcs004-urgrp AND code = lt_ztcs004-urcod AND sprache = '1'.
+        WHEN 3.
+          gt_out-urcod3 = lt_ztcs004-urcod.
+          SELECT SINGLE kurztext INTO gt_out-txtcdur3 FROM qpct WHERE katalogart = '5' AND codegruppe = lt_ztcs004-urgrp AND code = lt_ztcs004-urcod AND sprache = '1'.
+        WHEN OTHERS.
+          EXIT.
+      ENDCASE.
+    ENDLOOP.
+***退货交货单数据
+    IF gt_out-zthwx EQ 'X' OR gt_out-zthwx EQ 'Y'.
+      "ZSO有可能是手工输入，也可能是从系统带出，第一次带出，手工优先级比较高
+      IF gt_out-zthwx EQ 'Y'.
+        CLEAR gt_out-vbeln.
+      ENDIF.
+      IF gt_out-zso IS INITIAL AND gt_out-vbeln IS NOT INITIAL.
+        gt_out-zso = gt_out-vbeln.
+      ENDIF.
+      IF  gt_out-zso IS NOT INITIAL.
+        SELECT SINGLE vbeln INTO gt_out-zdn FROM vbfa WHERE vbelv = gt_out-zso AND vbtyp_n = 'T' AND vbtyp_v IN ( 'H','C' ).
+      ENDIF.
+***交货状态
+      IF gt_out-zdn IS NOT INITIAL.
+        CLEAR lv_wbstk.
+        SELECT SINGLE wbstk INTO lv_wbstk FROM vbuk WHERE vbeln = gt_out-zdn.
+        IF lv_wbstk EQ 'C'.
+          gt_out-zjhzt = '已过帐'.
+        ELSE.
+          gt_out-zjhzt = '未过帐'.
+        ENDIF.
+      ENDIF.
+    ELSE.
+      CLEAR:gt_out-vbeln.
+    ENDIF.
+***发货交货单及状态
+    IF gt_out-zthwx EQ 'Y' AND gt_out-zfhdd IS NOT INITIAL.
+      SELECT SINGLE vbeln INTO gt_out-zfhdn FROM vbfa WHERE vbelv = gt_out-zfhdd AND vbtyp_n = 'J' AND vbtyp_v IN ( 'H','C' ).
+***交货状态
+      IF gt_out-zfhdn IS NOT INITIAL.
+        CLEAR lv_wbstk.
+        SELECT SINGLE wbstk INTO lv_wbstk FROM vbuk WHERE vbeln = gt_out-zfhdn.
+        IF lv_wbstk EQ 'C'.
+          gt_out-zjhzt1 = '已过帐'.
+        ELSE.
+          gt_out-zjhzt1 = '未过帐'.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+***ADD BY QUYANTAO 2017.12.12
+    IF gt_out-zbarcode IS NOT INITIAL.
+      gt_out-menge = 1.
+    ENDIF.
+***退货标识描述
+    PERFORM frm_get_domain_text USING gt_out-zthwx CHANGING gt_out-zthwx_txt.
+***END ADD
+
+***ADD BY PFT 20180123  增加返还预警逻辑
+*  逻辑： 状态为A7时：当前日期-维修完成日期>1时，显示红灯，否则绿灯
+*        状态为B6时，当前日期-质检通过日期>1时，显示红灯，否则绿灯
+    CASE gt_out-zwxzt.
+      WHEN 'A7'.
+        lv_days = sy-datum - gt_out-zwxwc.
+        IF lv_days > 1.
+          gt_out-zfhyj = icon_led_red.
+        ELSE.
+          gt_out-zfhyj = icon_led_green.
+        ENDIF.
+      WHEN 'B6'.
+        lv_days = sy-datum - gt_out-zzjtg.
+        IF lv_days > 1.
+          gt_out-zfhyj = icon_led_red.
+        ELSE.
+          gt_out-zfhyj = icon_led_green.
+        ENDIF.
+      WHEN OTHERS.
+    ENDCASE.
+***END BY PFT 20180123
+
+***去掉位号物料前面的0
+    mcr_del_zero:gt_out-zwhwl1,gt_out-zwhwl2,gt_out-zwhwl3,gt_out-zwhwl4,gt_out-zwhwl5.
+
+    PERFORM frm_get_field_style USING gt_out-zwxzt CHANGING gt_out-stytab.
+********************************************************************** 报价标准 20180521
+    SEARCH gt_out-maktx FOR '驱动器'.
+    IF sy-subrc = 0.
+      gt_out-zwx = '维修标准1'.
+    ENDIF.
+    SEARCH gt_out-maktx FOR '开环步进电机'.
+    IF sy-subrc = 0.
+      gt_out-zwx = '维修标准2'.
+    ENDIF.
+    SEARCH gt_out-maktx FOR '闭环步进电机'.
+    IF sy-subrc = 0.
+      gt_out-zwx = '维修标准3'.
+    ENDIF.
+    SEARCH gt_out-maktx FOR '交流伺服电机'.
+    IF sy-subrc = 0.
+      gt_out-zwx = '维修标准4'.
+    ENDIF.
+    MODIFY gt_out.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  REFRESH:gt_fcat.
+  IF r2 = 'X' OR r3 = 'X' OR r4 = 'X'.
+    mcr_build_fieldcat: 'X' 'CHECK'      '选择'          ''          ''          'C'     '1'.
+  ENDIF.
+  IF r1 = 'X' .
+    mcr_build_fieldcat: 'X' 'ZFHYJ'      '返还预警'          ''          ''          'C'     '30'.
+  ENDIF.
+  mcr_build_fieldcat:'X' 'QMNUM'        '通知编号'      'QMNUM'     'ZTCS001'   ''     '',
+                     'X' 'QMART'        '通知单类型'    'QMART'     'QMEL'      ''     '',
+                     'X' 'ZINDX'        '项次'          'ZINDX'     'ZTCS001'   ''     '',
+                     'X' 'KUNUM'        '客户代码'      'KUNUM'     'QMEL'      ''     '',
+                     'X' 'SORTL'        '客户简称'      'SORTL'     'QMEL'      ''     '',
+                     ''  'MATNR'        '物料号码'      'MATNR'     'ZTCS001'   ''     '',
+                     ''  'MAKTX'        '物料描述'      'MAKTX'     'MAKT'      ''     '',
+                     ''  'ZBARCODE'     '条码'          'ZBARCODE'  'ZTCS001'   ''     '',
+                     ''  'MENGE'        '数量'          'MENGE'     'ZTCS001'   ''     '',
+                     ''  'ZREASON'      '客户问题描述'  'ZREASON'   'ZTCS001'   ''     '',
+                     ''  'ZGZSM'        '故障说明'      'ZGZSM'     'ZTCS001'   ''     '',
+                     ''  'ZYYSM'        '原因说明'      'ZYYSM'     'ZTCS001'   ''     '',
+                     ''  'ZWXZT'        '维修状态'      'ZWXZT'     'ZTCS001'   ''     '',
+                     ''  'ZTEXT'        '维修状态描述'  'ZTEXT'     'ZTCS002'   ''     '',
+                     ''  'ZTHWX'        '退货标识'      'ZTHWX'     'ZTCS001'   ''     '',
+                     ''  'ZTHWX_TXT'    '退货标识描述'  ''          ''          'C'    '50',
+                     ''  'ZWHWL1'       '位号/物料1'    'ZWHWL1'    'ZTCS001'   ''     '',
+                     ''  'MAKTX1'       '物料描述1'     'MAKTX'     'MAKT'      ''     '',
+                     ''  'ZWHWL2'       '位号/物料2'    'ZWHWL2'    'ZTCS001'   ''     '',
+                     ''  'MAKTX2'       '物料描述2'     'MAKTX'     'MAKT'      ''     '',
+                     ''  'ZWHWL3'       '位号/物料3'    'ZWHWL3'    'ZTCS001'   ''     '',
+                     ''  'MAKTX3'       '物料描述3'     'MAKTX'     'MAKT'      ''     '',
+                     ''  'ZWHWL4'       '位号/物料4'    'ZWHWL4'    'ZTCS001'   ''     '',
+                     ''  'MAKTX4'       '物料描述4'     'MAKTX'     'MAKT'      ''     '',
+                     ''  'ZWHWL5'       '位号/物料5'    'ZWHWL5'    'ZTCS001'   ''     '',
+                     ''  'MAKTX5'       '物料描述5'     'MAKTX'     'MAKT'      ''     '',
+                     ''  'LIFNR'        '供应商'        'LIFNR'     'ZTCS001'   ''     '',
+                     ''  'NAME1'        '供应商名称'    'NAME1'     'LFA1'      ''     '',
+                     ''  'ERDAT'        '创建日期'      'ERDAT'     'ZTCS001'   ''     '',
+                     ''  'ZJHFY'        '商务预报价'  'ZJHFY'     'ZTCS001'   ''     '',
+                     ''  'ZSJFY'        '实际收到费用'  'ZSJFY'     'ZTCS001'   ''     '',
+                     ''  'ZJHRQ'        '交货日期'      'ZJHRQ'     'ZTCS001'   ''     '',
+                     ''  'ZJSRQ'        '接收日期'      'ZJSRQ'     'ZTCS001'   ''     '',
+                     ''  'ZKHQR'        '客户确认日期'  'ZKHQR'     'ZTCS001'   ''     '',
+                     ''  'ZWXRQ'        '维修中日期'    'ZWXRQ'     'ZTCS001'   ''     '',
+                     ''  'ZYJGYS'       '已寄供应商日期' 'ZYJGYS'    'ZTCS001'   ''     '',
+                     ''  'ZTHRQ'        '供应商返还/退货日期' 'ZTHRQ'    'ZTCS001'   ''     '',
+                     ''  'ZWXWC'        '维修完成日期'  'ZWXWC'    'ZTCS001'   ''     '',
+                     ''  'ZZJTG'        '质检通过日期'  'ZZJTG'    'ZTCS001'   ''     '',
+                     ''  'ZCPFH'        '产品返还确认日期'  'ZCPFH'    'ZTCS001'   ''     '',
+                     ''  'ZYFKH'        '已返还客户日期'  'ZYFKH'    'ZTCS001'   ''     '',
+                     ''  'ZWCZT'        '完成状态'        'ZWCZT'    'ZTCS001'   ''     '',
+                     ''  'ZZJBZ'        '质检备注'        'ZZJBZ'    'ZTCS001'   ''     '',
+                     ''  'ZSWBZ'        '商务备注'        'ZSWBZ'    'ZTCS001'   ''     '',
+                     ''  'ZWXBZ'        '维修备注'        'ZWXBZ'    'ZTCS001'   ''     '',
+                     ''  'ZKDDH'        '客户快递单号'    'ZKDDH'    'ZTCS001'   ''     '',
+*                    ''  'VSART'        '快递公司代码'    'VSART'    'ZTCS001'   ''     '',
+*                    ''  'ZKDGS'        '快递公司描述'    'BEZEI'    'T173T'     ''     '',
+                     ''  'ZFHKH'        '返回客户'        'ZFHKH'    'ZTCS001'   ''     '',
+                     ''  'KUNNR'        '客户编码'        'KUNNR'    'ZTCS001'   ''     '',
+                     ''  'ZGBBS'        '过保标识'        'ZGBBS'    'ZTCS001'   ''     '',
+                     ''  'EXTENSION1'   '收货联系人'      'EXTENSION1'    'ADRC'  ''     '',
+                     ''  'ZSHDZ'        '收货地址'        ''          ''         'C'     '100',
+                     ''  'ZSHDH'        '收货电话'        ''          ''         'C'     '30',
+                     ''  'ZSHSJ'        '收货手机'        ''          ''         'C'     '30',
+                     ''  'ZKHMC'        '客户名称'        ''          ''         'C'     '70',
+                     ''  'BZIRK'        '销售大区代码'    'BZIRK'     'KNVV'     ''      '',
+                     ''  'BZIRK_TXT'    '销售大区描述'    'BZTXT'     'T171T'    ''      '',
+                     ''  'VKBUR'        '行办代码'        'VKBUR'     'KNVV'     ''      '',
+                     ''  'VKBUR_TXT'    '行办描述'        'BEZEI'     'TVKBT'    ''      '',
+                     ''  'VKGRP'        '销售组代码'      'VKGRP'     'KNVV'     ''      '',
+                     ''  'VKGRP_TXT'    '销售组描述'      'BEZEI'     'TVGRT'    ''      '',
+                     ''  'KVGR1'        '业务员代码'      'KVGR1'     'KNVV'     ''      '',
+                     ''  'KVGR1_TXT'    '业务员描述'      'BEZEI'     'TVV1T'    ''      '',
+                     ''  'KVGR2'        '商务代码'        'KVGR2'     'KNVV'     ''      '',
+                     ''  'KVGR2_TXT'    '商务描述'        'BEZEI'     'TVV2T'    ''      '',
+                     ''  'FECOD1'       '故障代码1'       'FECOD'     'QMFE'     ''      '',
+                     ''  'TXTCDFE1'     '故障描述1'       'TXTCDFE'   'RIWO00'    ''      '',
+                     ''  'FECOD2'       '故障代码2'       'FECOD'     'QMFE'     ''      '',
+                     ''  'TXTCDFE2'     '故障描述2'       'TXTCDFE'   'RIWO00'    ''      '',
+                     ''  'FECOD3'       '故障代码3'       'FECOD'     'QMFE'     ''      '',
+                     ''  'TXTCDFE3'     '故障描述3'       'TXTCDFE'   'RIWO00'    ''      '',
+                     ''  'URCOD1'       '原因代码1'       'URCOD'     'ZTCS004'     ''      '',
+                     ''  'TXTCDUR1'     '原因描述1'       'TXTCDUR'   'RIWO00'    ''      '',
+                     ''  'URCOD2'       '原因代码2'       'URCOD'     'ZTCS004'     ''      '',
+                     ''  'TXTCDUR2'     '原因描述2'       'TXTCDUR'   'RIWO00'    ''      '',
+                     ''  'URCOD3'       '原因代码3'       'URCOD'     'ZTCS004'     ''      '',
+                     ''  'TXTCDUR3'     '原因描述3'       'TXTCDUR'   'RIWO00'    ''      '',
+                     ''  'ZSO'          '退货订单'        'MBLNR'     'MSEG'         'C'      '10',
+                     ''  'ZDN'          '退货交货单'      'VBELN'     'LIKP'      ''      '',
+                     ''  'ZJHZT'        '退货状态'        ''          ''          'C'     '10',
+                     ''  'ZFHDD'        '发货订单'        'VBELN'     'VBAK'         'C'      '10',
+                     ''  'ZFHDN'        '发货交货'        'VBELN'     'LIKP'      ''      '',
+                     ''  'ZJHZT1'       '发货交货状态'    ''          ''          'C'     '10',
+                     ''  'ZWXCS'        '维修次数'        'ZWXCS'     'ZTCS001'   ''      '',
+                     ''  'ZYCYW'        '异常业务'        'ZYCYW'     'ZTCS001'   ''      '',
+                     ''  'ZGYSKDD'      '供应商快递单'    'ZGYSKDD'   'ZTCS001'   ''      '',
+                     ''  'ZBFH'         '不返还'          'ZBFH'      'ZTCS001'   ''      '',
+                     ''  'ZVERSION'     '版本'            'ZVERSION'  'ZTCS001'   ''      '',
+                     ''  'ZWFWX'        '无法维修'        'ZWFWX'     'ZTCS001'   ''      '',
+                     ''  'SPART_TXT'    '产品组描述'      'VTEXT'     'TSPAT'     ''      '',
+                     ''  'MATKL_TXT'    '物料组描述'      'WGBEZ'     'T023T'     ''      '',
+                     ''  'ZCB'          '物料成本价格'    'ZCB'       'ZTCS001'   ''      '',
+                     ''  'ZWXY'         '维修员'          'ZWXY'      'ZTCS001'   ''      '',
+                     ''  'ZWXGS'        '维修工时'        'ZWXGS'     'ZTCS001'   ''      '',
+                     ''  'ZGYSWXF'      '供应商维修费'    'ZGYSWXF'   'ZTCS001'   ''      '',
+                     ''  'ZRMA'         'RMA#'            'ZRMA'      'ZTCS001'   ''      '',
+                     ''  'QMTXT'        'K3维修单据号'    'QMTXT'     'QMEL'      ''      '',
+                     ''  'BSTNK'        '存放位置'        'BSTNK'     'QMEL'      ''      '',
+                     ''  'ZSFBS'        '收发标识'        'ZSFBS'     'ZTCS001'   ''      '',
+                     ''  'ZWX'        '价格标准'        ''     ''   ''      '',
+                     ''  'ZWXBJ'        '维修报价'        'ZWXBJ'     'ZTCS001'   ''      '',
+                     ''  'ZYFHDRQ'      '已发华东日期'    'ZYFHDRQ'   'ZTCS001'   ''      ''.
+  IF r1 = 'X' .
+    mcr_build_fieldcat: '' 'ZWH1'       '位号1'      'ZWH1'     'ZTCS001'   ''     '',
+                        '' 'ZWH2'       '位号2'      'ZWH2'     'ZTCS001'   ''     '',
+                        '' 'ZWH3'       '位号3'      'ZWH3'     'ZTCS001'   ''     '',
+                        '' 'ZWH4'       '位号4'      'ZWH4'     'ZTCS001'   ''     '',
+                        '' 'ZWH5'       '位号5'      'ZWH5'     'ZTCS001'   ''     ''.
+  ENDIF.
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+  gs_layout-no_toolbar = 'X'.
+  gs_layout-stylefname = 'STYTAB'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK        = ' '
+*     I_BYPASSING_BUFFER       =
+*     I_BUFFER_ACTIVE          =
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'FRM_PF_STATUS'
+      i_callback_user_command  = 'FRM_USER_COMMAND'
+*     I_CALLBACK_TOP_OF_PAGE   = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME         =
+*     I_BACKGROUND_ID          = ' '
+*     I_GRID_TITLE             =
+*     I_GRID_SETTINGS          =
+      is_layout_lvc            = gs_layout
+      it_fieldcat_lvc          = gt_fcat[]
+*     IT_EXCLUDING             =
+*     IT_SPECIAL_GROUPS_LVC    =
+*     IT_SORT_LVC              =
+*     IT_FILTER_LVC            =
+*     IT_HYPERLINK             =
+*     IS_SEL_HIDE              =
+*     i_default                = 'X'
+      i_save                   = 'U'
+*     IS_VARIANT               =
+      it_events                = gt_events[]
+*     IT_EVENT_EXIT            =
+*     IS_PRINT_LVC             =
+*     IS_REPREP_ID_LVC         =
+*     I_SCREEN_START_COLUMN    = 0
+*     I_SCREEN_START_LINE      = 0
+*     I_SCREEN_END_COLUMN      = 0
+*     I_SCREEN_END_LINE        = 0
+*     I_HTML_HEIGHT_TOP        =
+*     I_HTML_HEIGHT_END        =
+*     IT_ALV_GRAPHICS          =
+*     IT_EXCEPT_QINFO_LVC      =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER  =
+*     ES_EXIT_CAUSED_BY_USER   =
+    TABLES
+      t_outtab                 = gt_out[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PF_STATUS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_pf_status USING rt_extab TYPE slis_t_extab.
+  DEFINE mcr_add_fcode.
+    APPEND &1 TO rt_extab.
+  END-OF-DEFINITION.
+  REFRESH:rt_extab.
+  IF r1 = 'X'.
+    mcr_add_fcode:'ZALL','ZDEALL','ZJSQR','ZQXJSQR','ZFHQR','ZQXFHQR','ZZJQR','ZQXZJQR','ZZJBTG','ZSAVE','ZREFRESH','ZPRINT'.
+    SET PF-STATUS 'PF_1000' EXCLUDING rt_extab.
+  ELSEIF r2 = 'X'.
+    mcr_add_fcode:'ZJSQR','ZQXJSQR','ZFHQR','ZQXFHQR','ZSAVE','ZREFRESH','ZPRINT'.
+    SET PF-STATUS 'PF_1000' EXCLUDING rt_extab.
+  ELSEIF r3 = 'X'.
+    mcr_add_fcode:'ZZJQR','ZQXZJQR','ZZJBTG'.
+    SET PF-STATUS 'PF_1000' EXCLUDING rt_extab.
+  ELSEIF r4 = 'X'.
+    SET PF-STATUS 'PF_1001'.
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_USER_COMMAND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_user_command USING r_ucomm LIKE sy-ucomm
+                            rs_selfield TYPE slis_selfield..
+  DATA:lv_grid TYPE REF TO cl_gui_alv_grid.
+
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = lv_grid.
+
+  CALL METHOD lv_grid->check_changed_data( ).
+
+  CASE r_ucomm.
+    WHEN 'ZJSQR'.   "接收确认
+      PERFORM frm_do_jsqr.
+    WHEN 'ZQXJSQR'. "取消接收确认
+      PERFORM frm_do_qxjsqr.
+    WHEN 'ZFHQR'.   "返回确认
+      PERFORM frm_do_fhqr.
+    WHEN 'ZQXFHQR'. "取消返回确认
+      PERFORM frm_do_qxfhqr.
+    WHEN 'ZZJQR'.   "质检确认
+      PERFORM frm_do_zjqr.
+    WHEN 'ZQXZJQR'. "取消质检确认
+      PERFORM frm_do_qxzjqr.
+    WHEN 'ZZJBTG'.  "质检不通过
+      PERFORM frm_do_zjbtg.
+    WHEN 'ZALL'.
+      PERFORM frm_select_data USING 'X'.
+    WHEN 'ZDEALL'.
+      PERFORM frm_select_data USING space.
+    WHEN 'ZSAVE'.   "保存数据
+      PERFORM frm_save_data.
+    WHEN 'ZWXWC'.   "维修完成
+      PERFORM frm_do_wxwc.
+    WHEN 'ZFGYS'.   "发供应商
+      PERFORM frm_do_fgys.
+    WHEN 'ZGYSTH'.  "供应商返回
+      PERFORM frm_do_gysth.
+    WHEN 'ZREFRESH'."刷新数据
+      PERFORM frm_get_data.
+*   ADD BY PFT 20180123
+    WHEN 'ZPRINT'."打印产品维修报价单
+      PERFORM frm_print_data.
+*   END BY PFT 20180123
+    WHEN '&IC1'.
+      IF  rs_selfield-fieldname = 'QMNUM'.
+        SET PARAMETER ID 'IQM' FIELD rs_selfield-value.
+        IF r3 = 'X'.
+          CALL TRANSACTION 'ZIW52' AND SKIP FIRST SCREEN.
+        ELSEIF r4 = 'X'..
+          CALL TRANSACTION 'IW52' AND SKIP FIRST SCREEN.
+        ELSE.
+          CALL TRANSACTION 'IW53' AND SKIP FIRST SCREEN.
+        ENDIF.
+      ENDIF.
+      IF r4 = 'X' AND rs_selfield-fieldname = 'ZDN' AND rs_selfield-value IS NOT INITIAL.
+        SET PARAMETER ID 'VL' FIELD rs_selfield-value.
+        CALL TRANSACTION 'VL02N' AND SKIP FIRST SCREEN.
+      ENDIF.
+      IF rs_selfield-fieldname = 'ZFHDN' AND rs_selfield-value IS NOT INITIAL.
+        SET PARAMETER ID 'VL' FIELD rs_selfield-value.
+        CALL TRANSACTION 'VL02N' AND SKIP FIRST SCREEN.
+      ENDIF.
+      IF  rs_selfield-fieldname = 'ZWX'.  "add by leimt 20180521
+        CASE rs_selfield-value.
+          WHEN '维修标准1'.
+            CLEAR gv.
+            gv = 1.
+          WHEN '维修标准2'.
+            CLEAR gv.
+            gv = 2.
+          WHEN '维修标准3'.
+            CLEAR gv.
+            gv = 3.
+          WHEN '维修标准4'.
+            CLEAR gv.
+            gv = 4.
+          WHEN OTHERS.
+        ENDCASE.
+        IF rs_selfield-value <> ''.
+          CALL SCREEN 0100 STARTING AT 3 3 ENDING AT 90 20.
+        ENDIF.
+
+      ENDIF.
+    WHEN OTHERS.
+  ENDCASE.
+
+  CALL METHOD lv_grid->set_frontend_layout
+    EXPORTING
+      is_layout = gs_layout.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_AUTH
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_auth .
+  CHECK sy-ucomm = 'ONLI'.
+*  通知单类型权限检查
+  REFRESH: gt_tq80_t.
+  "检查销售组织权限
+  SELECT * INTO TABLE gt_tq80_t FROM tq80_t WHERE spras = sy-langu AND qmart IN s_qmart.
+  LOOP AT gt_tq80_t.
+    AUTHORITY-CHECK OBJECT 'I_QMEL'
+             ID 'QMART' FIELD gt_tq80_t-qmart.
+    IF sy-subrc <> 0.
+      DELETE gt_tq80_t.
+    ENDIF.
+  ENDLOOP.
+  SORT gt_tq80_t BY qmart.
+
+  IF gt_tq80_t[] IS INITIAL.
+    MESSAGE e398(00) WITH '您没有查看该通知单类型的权限' DISPLAY LIKE 'E'.
+    EXIT.
+  ENDIF.
+
+
+  IF r2 = 'X'.
+    AUTHORITY-CHECK OBJECT 'ZCSAUTH'
+             ID 'ZCSAUTH' FIELD '1'.
+    IF sy-subrc <> 0.
+      MESSAGE '你没有质检员的权限' TYPE 'E'.
+    ENDIF.
+  ELSEIF r3 = 'X'.
+    AUTHORITY-CHECK OBJECT 'ZCSAUTH'
+         ID 'ZCSAUTH' FIELD '2'.
+    IF sy-subrc <> 0.
+      MESSAGE '你没有商务的权限' TYPE 'E'.
+    ENDIF.
+  ELSEIF r4 = 'X'.
+    AUTHORITY-CHECK OBJECT 'ZCSAUTH'
+     ID 'ZCSAUTH' FIELD '3'.
+    IF sy-subrc <> 0.
+      MESSAGE '你没有维修的权限' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELD_STYLE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_GT_OUT_STYTAB  text
+*      -->P_GT_OUT_ZWXZT  text
+*----------------------------------------------------------------------*
+FORM frm_get_field_style USING    u_zwxzt LIKE ztcs001-zwxzt
+                         CHANGING t_stytab TYPE lvc_t_styl.
+  DATA:ls_stytab TYPE lvc_s_styl.
+
+  REFRESH:t_stytab.
+
+  IF gt_out-zthwx = 'X' AND r4 = 'X'..
+    ls_stytab-fieldname = 'ZSFBS'.
+    ls_stytab-style = cl_gui_alv_grid=>mc_style_enabled.
+    INSERT ls_stytab INTO TABLE t_stytab.
+  ENDIF.
+
+*  商务
+
+  IF r3 = 'X'.
+    IF u_zwxzt = 'A1' OR u_zwxzt = 'B1' OR u_zwxzt = 'A7' OR u_zwxzt = 'B6' .
+      ls_stytab-fieldname = 'ZREASON'.
+      ls_stytab-style = cl_gui_alv_grid=>mc_style_enabled.
+      INSERT ls_stytab INTO TABLE t_stytab.
+
+      ls_stytab-fieldname = 'ZSWBZ'.
+      ls_stytab-style = cl_gui_alv_grid=>mc_style_enabled.
+      INSERT ls_stytab INTO TABLE t_stytab.
+    ENDIF.
+    IF u_zwxzt = 'A7' OR u_zwxzt = 'B6' .
+      ls_stytab-fieldname = 'ZFHKH'.
+      ls_stytab-style = cl_gui_alv_grid=>mc_style_enabled.
+      INSERT ls_stytab INTO TABLE t_stytab.
+    ENDIF.
+    ls_stytab-fieldname = 'ZBFH'.
+    ls_stytab-style = cl_gui_alv_grid=>mc_style_enabled.
+    INSERT ls_stytab INTO TABLE t_stytab.
+
+    ls_stytab-fieldname = 'ZYCYW'.
+    ls_stytab-style = cl_gui_alv_grid=>mc_style_enabled.
+    INSERT ls_stytab INTO TABLE t_stytab.
+
+    IF gt_out-zwczt IS INITIAL.
+      ls_stytab-fieldname = 'ZJHFY'.
+      ls_stytab-style = cl_gui_alv_grid=>mc_style_enabled.
+      INSERT ls_stytab INTO TABLE t_stytab.
+
+      ls_stytab-fieldname = 'ZSJFY'.
+      ls_stytab-style = cl_gui_alv_grid=>mc_style_enabled.
+      INSERT ls_stytab INTO TABLE t_stytab.
+
+      IF gt_out-zthwx(1) NE 'Y' AND  u_zwxzt NE 'A9' AND u_zwxzt NE 'B9'.
+        ls_stytab-fieldname = 'ZTHWX'.
+        ls_stytab-style = cl_gui_alv_grid=>mc_style_enabled.
+        INSERT ls_stytab INTO TABLE t_stytab.
+      ENDIF.
+    ENDIF.
+
+    ls_stytab-fieldname = 'ZSO'.
+    ls_stytab-style = cl_gui_alv_grid=>mc_style_enabled.
+    INSERT ls_stytab INTO TABLE t_stytab.
+
+    IF gt_out-zthwx = 'Y'.
+      ls_stytab-fieldname = 'ZFHDD'.
+      ls_stytab-style = cl_gui_alv_grid=>mc_style_enabled.
+      INSERT ls_stytab INTO TABLE t_stytab.
+    ENDIF.
+
+**   ADD BY PFT 20180123
+*    IF u_zwxzt EQ 'A1' OR u_zwxzt EQ 'A7' OR u_zwxzt EQ 'B1' OR u_zwxzt EQ 'B2' OR u_zwxzt EQ 'B3' OR u_zwxzt EQ 'B4' OR u_zwxzt EQ 'B5' OR u_zwxzt EQ 'B6' .
+*      ls_stytab-fieldname = 'ZTHWX'.
+*      ls_stytab-style = cl_gui_alv_grid=>mc_style_enabled.
+*      INSERT ls_stytab INTO TABLE t_stytab.
+*    ENDIF.
+**   END BY PFT 20180123
+
+  ENDIF.
+
+  CHECK gt_out-zwczt IS INITIAL. "商务排除在外
+
+  IF r2 = 'X' AND ( u_zwxzt = 'A3' OR u_zwxzt = 'B5' ).
+    ls_stytab-fieldname = 'ZZJBZ'.
+    ls_stytab-style = cl_gui_alv_grid=>mc_style_enabled.
+    INSERT ls_stytab INTO TABLE t_stytab.
+  ENDIF.
+
+  IF r4 = 'X'.
+    IF gt_out-lifnr IS NOT INITIAL.
+      ls_stytab-fieldname = 'ZGYSKDD'.
+      ls_stytab-style = cl_gui_alv_grid=>mc_style_enabled.
+      INSERT ls_stytab INTO TABLE t_stytab.
+    ENDIF.
+
+    ls_stytab-fieldname = 'ZKDDH'.
+    ls_stytab-style = cl_gui_alv_grid=>mc_style_enabled.
+    INSERT ls_stytab INTO TABLE t_stytab.
+
+    ls_stytab-fieldname = 'ZGYSWXF'.
+    ls_stytab-style = cl_gui_alv_grid=>mc_style_enabled.
+    INSERT ls_stytab INTO TABLE t_stytab.
+
+    ls_stytab-fieldname = 'ZRMA'.
+    ls_stytab-style = cl_gui_alv_grid=>mc_style_enabled.
+    INSERT ls_stytab INTO TABLE t_stytab.
+
+    IF u_zwxzt NE 'A9' AND u_zwxzt NE 'B9'.
+      ls_stytab-fieldname = 'ZWFWX'.
+      ls_stytab-style = cl_gui_alv_grid=>mc_style_enabled.
+      INSERT ls_stytab INTO TABLE t_stytab.
+    ENDIF.
+
+    IF ( gt_out-zthwx(1) EQ 'Y' OR gt_out-zthwx(1) EQ space ) AND u_zwxzt NE 'A9' AND u_zwxzt NE 'B9'.
+      ls_stytab-fieldname = 'ZTHWX'.
+      ls_stytab-style = cl_gui_alv_grid=>mc_style_enabled.
+      INSERT ls_stytab INTO TABLE t_stytab.
+    ENDIF.
+
+    IF gt_out-zthwx(1) EQ 'Z'.
+      ls_stytab-fieldname = 'ZSO'.
+      ls_stytab-style = cl_gui_alv_grid=>mc_style_enabled.
+      INSERT ls_stytab INTO TABLE t_stytab.
+    ENDIF.
+
+    ls_stytab-fieldname = 'ZSFBS'.
+    ls_stytab-style = cl_gui_alv_grid=>mc_style_enabled.
+    INSERT ls_stytab INTO TABLE t_stytab.
+
+    IF u_zwxzt EQ 'A3' OR u_zwxzt EQ 'A6' OR u_zwxzt EQ 'B3' OR u_zwxzt EQ 'B4' OR u_zwxzt EQ 'B5'.
+      ls_stytab-fieldname = 'ZWXBJ'.
+      ls_stytab-style = cl_gui_alv_grid=>mc_style_enabled.
+      INSERT ls_stytab INTO TABLE t_stytab.
+    ENDIF.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DO_ZJSQR
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_do_jsqr .
+  DATA:lt_data LIKE ztcs001 OCCURS 0 WITH HEADER LINE.
+  DATA:lv_error TYPE c.
+
+  READ TABLE gt_out WITH KEY check = 'X'.
+  IF sy-subrc NE 0.
+    MESSAGE '请至少选择一行数据' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  LOOP AT gt_out WHERE check = 'X' AND zwxzt NE 'A1' AND zwxzt NE 'B1'.
+    EXIT.
+  ENDLOOP.
+  IF sy-subrc EQ 0.
+    MESSAGE '请选择维修状态为A1或B1的数据行' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  LOOP AT gt_out WHERE check = 'X' AND zthwx EQ 'X' AND ( zso IS INITIAL OR zdn IS INITIAL ).  "CHANGE BY PFT 20171108,将VBELN改为ZSO
+    EXIT.
+  ENDLOOP.
+  IF sy-subrc EQ 0.
+    MESSAGE '请输入退货单号' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  PERFORM frm_check_sw_thbs CHANGING lv_error.
+
+  CHECK lv_error IS INITIAL.
+
+  LOOP AT gt_out WHERE check = 'X'.
+    CASE gt_out-zwxzt.
+      WHEN 'A1'.
+        gt_out-zwxzt = 'A2'.
+      WHEN 'B1'.
+        gt_out-zwxzt = 'B2'.
+      WHEN OTHERS.
+    ENDCASE.
+    SELECT SINGLE ztext INTO gt_out-ztext FROM ztcs002 WHERE zstat = gt_out-zwxzt.
+    gt_out-zkhqr = sy-datum.
+    IF gt_out-zthwx = 'X'.
+      gt_out-zwczt = 'X'.
+    ENDIF.
+    gt_out-udate = sy-datum.
+    PERFORM frm_get_field_style USING gt_out-zwxzt CHANGING gt_out-stytab.
+    MODIFY gt_out.
+    MOVE-CORRESPONDING gt_out TO lt_data.
+    APPEND lt_data.
+    CLEAR lt_data.
+  ENDLOOP.
+
+  IF lt_data[] IS NOT INITIAL.
+    MODIFY ztcs001 FROM TABLE lt_data.
+    IF sy-subrc = 0.
+      COMMIT WORK AND WAIT.
+      MESSAGE '接收确认成功' TYPE 'S'.
+    ELSE.
+      ROLLBACK WORK.
+      MESSAGE '接收确认失败，请重试' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DO_QXJSQR
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_do_qxjsqr .
+  DATA:lt_data LIKE ztcs001 OCCURS 0 WITH HEADER LINE.
+  DATA:lv_error TYPE c.
+
+  READ TABLE gt_out WITH KEY check = 'X'.
+  IF sy-subrc NE 0.
+    MESSAGE '请至少选择一行数据' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  LOOP AT gt_out WHERE check = 'X' AND zwxzt NE 'A2' AND zwxzt NE 'B2'.
+    EXIT.
+  ENDLOOP.
+  IF sy-subrc EQ 0.
+    MESSAGE '请选择维修状态为A2或B2的数据行' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  PERFORM frm_check_sw_thbs CHANGING lv_error.
+  CHECK lv_error IS INITIAL.
+
+  LOOP AT gt_out WHERE check = 'X'.
+    CASE gt_out-zwxzt.
+      WHEN 'A2'.
+        gt_out-zwxzt = 'A1'.
+      WHEN 'B2'.
+        gt_out-zwxzt = 'B1'.
+      WHEN OTHERS.
+    ENDCASE.
+    SELECT SINGLE ztext INTO gt_out-ztext FROM ztcs002 WHERE zstat = gt_out-zwxzt.
+    CLEAR:gt_out-zkhqr,gt_out-zthwx,gt_out-zwczt.
+    PERFORM frm_get_field_style USING gt_out-zwxzt CHANGING gt_out-stytab.
+    gt_out-udate = sy-datum.
+    MODIFY gt_out.
+    MOVE-CORRESPONDING gt_out TO lt_data.
+    APPEND lt_data.
+    CLEAR lt_data.
+  ENDLOOP.
+
+  IF lt_data[] IS NOT INITIAL.
+    MODIFY ztcs001 FROM TABLE lt_data.
+    IF sy-subrc = 0.
+      COMMIT WORK AND WAIT.
+      MESSAGE '取消接收确认成功' TYPE 'S'.
+    ELSE.
+      ROLLBACK WORK.
+      MESSAGE '取消接收确认失败，请重试' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DO_FHQR
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_do_fhqr .
+  DATA:lt_data LIKE ztcs001 OCCURS 0 WITH HEADER LINE.
+  DATA:lv_error TYPE c.
+
+  READ TABLE gt_out WITH KEY check = 'X'.
+  IF sy-subrc NE 0.
+    MESSAGE '请至少选择一行数据' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  LOOP AT gt_out WHERE check = 'X' AND  ( ( zwxzt NE 'A7' AND zwxzt NE 'B6' AND zwfwx NE 'X' AND  qmart NE 'S7' ) OR
+                                             ( zwxzt NE 'B5'  AND qmart EQ 'S7' ) ) .
+    EXIT.
+  ENDLOOP.
+  IF sy-subrc EQ 0.
+    MESSAGE 'S5/S6类型请选择维修状态为A7或B6或无法维修的数据行，S7时请选择维修状态为B5数据行' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  LOOP AT gt_out WHERE check = 'X' AND (  zwxzt EQ 'A7' OR zwxzt EQ 'B6' ) AND zthwx EQ 'X' .
+    EXIT.
+  ENDLOOP.
+  IF sy-subrc = 0.
+    MESSAGE '退货时，如果状态为维修完成A7\质检完成B6，不能返回确认，仅能保存数据' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  LOOP AT gt_out WHERE check = 'X' AND ( zthwx EQ 'X' OR zthwx EQ 'Y' ) AND ( zso IS INITIAL OR zdn IS INITIAL ).  "CHANGE BY PFT 20171108,将VBELN改为ZSO
+    EXIT.
+  ENDLOOP.
+  IF sy-subrc EQ 0.
+    MESSAGE '请输入退货单号' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  LOOP AT gt_out WHERE check = 'X' AND  zthwx EQ 'Y'  AND  zfhdd IS INITIAL.  "CHANGE BY PFT 20171108,将VBELN改为ZSO
+    EXIT.
+  ENDLOOP.
+  IF sy-subrc EQ 0.
+    MESSAGE '请输入发货订单' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  LOOP AT gt_out WHERE check = 'X' AND  zthwx EQ 'Y'  AND  zfhdd IS NOT INITIAL AND zfhdn IS INITIAL.  "CHANGE BY PFT 20171108,将VBELN改为ZSO
+    EXIT.
+  ENDLOOP.
+  IF sy-subrc EQ 0.
+    MESSAGE '电机退换时，必须输入发货订单并创建交货单' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  PERFORM frm_check_sw_thbs CHANGING lv_error.
+  CHECK lv_error IS INITIAL.
+
+  LOOP AT gt_out WHERE check = 'X'.
+    IF gt_out-qmart NE 'S7'.
+      CASE gt_out-zwxzt.
+        WHEN 'A7'.
+          gt_out-zwxzt = 'A8'.
+        WHEN 'B6'.
+          gt_out-zwxzt = 'B8'.
+        WHEN OTHERS.
+          IF gt_out-zwfwx = 'X'.
+            IF gt_out-lifnr IS INITIAL.
+              gt_out-zwxzt = 'A8'.
+            ELSE.
+              gt_out-zwxzt = 'B8'.
+            ENDIF.
+          ENDIF.
+      ENDCASE.
+    ELSE.
+      IF gt_out-zwxzt = 'B5'.
+        gt_out-zwxzt = 'B8'.
+      ENDIF.
+    ENDIF.
+    SELECT SINGLE ztext INTO gt_out-ztext FROM ztcs002 WHERE zstat = gt_out-zwxzt.
+    gt_out-zcpfh = sy-datum.
+    IF gt_out-zbfh EQ 'X'.
+      gt_out-zwczt = 'X'.
+      CLEAR:gt_out-zfhkh.
+    ELSE.
+      CLEAR:gt_out-zwczt.
+      gt_out-zfhkh = 'X'.
+    ENDIF.
+    gt_out-udate = sy-datum.
+    PERFORM frm_get_field_style USING gt_out-zwxzt CHANGING gt_out-stytab.
+    MODIFY gt_out.
+    MOVE-CORRESPONDING gt_out TO lt_data.
+    APPEND lt_data.
+    CLEAR lt_data.
+  ENDLOOP.
+
+  IF lt_data[] IS NOT INITIAL.
+    MODIFY ztcs001 FROM TABLE lt_data.
+    IF sy-subrc = 0.
+      COMMIT WORK AND WAIT.
+      MESSAGE '返还确认成功' TYPE 'S'.
+    ELSE.
+      ROLLBACK WORK.
+      MESSAGE '返还确认失败，请重试' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DO_QXFHQR
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_do_qxfhqr .
+  DATA:lt_data LIKE ztcs001 OCCURS 0 WITH HEADER LINE.
+  DATA:lv_error TYPE c.
+
+  READ TABLE gt_out WITH KEY check = 'X'.
+  IF sy-subrc NE 0.
+    MESSAGE '请至少选择一行数据' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  LOOP AT gt_out WHERE check = 'X' AND zwxzt NE 'A8' AND zwxzt NE 'B8'.
+    EXIT.
+  ENDLOOP.
+  IF sy-subrc EQ 0.
+    MESSAGE '请选择维修状态为A8或B8的数据行' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  PERFORM frm_check_sw_thbs CHANGING lv_error.
+
+  CHECK lv_error IS INITIAL.
+
+  LOOP AT gt_out WHERE check = 'X'.
+    CASE gt_out-zwxzt.
+      WHEN 'A8'.
+        gt_out-zwxzt = 'A7'.
+      WHEN 'B8'.
+        IF gt_out-qmart NE 'S7'.
+          gt_out-zwxzt = 'B6'.
+        ELSE.
+          gt_out-zwxzt = 'B5'.
+        ENDIF.
+      WHEN OTHERS.
+    ENDCASE.
+    SELECT SINGLE ztext INTO gt_out-ztext FROM ztcs002 WHERE zstat = gt_out-zwxzt.
+    CLEAR:gt_out-zcpfh,gt_out-zfhkh.
+    PERFORM frm_get_field_style USING gt_out-zwxzt CHANGING gt_out-stytab.
+    gt_out-udate = sy-datum.
+    MODIFY gt_out.
+    MOVE-CORRESPONDING gt_out TO lt_data.
+    APPEND lt_data.
+    CLEAR lt_data.
+  ENDLOOP.
+
+  IF lt_data[] IS NOT INITIAL.
+    MODIFY ztcs001 FROM TABLE lt_data.
+    IF sy-subrc = 0.
+      COMMIT WORK AND WAIT.
+      MESSAGE '取消返还确认成功' TYPE 'S'.
+    ELSE.
+      ROLLBACK WORK.
+      MESSAGE '取消返还确认失败，请重试' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DO_ZJQR
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_do_zjqr .
+  DATA:lt_data LIKE ztcs001 OCCURS 0 WITH HEADER LINE.
+
+  READ TABLE gt_out WITH KEY check = 'X'.
+  IF sy-subrc NE 0.
+    MESSAGE '请至少选择一行数据' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  LOOP AT gt_out WHERE check = 'X' AND zwxzt NE 'A3' AND zwxzt NE 'B5'.
+    EXIT.
+  ENDLOOP.
+  IF sy-subrc EQ 0.
+    MESSAGE '请选择维修状态为A3或B5的数据行' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  LOOP AT gt_out WHERE check = 'X'.
+    CASE gt_out-zwxzt.
+      WHEN 'A3'.
+        gt_out-zwxzt = 'A6'.
+      WHEN 'B5'.
+        gt_out-zwxzt = 'B6'.
+      WHEN OTHERS.
+    ENDCASE.
+    SELECT SINGLE ztext INTO gt_out-ztext FROM ztcs002 WHERE zstat = gt_out-zwxzt.
+    gt_out-zzjtg = sy-datum.
+    PERFORM frm_get_field_style USING gt_out-zwxzt CHANGING gt_out-stytab.
+    gt_out-udate = sy-datum.
+    MODIFY gt_out.
+    MOVE-CORRESPONDING gt_out TO lt_data.
+    APPEND lt_data.
+    CLEAR lt_data.
+  ENDLOOP.
+
+  IF lt_data[] IS NOT INITIAL.
+    MODIFY ztcs001 FROM TABLE lt_data.
+    IF sy-subrc = 0.
+      COMMIT WORK AND WAIT.
+      MESSAGE '质检确认成功' TYPE 'S'.
+    ELSE.
+      ROLLBACK WORK.
+      MESSAGE '质检确认确认失败，请重试' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DO_QXZJQR
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_do_qxzjqr .
+  DATA:lt_data LIKE ztcs001 OCCURS 0 WITH HEADER LINE.
+
+  READ TABLE gt_out WITH KEY check = 'X'.
+  IF sy-subrc NE 0.
+    MESSAGE '请至少选择一行数据' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  LOOP AT gt_out WHERE check = 'X' AND zwxzt NE 'A6' AND zwxzt NE 'B6'.
+    EXIT.
+  ENDLOOP.
+  IF sy-subrc EQ 0.
+    MESSAGE '请选择维修状态为A6或B6的数据行' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  LOOP AT gt_out WHERE check = 'X'.
+    CASE gt_out-zwxzt.
+      WHEN 'A6'.
+        gt_out-zwxzt = 'A3'.
+      WHEN 'B6'.
+        gt_out-zwxzt = 'B5'.
+      WHEN OTHERS.
+    ENDCASE.
+    SELECT SINGLE ztext INTO gt_out-ztext FROM ztcs002 WHERE zstat = gt_out-zwxzt.
+    CLEAR:gt_out-zzjtg.
+    PERFORM frm_get_field_style USING gt_out-zwxzt CHANGING gt_out-stytab.
+    gt_out-udate = sy-datum.
+    MODIFY gt_out.
+    MOVE-CORRESPONDING gt_out TO lt_data.
+    APPEND lt_data.
+    CLEAR lt_data.
+  ENDLOOP.
+
+  IF lt_data[] IS NOT INITIAL.
+    MODIFY ztcs001 FROM TABLE lt_data.
+    IF sy-subrc = 0.
+      COMMIT WORK AND WAIT.
+      MESSAGE '取消质检确认成功' TYPE 'S'.
+    ELSE.
+      ROLLBACK WORK.
+      MESSAGE '取消质检确认确认失败，请重试' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DO_ZJBTG
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_do_zjbtg .
+  DATA:lt_data LIKE ztcs001 OCCURS 0 WITH HEADER LINE.
+
+  READ TABLE gt_out WITH KEY check = 'X'.
+  IF sy-subrc NE 0.
+    MESSAGE '请至少选择一行数据' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  LOOP AT gt_out WHERE check = 'X' AND zwxzt NE 'A3' AND zwxzt NE 'B5'.
+    EXIT.
+  ENDLOOP.
+  IF sy-subrc EQ 0.
+    MESSAGE '请选择维修状态为A3或B5的数据行' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  LOOP AT gt_out WHERE check = 'X' AND ( zwxzt NE 'A3' OR zwxzt NE 'B5') AND zzjbz IS INITIAL.
+    EXIT.
+  ENDLOOP.
+  IF sy-subrc EQ 0.
+    MESSAGE '请输入质检备注' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  LOOP AT gt_out WHERE check = 'X'.
+    gt_out-zzjtg = sy-datum.
+    PERFORM frm_get_field_style USING gt_out-zwxzt CHANGING gt_out-stytab.
+    gt_out-udate = sy-datum.
+    MODIFY gt_out.
+    MOVE-CORRESPONDING gt_out TO lt_data.
+    APPEND lt_data.
+    CLEAR lt_data.
+  ENDLOOP.
+
+  IF lt_data[] IS NOT INITIAL.
+    MODIFY ztcs001 FROM TABLE lt_data.
+    IF sy-subrc = 0.
+      COMMIT WORK AND WAIT.
+      MESSAGE '设置质检不通成功' TYPE 'S'.
+    ELSE.
+      ROLLBACK WORK.
+      MESSAGE '设置质检不通失败，请重试' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SELECT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_SPACE  text
+*----------------------------------------------------------------------*
+FORM frm_select_data  USING  u_flag TYPE c.
+  LOOP AT gt_out WHERE check NE u_flag.
+    gt_out-check = u_flag.
+    MODIFY gt_out.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_ZWXZT_F4
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0089   text
+*----------------------------------------------------------------------*
+FORM frm_zwxzt_f4  USING  u_fname TYPE help_info-dynprofld.
+  DATA:lt_return_tab LIKE ddshretval OCCURS  0 WITH HEADER LINE.
+
+  DATA:BEGIN OF lt_zstat OCCURS 0,
+         zstat LIKE ztcs002-zstat,
+         ztext LIKE ztcs002-ztext,
+       END OF lt_zstat.
+
+  REFRESH lt_zstat .
+
+  SELECT *
+   INTO CORRESPONDING FIELDS OF TABLE lt_zstat
+   FROM ztcs002.
+
+  SORT lt_zstat.
+
+  CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+    EXPORTING
+*     DDIC_STRUCTURE  = ' '
+      retfield        = 'ZSTAT'
+      pvalkey         = 'ZSTAT'
+      dynpprog        = sy-repid
+      dynpnr          = sy-dynnr
+      dynprofield     = u_fname
+*     STEPL           = 0
+*     WINDOW_TITLE    =
+*     VALUE           = ' '
+      value_org       = 'S'
+*     MULTIPLE_CHOICE = ' '
+*     display         =
+*     CALLBACK_PROGRAM       = ' '
+*     CALLBACK_FORM   = ' '
+*     CALLBACK_METHOD =
+*     MARK_TAB        =
+*   IMPORTING
+*     USER_RESET      =
+    TABLES
+      value_tab       = lt_zstat
+*     FIELD_TAB       =
+      return_tab      = lt_return_tab
+*     DYNPFLD_MAPPING =
+    EXCEPTIONS
+      parameter_error = 1
+      no_values_found = 2
+      OTHERS          = 3.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SAVE_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_save_data .
+  DATA:lt_data LIKE ztcs001 OCCURS 0 WITH HEADER LINE.
+  DATA:lv_error TYPE c.
+
+  IF r3 = 'X'.
+    PERFORM frm_check_sw_thbs CHANGING lv_error.
+  ELSEIF r4 = 'X'.
+    PERFORM frm_check_wx_auth USING space CHANGING lv_error.
+  ENDIF.
+
+  CHECK lv_error IS INITIAL.
+
+  LOOP AT gt_out WHERE check = 'X'.
+    IF ( gt_out-zwxzt = 'A8' OR gt_out-zwxzt = 'B8' ) AND  gt_out-zkddh IS NOT INITIAL .
+      CASE gt_out-zwxzt.
+        WHEN 'A8'.
+          gt_out-zwxzt = 'A9'.
+        WHEN 'B8'.
+          gt_out-zwxzt = 'B9'.
+        WHEN OTHERS.
+      ENDCASE.
+      gt_out-zyfkh = sy-datum.
+      SELECT SINGLE ztext INTO gt_out-ztext FROM ztcs002 WHERE zstat = gt_out-zwxzt.
+    ENDIF.
+
+    IF gt_out-zthwx = 'Z' AND r4 = 'X'..
+      gt_out-zwczt = 'X'.
+    ENDIF.
+
+    IF gt_out-zthwx = 'X' AND gt_out-zso IS NOT INITIAL AND r3 = 'X'.
+      gt_out-zwczt = 'X'.
+    ENDIF.
+    gt_out-udate = sy-datum.
+    MODIFY gt_out.
+
+    MOVE-CORRESPONDING gt_out TO lt_data.
+    APPEND lt_data.
+    CLEAR lt_data.
+  ENDLOOP.
+
+  IF lt_data[] IS NOT INITIAL.
+    MODIFY ztcs001 FROM TABLE lt_data.
+    IF sy-subrc = 0.
+      COMMIT WORK AND WAIT.
+      MESSAGE '保存数据成功' TYPE 'S'.
+    ELSE.
+      ROLLBACK WORK.
+      MESSAGE '保存数据失败' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DO_WXWC
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_do_wxwc .
+  DATA:ls_ztcs002 LIKE ztcs002.
+  DATA:lv_msg   TYPE string,
+       lv_error TYPE c.
+  DATA:lt_data LIKE ztcs001 OCCURS 0 WITH HEADER LINE.
+
+  PERFORM frm_check_wx_auth USING '01' CHANGING lv_error.
+
+  CHECK lv_error IS INITIAL.
+
+
+  READ TABLE gt_out WITH KEY check = 'X'.
+  IF sy-subrc NE 0.
+    MESSAGE '请至少选择一行数据' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  SELECT SINGLE * INTO CORRESPONDING FIELDS OF ls_ztcs002 FROM ztcs002 WHERE zstat = 'A7'.
+  LOOP AT gt_out WHERE check = 'X'.
+    IF gt_out-zwxzt NE ls_ztcs002-zstat_pr1 AND
+       gt_out-zwxzt NE ls_ztcs002-zstat_pr2 AND
+       gt_out-zwxzt NE ls_ztcs002-zstat_pr3 AND
+       gt_out-zwxzt NE ls_ztcs002-zstat_pr4 AND
+       gt_out-zwxzt NE ls_ztcs002-zstat_pr5.
+      CONCATENATE '通知单：' gt_out-qmnum '维修状态不能切换为维修完成，请检查' INTO lv_msg.
+      MESSAGE lv_msg TYPE 'I'.
+      lv_error  = 'X'.
+      EXIT.
+    ENDIF.
+    IF ( gt_out-fecod1 IS INITIAL OR gt_out-urcod1 IS INITIAL ) AND gt_out-fecod1 NE 'B29'.
+      CONCATENATE '通知单：' gt_out-qmnum '没有故障原因，请检查' INTO lv_msg.
+      MESSAGE lv_msg TYPE 'I'.
+      lv_error  = 'X'.
+    ENDIF.
+  ENDLOOP.
+
+  CHECK lv_error IS INITIAL.
+
+  LOOP AT gt_out WHERE check = 'X'.
+    gt_out-zwxzt = 'A7'.
+    gt_out-ztext = ls_ztcs002-ztext.
+    gt_out-zwxwc = sy-datum.
+    IF gt_out-zthwx = 'Z'.
+      gt_out-zwczt = 'X'.
+    ENDIF.
+    gt_out-udate = sy-datum.
+    MODIFY gt_out.
+    MOVE-CORRESPONDING gt_out TO lt_data.
+    APPEND lt_data.
+    CLEAR lt_data.
+  ENDLOOP.
+
+  IF lt_data[] IS NOT INITIAL.
+    MODIFY ztcs001 FROM TABLE lt_data.
+    COMMIT WORK AND WAIT.
+    MESSAGE '设置维修完成状态成功' TYPE 'S'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DO_FGYS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_do_fgys .
+  DATA:ls_ztcs002 LIKE ztcs002.
+  DATA:lv_msg   TYPE string,
+       lv_error TYPE c.
+  DATA:lt_data LIKE ztcs001 OCCURS 0 WITH HEADER LINE.
+
+  PERFORM frm_check_wx_auth USING '02' CHANGING lv_error.
+  CHECK lv_error IS INITIAL.
+
+  READ TABLE gt_out WITH KEY check = 'X'.
+  IF sy-subrc NE 0.
+    MESSAGE '请至少选择一行数据' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  SELECT SINGLE * INTO CORRESPONDING FIELDS OF ls_ztcs002 FROM ztcs002 WHERE zstat = 'B4'.
+  LOOP AT gt_out WHERE check = 'X'.
+    IF gt_out-zwxzt NE ls_ztcs002-zstat_pr1 AND
+       gt_out-zwxzt NE ls_ztcs002-zstat_pr2 AND
+       gt_out-zwxzt NE ls_ztcs002-zstat_pr3 AND
+       gt_out-zwxzt NE ls_ztcs002-zstat_pr4 AND
+       gt_out-zwxzt NE ls_ztcs002-zstat_pr5.
+      CONCATENATE '通知单：' gt_out-qmnum '维修状态不能切换为已寄供应商，请检查' INTO lv_msg.
+      MESSAGE lv_msg TYPE 'I'.
+      lv_error  = 'X'.
+      EXIT.
+    ENDIF.
+    IF gt_out-fecod1 IS INITIAL OR gt_out-urcod1 IS INITIAL.
+      CONCATENATE '通知单：' gt_out-qmnum '没有故障原因，请检查' INTO lv_msg.
+      MESSAGE lv_msg TYPE 'I'.
+      lv_error  = 'X'.
+    ENDIF.
+  ENDLOOP.
+
+  CHECK lv_error IS INITIAL.
+
+  LOOP AT gt_out WHERE check = 'X'.
+    gt_out-zwxzt = 'B4'.
+    gt_out-ztext = ls_ztcs002-ztext.
+    gt_out-zyjgys = sy-datum.
+    gt_out-udate = sy-datum.
+    MODIFY gt_out.
+    MOVE-CORRESPONDING gt_out TO lt_data.
+    APPEND lt_data.
+    CLEAR lt_data.
+  ENDLOOP.
+
+  IF lt_data[] IS NOT INITIAL.
+    MODIFY ztcs001 FROM TABLE lt_data.
+    COMMIT WORK AND WAIT.
+    MESSAGE '设置发供应商状态成功' TYPE 'S'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DO_GYSTH
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_do_gysth .
+  DATA:ls_ztcs002 LIKE ztcs002.
+  DATA:lv_msg   TYPE string,
+       lv_error TYPE c.
+  DATA:lt_data LIKE ztcs001 OCCURS 0 WITH HEADER LINE.
+
+  PERFORM frm_check_wx_auth USING '03' CHANGING lv_error.
+
+  CHECK lv_error IS INITIAL.
+
+  READ TABLE gt_out WITH KEY check = 'X'.
+  IF sy-subrc NE 0.
+    MESSAGE '请至少选择一行数据' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  SELECT SINGLE * INTO CORRESPONDING FIELDS OF ls_ztcs002 FROM ztcs002 WHERE zstat = 'B5'.
+  LOOP AT gt_out WHERE check = 'X'.
+    IF gt_out-zwxzt NE ls_ztcs002-zstat_pr1 AND
+       gt_out-zwxzt NE ls_ztcs002-zstat_pr2 AND
+       gt_out-zwxzt NE ls_ztcs002-zstat_pr3 AND
+       gt_out-zwxzt NE ls_ztcs002-zstat_pr4 AND
+       gt_out-zwxzt NE ls_ztcs002-zstat_pr5.
+      CONCATENATE '通知单：' gt_out-qmnum '维修状态不能切换为供应商退回，请检查' INTO lv_msg.
+      MESSAGE lv_msg TYPE 'I'.
+      lv_error  = 'X'.
+      EXIT.
+    ENDIF.
+*    IF gt_out-fecod1 IS INITIAL OR gt_out-urcod1 IS INITIAL.
+*      CONCATENATE '通知单：' gt_out-qmnum '没有故障原因，请检查' INTO lv_msg.
+*      MESSAGE lv_msg TYPE 'I'.
+*      lv_error  = 'X'.
+*    ENDIF.
+  ENDLOOP.
+
+  CHECK lv_error IS INITIAL.
+
+  LOOP AT gt_out WHERE check = 'X'.
+    gt_out-zwxzt = 'B5'.
+    gt_out-ztext = ls_ztcs002-ztext.
+    gt_out-zthrq = sy-datum.
+    gt_out-udate = sy-datum.
+    MODIFY gt_out.
+    MOVE-CORRESPONDING gt_out TO lt_data.
+    APPEND lt_data.
+    CLEAR lt_data.
+  ENDLOOP.
+
+  IF lt_data[] IS NOT INITIAL.
+    MODIFY ztcs001 FROM TABLE lt_data.
+    COMMIT WORK AND WAIT.
+    MESSAGE '设置供应商退回状态成功' TYPE 'S'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_BUILD_EVENTS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_build_events .
+  REFRESH: gt_events.
+  gt_events-name = 'CALLER_EXIT'.
+  gt_events-form = 'FRM_BUTTON'.
+  APPEND gt_events.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FM_BUTTON
+*&---------------------------------------------------------------------*
+*       设置enter事件
+*----------------------------------------------------------------------*
+*      -->E_GRID     text
+*----------------------------------------------------------------------*
+
+FORM frm_button USING g_grid TYPE slis_data_caller_exit.
+* 设置enter事件
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = gv_grid.
+
+  CALL METHOD gv_grid->check_changed_data( ).
+
+  CALL METHOD gv_grid->register_edit_event
+    EXPORTING
+      i_event_id = cl_gui_alv_grid=>mc_evt_enter
+    EXCEPTIONS
+      error      = 1
+      OTHERS     = 2.
+  CREATE OBJECT gt_event_receiver.
+  SET HANDLER   gt_event_receiver->handle_modify FOR gv_grid.
+  SET HANDLER gt_event_receiver->handle_data_changed FOR gv_grid.  "回车事件
+ENDFORM. "FM_BUTTON
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_WX_AUTH
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_4199   text
+*      <--P_LV_ERROR  text
+*----------------------------------------------------------------------*
+FORM frm_check_wx_auth  USING   u_type TYPE c
+                        CHANGING c_error TYPE c.
+
+  IF u_type IS NOT INITIAL.
+    AUTHORITY-CHECK OBJECT 'ZCSWXTYPE'
+             ID 'ZCSWXTYPE' FIELD u_type.
+    IF sy-subrc <> 0.
+      c_error = 'X'.
+      MESSAGE '你没有分配对应的权限' TYPE 'E'.
+      EXIT .
+    ENDIF.
+  ENDIF.
+
+  DATA:lv_zthwx LIKE ztcs001-zthwx.
+
+  CLEAR c_error.
+  LOOP AT gt_out WHERE check = 'X' AND ( zthwx EQ 'X' OR zthwx EQ 'Z' ).
+    CLEAR lv_zthwx.
+    SELECT SINGLE zthwx INTO lv_zthwx FROM ztcs001 WHERE qmnum = gt_out-qmnum AND zindx = gt_out-zindx.
+    IF sy-subrc = 0 AND ( lv_zthwx NE 'X' AND lv_zthwx NE 'Z' ).
+      MESSAGE '维护无权限确认退货' TYPE 'I'.
+      c_error = 'X'.
+      EXIT.
+    ENDIF.
+  ENDLOOP.
+
+  DATA:lv_mblnr LIKE mkpf-mblnr.
+  LOOP AT gt_out WHERE check = 'X' AND zthwx EQ 'Z' AND zso IS NOT INITIAL .
+*    SELECT SINGLE mblnr INTO lv_mblnr FROM mseg WHERE mblnr = gt_out-zso AND bwart EQ '202'.
+    SELECT SINGLE mblnr INTO lv_mblnr FROM mseg WHERE mblnr = gt_out-zso AND bwart EQ 'Z02'. " CHANGED BY WUSK 20180115
+    IF sy-subrc NE 0.
+      MESSAGE |{ gt_out-zso }不是有效的物料凭证| TYPE 'I'.
+      c_error = 'X'.
+      EXIT.
+    ENDIF.
+  ENDLOOP.
+
+  DATA:lv_zsfbs LIKE ztcs001-zsfbs.
+
+  AUTHORITY-CHECK OBJECT 'ZCSQY'
+           ID 'ZCSQY' FIELD 'X'.
+  IF sy-subrc = 0.
+    LOOP AT gt_out WHERE check = 'X'.
+      CLEAR lv_zsfbs.
+      SELECT SINGLE zsfbs INTO lv_zsfbs FROM ztcs001 WHERE qmnum = gt_out-qmnum AND zindx = gt_out-zindx.
+      IF gt_out-zsfbs = '华东已收货' AND lv_zsfbs IS INITIAL.                       "从空变为华东已收货货
+        MESSAGE |通知单{ gt_out-qmnum }不能从空值更改为{ gt_out-zsfbs }| TYPE 'I'.
+        EXIT.
+      ELSEIF  gt_out-zsfbs = '华东已收货' AND lv_zsfbs = '已发华东'.         "从已发华东变为华东已收货
+        MESSAGE |通知单{ gt_out-qmnum }不能从{ lv_zsfbs }更改为{ gt_out-zsfbs }| TYPE 'I'.
+        EXIT.
+      ELSEIF gt_out-zsfbs = '华东已收货'.                     "改为华东已收货后报错，再次保存华东已收货。
+        MESSAGE |通知单{ gt_out-qmnum }不能更改为{ gt_out-zsfbs }| TYPE 'I'.
+        EXIT.
+      ENDIF.
+      IF gt_out-zsfbs EQ '已发华东'.
+        gt_out-zyfhdrq = sy-datum.
+      ELSE.
+        CLEAR gt_out-zyfhdrq.
+      ENDIF.
+      MODIFY gt_out.
+    ENDLOOP.
+  ENDIF.
+  AUTHORITY-CHECK OBJECT 'ZCSQY'
+            ID 'ZCSQY' FIELD 'Y'.
+  IF sy-subrc = 0.
+    LOOP AT gt_out WHERE check = 'X'.
+      CLEAR lv_zsfbs.
+      SELECT SINGLE zsfbs INTO lv_zsfbs FROM ztcs001 WHERE qmnum = gt_out-qmnum AND zindx = gt_out-zindx.
+      IF gt_out-zsfbs = '已发华东' OR gt_out-zsfbs IS INITIAL.
+        MESSAGE |通知单{ gt_out-qmnum }不能从{ lv_zsfbs }更改为{ gt_out-zsfbs }| TYPE 'I'.
+        EXIT.
+      ELSEIF gt_out-zsfbs = '华东已收货' AND lv_zsfbs IS INITIAL.
+        MESSAGE |通知单{ gt_out-qmnum }不能从{ lv_zsfbs }更改为{ gt_out-zsfbs }| TYPE 'I'.
+        EXIT.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+*    LOOP AT gt_out WHERE check = 'X' AND ( zsfbs = '已发华东' OR zsfbs IS INITIAL ).   caneled by greywu 20180130
+*      CLEAR lv_zsfbs.
+*      SELECT SINGLE zsfbs INTO lv_zsfbs FROM ztcs001 WHERE qmnum = gt_out-qmnum AND zindx = gt_out-zindx.
+*      CHECK lv_zsfbs NE gt_out-zsfbs.
+*      IF ( lv_zsfbs IS INITIAL AND  gt_out-zsfbs NE '已发华东' AND gt_out-zsfbs IS NOT INITIAL  ) OR
+*         ( lv_zsfbs IS NOT INITIAL AND  lv_zsfbs NE '已发华东' AND gt_out-zsfbs IS INITIAL  ).
+*        MESSAGE |通知单{ gt_out-qmnum }不能从{ lv_zsfbs }更改为{ gt_out-zsfbs }| TYPE 'I'.
+*        c_error = 'X'.
+*        EXIT.
+*      ENDIF.
+*      IF lv_zsfbs IS INITIAL AND gt_out-zsfbs EQ '已发华东'.
+*        gt_out-zyfhdrq = sy-datum.
+*      ELSE.
+*        CLEAR gt_out-zyfhdrq.
+*      ENDIF.
+*      MODIFY gt_out.
+*    ENDLOOP.
+*  ENDIF.
+*  CHECK c_error IS INITIAL.
+*  AUTHORITY-CHECK OBJECT 'ZCSQY'
+*           ID 'ZCSQY' FIELD 'Y'.
+*  IF sy-subrc = 0.
+*    LOOP AT gt_out WHERE check = 'X' AND ( zsfbs = '已发华东' OR zsfbs EQ '华东已收货' ).
+*      CLEAR lv_zsfbs.
+*      SELECT SINGLE zsfbs INTO lv_zsfbs FROM ztcs001 WHERE qmnum = gt_out-qmnum AND zindx = gt_out-zindx.
+*      CHECK lv_zsfbs NE gt_out-zsfbs.
+*      IF ( lv_zsfbs = '已发华东' AND  gt_out-zsfbs NE '华东已收货'  ) OR
+*         ( lv_zsfbs = '华东已收货' AND   gt_out-zsfbs NE '已发华东' ).
+*        MESSAGE |通知单{ gt_out-qmnum }不能从{ lv_zsfbs }更改为{ gt_out-zsfbs }| TYPE 'I'.
+*        c_error = 'X'.
+*        EXIT.
+*      ENDIF.
+*    ENDLOOP.
+*  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_ZWXY_F4
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0146   text
+*----------------------------------------------------------------------*
+FORM frm_zwxy_f4  USING  u_fname TYPE help_info-dynprofld.
+  DATA:lt_return_tab LIKE ddshretval OCCURS  0 WITH HEADER LINE.
+
+  REFRESH gt_zwxy .
+
+  SELECT zcode zwxy INTO CORRESPONDING FIELDS OF TABLE gt_zwxy FROM ztcs005 .
+
+  CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+    EXPORTING
+*     DDIC_STRUCTURE  = ' '
+      retfield        = 'ZWXY'
+      pvalkey         = 'ZWXY'
+      dynpprog        = sy-repid
+      dynpnr          = sy-dynnr
+      dynprofield     = u_fname
+      value_org       = 'S'
+    TABLES
+      value_tab       = gt_zwxy
+      return_tab      = lt_return_tab
+    EXCEPTIONS
+      parameter_error = 1
+      no_values_found = 2
+      OTHERS          = 3.
+  IF sy-subrc = 0.
+
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DOMAIN_TEXT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_GT_OUT_ZTHWX  text
+*      <--P_GT_OUT_ZTHWX_TXT  text
+*----------------------------------------------------------------------*
+FORM frm_get_domain_text  USING    u_zthwx TYPE c
+                          CHANGING c_txt TYPE c.
+  DATA:lv_domname  TYPE dd07v-domname,
+       lv_domvalue TYPE dd07v-domvalue_l,
+       lv_ddtext   TYPE dd07v-ddtext.
+
+  lv_domname = 'ZTHWX'.
+  lv_domvalue =  u_zthwx.
+
+  CALL FUNCTION 'DOMAIN_VALUE_GET'
+    EXPORTING
+      i_domname  = lv_domname
+      i_domvalue = lv_domvalue
+    IMPORTING
+      e_ddtext   = lv_ddtext
+    EXCEPTIONS
+      not_exist  = 1
+      OTHERS     = 2.
+  c_txt = lv_ddtext.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  F_CLASS_DATA_CHANGED
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_ER_DATA_CHANGED  text
+*----------------------------------------------------------------------*
+FORM f_class_data_changed USING data_changed TYPE REF TO cl_alv_changed_data_protocol.
+  FIELD-SYMBOLS: <fs_mod_rows> TYPE STANDARD TABLE,
+                 <fs_cells>    TYPE lvc_t_modi,
+                 <fs_cell_wa>  TYPE lvc_s_modi,
+                 <fs>          LIKE LINE OF gt_out.
+  DATA: lv_tabix LIKE sy-tabix.
+
+  IF NOT data_changed->mp_mod_rows IS INITIAL.
+    ASSIGN data_changed->mp_mod_rows->* TO <fs_mod_rows>.
+    ASSIGN data_changed->mt_mod_cells TO <fs_cells>.
+    LOOP AT <fs_mod_rows> ASSIGNING <fs>.
+*   获取列名
+      READ TABLE <fs_cells> WITH KEY tabix = sy-tabix ASSIGNING <fs_cell_wa>.
+*   获取列值
+      lv_tabix = <fs_cell_wa>-row_id.
+      READ TABLE gt_out INDEX lv_tabix.
+      IF sy-subrc = 0.
+        PERFORM frm_get_domain_text USING gt_out-zthwx CHANGING gt_out-zthwx_txt.
+        MODIFY gt_out INDEX lv_tabix.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+  CALL METHOD gv_grid->refresh_table_display( ).
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_SW_THBS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      <--P_LV_ERROR  text
+*----------------------------------------------------------------------*
+FORM frm_check_sw_thbs  CHANGING c_error TYPE c.
+  DATA:lv_zthwx LIKE ztcs001-zthwx.
+
+  CLEAR c_error.
+  LOOP AT gt_out WHERE check = 'X' AND zthwx EQ 'Y'.
+    CLEAR lv_zthwx.
+    SELECT SINGLE zthwx INTO lv_zthwx FROM ztcs001 WHERE qmnum = gt_out-qmnum AND zindx = gt_out-zindx.
+    IF sy-subrc = 0 AND lv_zthwx NE 'Y'.
+      MESSAGE '商务无权限确认电机退换' TYPE 'I'.
+      c_error = 'X'.
+      EXIT.
+    ENDIF.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PRINT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_print_data .
+  DATA fm_name TYPE rs38l_fnam.
+  DATA:xssfctrlop        LIKE ssfctrlop,
+       w_job_output_info TYPE ssfcrescl.
+
+  DATA: wa_head LIKE zszcs002_head,
+        it_head LIKE zszcs002_head OCCURS 0 WITH HEADER LINE,
+        it_item LIKE zszcs002_item OCCURS 0 WITH HEADER LINE.
+  DATA:lv_qmnum  LIKE qmel-qmnum.
+
+  DATA: BEGIN OF lt_qmnum OCCURS 0,
+          qmnum LIKE ztcs001-qmnum,
+          kunum LIKE qmel-kunum,
+        END OF lt_qmnum.
+
+  READ TABLE gt_out WITH KEY check = 'X'.
+  IF sy-subrc <> 0.
+    MESSAGE s000(oo) WITH '请先选择要打印的记录' DISPLAY LIKE 'E'.
+  ENDIF.
+
+*  检查只允许打印维修状态为A7和B6
+  LOOP AT gt_out WHERE check = 'X'.
+    IF gt_out-zwxzt NE 'A7' AND gt_out-zwxzt NE 'B6'.
+      MESSAGE e398(00) WITH '只允许打印维修状态为A7和B6' DISPLAY LIKE 'E'.
+    ENDIF.
+  ENDLOOP.
+
+* 将选中的记录加入表IT_HEAD中，针对客户进行去重
+  REFRESH:it_head,lt_qmnum.
+  LOOP AT gt_out WHERE check = 'X' .
+    CLEAR:it_head,lt_qmnum.
+    MOVE-CORRESPONDING gt_out TO it_head.
+    CLEAR:it_head-qmnum.
+    COLLECT it_head.
+    MOVE-CORRESPONDING gt_out TO lt_qmnum.
+    COLLECT lt_qmnum.
+    CLEAR: gt_out.
+  ENDLOOP.
+
+  SORT it_head BY kunum.
+  DELETE ADJACENT DUPLICATES FROM it_head COMPARING kunum.
+
+  SORT lt_qmnum BY kunum qmnum.
+  DELETE ADJACENT DUPLICATES FROM lt_qmnum COMPARING kunum qmnum.
+
+  CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
+    EXPORTING
+      formname           = 'ZSFCS_002'
+    IMPORTING
+      fm_name            = fm_name
+    EXCEPTIONS
+      no_form            = 1
+      no_function_module = 2
+      OTHERS             = 3.
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+
+  LOOP AT it_head.
+    AT FIRST.
+      xssfctrlop-no_close = 'X'.
+    ENDAT.
+    AT LAST.
+      xssfctrlop-no_close = ''.
+    ENDAT.
+
+*   根据商务从表ZTSD002中取出联系电话及传真
+    SELECT SINGLE tel fax INTO (it_head-tel,it_head-fax) FROM ztsd002 WHERE kvgr2 = it_head-kvgr2.
+*  处理维修单号
+    LOOP AT lt_qmnum WHERE kunum = it_head-kunum.
+      CLEAR: lv_qmnum.
+      CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+        EXPORTING
+          input  = lt_qmnum-qmnum
+        IMPORTING
+          output = lv_qmnum.
+      IF it_head-qmnum IS INITIAL.
+        it_head-qmnum = lv_qmnum.
+      ELSE.
+        CONCATENATE it_head-qmnum lv_qmnum INTO it_head-qmnum SEPARATED BY '/'.
+      ENDIF.
+    ENDLOOP.
+    CONDENSE it_head-qmnum.
+*  处理抬头
+    REFRESH:it_item.
+
+    LOOP AT gt_out WHERE check = 'X' AND kunum = it_head-kunum.
+      CLEAR: it_item.
+      MOVE-CORRESPONDING gt_out TO it_item.
+*   收费原因
+      CASE gt_out-zgbbs.
+        WHEN 'X'.
+          it_item-zgbbs_txt = '过保收费'.
+        WHEN OTHERS.
+          it_item-zgbbs_txt = '人为故障'.
+      ENDCASE.
+*   维修报价/元
+      IF gt_out-zwxbj = 0.
+        it_item-zwxbj = gt_out-zjhfy.
+      ENDIF.
+      APPEND it_item.
+      CLEAR: gt_out.
+    ENDLOOP.
+
+    CALL FUNCTION fm_name
+      EXPORTING
+        control_parameters = xssfctrlop
+        wa_head            = it_head
+*      IMPORTING
+*       job_output_info    = w_job_output_info
+      TABLES
+        it_item            = it_item
+      EXCEPTIONS
+        formatting_error   = 1
+        internal_error     = 2
+        send_error         = 3
+        user_canceled      = 4.
+
+    xssfctrlop-no_open = 'X'.
+    FREE: it_item.
+
+  ENDLOOP.
+
+ENDFORM.

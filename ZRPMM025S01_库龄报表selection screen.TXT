@@ -1,0 +1,12 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM013S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_werks FOR mseg-werks DEFAULT '1000',"工厂
+               s_matnr FOR mseg-matnr,"物料
+               s_lgort FOR mseg-lgort,"库存地点
+               s_bwart FOR mseg-bwart ,"移动类型
+               s_matkl FOR mara-matkl,"物料组
+               s_spart FOR mara-spart."产品组
+PARAMETERS:    p_atage LIKE vtbbewe-atage OBLIGATORY DEFAULT '30'."间隔天数
+SELECTION-SCREEN END OF BLOCK blc.

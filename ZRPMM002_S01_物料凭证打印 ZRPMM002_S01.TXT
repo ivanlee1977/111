@@ -1,0 +1,30 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM002_S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS : s_matnr FOR mseg-matnr,"物料号码
+s_werks FOR mseg-werks OBLIGATORY DEFAULT 1000, "工厂
+s_bwart FOR mseg-bwart, " 移动类型
+s_lgort FOR mseg-lgort, "库存地点
+s_lifnr FOR mseg-lifnr, "供应商
+s_ebeln FOR mseg-ebeln, "采购订单
+s_aufnr FOR mseg-aufnr, "生产/内部订单
+s_mblnr FOR mseg-mblnr, "物料凭证
+s_budat FOR mseg-budat_mkpf OBLIGATORY ."过账日期
+PARAMETERS:
+p_cancel like mseg-xwsbr DEFAULT ''."空时为不含冲销，X时为含冲销 "ADD BY PFT 20180122
+
+SELECTION-SCREEN END OF BLOCK b1.
+
+SELECTION-SCREEN BEGIN OF BLOCK b2 WITH FRAME TITLE TEXT-002.
+PARAMETERS : p_1  RADIOBUTTON GROUP radi DEFAULT 'X',
+             p_2  RADIOBUTTON GROUP radi,
+             p_3  RADIOBUTTON GROUP radi,
+             p_10 RADIOBUTTON GROUP radi,
+             p_4  RADIOBUTTON GROUP radi,
+             p_5  RADIOBUTTON GROUP radi,
+             p_6  RADIOBUTTON GROUP radi,
+             p_7  RADIOBUTTON GROUP radi,
+             p_8  RADIOBUTTON GROUP radi,
+             p_9  RADIOBUTTON GROUP radi.
+SELECTION-SCREEN END OF BLOCK b2.

@@ -1,0 +1,551 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM003_F01
+*&---------------------------------------------------------------------*
+
+FORM GET_DATA."取数据
+  SELECT
+        A~AUFNR
+        A~GSTRP
+        A~GLTRP
+        A~AUFPL
+        A~FEVOR
+        B~DAUAT
+        B~MATNR
+        B~CHARG
+        INTO CORRESPONDING FIELDS OF TABLE GT_ITEM
+    FROM AFKO AS A
+    JOIN AFPO AS B ON A~AUFNR EQ B~AUFNR
+    WHERE A~FEVOR IN S_FEVOR
+      AND A~AUFNR IN S_AUFNR
+      AND A~GSTRP IN S_GSTRP
+      AND A~GLTRP IN S_GLTRP
+      AND B~DAUAT IN S_DAUAT
+      AND B~MATNR IN S_MATNR.
+ENDFORM.
+
+FORM PROCESS_DATA."处理数据
+  DATA:BEGIN OF IT_AFVV OCCURS 0,
+         AUFPL TYPE AFVC-AUFPL, "
+         VORNR TYPE AFVC-VORNR, "
+         APLZL TYPE AFVC-APLZL, "
+         ARBID TYPE AFVC-ARBID, "
+         RUECK TYPE AFVC-RUECK,
+         MGVRG TYPE AFVV-MGVRG, "
+         ISM01 TYPE AFVV-ISM01, "
+         LMNGA TYPE AFVV-LMNGA, "
+         RMNGA TYPE AFVV-RMNGA, "
+         VGW01 TYPE AFVV-VGW01, "标准工时（准备）
+         VGW02 TYPE AFVV-VGW02, " 标准工时（工时）
+         VGE01 TYPE AFVV-VGE01, "
+         VGE02 TYPE AFVV-VGE02, "
+       END OF IT_AFVV.
+
+  DATA:BEGIN OF IT_CRHD OCCURS 0,
+         OBJTY LIKE CRHD-OBJTY,
+         OBJID LIKE CRHD-OBJID,
+         ARBPL LIKE CRHD-ARBPL,
+       END OF IT_CRHD.
+
+  DATA:IT_AFRU LIKE AFRU OCCURS 0 WITH HEADER LINE .
+  DATA:IT_TRUGT LIKE TRUGT OCCURS 0 WITH HEADER LINE .
+  DATA:IT_MAKT LIKE MAKT OCCURS 0 WITH HEADER LINE .
+
+  IF GT_ITEM[] IS NOT INITIAL .
+    SELECT  A~AUFPL
+            A~APLZL
+            A~VORNR "
+            A~ARBID
+            A~RUECK
+            B~MGVRG
+            B~ISM01
+            B~LMNGA
+            B~RMNGA
+            B~VGW01
+            B~VGE01
+            B~VGE02
+       INTO CORRESPONDING FIELDS OF TABLE IT_AFVV
+       FROM AFVC AS A
+       JOIN AFVV AS B ON A~AUFPL EQ B~AUFPL AND A~APLZL EQ B~APLZL
+       FOR ALL ENTRIES IN GT_ITEM
+        WHERE A~AUFPL EQ GT_ITEM-AUFPL.
+
+    "MAKT
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE IT_MAKT
+      FROM MAKT FOR ALL ENTRIES IN GT_ITEM
+       WHERE MATNR EQ GT_ITEM-MATNR
+         AND SPRAS EQ SY-LANGU.
+  ENDIF.
+
+  IF IT_AFVV[] IS NOT INITIAL .
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE IT_CRHD
+      FROM CRHD
+      FOR ALL ENTRIES IN IT_AFVV
+      WHERE OBJID EQ IT_AFVV-ARBID.
+
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE IT_AFRU
+      FROM AFRU
+      FOR ALL ENTRIES IN IT_AFVV
+      WHERE  RUECK EQ IT_AFVV-RUECK.
+  ENDIF.
+
+  IF IT_AFRU[] IS NOT INITIAL .
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE IT_TRUGT
+      FROM TRUGT
+      FOR ALL ENTRIES IN IT_AFRU
+      WHERE GRUND EQ IT_AFRU-GRUND.
+  ENDIF.
+
+
+  LOOP AT GT_ITEM INTO GW_ITEM.
+    "MAKT
+    READ TABLE IT_MAKT WITH KEY MATNR = GW_ITEM-MATNR.
+    IF SY-SUBRC EQ 0.
+      GW_ITEM-MAKTX =  IT_MAKT-MAKTX.
+    ENDIF.
+
+    "AFVV
+    READ TABLE IT_AFVV WITH  KEY AUFPL = GW_ITEM-AUFPL.
+    IF SY-SUBRC EQ 0.
+      GW_ITEM-VORNR =  IT_AFVV-VORNR.
+      GW_ITEM-ARBID =  IT_AFVV-ARBID.
+      GW_ITEM-RUECK =  IT_AFVV-RUECK.
+      GW_ITEM-MGVRG =  IT_AFVV-MGVRG."计划数量
+      GW_ITEM-ISM01 =  IT_AFVV-ISM01."累计实际工时
+      GW_ITEM-LMNGA =  IT_AFVV-LMNGA."累计良品数
+      GW_ITEM-RMNGA =  IT_AFVV-RMNGA."累计不良数
+      GW_ITEM-VGW01 =  IT_AFVV-VGW01."工时
+      GW_ITEM-VGW02 =  IT_AFVV-VGW02."工时
+      GW_ITEM-VGE01 =  IT_AFVV-VGE01."工时单位
+      GW_ITEM-VGE02 =  IT_AFVV-VGE02."工时单位
+    ENDIF.
+
+    LOOP AT IT_AFVV WHERE AUFPL EQ GW_ITEM-AUFPL.
+      AT END OF VORNR.
+        GW_ITEM-LMNGA_END  = GW_ITEM-LMNGA_END +  IT_AFVV-LMNGA."累计良品数
+      ENDAT.
+    ENDLOOP.
+
+
+    "工作中心
+    READ TABLE IT_CRHD WITH KEY OBJID = GW_ITEM-ARBID.
+    IF SY-SUBRC EQ 0.
+      GW_ITEM-ARBPL =  IT_CRHD-ARBPL.
+    ENDIF.
+
+    "AFRU
+    READ TABLE IT_AFRU WITH KEY RUECK = IT_AFVV-RUECK.
+    IF SY-SUBRC EQ 0.
+      GW_ITEM-GRUND = IT_AFRU-GRUND."异常代码（抓第一个）
+      GW_ITEM-LTXA1 = IT_AFRU-LTXA1."责任部门
+      GW_ITEM-ILE01 = IT_AFRU-ILE01."实际工时单位
+    ENDIF.
+
+    LOOP AT IT_AFRU WHERE AUFPL EQ GW_ITEM-AUFPL AND BUDAT IN S_BUDAT.
+      IF IT_AFRU-STOKZ IS INITIAL AND IT_AFRU-STZHL IS INITIAL.
+        GW_ITEM-GMNGA =  GW_ITEM-GMNGA + IT_AFRU-GMNGA.
+        GW_ITEM-ISM01_VV =  GW_ITEM-ISM01_VV + IT_AFRU-ISM01.
+      ENDIF.
+    ENDLOOP.
+
+    GW_ITEM-ZJHGS = ( GW_ITEM-LMNGA - GW_ITEM-RMNGA ) * GW_ITEM-VGW01 + GW_ITEM-VGW02. "累计计划工时
+    GW_ITEM-ZCEGS = GW_ITEM-ISM01 -  GW_ITEM-ZJHGS ."累计超额工时
+
+    "TRUGT
+    READ TABLE IT_TRUGT WITH KEY GRUND = GW_ITEM-GRUND WERKS = GW_ITEM-PWERK.
+    IF SY-SUBRC EQ 0.
+      GW_ITEM-GRDTX =  IT_TRUGT-GRDTX."异常原因（抓第一个）
+    ENDIF.
+    IF GW_ITEM-MGVRG NE 0.
+      GW_ITEM-ZBLL = GW_ITEM-RMNGA  / GW_ITEM-MGVRG . "不良率
+      GW_ITEM-ZZTL  = GW_ITEM-LMNGA_END / GW_ITEM-MGVRG .  "直通率
+    ENDIF.
+
+    MODIFY GT_ITEM FROM GW_ITEM.
+  ENDLOOP .
+
+ENDFORM.
+
+FORM GET_ALV."ALV显示界面
+  DATA : COL_POS TYPE I VALUE 1.
+
+  CLEAR:IT_FIELDCAT,WA_FIELDCAT.
+
+  GS_LAYOUT-ZEBRA = 'X'.
+  GS_LAYOUT-CWIDTH_OPT = 'X'."
+  GS_LAYOUT-STYLEFNAME = 'FIELD_STYLE'. " 将内表中的字段名存入显示格式
+  GS_LAYOUT-BOX_FNAME        = 'SEL'.
+  I_GRID_SETTINGS-EDT_CLL_CB = 'X'.
+*  wa_events-name = 'CALLER_EXIT'.
+*  wa_events-form = 'CALLER_EXIT'.
+*  APPEND wa_events TO it_events.
+
+  PERFORM FIELDCAT_INT USING COL_POS  'FEVOR'   ' '   '生产管理员（线别）'  ''  '' '' '' ''.
+  PERFORM FIELDCAT_INT USING COL_POS  'AUFNR'   ' '   '生产订单'   ''  '' '' ''   ''.
+  PERFORM FIELDCAT_INT USING COL_POS  'GSTRP'   ' '   '基本开始日期'   ''  '' '' ''   ''.
+  PERFORM FIELDCAT_INT USING COL_POS  'GLTRP'   ' '   '基本结束日期'   ''  '' '' ''   ''.
+  PERFORM FIELDCAT_INT USING COL_POS  'DAUAT'   ' '   '订单类型'   ''  '' '' ''   ''.
+  PERFORM FIELDCAT_INT USING COL_POS  'MATNR'   ' '   '物料'   ''  '' '' ''   ''.
+  PERFORM FIELDCAT_INT USING COL_POS  'MAKTX'   ' '   '物料描述'   ''  '' '' ''   ''.
+  PERFORM FIELDCAT_INT USING COL_POS  'CHARG'   ' '   '版本'   ''  '' '' ''   ''.
+  PERFORM FIELDCAT_INT USING COL_POS  'VORNR'   ' '   '工序'   ''  '' '' ''   ''.
+  PERFORM FIELDCAT_INT USING COL_POS  'ARBPL'   ' '   '工作中心'   ''  '' '' ''   ''.
+  PERFORM FIELDCAT_INT USING COL_POS  'MGVRG'   ' '   '计划数量'   ''  '' '' ''   ''.
+  PERFORM FIELDCAT_INT USING COL_POS  'GMNGA'   ' '   '实际完成数（报工良品数）'   ''  '' '' ''   ''.
+  PERFORM FIELDCAT_INT USING COL_POS  'ISM01_VV'   ' '   '实际工时'   ''  '' '' ''   ''.
+  PERFORM FIELDCAT_INT USING COL_POS  'ILE01'   ' '   '实际工时单位'   ''  '' '' ''   ''.
+  PERFORM FIELDCAT_INT USING COL_POS  'ISM01'   ' '   '累计实际工时'   ''  '' '' ''   ''.
+  PERFORM FIELDCAT_INT USING COL_POS  'LMNGA'   ' '   '累计良品数'   ''  '' '' ''   ''.
+  PERFORM FIELDCAT_INT USING COL_POS  'RMNGA'   ' '   '累计不良数'   ''  '' '' ''   ''.
+  PERFORM FIELDCAT_INT USING COL_POS  'ZBLL'   ' '   '不良率'   ''  '' '' ''   ''.
+  PERFORM FIELDCAT_INT USING COL_POS  'ZZTL'   ' '   '直通率'   ''  '' '' ''   ''.
+  PERFORM FIELDCAT_INT USING COL_POS  'ZJHGS'   ' '   '累计计划工时'   ''  '' '' ''   ''.
+  PERFORM FIELDCAT_INT USING COL_POS  'ZCEGS'   ' '   '累计超额工时'   ''  '' '' ''   ''.
+  PERFORM FIELDCAT_INT USING COL_POS  'GRUND'   ' '   '异常代码（抓第一个）'   ''  '' '' ''   ''.
+  PERFORM FIELDCAT_INT USING COL_POS  'GRDTX'   ' '   '异常原因（抓第一个）'   ''  '' '' ''   ''.
+  PERFORM FIELDCAT_INT USING COL_POS  'LTXA1'   ' '   '责任部门'   ''  '' '' ''   ''.
+  PERFORM FIELDCAT_INT USING COL_POS  'BEIZHU'   ' '   '备注'   ''  '' '' ''   ''.
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      I_CALLBACK_PROGRAM          = SY-REPID
+      IS_LAYOUT_LVC               = GS_LAYOUT
+      IT_FIELDCAT_LVC             = IT_FIELDCAT
+      IT_EVENTS                   = IT_EVENTS
+      I_SAVE                      = 'A'
+      I_CALLBACK_PF_STATUS_SET    = 'SET_PF_STATUS'
+      I_CALLBACK_USER_COMMAND     = 'ALV_USER_COMMAND'
+      I_CALLBACK_HTML_TOP_OF_PAGE = 'ALV_TOP_OF_PAGE'
+      I_GRID_SETTINGS             = I_GRID_SETTINGS
+    TABLES
+      T_OUTTAB                    = GT_ITEM[]
+    EXCEPTIONS
+      PROGRAM_ERROR               = 1
+      OTHERS                      = 2.
+
+  IF SY-SUBRC <> 0.
+* MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+*         WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+  ENDIF.
+ENDFORM.
+
+FORM SET_PF_STATUS USING RT_EXTAB TYPE SLIS_T_EXTAB.
+
+  DATA: WA_EXTAB TYPE SLIS_EXTAB.
+
+  SET PF-STATUS 'ZRPPP014_STATUS' EXCLUDING RT_EXTAB.
+
+ENDFORM.                    "set_pf_status1
+
+FORM ALV_USER_COMMAND USING R_UCOMM LIKE SY-UCOMM  RS_SELFIELD TYPE SLIS_SELFIELD.
+*   获取ALV中的鼠标勾选记录
+  DATA: L_GRID TYPE REF TO CL_GUI_ALV_GRID.
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      E_GRID = L_GRID.
+  RS_SELFIELD-REFRESH = 'X'.
+  RS_SELFIELD-COL_STABLE = 'X'.
+  RS_SELFIELD-ROW_STABLE = 'X'.
+
+  R_UCOMM = SY-UCOMM.
+  SAVE_OK =  R_UCOMM .
+  CASE R_UCOMM.
+      "打印
+    WHEN 'C_PRINT'.
+      PERFORM OUTPUT_REPORT.
+  ENDCASE.
+
+
+ENDFORM.                    "alv_user_command
+
+FORM FIELDCAT_INT  USING   P_COL_POS         " 1
+                            P_FIELDNAME       " 2
+                            P_KEY             " 3
+                            P_SELTEXT_L       " 4
+                            P_ZERO
+                            P_FILENAME
+                            P_TALBENAME
+                            P_OUTPUTLEN
+                            P_EDIT .
+
+  WA_FIELDCAT-COL_POS       = P_COL_POS.
+  WA_FIELDCAT-FIELDNAME     = P_FIELDNAME.
+  WA_FIELDCAT-KEY           = P_KEY.
+  WA_FIELDCAT-COLTEXT     = P_SELTEXT_L.
+  WA_FIELDCAT-NO_ZERO        = P_ZERO.
+  WA_FIELDCAT-REF_FIELD   = P_FILENAME.
+  WA_FIELDCAT-REF_TABLE    = P_TALBENAME.
+  WA_FIELDCAT-TIPDDICTXT       = 'L'.
+  WA_FIELDCAT-EDIT           = P_EDIT  .
+  APPEND WA_FIELDCAT TO IT_FIELDCAT.
+  P_COL_POS = P_COL_POS + 1.
+  CLEAR: WA_FIELDCAT.
+ENDFORM.                    " FIELDCAT_INT
+
+FORM OUTPUT_REPORT.
+********数据定义*******
+  DATA:LV_FILE   TYPE STRING,
+       LV_RESULT TYPE C. "标识: 空表示文件不存在;否则,表示存在
+  DATA LV_ANSWER TYPE C.
+  DATA:LI_LINES TYPE I.
+  DATA:LS_KEY   TYPE WWWDATATAB,
+       LV_SUBRC TYPE SY-SUBRC.
+  DATA LV_FILE1 LIKE RLGRAP-FILENAME.
+*******初始化*******
+*******程序主体*******
+  CALL METHOD CL_GUI_FRONTEND_SERVICES=>DIRECTORY_BROWSE
+    EXPORTING
+      WINDOW_TITLE    = '请选择你要存放文件的路径'
+      INITIAL_FOLDER  = 'D:'
+    CHANGING
+      SELECTED_FOLDER = LV_FILE.
+
+  CONCATENATE LV_FILE '\' SY-TITLE  SY-DATUM '.xls' INTO LV_FILE.
+
+*    CONCATENATE 'C:\PP\' sy-title '-'   sy-datum '.xls' INTO lv_file.
+
+  CALL METHOD CL_GUI_FRONTEND_SERVICES=>FILE_EXIST
+    EXPORTING
+      FILE                 = LV_FILE
+    RECEIVING
+      RESULT               = LV_RESULT
+    EXCEPTIONS
+      CNTL_ERROR           = 1
+      ERROR_NO_GUI         = 2
+      WRONG_PARAMETER      = 3
+      NOT_SUPPORTED_BY_GUI = 4
+      OTHERS               = 5.
+  IF LV_RESULT IS NOT  INITIAL. "文件已经存在
+    CALL FUNCTION 'POPUP_TO_CONFIRM'
+      EXPORTING
+        TITLEBAR              = '请确认'
+        TEXT_QUESTION         = '文件已经存在，是否要覆盖?'
+        TEXT_BUTTON_1         = '是'
+        TEXT_BUTTON_2         = '否'
+        DEFAULT_BUTTON        = '2' "缺省选中按钮: 1 是; 2 否
+        DISPLAY_CANCEL_BUTTON = ''  "标识: 为空,不显示 取消按钮
+      IMPORTING
+        ANSWER                = LV_ANSWER "标识： 1 是;
+      EXCEPTIONS
+        TEXT_NOT_FOUND        = 1
+        OTHERS                = 2.
+    IF LV_ANSWER NE '1'.
+      EXIT.
+    ENDIF.
+  ENDIF.
+
+  LS_KEY-RELID = 'MI'.
+  LS_KEY-OBJID = GCST_EXCEL_TEMPLATE.
+  LV_FILE1 = LV_FILE.
+  CALL FUNCTION 'DOWNLOAD_WEB_OBJECT'
+    EXPORTING
+      KEY         = LS_KEY
+      DESTINATION = LV_FILE1
+    IMPORTING
+      RC          = LV_SUBRC.
+  IF LV_SUBRC <> 0.
+    MESSAGE '下载模板出错，请检查，谢谢' TYPE 'E'.
+    EXIT.
+  ENDIF.
+
+***填充EXCEL数据
+  PERFORM FRM_FILLDATA_EXCEL USING LV_FILE.
+
+ENDFORM.
+
+
+FORM FRM_FILLDATA_EXCEL  USING  IV_FILE TYPE STRING.
+  DATA LV_VALUE TYPE CHAR200.
+  DATA:
+       SHEET_NAME(200) TYPE C. "EXCEL SHEET NAME
+
+  DATA: L_ROW  TYPE I,
+        L_NO   TYPE I,
+        L_NUM  TYPE I,
+        L_XLH  TYPE I,
+        L_ROW1 TYPE I,
+        L_ROW2 TYPE I.
+
+  DATA LV_ROW TYPE I.
+  DATA LV_COL TYPE I.
+  DATA:
+    ROW_C   TYPE CHAR4,
+    ROW_1   TYPE I,
+    ROW_C_2 TYPE CHAR4,
+    ROW_2   TYPE I,
+    CELL    TYPE CHAR9.
+
+
+  DEFINE MAC_FILL_CELL.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+      EXPORTING
+        #1 = &1
+        #2 = &2.
+    SET PROPERTY OF lo_cell 'VALUE' = &3.
+  END-OF-DEFINITION.
+
+  DEFINE MAC_MER_CELL.
+    CALL METHOD OF
+      lo_sheet
+      'RANGE' = lo_cell
+      EXPORTING
+      #1 = &1.
+    CALL METHOD OF
+      lo_cell
+      'MERGE'.
+    FREE OBJECT lo_cell.
+
+  END-OF-DEFINITION.               "mergerange
+
+  DEFINE MAC_BORD_CELL.
+    CALL METHOD OF
+      lo_sheet"lo_workbook
+      'RANGE' = lo_cell
+      EXPORTING
+      #1 = &1.
+    DO 4 TIMES .
+      CALL METHOD OF
+        lo_cell
+        'BORDERS' = borders_obj
+        EXPORTING
+        #1 = sy-index.
+      SET PROPERTY OF borders_obj 'LineStyle' = '1'.
+      SET PROPERTY OF borders_obj 'WEIGHT' = '2'.
+      SET PROPERTY OF borders_obj 'ColorIndex' = '1'.
+      FREE OBJECT borders_obj.
+    ENDDO.
+    FREE OBJECT borders_obj.
+    FREE OBJECT lo_cell.
+  END-OF-DEFINITION.
+
+*填充excel
+  CREATE OBJECT LO_EXCEL 'EXCEL.APPLICATION'.
+  CALL METHOD OF LO_EXCEL 'WORKBOOKS' = LO_WORKBOOKS.
+  CALL METHOD OF LO_WORKBOOKS 'OPEN' = LO_WORKBOOK EXPORTING #1 = IV_FILE.
+  CALL METHOD OF LO_WORKBOOK 'WORKSHEETS' = LO_SHEET EXPORTING #1 = 1.
+*******程序主体*******
+  "表头数据.
+
+* 检查抬头，有几个SHEET，复制N-1个SHEET
+
+
+*读取模板数
+
+*  L_NUM = L_NUM + 1.
+*  PERFORM FRM_SELECT_SHEET USING L_NUM.
+*
+*  CONCATENATE '物料信息' '' INTO SHEET_NAME. "sheet命名
+*  CONDENSE SHEET_NAME.
+*  SET PROPERTY OF LO_SHEET 'NAME' = SHEET_NAME."命名SHEET.
+
+
+
+  LV_ROW = 1.
+  LOOP AT GT_ITEM INTO GW_ITEM.
+
+    LV_COL = LV_COL + 1.
+    LV_ROW = LV_ROW + 1.
+
+    "FEVOR
+    MAC_FILL_CELL LV_ROW LV_COL GW_ITEM-FEVOR.
+    "AUFNR
+    MAC_FILL_CELL LV_ROW LV_COL GW_ITEM-AUFNR.
+    "GSTRP
+    MAC_FILL_CELL LV_ROW LV_COL GW_ITEM-GSTRP.
+    "GLTRP
+    MAC_FILL_CELL LV_ROW LV_COL GW_ITEM-GLTRP.
+    "DAUAT
+    MAC_FILL_CELL LV_ROW LV_COL GW_ITEM-DAUAT.
+    "MATNR
+    MAC_FILL_CELL LV_ROW LV_COL GW_ITEM-MATNR.
+    "MAKTX
+    MAC_FILL_CELL LV_ROW LV_COL GW_ITEM-MAKTX.
+    "CHARG
+    MAC_FILL_CELL LV_ROW LV_COL GW_ITEM-CHARG.
+    "VORNR
+    MAC_FILL_CELL LV_ROW LV_COL GW_ITEM-VORNR.
+    "ARBPL
+    MAC_FILL_CELL LV_ROW LV_COL GW_ITEM-ARBPL.
+    "MGVRG
+    MAC_FILL_CELL LV_ROW LV_COL GW_ITEM-MGVRG.
+    "GMNGA
+    MAC_FILL_CELL LV_ROW LV_COL GW_ITEM-GMNGA.
+    "ISM01_VV
+    MAC_FILL_CELL LV_ROW LV_COL GW_ITEM-ISM01_VV.
+    "ILE01
+    MAC_FILL_CELL LV_ROW LV_COL GW_ITEM-ILE01.
+    "ISM01
+    MAC_FILL_CELL LV_ROW LV_COL GW_ITEM-ISM01.
+    "LMNGA
+    MAC_FILL_CELL LV_ROW LV_COL GW_ITEM-LMNGA.
+    "RMNGA
+    MAC_FILL_CELL LV_ROW LV_COL GW_ITEM-RMNGA.
+    "ZBLL
+    MAC_FILL_CELL LV_ROW LV_COL GW_ITEM-ZBLL.
+    "ZZTL
+    MAC_FILL_CELL LV_ROW LV_COL GW_ITEM-ZZTL.
+    "ZJHGS
+    MAC_FILL_CELL LV_ROW LV_COL GW_ITEM-ZJHGS.
+    "ZCEGS
+    MAC_FILL_CELL LV_ROW LV_COL GW_ITEM-ZCEGS.
+    "GRUND
+    MAC_FILL_CELL LV_ROW LV_COL GW_ITEM-GRUND.
+    "GRDTX
+    MAC_FILL_CELL LV_ROW LV_COL GW_ITEM-GRDTX.
+    "LTXA1
+    MAC_FILL_CELL LV_ROW LV_COL GW_ITEM-LTXA1.
+    "BEIZHU
+    MAC_FILL_CELL LV_ROW LV_COL GW_ITEM-BEIZHU.
+
+    ROW_C = LV_ROW.
+    CONDENSE ROW_C NO-GAPS.
+
+    ROW_OBJ = ROW_C.
+    CALL METHOD OF ROW_OBJ 'AUTOFIT'."自适应
+    CONCATENATE 'A' ROW_C ':AC'ROW_C INTO CELL.
+    MAC_BORD_CELL CELL.
+
+    CLEAR:LV_COL.
+  ENDLOOP.
+
+
+  CALL METHOD OF LO_SHEET 'CELLS' = LO_CELL EXPORTING #1 = 1 #2 = 1.
+  CALL METHOD OF LO_CELL 'SELECT'.
+  SET PROPERTY OF LO_EXCEL 'CutCopyMode' = 0.
+
+  CALL METHOD OF LO_WORKBOOK 'SAVE'.
+  SET PROPERTY OF LO_EXCEL 'VISIBLE' = 1.
+  FREE OBJECT:LO_EXCEL,LO_WORKBOOKS,LO_WORKBOOK,LO_SHEET,LO_RANGE,LO_CELL.
+ENDFORM.
+
+FORM SHEET_COPY  USING    P_N.
+  DATA: L TYPE I VALUE 0.
+  DO P_N TIMES.
+    L = L + 1.
+    CALL METHOD OF
+    LO_EXCEL
+    'WORKSHEETS' = TMP_SHEET
+    EXPORTING
+      #1           = L.
+    PERFORM ERR_HDL.
+    CALL METHOD OF
+      LO_SHEET
+      'COPY'
+      EXPORTING
+        #1 = TMP_SHEET.
+    PERFORM ERR_HDL.
+  ENDDO.
+ENDFORM.
+
+FORM ERR_HDL .
+  IF SY-SUBRC <> 0.
+    MESSAGE 'OLE error: Return code ='(010) TYPE 'S'.
+    EXIT.
+  ENDIF.
+ENDFORM.                    " ERR_HDL
+
+FORM FRM_SELECT_SHEET  USING    PV_NUM.
+  CALL METHOD OF LO_EXCEL 'WORKSHEETS' = LO_SHEET
+  EXPORTING
+    #1 = PV_NUM.
+
+  CALL METHOD OF LO_SHEET 'SELECT'.
+ENDFORM.

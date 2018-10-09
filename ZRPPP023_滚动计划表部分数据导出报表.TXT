@@ -1,0 +1,74 @@
+*&---------------------------------------------------------------------*
+*& Report ZRPPP023
+*& 创建者(公司)/日期： leimt/20180102
+*& 程序描述:滚动计划表部分数据导出报表
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    LEIMT           20180102      创建程序
+*&---------------------------------------------------------------------*
+REPORT zrppp023.
+
+INCLUDE zrppp023t01.
+INCLUDE zrppp023s01.
+INCLUDE zrppp023f01.
+
+INITIALIZATION.
+  PERFORM frm_initial_data.
+
+AT SELECTION-SCREEN OUTPUT.
+
+  IF p_r1 = 'X'.
+    LOOP AT SCREEN.
+      IF screen-group1 = 'PP'.
+        screen-active = '1'.
+      ENDIF.
+      IF screen-group1 = 'DD'.
+        screen-active = '0'.
+      ENDIF.
+      MODIFY SCREEN.
+    ENDLOOP.
+  ENDIF.
+  IF p_r2 = 'X'.
+    LOOP AT SCREEN.
+      IF screen-group1 = 'PP'.
+        screen-active = '0'.
+      ENDIF.
+      IF screen-group1 = 'DD'.
+        screen-active = '1'.
+      ENDIF.
+      MODIFY SCREEN.
+    ENDLOOP.
+  ENDIF.
+
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_file. "弹出选择文件对话框
+  CREATE OBJECT l_obj.
+  CALL METHOD l_obj->file_open_dialog
+    EXPORTING
+      file_filter       = '*.xls;*.xlsx;'
+      initial_directory = 'D:\'
+    CHANGING
+      file_table        = it_file[]
+      rc                = g_rc.
+  READ TABLE it_file INDEX 1.
+  p_file = it_file-filename.
+************************************************************************
+* START-OF-SELECTION
+************************************************************************
+AT SELECTION-SCREEN.
+  CLEAR sy-ucomm.
+  CASE sscrfields-ucomm.
+    WHEN 'FC01'.  "开启文件
+      PERFORM frm_download_template USING 'ZPP023' CHANGING p_file.
+    WHEN OTHERS.
+  ENDCASE.
+
+START-OF-SELECTION.
+*  IF p_r1 = 'X'.
+
+*  ENDIF.
+
+
+  PERFORM frm_get_data."取数
+  PERFORM frm_process_data."对取出的数据进行处理
+  PERFORM frm_show.

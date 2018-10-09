@@ -1,0 +1,177 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP002F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:BEGIN OF lt_crhd OCCURS 0,
+         objty LIKE crhd-objty,
+         objid LIKE crhd-objid,
+         arbpl LIKE crhd-arbpl,
+       END OF lt_crhd.
+
+  SELECT   a~matnr
+           a~werks
+           a~plnnr
+           a~plnal
+           b~ktext
+           b~verwe
+           b~statu
+           d~vornr
+           d~ltxa1
+           d~arbid
+           d~werks AS werkw
+           d~steus
+           d~bmsch
+           d~vgw01
+           d~vgw02
+           d~splim
+           d~spmus
+           e~dispo
+    INTO CORRESPONDING FIELDS OF TABLE gt_out
+    FROM mapl AS a
+    INNER JOIN plko AS b
+    ON a~plnty = b~plnty
+    AND a~plnnr = b~plnnr
+    AND a~plnal = b~plnal
+      INNER JOIN plas AS c
+       ON a~plnty = c~plnty
+      AND a~plnnr = c~plnnr
+      AND a~plnal = c~plnal
+      INNER JOIN plpo AS d
+       ON c~plnty = d~plnty
+      AND c~plnnr = d~plnnr
+      AND c~plnkn = d~plnkn
+      AND c~zaehl = d~zaehl
+      INNER JOIN marc AS e
+      ON a~werks = e~werks
+      AND a~matnr = e~matnr
+   WHERE a~werks IN s_werks
+     AND a~matnr IN s_matnr
+     AND a~plnty EQ 'N'
+     AND e~dispo IN s_dispo
+     AND b~statu IN s_statu
+     AND a~loekz EQ space
+     AND b~loekz EQ space
+     AND c~loekz EQ space
+     AND d~loekz EQ space.
+
+  CHECK gt_out[] IS NOT INITIAL.
+***抓取工作中心数据
+  SELECT objty
+         objid
+         arbpl
+    INTO CORRESPONDING FIELDS OF TABLE lt_crhd
+    FROM crhd
+    FOR ALL ENTRIES IN gt_out
+    WHERE objty = 'A'
+      AND objid = gt_out-arbid.
+
+  SORT lt_crhd BY objty objid.
+
+  LOOP AT gt_out.
+    READ TABLE lt_crhd WITH KEY objid = gt_out-arbid BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-arbpl = lt_crhd-arbpl.
+      MODIFY gt_out.
+    ENDIF.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  mcr_build_fieldcat:'MATNR'   '物料号码'       'MATNR'   'MAPL',
+                     'WERKS'   '工厂'           'WERKS'   'MAPL',
+                     'PLNAL'   '组计数器'       'PLNAL'   'MAPL',
+                     'KTEXT'   '工艺描述'       'KTEXT'   'PLKO',
+                     'VERWE'   '用途'           'VERWE'   'PLKO',
+                     'STATU'   '状态'           'STATU'   'PLKO',
+                     'VORNR'   '工序号'         'VORNR'   'PLKO',
+                     'LTXA1'   '工序描述'       'LTXA1'   'PLPO',
+                     'ARBPL'   '工作中心'       'ARBPL'   'CRHD',
+                     'WERKW'   '工作中心工厂'   'WERKS'   'PLPO',
+                     'STEUS'   '控制码'         'STEUS'   'PLPO',
+                     'BMSCH'   '基本数量'       'BMSCH'   'PLPO',
+                     'VGW01'   '准备时间(MIN)'  'VGW01'   'PLPO',
+                     'VGW02'   '人工时间(MIN)'  'VGW02'   'PLPO',
+                     'SPLIM'   '分解数'         'SPLIM'   'PLPO',
+                     'SPMUS'   '需分解'         'SPMUS'   'PLPO',
+                     'DISPO'   'MRP控制者'      'DISPO'   'MARC'.
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra  = 'X'.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK  = ' '
+*     I_BYPASSING_BUFFER =
+*     I_BUFFER_ACTIVE    =
+      i_callback_program = sy-repid
+*     I_CALLBACK_PF_STATUS_SET          = ' '
+*     I_CALLBACK_USER_COMMAND           = ' '
+*     I_CALLBACK_TOP_OF_PAGE            = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME   =
+*     I_BACKGROUND_ID    = ' '
+*     I_GRID_TITLE       =
+*     I_GRID_SETTINGS    =
+      is_layout_lvc      = gs_layout
+      it_fieldcat_lvc    = gt_fcat[]
+*     IT_EXCLUDING       =
+*     IT_SPECIAL_GROUPS_LVC             =
+*     IT_SORT_LVC        =
+*     IT_FILTER_LVC      =
+*     IT_HYPERLINK       =
+*     IS_SEL_HIDE        =
+      i_default          = 'X'
+      i_save             = 'A'
+*     IS_VARIANT         =
+*     IT_EVENTS          =
+*     IT_EVENT_EXIT      =
+*     IS_PRINT_LVC       =
+*     IS_REPREP_ID_LVC   =
+*     I_SCREEN_START_COLUMN             = 0
+*     I_SCREEN_START_LINE               = 0
+*     I_SCREEN_END_COLUMN               = 0
+*     I_SCREEN_END_LINE  = 0
+*     I_HTML_HEIGHT_TOP  =
+*     I_HTML_HEIGHT_END  =
+*     IT_ALV_GRAPHICS    =
+*     IT_EXCEPT_QINFO_LVC               =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER           =
+*     ES_EXIT_CAUSED_BY_USER            =
+    TABLES
+      t_outtab           = gt_out[]
+    EXCEPTIONS
+      program_error      = 1
+      OTHERS             = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.

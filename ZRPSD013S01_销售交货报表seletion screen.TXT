@@ -1,0 +1,40 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPSD013S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK blc4 WITH FRAME TITLE TEXT-005.
+PARAMETERS:p_r0 AS CHECKBOX .
+PARAMETERS:p_r1 AS CHECKBOX .
+SELECTION-SCREEN END OF BLOCK blc4.
+
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_vkorg FOR likp-vkorg,
+               s_vtweg FOR lips-vtweg,
+               s_lgort FOR lips-lgort.
+SELECTION-SCREEN END OF BLOCK blc.
+
+SELECTION-SCREEN BEGIN OF BLOCK blc1 WITH FRAME TITLE TEXT-002.
+SELECT-OPTIONS:s_kunag FOR likp-kunag,
+               s_bzirk FOR vbkd-bzirk,
+               s_vkbur FOR vbak-vkbur,
+               s_vkgrp FOR vbak-vkgrp,
+               s_kvgr1 FOR vbak-kvgr1,
+               s_kvgr2 FOR vbak-kvgr2.
+SELECTION-SCREEN END OF BLOCK blc1.
+
+SELECTION-SCREEN BEGIN OF BLOCK blc2 WITH FRAME TITLE TEXT-003.
+SELECT-OPTIONS:s_vgbel FOR lips-vgbel,
+               s_vbeln FOR lips-vbeln,
+               s_lfart FOR likp-lfart,
+               s_bldat FOR likp-bldat,
+               s_budat FOR likp-wadat_ist,
+               s_wbstk FOR vbuk-wbstk,
+               s_cmgst FOR vbuk-cmgst,
+               s_lifsk FOR likp-lifsk.
+SELECTION-SCREEN END OF BLOCK blc2.
+SELECTION-SCREEN BEGIN OF BLOCK blc3 WITH FRAME TITLE TEXT-004.
+SELECT-OPTIONS:s_matnr FOR lips-matnr,
+               s_zxh   FOR ausp-atwrt,
+               s_xl    FOR ausp-atwrt,
+               s_zxl   FOR ausp-atwrt,
+               s_cpx   FOR ausp-atwrt.
+SELECTION-SCREEN END OF BLOCK blc3.

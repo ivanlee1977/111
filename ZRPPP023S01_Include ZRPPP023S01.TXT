@@ -1,0 +1,23 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPPP023S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN: FUNCTION KEY 1.
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+PARAMETERS:p_r1 RADIOBUTTON GROUP r1 DEFAULT 'X' USER-COMMAND r0,
+           p_r2 RADIOBUTTON GROUP r1.
+SELECTION-SCREEN END OF BLOCK b1.
+
+DATA c6 TYPE char6.
+SELECTION-SCREEN BEGIN OF BLOCK b2 WITH FRAME TITLE TEXT-002.
+
+SELECT-OPTIONS: s_werks1 FOR marc-werks DEFAULT '1000' MODIF ID pp,
+                s_tjyf FOR c6  DEFAULT sy-datum+0(6) MODIF ID pp.
+PARAMETERS:p_file LIKE rlgrap-filename   MODIF ID pp.
+SELECTION-SCREEN END OF BLOCK b2.
+
+SELECTION-SCREEN BEGIN OF BLOCK b3 WITH FRAME TITLE TEXT-003.
+SELECT-OPTIONS: s_werks2 FOR marc-werks DEFAULT '1000' MODIF ID dd,
+                s_matnr FOR marc-matnr  MODIF ID dd,
+                s_mtart FOR mara-mtart DEFAULT 'Z002' MODIF ID dd,
+                s_dispo FOR plaf-dispo  MODIF ID dd.
+SELECTION-SCREEN END OF BLOCK b3.

@@ -1,0 +1,134 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP026F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:lt_mara LIKE TABLE OF mara WITH HEADER LINE,
+       lt_makt LIKE TABLE OF makt WITH HEADER LINE.
+***抓取满足条件的BOM数据
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE gt_out FROM  stko AS a INNER JOIN mast AS b ON a~stlnr = b~stlnr AND a~wrkan = b~werks
+    WHERE a~stlst <> 1
+    AND b~matnr IN s_matnr
+    AND b~werks IN s_werks
+    .
+
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_mara FROM mara WHERE mtart IN s_mtart AND matkl IN s_matkl.
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_makt FROM makt FOR ALL ENTRIES IN gt_out WHERE matnr = gt_out-matnr AND spras = 1.
+
+  LOOP AT gt_out.
+    READ TABLE lt_mara WITH  KEY matnr = gt_out-matnr.
+    IF sy-subrc <> 0.
+      DELETE gt_out.
+      CONTINUE.
+    ENDIF.
+    READ TABLE lt_makt WITH  KEY matnr = gt_out-matnr.
+    gt_out-maktx = lt_makt-maktx.
+    MODIFY gt_out.
+  ENDLOOP.
+
+ENDFORM.
+
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+
+*设置并显示alv结果
+  gs_layout-zebra = 'X'.
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-box_fname = 'SEL'.
+  PERFORM it_field USING 'MATNR' '物料编码'    'MATNR' 'MARA'.
+  PERFORM it_field USING 'MAKTX' '物料描述'    'MAKTX' 'MAKT'.
+  PERFORM it_field USING 'WERKS' '工厂'    'WERKS' 'MARA'.
+  PERFORM it_field USING 'STLST' 'BOM 状态'    'STLST' 'STKO'.
+  PERFORM it_field USING 'STLNR' 'BOM清单'    'STLNR' 'MAST'.
+  PERFORM it_field USING 'STLAN' '用途'    'STLAN' 'MAST'.
+  PERFORM it_field USING 'STLTY' '物料描述'    'STLTY' 'STKO'.
+  PERFORM it_field USING 'ANDAT' '创建日期'    'ANDAT' 'STKO'.
+  PERFORM it_field USING 'ANNAM' '创建者'    'ANNAM' 'STKO'.
+*  PERFORM it_field USING 'AEDAT' '更改日期'    'AEDAT' 'STKO'.
+*  PERFORM it_field USING 'AENAM' '更改者'    'AENAM' 'STKO'.
+
+
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK  = ' '
+*     I_BYPASSING_BUFFER =
+*     I_BUFFER_ACTIVE    =
+      i_callback_program = sy-repid
+*     i_callback_pf_status_set = 'PF_STATUS_SET'
+*     i_callback_user_command  = 'USER_COMMAND'
+*     I_CALLBACK_TOP_OF_PAGE   = ' '
+*     i_callback_html_top_of_page       =
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME   =
+*     I_BACKGROUND_ID    = ' '
+*     I_GRID_TITLE       =
+*     I_GRID_SETTINGS    =
+      is_layout_lvc      = gs_layout
+      it_fieldcat_lvc    = fieldcat[]
+*     IT_EXCLUDING       =
+*     IT_SPECIAL_GROUPS_LVC    =
+*     it_sort_lvc        = lt_sort[]
+*     it_filter_lvc      = lt_filt[]
+*     IT_HYPERLINK       =
+*     IS_SEL_HIDE        =
+*     I_DEFAULT          = 'X'
+      i_save             = 'A'
+*     IS_VARIANT         =
+*     it_events          =
+*     IT_EVENT_EXIT      =
+*     IS_PRINT_LVC       =
+*     IS_REPREP_ID_LVC   =
+*     I_SCREEN_START_COLUMN    = 0
+*     I_SCREEN_START_LINE      = 0
+*     I_SCREEN_END_COLUMN      = 0
+*     I_SCREEN_END_LINE  = 0
+*     I_HTML_HEIGHT_TOP  =
+*     I_HTML_HEIGHT_END  =
+*     IT_ALV_GRAPHICS    =
+*     IT_EXCEPT_QINFO_LVC      =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER  =
+*     ES_EXIT_CAUSED_BY_USER   =
+    TABLES
+      t_outtab           = gt_out[]
+    EXCEPTIONS
+      program_error      = 1
+      OTHERS             = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.
+
+FORM it_field  USING   p_fieldname       "
+                     p_seltext_l       "
+                     p_field
+                     p_table.
+
+  fieldcat_ln-fieldname     = p_fieldname.
+  fieldcat_ln-reptext     = p_seltext_l.
+  fieldcat_ln-ref_field  = p_field.
+  fieldcat_ln-ref_table  = p_table.
+
+  APPEND fieldcat_ln TO fieldcat.
+  CLEAR: fieldcat_ln.
+ENDFORM.

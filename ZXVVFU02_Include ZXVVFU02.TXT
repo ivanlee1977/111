@@ -1,0 +1,17 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZXVVFU02
+*&---------------------------------------------------------------------*
+DATA: lv_augru LIKE vbak-augru.
+IF vbrk-fkart = 'ZF8' OR vbrk-fkart = 'ZF8S'
+  OR vbrk-fkart = 'ZG8' OR vbrk-fkart = 'ZG8S'.
+  LOOP AT cvbrp.
+    CLEAR:lv_augru.
+    SELECT SINGLE augru INTO lv_augru
+      FROM vbak
+      WHERE vbeln = cvbrp-vgbel.
+    SELECT SINGLE bezei INTO xaccit-zuonr
+      FROM tvaut
+      WHERE spras = sy-langu
+        AND augru = lv_augru.
+  ENDLOOP.
+ENDIF.

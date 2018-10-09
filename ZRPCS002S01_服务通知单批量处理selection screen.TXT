@@ -1,0 +1,49 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPCS002S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_vkorg FOR qmel-vkorg OBLIGATORY ,
+               s_qmart FOR qmel-qmart,
+               s_qmnum FOR qmel-qmnum,
+               s_matnr FOR qmel-matnr,
+               s_kunum FOR qmel-kunum,
+               s_qmtxt FOR qmel-qmtxt,
+               s_zwxzt FOR ztcs001-zwxzt,
+               s_kvgr1 FOR knvv-kvgr1,
+               s_kvgr2 FOR knvv-kvgr2,
+               s_erdat FOR ztcs001-erdat,
+               s_zkhqr FOR ztcs001-zkhqr,
+               s_zzjtg FOR ztcs001-zzjtg,
+               s_zbar  FOR ztcs001-zbarcode,
+               s_zwxy  FOR ztcs001-zwxy,
+               S_ZTHWX FOR ZTCS001-ZTHWX,
+               S_ZSFBS FOR ZTCS001-ZSFBS.
+SELECTION-SCREEN END OF BLOCK blc.
+
+SELECTION-SCREEN BEGIN OF BLOCK blc1 WITH FRAME TITLE TEXT-002.
+PARAMETERS:r1 RADIOBUTTON GROUP ra DEFAULT 'X',
+           r2 RADIOBUTTON GROUP ra,
+           r3 RADIOBUTTON GROUP ra,
+           r4 RADIOBUTTON GROUP ra.
+SELECTION-SCREEN END OF BLOCK blc1.
+
+SELECTION-SCREEN BEGIN OF BLOCK blc2 WITH FRAME TITLE TEXT-003.
+PARAMETERS:r5 RADIOBUTTON GROUP rb DEFAULT 'X',
+           r6 RADIOBUTTON GROUP rb,
+           r7 RADIOBUTTON GROUP rb,
+           r8 RADIOBUTTON GROUP rb.
+SELECTION-SCREEN END OF BLOCK blc2.
+
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_zwxzt-low.
+  PERFORM frm_zwxzt_f4 USING 'S_ZWXZT-LOW'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_zwxzt-high.
+  PERFORM frm_zwxzt_f4 USING 'S_ZWXZT-HIGH'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_zwxy-low.
+  PERFORM frm_zwxy_f4 USING 'S_ZWXY-LOW'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_zwxy-high.
+  PERFORM frm_zwxy_f4 USING 'S_ZWXY-HIGH'.

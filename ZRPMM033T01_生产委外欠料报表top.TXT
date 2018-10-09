@@ -1,0 +1,55 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM033T01
+*&---------------------------------------------------------------------*
+TABLES:mara,aufk,ekko,ekpo,afko.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       aufnr  LIKE aufk-aufnr,
+       ebeln  LIKE ekko-ebeln,
+       matnr  LIKE mara-matnr,
+       maktx  LIKE makt-maktx,
+       zmatn  LIKE mara-matnr,
+       zmakt  LIKE makt-maktx,
+       menge  LIKE resb-bdmng,
+       zyfsl  TYPE p DECIMALS 3, "已发数量
+       zqlsl  TYPE p DECIMALS 3, "欠料数量
+       zkcsl  TYPE p DECIMALS 3, "库存数量
+       zwwkc  TYPE p DECIMALS 3, "委外库存
+       zmeng1 TYPE p DECIMALS 3, "1160库位爱讯仓库存
+       zmeng2 TYPE p DECIMALS 3, "1170库位维嘉意仓库存
+       zmeng3 TYPE p DECIMALS 3, "非1160&1170仓未限制使用数量
+       zwlwd  TYPE p DECIMALS 3, "物料未到数量
+       zpzwk  TYPE p DECIMALS 3, "盘装料仓库未扣数
+       zdjh   TYPE p DECIMALS 3, "待创建交货
+       zwjh   TYPE p DECIMALS 3, "已创建交货未过账数量
+       insme  TYPE mard-insme,
+       rgekz  TYPE marc-rgekz,
+       lifnr  TYPE ekko-lifnr,  "供应商
+       name1  TYPE lfa1-name1,  "供应商名称
+       gstrp  TYPE afko-gstrp,
+       bedat  TYPE ekko-bedat,
+     END OF gt_out.
+
+***alv data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  gt_fcat-inttype = &5.
+  gt_fcat-intlen = &6.
+  IF &5 = 'P'.
+    gt_fcat-no_zero = 'X'.
+  ENDIF.
+  IF &1 = 'EBELN'.
+    gt_fcat-hotspot = 'X'.
+  ENDIF.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

@@ -1,0 +1,11 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPMM039S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_aufnr FOR ztmm008-aufnr,
+               s_erdat FOR ztmm008-erdat,
+               s_zsqno FOR ztmm008-zsqno,
+               s_ernam FOR ztmm008-ernam.
+SELECT-OPTIONS:s_zstat FOR ztmm008-zstat.
+SELECTION-SCREEN END OF BLOCK blc.

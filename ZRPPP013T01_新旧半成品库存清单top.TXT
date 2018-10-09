@@ -1,0 +1,45 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP013T01
+*&---------------------------------------------------------------------*
+TABLES:mast.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       werks     LIKE mast-werks,
+       matnr     LIKE mast-matnr,
+       maktx     LIKE makt-maktx,
+       revlv     LIKE aeoi-revlv,
+       oitxt     LIKE aeoi-oitxt,
+       idnrk     LIKE stpo-idnrk,
+       idnrk_txt LIKE makt-maktx,
+       dispo     LIKE marc-dispo,
+       fxzkc_1   TYPE p , "1010原材料仓
+       fxzkc_2   TYPE p , "1100更改仓
+       fxzkc_3   TYPE p , "1120PCBA维修仓
+       fxzkc_4   TYPE p , "1170维嘉意仓
+       ztkcs_1   TYPE p , "车间在制
+       ztkcs_2   TYPE p , "外协未返回
+       total     TYPE p,
+       meins     TYPE mara-meins,
+       objkt     TYPE aeoi-objkt, "取版次
+       zflag     TYPE c , "是否最新版
+     END OF gt_out.
+
+***alv data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  IF &1 = 'FXZKC' OR &1 = 'ZTKCS' OR &1 = 'TOTAL'.
+    gt_fcat-qfieldname = 'MEINS'.
+    gt_fcat-no_zero = 'X'.
+  ENDIF.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

@@ -1,0 +1,1398 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZSDRP014F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+* 逻辑说明：
+*当用户选择未计划：从表ZTSD004中取审批状态为Y的交货单订单信息，
+*                  关联从表VBRP和VBRK中取发票类型为ZF1\ZG1\ZF4\ZG4并且客户帐户组分配为10和20
+*                  从表ZTSD005中取出上月有做开票计划并且未在金税中开票完成的数据（金税开票数量从表ZTSD006取）
+*                  发票数量-上月已开票数量-本月已经做发票计划的数量
+*当用户选择已计划：从表ZTSD005中取出本月的开票计划
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA: lv_date_low  LIKE sy-datum, "本月起始日期
+        lv_date_high LIKE sy-datum. "本月截止日期
+  REFRESH: gt_alv,gt_ztsd004,gt_ztsd005,gt_vbak,gt_tvv4t.
+
+  CONCATENATE sy-datum(6) '01' INTO lv_date_low.
+  CALL FUNCTION 'BKK_GET_MONTH_LASTDAY'
+    EXPORTING
+      i_date = sy-datum
+    IMPORTING
+      e_date = lv_date_high.
+
+*   根据选择屏幕对账单号和对账日期、客户从表ZTSD004中筛选出审批状态为Y的交货单信息
+  SELECT * INTO TABLE gt_ztsd004
+    FROM ztsd004
+    WHERE dzdhm IN s_dzdhm
+      AND zdate IN s_zdate
+      AND kunag IN s_kunnr
+      AND zstatus EQ 'Y'.
+
+  CASE 'X'.
+    WHEN p_wjh.
+*    根据交货单信息从表VBRP和VBRK中取出发票类型为ZF1 ZG1 ZF4 ZG4和客户帐户组为10 20的发票信息
+      IF gt_ztsd004[] IS NOT INITIAL.
+        SELECT a~vbeln a~posnr a~vgbel a~vgpos a~matnr a~arktx a~fkimg a~vrkme a~kzwi1 a~aubel a~matnr AS objek
+               b~kunag AS kunnr b~vkorg b~vtweg b~ktgrd b~fkart b~bukrs
+          INTO CORRESPONDING FIELDS OF TABLE gt_alv
+          FROM vbrp AS a INNER JOIN vbrk AS b ON a~vbeln = b~vbeln
+          FOR ALL ENTRIES IN gt_ztsd004
+          WHERE b~fkart IN ('ZF1','ZG1','ZF4','ZG4')
+            AND b~fksto EQ space
+            AND a~vgbel EQ gt_ztsd004-vbeln
+            AND b~vkorg IN s_vkorg
+            AND b~ktgrd IN ('10','20').
+*** ADD BY PFT 20171218
+        SELECT a~vbeln a~posnr a~vgbel a~vgpos a~matnr a~arktx a~fkimg a~vrkme a~kzwi1 a~aubel a~matnr AS objek
+               b~kunag AS kunnr b~vkorg b~vtweg b~ktgrd b~fkart b~bukrs
+          APPENDING CORRESPONDING FIELDS OF TABLE gt_alv
+          FROM vbrp AS a INNER JOIN vbrk AS b ON a~vbeln = b~vbeln
+          FOR ALL ENTRIES IN gt_ztsd004
+          WHERE b~fkart IN ('ZF8','ZG8','ZF8S','ZG8S') "增加ZF8 ZG8 ZF8S ZG8S类型
+            AND b~fksto EQ space
+            AND a~vbeln EQ gt_ztsd004-vbeln_fp
+            AND b~vkorg IN s_vkorg
+            AND b~ktgrd IN ('10','20').
+*** END BY PFT 20171218
+      ENDIF.
+*  根据发票号、发票行项目、客户从表ZTSD005中取出未取消的发票计划
+      IF gt_alv[] IS NOT INITIAL.
+        SELECT * INTO TABLE gt_ztsd005
+          FROM ztsd005
+          FOR ALL ENTRIES IN gt_alv
+          WHERE kunnr IN s_kunnr
+            AND vbeln = gt_alv-vbeln
+            AND posnr = gt_alv-posnr
+            AND zsfqx EQ space.
+      ENDIF.
+*** CHANGE BY PFT 20171214  取消这段逻辑
+*  根据发票号、行项目、计划号从表ZTSD006中取出金税已开发票信息
+*      IF gt_ztsd005[] IS NOT INITIAL.
+*        SELECT * INTO TABLE gt_ztsd006
+*          FROM ztsd006
+*          FOR ALL ENTRIES IN gt_ztsd005
+*          WHERE zjhdh = gt_ztsd005-zjhdh
+*            AND vbeln = gt_ztsd005-vbeln
+*            AND posnr = gt_ztsd005-posnr
+*            AND datatypes = '0'.
+*      ENDIF.
+*** END BY PFT 20171214
+    WHEN p_yjh.
+      SELECT a~vbeln a~posnr a~vgbel a~vgpos a~matnr a~arktx a~fkimg a~kzwi1 a~aubel a~matnr AS objek
+             b~kunag AS kunnr b~vkorg b~vtweg b~ktgrd b~fkart
+             c~menge c~zjhdh c~zjhrq c~zjsbs c~zsfqx c~zspbs c~bukrs c~zswbz
+        INTO CORRESPONDING FIELDS OF TABLE gt_alv
+        FROM vbrp AS a INNER JOIN vbrk AS b ON a~vbeln = b~vbeln
+                       INNER JOIN ztsd005 AS c ON a~vbeln = c~vbeln
+                                               AND a~posnr = c~posnr
+        WHERE c~zjhdh IN s_zjhdh
+          AND c~zjhrq IN s_zjhrq
+          AND c~kunnr IN s_kunnr
+          AND b~vkorg IN s_vkorg
+          AND c~zsfqx EQ space.
+
+      IF p_r1 EQ space.
+        DELETE gt_alv WHERE zspbs = 'X'.
+      ENDIF.
+*  取出金税开票回传信息
+      IF gt_alv[] IS NOT INITIAL.
+        SELECT * INTO TABLE gt_ztsd006
+          FROM ztsd006
+          FOR ALL ENTRIES IN gt_alv
+          WHERE vbeln = gt_alv-vbeln
+            AND posnr = gt_alv-posnr
+            AND datatypes = '0'
+            AND zsfqx = space.
+        SORT gt_ztsd006 BY vbeln posnr invoicenumber.
+      ENDIF.
+  ENDCASE.
+
+*   根据发票中的客户从表KNA1和表KNVV中取出客户主数据和客户销售数据
+  IF gt_alv[] IS NOT INITIAL.
+    SELECT * INTO TABLE gt_kna1 FROM kna1
+      FOR ALL ENTRIES IN gt_alv
+      WHERE kunnr EQ gt_alv-kunnr.
+    SORT gt_kna1 BY kunnr.
+
+*   根据销售组织+客户+物料取客户物料信息
+    SELECT * INTO TABLE gt_knmt
+      FROM knmt
+      FOR ALL ENTRIES IN gt_alv
+      WHERE vkorg = gt_alv-vkorg
+        AND kunnr = gt_alv-kunnr
+        AND matnr = gt_alv-matnr.
+    SORT gt_knmt BY vkorg kunnr matnr.
+
+*   根据发票中的客户从表KNVV中取出客户销售主数据
+    SELECT * INTO TABLE gt_knvv FROM knvv
+      FOR ALL ENTRIES IN gt_alv
+      WHERE kunnr EQ gt_alv-kunnr
+        AND vkorg EQ gt_alv-vkorg
+        AND vtweg EQ gt_alv-vtweg
+        AND bzirk IN s_bzirk
+        AND kvgr1 IN s_kvgr1
+        AND kvgr2 IN s_kvgr2.
+    SORT gt_knvv BY kunnr vkorg vtweg.
+*   根据销售订单号从表VBAK中取出客户采购订单号
+    SELECT a~vbeln a~bstnk a~augru b~zterm
+      INTO TABLE gt_vbak
+      FROM vbak AS a INNER JOIN vbkd AS b ON a~vbeln = b~vbeln
+      FOR ALL ENTRIES IN gt_alv
+      WHERE a~vbeln = gt_alv-aubel
+        AND b~posnr = '000000'.
+    SORT gt_vbak BY vbeln.
+*  根据物料号取商品名称和商品型号
+    SELECT a~objek a~atinn a~atwrt b~atnam
+      INTO CORRESPONDING FIELDS OF TABLE gt_ausp
+      FROM ausp AS a INNER JOIN cabn AS b ON a~atinn = b~atinn
+      FOR ALL ENTRIES IN gt_alv
+      WHERE b~atnam IN ('ZFER_CPMC','ZFER_CPXH','ZHAL_CPMC','ZHAL_CPXH')
+        AND a~objek = gt_alv-objek.
+    SORT gt_ausp BY objek.
+***根据物料从表MARA中取出物料产品组和物料组
+    SELECT a~matnr a~spart a~matkl b~maktx
+      INTO CORRESPONDING FIELDS OF TABLE gt_mara
+      FROM mara AS a INNER JOIN makt AS b ON a~matnr = b~matnr
+      FOR ALL ENTRIES IN gt_alv
+      WHERE a~matnr = gt_alv-matnr
+        AND b~spras = sy-langu.
+    SORT gt_mara BY matnr.
+
+***取开票税分类码
+    SELECT * INTO TABLE gt_ztsd011 FROM ztsd011.
+    SORT gt_ztsd011 BY zmatnr.
+  ENDIF.
+*  取出开票方式描述
+  SELECT * INTO TABLE gt_tvv4t FROM tvv4t WHERE spras = sy-langu.
+  SORT gt_tvv4t BY kvgr4.
+
+  SORT gt_ztsd004 BY kunag vbeln vbeln_fp.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PROCESS_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_process_data .
+  DATA: lv_katr1         LIKE kna1-katr1, "开票备注
+        lv_katr4         LIKE kna1-katr4, "金税物料
+        lv_tabix         LIKE sy-tabix,
+        lv_string1       TYPE string,
+        lv_string2       TYPE string,
+        lv_matnr         TYPE matnr,
+        lv_invoicenumber TYPE ztsd006-invoicenumber.
+  DATA: lt_tvzbt LIKE tvzbt OCCURS 0 WITH HEADER LINE,
+        lt_tvaut LIKE tvaut OCCURS 0 WITH HEADER LINE,
+        lt_t173t LIKE t173t OCCURS 0 WITH HEADER LINE.
+  DATA:ls_kna1 LIKE kna1,
+       ls_knb1 LIKE knb1.
+  DATA:BEGIN OF lt_konv OCCURS 0,
+         kbetr TYPE konv-kbetr,
+         vbeln TYPE vbrp-vbeln,
+         posnr TYPE vbrp-posnr,
+       END OF lt_konv.
+  REFRESH:lt_styletab.
+
+  SELECT a~kbetr c~vbeln c~posnr INTO CORRESPONDING FIELDS OF TABLE lt_konv FROM konv AS a INNER JOIN vbrk AS b ON a~knumv = b~knumv
+    INNER JOIN vbrp AS c ON b~vbeln = c~vbeln
+    FOR ALL ENTRIES IN gt_alv
+    WHERE c~vbeln = gt_alv-vbeln AND c~posnr = gt_alv-posnr AND a~kschl = 'MWSI'.
+
+*  ADD BY PFT 20171226
+***付款条件描述
+  SELECT * INTO TABLE lt_tvzbt FROM tvzbt WHERE spras = sy-langu.
+***订单原因描述
+  SELECT * INTO TABLE lt_tvaut FROM tvaut WHERE spras = sy-langu.
+***物流公司
+  SELECT * INTO TABLE lt_t173t FROM t173t WHERE spras = sy-langu.
+  SORT lt_tvzbt BY zterm.
+  SORT lt_tvaut BY augru.
+  SORT lt_t173t BY vsart.
+* END BY PFT 20171226
+
+  CASE 'X'.
+    WHEN p_wjh.
+*    汇总已计划的销售发票数据（根据销售发票+行项目累计） :本月有年月，本月以前不带年月
+      LOOP AT gt_ztsd005.  " WHERE zjhrq+0(6) = sy-datum+0(6).  取消已开票汇总数据的月份限制 BY YZP 20180110
+        CLEAR:gt_ztsd005_col.
+        gt_ztsd005_col-vbeln = gt_ztsd005-vbeln.
+        gt_ztsd005_col-posnr = gt_ztsd005-posnr.
+        gt_ztsd005_col-menge = gt_ztsd005-menge.
+        COLLECT gt_ztsd005_col.
+        CLEAR:gt_ztsd005.
+      ENDLOOP.
+      SORT gt_ztsd005_col BY vbeln posnr.
+*** CHANGE BY PFT 20171214  取消这段逻辑
+*   汇总已开票数量
+*      LOOP AT gt_ztsd006.
+*        CLEAR:gt_ztsd006_col.
+*        MOVE-CORRESPONDING gt_ztsd006 TO gt_ztsd006_col.
+*        COLLECT gt_ztsd006_col.
+*        CLEAR: gt_ztsd006.
+*      ENDLOOP.
+*      SORT gt_ztsd006_col BY vbeln posnr.
+*** END BY pft 20171214
+  ENDCASE.
+
+*    根据销售发票+行项目排除自定义计划表ZTSD005中的已计划部分
+  DATA:lv_kvgr11 LIKE knvv-kvgr1.
+  LOOP AT gt_alv.
+    CLEAR: lv_katr1,lv_katr4,lv_tabix,lv_string1,lv_string2.
+    lv_tabix = sy-tabix.
+***ADD BY PFT 20171116 增加权限检查
+    lv_tabix = sy-tabix.
+    AUTHORITY-CHECK OBJECT 'V_VBAK_VKO'
+             ID 'VKORG' FIELD gt_alv-vkorg
+             ID 'VTWEG' DUMMY
+             ID 'SPART' DUMMY
+             ID 'ACTVT' FIELD '03'.
+    IF sy-subrc <> 0.
+      DELETE gt_alv INDEX lv_tabix .
+      CONTINUE.
+    ENDIF.
+***END BY PFT 20171116
+*    根据客户+销售组织+分销渠道取出开票方式
+    READ TABLE gt_knvv WITH KEY kunnr = gt_alv-kunnr vkorg = gt_alv-vkorg vtweg = gt_alv-vtweg BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-kvgr4 = gt_knvv-kvgr4.
+      IF gt_alv-kunnr = 'A000' OR gt_alv-kunnr = 'C000'.
+        AUTHORITY-CHECK OBJECT 'Z_KVGR1'
+                 ID 'KVGR1' FIELD gt_knvv-kvgr1.
+      ELSE.  "取客户主数据业务员，进行权限控制 20180103  yzp
+        CLEAR lv_kvgr11.
+        SELECT SINGLE kvgr1 INTO lv_kvgr11 FROM knvv WHERE kunnr = gt_alv-kunnr AND vkorg = gt_alv-vkorg.
+        AUTHORITY-CHECK OBJECT 'Z_KVGR1'
+                 ID 'KVGR1' FIELD lv_kvgr11.
+      ENDIF.
+      IF sy-subrc <> 0.
+        DELETE gt_alv INDEX lv_tabix.
+        CONTINUE.
+      ENDIF.
+    ELSE.
+      DELETE gt_alv INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+*     本次开票只包括VBRK-KTGRD =10 AND KVV-KVGR4 = 100和110
+*                   VBRK-VKORG =1200 AND VBRK-KTGRD =20 AND KVV-KVGR4 = 130
+    IF p_wjh EQ 'X'.
+      CASE gt_alv-ktgrd .
+        WHEN '10'.
+          IF gt_alv-kvgr4 NE '100' AND gt_alv-kvgr4 NE '110'.
+            DELETE gt_alv INDEX lv_tabix.
+            CONTINUE.
+          ENDIF.
+        WHEN '20'.
+          IF gt_alv-vkorg NE '1200' OR gt_alv-kvgr4 NE '130'.
+            DELETE gt_alv INDEX lv_tabix.
+            CONTINUE.
+          ENDIF.
+      ENDCASE.
+*    当发票类型为zg1和zg4时，数量为负
+      IF gt_alv-fkart EQ 'ZG1' OR gt_alv-fkart EQ 'ZG4' OR gt_alv-fkart EQ 'ZG8' OR gt_alv-fkart EQ 'ZF8S'.
+        gt_alv-menge = gt_alv-fkimg * -1.
+      ELSE.
+        gt_alv-menge = gt_alv-fkimg.
+      ENDIF.
+*    计算本次的开票计划(发票数量-本月发票计划数量-本月以前金税已开票数量)
+      READ TABLE gt_ztsd005_col WITH KEY vbeln = gt_alv-vbeln posnr = gt_alv-posnr BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_alv-menge = gt_alv-menge - gt_ztsd005_col-menge.
+      ENDIF.
+*** CHANGE BY PFT 20171214  取消这段逻辑
+**   计算历史金税已开发票（根据发票、行项目取）
+*          READ TABLE gt_ztsd006_col WITH KEY vbeln = gt_alv-vbeln posnr = gt_alv-posnr BINARY SEARCH.
+*          IF sy-subrc = 0.
+*            gt_alv-menge = gt_alv-menge - gt_ztsd006_col-fkimg.
+*          ENDIF.
+*** END BY PFT 20171214
+***ADD BY PFT 20171221
+*  取出金税开票号码
+    ELSEIF p_yjh EQ 'X'.
+      CLEAR:lv_invoicenumber.
+      IF gt_alv-zjhdh IS NOT INITIAL.
+        LOOP AT gt_ztsd006 WHERE zjhdh = gt_alv-zjhdh AND vbeln = gt_alv-vbeln AND posnr = gt_alv-posnr.
+          IF gt_alv-invoicenumber IS INITIAL.
+            gt_alv-invoicenumber = gt_ztsd006-invoicenumber.
+          ELSE.
+            IF gt_ztsd006-invoicenumber NE lv_invoicenumber.
+              CONCATENATE gt_alv-invoicenumber gt_ztsd006-invoicenumber INTO gt_alv-invoicenumber SEPARATED BY '/'.
+            ENDIF.
+          ENDIF.
+          IF gt_alv-invoicedate IS INITIAL .
+            gt_alv-invoicedate = gt_ztsd006-invoicedate.
+          ENDIF.
+
+          IF gt_alv-vsart IS INITIAL .
+            gt_alv-vsart = gt_ztsd006-vsart.
+          ENDIF.
+          IF gt_alv-zwldh IS INITIAL .
+            gt_alv-zwldh = gt_ztsd006-zwldh.
+          ENDIF.
+          IF gt_alv-zhd IS INITIAL .
+            gt_alv-zhd = gt_ztsd006-zhd.
+          ENDIF.
+          lv_invoicenumber = gt_ztsd006-invoicenumber.
+        ENDLOOP.
+      ELSE.
+        LOOP AT gt_ztsd006 WHERE zjhdh = space AND vbeln = gt_alv-vbeln AND posnr = gt_alv-posnr.
+          IF gt_alv-invoicenumber IS INITIAL.
+            gt_alv-invoicenumber = gt_ztsd006-invoicenumber.
+          ELSE.
+            IF gt_ztsd006-invoicenumber NE lv_invoicenumber.
+              CONCATENATE gt_alv-invoicenumber gt_ztsd006-invoicenumber INTO gt_alv-invoicenumber SEPARATED BY '/'.
+            ENDIF.
+          ENDIF.
+          IF gt_alv-invoicedate IS INITIAL .
+            gt_alv-invoicedate = gt_ztsd006-invoicedate.
+          ENDIF.
+          IF gt_alv-vsart IS INITIAL .
+            gt_alv-vsart = gt_ztsd006-vsart.
+          ENDIF.
+          IF gt_alv-zwldh IS INITIAL .
+            gt_alv-zwldh = gt_ztsd006-zwldh.
+          ENDIF.
+          IF gt_alv-zhd IS INITIAL .
+            gt_alv-zhd = gt_ztsd006-zhd.
+          ENDIF.
+          lv_invoicenumber = gt_ztsd006-invoicenumber.
+        ENDLOOP.
+      ENDIF.
+***END BY PFT 20171221
+    ENDIF.
+    IF gt_alv-invoicedate NOT IN s_invo[] AND gt_alv-invoicedate <> ''.
+      DELETE gt_alv.
+      CONTINUE.
+    ENDIF.
+    gt_alv-menge_bs = gt_alv-menge."数量
+*    根据客户+交货单号取对帐单号和对帐日期
+    IF gt_alv-vgbel+0(3) = '008'.
+      READ TABLE gt_ztsd004 WITH KEY kunag = gt_alv-kunnr vbeln = gt_alv-vgbel .
+      IF sy-subrc = 0.
+        gt_alv-dzdhm = gt_ztsd004-dzdhm.
+        gt_alv-zdate = gt_ztsd004-zdate.
+      ENDIF.
+    ELSE.
+      READ TABLE gt_ztsd004 WITH KEY kunag = gt_alv-kunnr vbeln = gt_alv-vgbel vbeln_fp = gt_alv-vbeln .
+      IF sy-subrc = 0.
+        gt_alv-dzdhm = gt_ztsd004-dzdhm.
+        gt_alv-zdate = gt_ztsd004-zdate.
+      ENDIF.
+    ENDIF.
+*    计算单价=VBAP-KZEI1 / VBRP-FKIMG.
+    IF gt_alv-fkimg NE 0.
+      gt_alv-zpric = gt_alv-kzwi1 / gt_alv-fkimg.
+    ENDIF.
+
+*   计算价税合计= VBAP-KZWI1/VBRP-FKIMG*本次计划开票的数量
+    IF gt_alv-fkimg NE 0.
+      gt_alv-zjshj = gt_alv-kzwi1 / gt_alv-fkimg * gt_alv-menge.
+    ENDIF.
+*    取客户主数据
+    READ TABLE gt_kna1 WITH KEY kunnr = gt_alv-kunnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      CONCATENATE gt_kna1-name1 gt_kna1-name2 INTO gt_alv-name.
+      CONDENSE gt_alv-name.
+      gt_alv-katr1 = gt_kna1-katr1.
+      gt_alv-zvat_num = gt_kna1-zvat_num. "纳税人识别号
+      gt_alv-zaccount = gt_kna1-zaccount. "开户行及帐号
+      gt_alv-zaddr = gt_kna1-zaddr. "地址和电话
+      lv_katr4 = gt_kna1-katr4."金税物料
+    ENDIF.
+*   取开票备注类型（根据KATR1从表tvk1t中取描述）
+    SELECT SINGLE vtext INTO gt_alv-vtext FROM tvk1t WHERE katr1 = gt_alv-katr1 AND spras = sy-langu.
+*    取出开票方式描述
+    READ TABLE gt_tvv4t WITH KEY kvgr4 = gt_alv-kvgr4 BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-bezei = gt_tvv4t-bezei.
+    ENDIF.
+
+***********取商品名称和商品型号*****************
+***逻辑：先判断KNA1-KATR4是否为金税物料，如果为金税物料根据销售组织+客户+物料从表KNMT中取
+***      如果取不到，逻辑同下
+***      判断MARA-SPART=13，商品名称=线材，型号=‘’，单位= 条
+***      判断MARA-MATKL = 2010 4010 5010 并且MARA-SPART = 13,单位= 台，商品名称、型号取自物料主数据分类特性
+***      判断MARA-MATKL NE 2010 4010 5010,商品名称=配件 型号= ‘’单位=个
+    IF lv_katr4 = 'D1'.
+*    取产品型号
+      READ TABLE gt_knmt WITH KEY vkorg = gt_alv-vkorg
+                                  kunnr = gt_alv-kunnr
+                                  matnr = gt_alv-matnr BINARY SEARCH.
+      IF sy-subrc = 0.
+        SPLIT gt_knmt-kdmat AT '/' INTO lv_string1 gt_alv-cpxh.
+*   取产品名称
+        PERFORM frm_get_cpxh USING gt_knmt CHANGING gt_alv-cpmc.
+      ENDIF.
+      CLEAR: gt_mara.
+      READ TABLE gt_mara WITH KEY matnr = gt_alv-matnr BINARY SEARCH.
+      IF gt_mara-spart = '13'.
+        gt_alv-vrkme = '条'.
+      ELSE.
+        IF gt_mara-matkl = '2010' OR gt_mara-matkl = '4010' OR gt_mara-matkl = '5010'.
+          gt_alv-vrkme = '台'.
+        ELSE.
+          gt_alv-vrkme = '个'.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+
+    IF gt_alv-cpxh IS INITIAL AND gt_alv-cpmc IS INITIAL.
+      CLEAR: gt_mara.
+      READ TABLE gt_mara WITH KEY matnr = gt_alv-matnr BINARY SEARCH.
+      IF gt_mara-spart = '13'.
+        gt_alv-cpmc = '线材'.
+        gt_alv-cpxh = gt_mara-maktx.
+        gt_alv-vrkme = '条'.
+      ELSE.
+        IF gt_mara-matkl = '2010' OR gt_mara-matkl = '4010' OR gt_mara-matkl = '5010'.
+          LOOP AT gt_ausp WHERE objek = gt_alv-objek.
+            CASE gt_ausp-atnam.
+              WHEN 'ZFER_CPMC' OR 'ZHAL_CPMC'.
+                gt_alv-cpmc = gt_ausp-atwrt.
+              WHEN 'ZFER_CPXH' OR 'ZHAL_CPXH'.
+                gt_alv-cpxh = gt_ausp-atwrt.
+              WHEN OTHERS.
+            ENDCASE.
+          ENDLOOP.
+          gt_alv-vrkme = '台'.
+        ELSE.
+          gt_alv-cpmc = '配件'.
+          gt_alv-vrkme = '个'.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+**************************************************************
+
+*    处理备注：当KNA1-KATR1=A1,取VBAK-BSTNK; 当KNA1-KATR1=A2,取VBRP-AUBEL;A3,取对账单号。其它取自定义的备注
+*   CHANGE BY PFT 20171220 优先取手工输入的备注
+    PERFORM process_header.
+    PERFORM frm_text.
+    LOOP AT gt_lines INTO gs_lines.
+      CONCATENATE gt_alv-zbz gs_lines-tdline INTO gt_alv-zbz.
+      CLEAR:gs_lines.
+    ENDLOOP.
+    CONDENSE gt_alv-zbz.
+    IF gt_alv-zbz IS INITIAL.
+      CASE gt_alv-katr1.
+        WHEN 'A1'.
+          READ TABLE gt_vbak WITH KEY vbeln = gt_alv-aubel BINARY SEARCH.
+          IF sy-subrc = 0.
+            gt_alv-zbz = gt_vbak-bstnk.
+          ENDIF.
+        WHEN 'A2'.
+          gt_alv-zbz = gt_alv-aubel.
+        WHEN 'A3'.
+          gt_alv-zbz = gt_alv-dzdhm.
+        WHEN OTHERS.
+*        PERFORM process_header.
+*        PERFORM frm_text.
+*        LOOP AT gt_lines INTO gs_lines.
+*          CONCATENATE gt_alv-zbz gs_lines-tdline INTO gt_alv-zbz.
+*          CLEAR:gs_lines.
+*        ENDLOOP.
+*        CONDENSE gt_alv-zbz.
+      ENDCASE.
+    ENDIF.
+*   END BY PFT 20171220
+*  ADD BY PFT 20171226
+    READ TABLE gt_vbak WITH KEY vbeln = gt_alv-aubel BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-zterm = gt_vbak-zterm.
+      gt_alv-augru = gt_vbak-augru.
+    ENDIF.
+***付款条件描述
+    READ TABLE lt_tvzbt WITH KEY zterm = gt_alv-zterm BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-zterm_txt = lt_tvzbt-vtext.
+    ENDIF.
+***订单原因描述
+    READ TABLE lt_tvaut WITH KEY augru = gt_alv-augru BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-augru_txt = lt_tvaut-bezei.
+    ENDIF.
+***物流公司
+    READ TABLE lt_t173t WITH KEY vsart = gt_alv-vsart BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-vsart_txt = lt_t173t-bezei.
+    ENDIF.
+*   END BY PFT 20171226
+    REFRESH:lt_styletab.
+    IF gt_alv-zjhdh IS NOT INITIAL.
+      CLEAR: ls_stylerow.
+      ls_stylerow-fieldname = 'MENGE'.
+      ls_stylerow-style = cl_gui_alv_grid=>mc_style_disabled.
+      INSERT ls_stylerow INTO TABLE lt_styletab.
+    ENDIF.
+    IF lt_styletab IS NOT INITIAL.
+      gt_alv-style = lt_styletab.
+    ENDIF.
+*  取开票税分类码
+    CLEAR:lv_matnr.
+    CALL FUNCTION 'CONVERSION_EXIT_MATN1_OUTPUT'
+      EXPORTING
+        input  = gt_alv-matnr
+      IMPORTING
+        output = lv_matnr.
+
+    READ TABLE gt_ztsd011 WITH KEY zmatnr = lv_matnr+0(3) BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-zsflm = gt_ztsd011-zsflm.
+    ENDIF.
+***add by quyantao 20180202
+    CLEAR:ls_kna1,ls_knb1.
+    SELECT SINGLE * INTO ls_knb1 FROM knb1 WHERE kunnr = gt_alv-kunnr AND bukrs = '1000'.
+    IF sy-subrc = 0 AND ls_knb1-ekvbd IS NOT INITIAL.
+      SELECT SINGLE * INTO ls_kna1 FROM kna1 WHERE kunnr = ls_knb1-ekvbd.
+      IF sy-subrc = 0.
+        gt_alv-zkpgs = ls_knb1-ekvbd.
+        gt_alv-zname = ls_kna1-name1.
+        gt_alv-zvat_num = ls_kna1-zvat_num.
+        gt_alv-zaccount = ls_kna1-zaccount.
+        gt_alv-zaddr = ls_kna1-zaddr.
+      ELSE.
+        gt_alv-zkpgs = gt_alv-kunnr.
+        gt_alv-zname = gt_alv-name.
+      ENDIF.
+    ELSE.
+      gt_alv-zkpgs = gt_alv-kunnr.
+      gt_alv-zname = gt_alv-name.
+    ENDIF.
+***end add
+    READ TABLE lt_konv WITH  KEY vbeln = gt_alv-vbeln posnr = gt_alv-posnr.
+    IF sy-subrc = 0.
+      IF lt_konv-kbetr = 170.
+        gt_alv-zhlv = '17%'.
+      ELSE.
+        gt_alv-zhlv = '16%'.
+      ENDIF.
+    ENDIF.
+    MODIFY gt_alv.
+    CLEAR: gt_alv.
+  ENDLOOP.
+
+  DELETE gt_alv WHERE menge = 0 .
+
+  IF p_wjh EQ 'X'.
+    SORT gt_alv BY kunnr dzdhm vgbel vgpos.
+  ELSEIF p_yjh EQ 'X'.
+    SORT gt_alv BY zjhdh vgbel vgpos.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SUB_BUILD_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM sub_build_fieldcat .
+  REFRESH:g_it_fieldcat1.
+
+  PERFORM sub_set_fieldcat1 USING 'X' 'SEL'      '选择'          ''  'X' ''  'X'  ''  ''  '' '' '' .
+  PERFORM sub_set_fieldcat1 USING 'X' 'ZJHDH'    '计划号'        ''  ''  ''  ''  ''  'ZJHDH'  'ZTSD005' '' ''.
+  PERFORM sub_set_fieldcat1 USING 'X' 'ZJSBS'    '传金税标识'    'X' 'X' ''  ''  ''  ''  '' '' ''.
+  IF p_yjh EQ 'X'.
+    PERFORM sub_set_fieldcat1 USING 'X' 'ZSPBS'    '审批标识'    'X' 'X' ''  ''  ''  ''  '' '' ''.
+  ENDIF.
+  PERFORM sub_set_fieldcat1 USING 'X' 'BUKRS'    '公司代码'        ''  ''  ''  ''  ''  'BUKRS'  'T001' '' ''.
+  PERFORM sub_set_fieldcat1 USING 'X' 'DZDHM'    '对账单号'      ''  ''  ''  ''  ''  'DZDHM'  'ZTSD004' '' ''.
+  PERFORM sub_set_fieldcat1 USING 'X' 'INVOICENUMBER'    '金税发票号码'      ''  ''  ''  ''  '100'  ''  '' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'ZSFLM'    '税分类码'      ''  ''  ''  ''  ''  'ZSFLM'  'ZTSD011' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'KUNNR'    '客户编码'      'X' ''  ''  ''  ''  'KUNNR'  'KNA1' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'NAME'     '客户名称'      ''  ''  ''  ''  '40'  ''  '' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'VGBEL'    '交货单号'      'X' ''  ''  ''  ''  'VBELN'  'LIKP' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'VGPOS'    '交货项目'      'X' ''  ''  ''  ''  'POSNR'  'LIPS' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'MATNR'    '产品编码'      'X' ''  ''  ''  ''  'MATNR'  'MARA' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'ARKTX'    '物料描述'      ''  ''  ''  ''  '40'  ''  '' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'CPMC'     '商品名称'      ''  ''  ''  ''  '40'  ''  '' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'CPXH'     '商品型号'      ''  ''  ''  ''  '40'  ''  '' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'ZPRIC'    '单价'          'X' ''  ''  ''  '20'  ''  '' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'MENGE'    '数量'          'X' ''  ''  'X'  ''  'MENGE'  'USEG' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'VRKME'    '单位'          '' ''  ''   ''  '5'  ''  '' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'ZJSHJ'    '价税合计'      'X' ''  ''  ''  '20'  ''  '' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'ZVAT_NUM' '纳税人识别'    ''  ''  ''  ''  ''  'ZVAT_NUM'  'KNA1' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'ZACCOUNT' '开户行及帐号'  ''  ''  ''  ''  ''  'ZACCOUNT'  'KNA1' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'ZADDR'    '地址和电话'    ''  ''  ''  ''  ''  'ZADDR'  'KNA1' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'BEZEI'    '开票方式'      ''  ''  ''  ''  ''  'BEZEI'  'TVV4T' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'VKORG'    '销售组织'      ''  ''  ''  ''  ''  'VKORG'  'VBRK' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'VBELN'    '销售发票'      'X' ''  ''  ''  ''  'VBELN'  'VBRP' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'POSNR'    '发票项目'      'X' ''  ''  ''  ''  'POSNR'  'VBRP' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'ZHLV'    '实际开票税率'      'X' ''  ''  ''  ''  ''  '' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'ZJHRQ'    '计划日期'      ''  ''  ''  ''  '10'  ''  '' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'FKART'    '发票类型'      ''  ''  ''  ''  ''  'FKART'  'VBRK' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'VTEXT'    '开票备注类型'  ''  ''  ''  ''  ''  'VTEXT'  'TVK1T' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'ZBZ'      '开票备注'      ''  ''  ''  ''  '50'  ''  '' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'ZSWBZ'    '商务备注'      ''  ''  ''  'X'  '50'  ''  '' '' ''.
+
+  PERFORM sub_set_fieldcat1 USING '' 'ZTERM'    '结算方式'      ''  ''  ''  ''  ''  'ZTERM'  'VBKD' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'ZTERM_TXT' '结算方式描述'  ''  ''  ''  ''  ''  'VTEXT'  'TVZBT' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'AUGRU'    '订单原因'      ''  ''  ''  ''  ''  'AUGRU'  'VBAK' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'AUGRU_TXT' '订单原因描述'  ''  ''  ''  ''  ''  'BEZEI'  'TVAUT' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'INVOICEDATE' '金税开具日期'   ''  ''  ''  ''  ''  'INVOICEDATE'  'ZTSD006' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'VSART'    '物流公司'      ''  ''  ''  ''  ''  'FKART'  'ZTSD006' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'VSART_TXT' '物流公司名称'     ''  ''  ''  ''  ''  ''  '' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'ZWLDH'    '物流单号'      ''  ''  ''  ''  ''  'ZWLDH'  'ZTSD006' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'ZHD'      '回单'      ''  ''  ''  ''  ''  'ZHD'  'ZTSD006' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'ZKPGS'    '实际开票公司代码'      ''  ''  ''  ''  ''  'EKVBD'  'KNB1' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'ZNAME'    '实际开票公司名称'      ''  ''  ''  ''  ''  'NAME1'  'KNA1' '' ''.
+*add by leimt 20180319
+  PERFORM sub_set_fieldcat1 USING '' 'BEZEI_KVGR1'    '销售工程师/销售代表'      ''  ''  ''  ''  ''  ''  '' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'BEZEI_KVGR2'    '商务'      ''  ''  ''  ''  ''  ''  '' '' ''.
+  PERFORM sub_set_fieldcat1 USING '' 'WADAT_IST'    '过账日期'      ''  ''  ''  ''  ''  ''  '' '' ''.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  pf_status_set
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->RT_EXTAB   text
+*----------------------------------------------------------------------*
+FORM pf_status_set USING rt_extab TYPE slis_t_extab.
+  DATA:fcode           TYPE TABLE OF sy-ucomm.
+  REFRESH: fcode.
+  IF p_wjh EQ 'X' .
+    APPEND 'ZQXKP' TO fcode."取消计划
+    APPEND 'ZSP' TO fcode.  "审批
+    APPEND 'ZQXSP' TO fcode."取消审批
+    APPEND 'ZCJS' TO fcode."传金税
+    APPEND 'ZQXCJS' TO fcode."取消传金税
+    APPEND '&DATA_SAVE' TO fcode."保存     ADD BY PFT 20171227 未计划时不显示菜单栏的保存按钮
+  ELSEIF p_yjh EQ 'X'.
+    APPEND 'ZSCKP' TO fcode. "生成计划
+    AUTHORITY-CHECK OBJECT 'ZJS'
+             ID 'ACTVT' DUMMY.
+    IF sy-subrc <> 0.
+      APPEND 'ZCJS' TO fcode."传金税
+      APPEND 'ZQXCJS' TO fcode."取消传金税
+    ENDIF.
+    AUTHORITY-CHECK OBJECT 'ZSP'
+             ID 'ACTVT' DUMMY.
+    IF sy-subrc <> 0.
+      APPEND 'ZSP' TO fcode.  "审批
+      APPEND 'ZQXSP' TO fcode."取消审批
+    ENDIF.
+  ENDIF.
+  SET PF-STATUS 'ZSTANDARD' EXCLUDING fcode.
+ENDFORM. "pf_status_set
+
+
+*&---------------------------------------------------------------------*
+*&      Form  alv_user_command
+*&---------------------------------------------------------------------*
+*----------------------------------------------------------------------*
+*      -->UCOMM      text
+*      -->SELFIELD   text
+*----------------------------------------------------------------------*
+
+FORM alv_user_command USING ucomm LIKE sy-ucomm
+      selfield TYPE slis_selfield.
+  PERFORM sub_check_changed_data.
+  DATA: BEGIN OF  lt_zjhdh OCCURS 0 ,
+          zjhdh LIKE ztsd005-zjhdh,
+        END OF lt_zjhdh.
+  CLEAR:lt_zjhdh.
+  REFRESH lt_zjhdh.
+
+  CASE ucomm.
+    WHEN 'ALL'.
+      LOOP AT gt_alv WHERE sel IS INITIAL.
+        gt_alv-sel = 'X'.
+        MODIFY gt_alv TRANSPORTING sel.
+        CLEAR: gt_alv.
+      ENDLOOP.
+    WHEN 'SALL'.
+      LOOP AT gt_alv WHERE sel = 'X'.
+        CLEAR:gt_alv-sel.
+        MODIFY gt_alv TRANSPORTING sel.
+        CLEAR: gt_alv.
+      ENDLOOP.
+    WHEN 'ZSCKP'."生成计划
+      READ TABLE gt_alv WITH KEY sel = 'X' .
+      IF sy-subrc <> 0.
+        MESSAGE e001 DISPLAY LIKE 'E'.
+      ENDIF.
+*      BREAK-POINT.
+      LOOP AT gt_alv WHERE sel = 'X' AND zjhdh IS NOT INITIAL.
+        MESSAGE e002 DISPLAY LIKE 'E'.
+      ENDLOOP.
+      PERFORM frm_creat_jhd."生成计划
+    WHEN 'ZQXKP'."取消计划
+      READ TABLE gt_alv WITH KEY sel = 'X' .
+      IF sy-subrc <> 0.
+        MESSAGE e001 DISPLAY LIKE 'E'.
+      ENDIF.
+      LOOP AT gt_alv WHERE sel = 'X' AND zjhdh IS INITIAL.
+        MESSAGE e003 DISPLAY LIKE 'E'.
+      ENDLOOP.
+      LOOP AT gt_alv WHERE sel = 'X' AND zspbs = 'X'.
+        MESSAGE e019 DISPLAY LIKE 'E'.
+      ENDLOOP.
+      PERFORM frm_canc_jhd USING 'ZQXKP' CHANGING lv_err."取消计划
+*     判断更新数据库是否成功，成功重新取数刷新alv，失败报错
+      IF lv_err = 'S'.
+*        PERFORM frm_get_data."取数
+*        PERFORM frm_process_data."对取出的数据进行处理
+        LOOP AT gt_alv WHERE sel = 'X'.
+          lt_zjhdh-zjhdh = gt_alv-zjhdh.
+          COLLECT lt_zjhdh.
+        ENDLOOP.
+        LOOP AT lt_zjhdh.
+          LOOP AT gt_alv WHERE zjhdh = lt_zjhdh-zjhdh.
+            gt_alv-sel = ''.
+            gt_alv-zsfqx = ''.
+            MODIFY gt_alv INDEX sy-tabix.
+          ENDLOOP.
+        ENDLOOP.
+        MESSAGE s011 DISPLAY LIKE 'S'.
+      ELSEIF lv_err = 'E'.
+        MESSAGE e012 DISPLAY LIKE 'E'.
+      ENDIF.
+
+    WHEN 'ZSP'."审批计划
+      READ TABLE gt_alv WITH KEY sel = 'X' .
+      IF sy-subrc <> 0.
+        MESSAGE e001 DISPLAY LIKE 'E'.
+      ENDIF.
+      LOOP AT gt_alv WHERE sel = 'X'.
+        IF gt_alv-zspbs IS NOT INITIAL.
+          MESSAGE e004 DISPLAY LIKE 'E'.
+        ENDIF.
+      ENDLOOP.
+      PERFORM frm_canc_jhd USING 'ZSP' CHANGING lv_err."审批计划
+*     判断更新数据库是否成功，成功重新取数刷新alv，失败报错
+      IF lv_err = 'S'.
+*        PERFORM frm_get_data."取数     modi by leimt20180420
+*        PERFORM frm_process_data."对取出的数据进行处理
+        LOOP AT gt_alv WHERE sel = 'X'.
+          lt_zjhdh-zjhdh = gt_alv-zjhdh.
+          COLLECT lt_zjhdh.
+        ENDLOOP.
+        LOOP AT lt_zjhdh.
+          LOOP AT gt_alv WHERE zjhdh = lt_zjhdh-zjhdh.
+            gt_alv-sel = ''.
+            gt_alv-zspbs = 'X'.
+            MODIFY gt_alv INDEX sy-tabix.
+          ENDLOOP.
+        ENDLOOP.
+        MESSAGE s013 DISPLAY LIKE 'S'.
+      ELSEIF lv_err = 'E'.
+        MESSAGE e014 DISPLAY LIKE 'E'.
+      ENDIF.
+
+    WHEN 'ZQXSP'."取消审批计划
+      READ TABLE gt_alv WITH KEY sel = 'X' .
+      IF sy-subrc <> 0.
+        MESSAGE e001 DISPLAY LIKE 'E'.
+      ENDIF.
+      LOOP AT gt_alv WHERE sel = 'X'.
+        IF gt_alv-zspbs IS INITIAL.
+          MESSAGE e005 WITH gt_alv-zjhdh DISPLAY LIKE 'E'.
+        ENDIF.
+        IF gt_alv-invoicenumber IS NOT INITIAL.
+          MESSAGE e033 WITH gt_alv-zjhdh DISPLAY LIKE 'E'.
+        ENDIF.
+      ENDLOOP.
+      PERFORM frm_canc_jhd USING 'ZQXSP' CHANGING lv_err."取消审批计划
+*     判断更新数据库是否成功，成功重新取数刷新ALV，失败报错
+      IF lv_err = 'S'.
+        LOOP AT gt_alv WHERE sel = 'X'.
+          lt_zjhdh-zjhdh = gt_alv-zjhdh.
+          COLLECT lt_zjhdh.
+        ENDLOOP.
+        LOOP AT lt_zjhdh.
+          LOOP AT gt_alv WHERE zjhdh = lt_zjhdh-zjhdh.
+            gt_alv-sel = ''.
+            gt_alv-zspbs = ''.
+            MODIFY gt_alv INDEX sy-tabix.
+          ENDLOOP.
+        ENDLOOP.
+*        PERFORM frm_get_data."取数
+*        PERFORM frm_process_data."对取出的数据进行处理
+        MESSAGE s015 DISPLAY LIKE 'S'.
+      ELSEIF lv_err = 'E'.
+        MESSAGE e016 DISPLAY LIKE 'E'.
+      ENDIF.
+
+    WHEN 'ZCJS' OR 'ZQXCJS'."传金税
+      READ TABLE gt_alv WITH KEY sel = 'X' .
+      IF sy-subrc <> 0.
+        MESSAGE e001 DISPLAY LIKE 'E'.
+      ENDIF.
+      LOOP AT gt_alv WHERE sel = 'X' AND zspbs EQ 'X'.
+        MESSAGE e006 WITH gt_alv-zjhdh DISPLAY LIKE 'E'.
+      ENDLOOP.
+      LOOP AT gt_alv WHERE sel = 'X' AND invoicenumber IS NOT INITIAL.
+        MESSAGE e032 WITH gt_alv-zjhdh DISPLAY LIKE 'E'.
+      ENDLOOP.
+      PERFORM frm_cjs_jhd USING ucomm CHANGING lv_err."传金税
+*     判断更新数据库是否成功，成功重新取数刷新ALV，失败报错
+      IF lv_err = 'S'.
+*          PERFORM frm_get_data."取数
+*          PERFORM frm_process_data."对取出的数据进行处理
+        LOOP AT gt_alv WHERE sel = 'X'.
+          lt_zjhdh-zjhdh = gt_alv-zjhdh.
+          COLLECT lt_zjhdh.
+        ENDLOOP.
+        LOOP AT lt_zjhdh.
+          LOOP AT gt_alv WHERE zjhdh = lt_zjhdh-zjhdh.
+            gt_alv-sel = ''.
+            IF ucomm = 'ZQXCJS'.
+              gt_alv-zjsbs = ''.
+            ELSE.
+              gt_alv-zjsbs = 'X'.
+            ENDIF.
+            MODIFY gt_alv INDEX sy-tabix.
+          ENDLOOP.
+        ENDLOOP.
+
+        MESSAGE s017 WITH '传金税标识' DISPLAY LIKE 'S'.
+      ELSEIF lv_err = 'E'.
+        MESSAGE e018 WITH '传金税标识' DISPLAY LIKE 'E'.
+      ENDIF.
+
+    WHEN 'ZBZ'.
+      REFRESH: gt_zjhd.
+      DATA: lv_lines TYPE i.
+      READ TABLE gt_alv WITH KEY sel = 'X' .
+      IF sy-subrc <> 0.
+        MESSAGE e001 DISPLAY LIKE 'E'.
+      ENDIF.
+      LOOP AT gt_alv WHERE sel = 'X'.
+        IF gt_alv-zjhdh IS INITIAL.
+          MESSAGE e007 DISPLAY LIKE 'E'.
+        ELSE.
+          gt_zjhd-zjhdh = gt_alv-zjhdh.
+          COLLECT gt_zjhd.
+        ENDIF.
+      ENDLOOP.
+      lv_lines =  lines( gt_zjhd ).
+      IF lv_lines > 1.
+        MESSAGE e008 DISPLAY LIKE 'E'.
+      ENDIF.
+      CLEAR:lv_spbs.
+      READ TABLE gt_alv WITH KEY sel = 'X'.
+      IF sy-subrc = 0.
+        lv_spbs = gt_alv-zspbs.
+      ENDIF.
+      CALL SCREEN 0100 STARTING AT 5 8 ENDING AT 70 20.
+    WHEN '&DATA_SAVE'.
+      READ TABLE gt_alv WITH KEY sel = 'X' .
+      IF sy-subrc <> 0.
+        MESSAGE e001 DISPLAY LIKE 'E'.
+      ENDIF.
+
+      PERFORM frm_save_swbz CHANGING lv_err."保存商务备注
+*     判断更新数据库是否成功，成功重新取数刷新alv，失败报错
+      IF lv_err = 'S'.
+        MESSAGE s017 WITH '商务备注' DISPLAY LIKE 'S'.
+      ELSEIF lv_err = 'E'.
+        MESSAGE e018 WITH '商务备注' DISPLAY LIKE 'E'.
+      ENDIF.
+
+    WHEN '&IC1'.
+      READ TABLE gt_alv INDEX selfield-tabindex."读取当前行
+      SET PARAMETER ID : 'VL' FIELD gt_alv-vgbel.
+      CALL TRANSACTION  'VL03N' AND SKIP FIRST SCREEN.
+    WHEN OTHERS.
+  ENDCASE.
+
+
+  PERFORM sub_refresh_data.
+ENDFORM. "alv_user_command
+
+*&---------------------------------------------------------------------*
+*&      Form  SUB_BUILD_EVENTS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+
+FORM sub_build_events .
+  REFRESH: g_it_events.
+  g_it_events-name = 'CALLER_EXIT'.
+  g_it_events-form = 'FRM_BUTTON'.
+  APPEND g_it_events.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  FM_BUTTON
+*&---------------------------------------------------------------------*
+*       设置enter事件
+*----------------------------------------------------------------------*
+*      -->E_GRID     text
+*----------------------------------------------------------------------*
+
+FORM frm_button USING g_grid TYPE slis_data_caller_exit.
+* 设置enter事件
+  PERFORM sub_check_changed_data.
+  CALL METHOD ref->register_edit_event
+    EXPORTING
+      i_event_id = cl_gui_alv_grid=>mc_evt_enter
+    EXCEPTIONS
+      error      = 1
+      OTHERS     = 2.
+
+  CREATE OBJECT gt_event_receiver.
+
+  SET HANDLER   gt_event_receiver->handle_modify FOR ref.
+ENDFORM. "FM_BUTTON
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CREAT_JHD
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_creat_jhd.
+  DATA: lt_ztsd005 LIKE ztsd005 OCCURS 0 WITH HEADER LINE.
+  DATA: lv_zjhdh LIKE ztsd005-zjhdh.
+  REFRESH: gt_zjhd,lt_ztsd005.
+*  从表ZTSD005中取出最大的计划单号，并且计算出当前计划单号起始值
+
+  SELECT SINGLE MAX( zjhdh ) INTO lv_zjhdh FROM ztsd005 .
+  IF lv_zjhdh IS NOT INITIAL.
+    lv_zjhdh = lv_zjhdh + 1.
+  ELSE.
+    lv_zjhdh = '10000001'.
+  ENDIF.
+*  将选中的行项目客户存在中间表GT_SCJHD中，根据客户生成计划单号（一个客户生成一个单号）
+  LOOP AT gt_alv WHERE sel = 'X'.
+    CLEAR: gt_zjhd.
+    gt_zjhd-kunnr = gt_alv-kunnr.
+    gt_zjhd-vkorg = gt_alv-vkorg.
+    COLLECT gt_zjhd.
+    CLEAR: gt_alv.
+  ENDLOOP.
+  LOOP AT gt_zjhd.
+    gt_zjhd-zjhdh = lv_zjhdh.
+    lv_zjhdh = lv_zjhdh + 1.
+    MODIFY gt_zjhd TRANSPORTING zjhdh.
+    CLEAR: gt_zjhd.
+  ENDLOOP.
+  SORT gt_zjhd BY kunnr.
+
+
+*  将数据保存至表ZTSD005
+  LOOP AT gt_alv WHERE sel = 'X'.
+    CLEAR:lt_ztsd005.
+    READ TABLE gt_zjhd WITH KEY kunnr = gt_alv-kunnr vkorg = gt_alv-vkorg BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-zjhdh = gt_zjhd-zjhdh.
+    ENDIF.
+    gt_alv-zjhrq = sy-datum.
+    IF gt_alv-zjhdh IS NOT INITIAL.
+      CLEAR: ls_stylerow.
+      ls_stylerow-fieldname = 'MENGE'.
+      ls_stylerow-style = cl_gui_alv_grid=>mc_style_disabled.
+      INSERT ls_stylerow INTO TABLE lt_styletab.
+    ENDIF.
+    IF lt_styletab IS NOT INITIAL.
+      gt_alv-style = lt_styletab.
+    ENDIF.
+    MODIFY gt_alv TRANSPORTING zjhdh zjhrq style.
+    MOVE-CORRESPONDING gt_alv TO lt_ztsd005.
+    APPEND lt_ztsd005.
+    CLEAR: gt_alv.
+  ENDLOOP.
+
+  IF lt_ztsd005[] IS NOT INITIAL.
+    MODIFY ztsd005 FROM TABLE lt_ztsd005.
+    IF sy-subrc = 0.
+      COMMIT WORK AND WAIT.
+      MESSAGE s009 DISPLAY LIKE 'S'.
+    ELSE.
+      ROLLBACK WORK.
+      MESSAGE e010 DISPLAY LIKE 'E'.
+    ENDIF.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CANC_JHD
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_canc_jhd USING lv_ucomm LIKE sy-ucomm
+                 CHANGING lv_err TYPE c.
+  DATA: lt_ztsd005 LIKE ztsd005 OCCURS 0 WITH HEADER LINE.
+  REFRESH: gt_zjhd,lt_ztsd005.  CLEAR:lv_err.
+*  将选中的行项目客户存在中间表GT_SCJHD中，根据计划号取消计划）
+  LOOP AT gt_alv WHERE sel = 'X'.
+    CLEAR: gt_zjhd.
+    gt_zjhd-zjhdh = gt_alv-zjhdh.
+    gt_zjhd-kunnr = gt_alv-kunnr.
+    gt_zjhd-vkorg = gt_alv-vkorg.
+    COLLECT gt_zjhd.
+    CLEAR: gt_alv.
+  ENDLOOP.
+
+*  将数据保存至表ZTSD005
+  LOOP AT gt_zjhd.
+    LOOP AT gt_alv WHERE zjhdh = gt_zjhd-zjhdh AND kunnr = gt_zjhd-kunnr AND vkorg = gt_zjhd-vkorg.
+      CLEAR:lt_ztsd005.
+      CASE lv_ucomm.
+        WHEN 'ZQXKP'."取消计划
+          gt_alv-zsfqx = 'X'.
+        WHEN 'ZSP'.  "审批计划
+          gt_alv-zspbs = 'X'.
+        WHEN 'ZQXSP'."取消审批
+          CLEAR: gt_alv-zspbs.
+      ENDCASE .
+      MOVE-CORRESPONDING gt_alv TO lt_ztsd005.
+      APPEND lt_ztsd005.
+*      MODIFY gt_alv.
+      CLEAR: gt_alv.
+    ENDLOOP.
+  ENDLOOP.
+
+  IF lt_ztsd005[] IS NOT INITIAL.
+    MODIFY ztsd005 FROM TABLE lt_ztsd005.
+    IF sy-subrc = 0.
+      COMMIT WORK AND WAIT.
+      lv_err = 'S'.
+    ELSE.
+      ROLLBACK WORK.
+      lv_err = 'E'.
+    ENDIF.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CJS_JHD
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_cjs_jhd USING lv_ucomm LIKE sy-ucomm
+               CHANGING lv_err TYPE c .
+  DATA: lt_ztsd005 LIKE ztsd005 OCCURS 0 WITH HEADER LINE.
+  DATA: lv_mess TYPE string.
+
+  REFRESH:lt_ztsd005,gt_zjhd.
+  CLEAR:lv_err.
+*  将选中的行项目客户存在中间表gt_scjhd中，根据计划号取消计划）
+  LOOP AT gt_alv WHERE sel = 'X'.
+    CLEAR: gt_zjhd.
+    gt_zjhd-zjhdh = gt_alv-zjhdh.
+    gt_zjhd-vkorg = gt_alv-vkorg.
+    COLLECT gt_zjhd.
+    CLEAR: gt_alv.
+  ENDLOOP.
+
+*     检查商品名称、商品型号、纳税人识别号、开户行及帐号、地址电话不能为空
+*         开票方式只能为普通发票和17%的增值税
+  LOOP AT gt_zjhd.
+    LOOP AT gt_alv WHERE zjhdh = gt_zjhd-zjhdh AND vkorg = gt_zjhd-vkorg.
+      CLEAR:lt_ztsd005.
+      IF gt_alv-cpmc IS INITIAL.
+        MESSAGE e020 WITH '商品名称' DISPLAY LIKE 'E'.
+      ENDIF.
+      IF gt_alv-cpmc NE '配件'.
+        IF gt_alv-cpxh IS INITIAL.
+          MESSAGE e020 WITH '商品型号' DISPLAY LIKE 'E'.
+        ENDIF.
+      ENDIF.
+      IF gt_alv-zvat_num IS INITIAL.
+        MESSAGE e020 WITH '纳税人识别号' DISPLAY LIKE 'E'.
+      ENDIF.
+      IF gt_alv-zaccount IS INITIAL.
+        MESSAGE e020 WITH '开户行及帐号' DISPLAY LIKE 'E'.
+      ENDIF.
+      IF gt_alv-zaddr IS INITIAL.
+        MESSAGE e020 WITH '地址和电话' DISPLAY LIKE 'E'.
+      ENDIF.
+      IF gt_alv-kvgr4 NE '110' AND gt_alv-kvgr4 NE '100'.
+        MESSAGE e021 DISPLAY LIKE 'E'.
+      ENDIF.
+      IF gt_alv-zsflm IS INITIAL.
+        MESSAGE e026 WITH gt_alv-matnr DISPLAY LIKE 'E'.
+      ENDIF.
+      CASE lv_ucomm.
+        WHEN 'ZCJS'.
+          gt_alv-zjsbs = 'X'.
+        WHEN 'ZQXCJS'.
+          CLEAR:gt_alv-zjsbs.
+      ENDCASE.
+      MOVE-CORRESPONDING gt_alv TO lt_ztsd005.
+      APPEND lt_ztsd005.
+      CLEAR: gt_alv.
+    ENDLOOP.
+  ENDLOOP.
+
+  IF lt_ztsd005[] IS NOT INITIAL.
+    MODIFY ztsd005 FROM TABLE lt_ztsd005.
+    IF sy-subrc = 0.
+      COMMIT WORK AND WAIT.
+      lv_err = 'S'.
+    ELSE.
+      ROLLBACK WORK.
+      lv_err = 'E'.
+    ENDIF.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Module  STATUS_0100  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE status_0100 OUTPUT.
+  SET PF-STATUS '0100'.
+  SET TITLEBAR '0100'.
+  PERFORM long_text.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  INITIAL_SCREEN  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE initial_screen OUTPUT.
+
+  DATA texttable1 TYPE TABLE OF textline.
+
+  DATA: container_temp TYPE REF TO cl_gui_custom_container,
+        editor_temp    TYPE REF TO cl_gui_textedit.
+  DATA: lv_tname TYPE thead-tdname.
+  DATA: lt_inlines TYPE TABLE OF tline WITH HEADER LINE,
+        lt_lines   TYPE TABLE OF tline WITH HEADER LINE.
+
+  PERFORM process_header.
+  PERFORM frm_text.
+
+
+  REFRESH: texttable.
+  CALL FUNCTION 'CONVERT_ITF_TO_STREAM_TEXT'
+    EXPORTING
+      language    = sy-langu
+    TABLES
+      text_stream = texttable
+      itf_text    = gt_lines.
+
+  CALL METHOD x_editor->set_text_as_stream
+    EXPORTING
+      text = texttable.
+
+*  IF gt_lines[] IS NOT INITIAL.
+  IF lv_spbs = 'X' .
+    CALL METHOD x_editor->set_readonly_mode
+      EXPORTING
+        readonly_mode = 1.
+  ELSE.
+    CALL METHOD x_editor->set_readonly_mode
+      EXPORTING
+        readonly_mode = 0.
+  ENDIF.
+
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0100  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_0100 INPUT.
+  DATA: se_code TYPE sy-ucomm.
+  DATA: ok_code TYPE sy-ucomm.
+  CLEAR: se_code.
+  se_code = ok_code.
+  CASE se_code.
+    WHEN 'SAVE'.
+      PERFORM save_longtext.
+      LEAVE TO SCREEN 0.
+    WHEN 'CANCEL' OR 'BACK' OR 'EXIT'.
+      LEAVE TO SCREEN 0.
+    WHEN OTHERS.
+  ENDCASE.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Form  LONG_TEXT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM long_text .
+  IF gr_ccontainer IS INITIAL.
+    CREATE OBJECT gr_ccontainer
+      EXPORTING
+        container_name = gc_custom_control_name.
+    CREATE OBJECT x_editor
+      EXPORTING
+        parent           = gr_ccontainer
+        max_number_chars = 100000.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  PROCESS_HEADER
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM process_header .
+  CLEAR: header,p_name.
+  header-tdobject = 'ZRPSD014'.
+  p_name = gt_alv-zjhdh.
+  CONDENSE p_name.
+  header-tdname = p_name.
+  header-tdid = '0001'.
+  header-tdspras = sy-langu.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SAVE_LONGTEXT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+**----------------------------------------------------------------------*
+FORM save_longtext .
+  PERFORM process_header.
+  CALL METHOD x_editor->get_text_as_stream
+    IMPORTING
+      text = texttable.
+
+  CALL FUNCTION 'CONVERT_STREAM_TO_ITF_TEXT'
+    EXPORTING
+      language    = sy-langu
+    TABLES
+      text_stream = texttable
+      itf_text    = gt_lines.
+
+  CALL FUNCTION 'SAVE_TEXT'
+    EXPORTING
+      header          = header
+      savemode_direct = 'X'
+    TABLES
+      lines           = gt_lines.
+  IF sy-subrc EQ 0.
+
+*    MESSAGE 'SAVE SUCCESSFULLY' TYPE 'S' DISPLAY LIKE 'I'.
+
+  ENDIF.
+  CALL FUNCTION 'COMMIT_TEXT'.
+ENDFORM. " SAVE_LONGTEXT
+*&---------------------------------------------------------------------*
+*&      Form  FRM_TEXT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_text .
+  REFRESH: gt_lines[].
+  CLEAR: gt_lines.
+  CALL FUNCTION 'READ_TEXT'
+    EXPORTING
+      id                      = header-tdid
+      language                = sy-langu
+      name                    = p_name
+      object                  = header-tdobject
+    TABLES
+      lines                   = gt_lines
+    EXCEPTIONS
+      id                      = 1
+      language                = 2
+      name                    = 3
+      not_found               = 4
+      object                  = 5
+      reference_check         = 6
+      wrong_access_to_archive = 7
+      OTHERS                  = 8.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SAVE_SWBZ
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_save_swbz CHANGING lv_err TYPE c .
+  DATA: lt_ztsd005 LIKE ztsd005 OCCURS 0 WITH HEADER LINE.
+  REFRESH:lt_ztsd005.
+  CLEAR:lv_err.
+  LOOP AT gt_alv WHERE sel = 'X'.
+    CLEAR:lt_ztsd005.
+    MOVE-CORRESPONDING gt_alv TO lt_ztsd005.
+    APPEND lt_ztsd005.
+    CLEAR: gt_alv.
+  ENDLOOP.
+
+  IF lt_ztsd005[] IS NOT INITIAL.
+    MODIFY ztsd005 FROM TABLE lt_ztsd005.
+    IF sy-subrc = 0.
+      COMMIT WORK AND WAIT.
+      lv_err = 'S'.
+    ELSE.
+      ROLLBACK WORK.
+      lv_err = 'E'.
+    ENDIF.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_CPXH
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_GT_KNMT  text
+*      <--P_GT_ALV_CPXH  text
+*----------------------------------------------------------------------*
+FORM frm_get_cpxh  USING    ps_knmt LIKE gt_knmt
+                   CHANGING pv_cpxh.
+  CLEAR: header,p_name.
+  header-tdobject = 'KNMT'.
+  CONCATENATE ps_knmt-vkorg ps_knmt-vtweg ps_knmt-kunnr ps_knmt-matnr INTO p_name.
+  CONDENSE p_name.
+  header-tdname = p_name.
+  header-tdid = '0001'.
+  header-tdspras = sy-langu.
+
+  PERFORM frm_text.
+
+  LOOP AT gt_lines INTO gs_lines.
+    CONCATENATE pv_cpxh gs_lines-tdline INTO pv_cpxh.
+    CLEAR:gs_lines.
+  ENDLOOP.
+  CONDENSE pv_cpxh.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_HOTSPOT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_hotspot .
+  READ TABLE g_it_fieldcat1 WITH KEY fieldname = 'VGBEL'.
+  g_it_fieldcat1-hotspot = 'X'.
+  MODIFY g_it_fieldcat1 INDEX sy-tabix.
+  LOOP AT gt_alv.
+    SELECT SINGLE kvgr1 INTO gt_alv-kvgr1 FROM knvv WHERE kunnr = gt_alv-kunnr AND vkorg = gt_alv-vkorg.
+    SELECT SINGLE bezei INTO gt_alv-bezei_kvgr1 FROM tvv1t WHERE kvgr1 = gt_alv-kvgr1 AND spras = 1.
+    SELECT SINGLE ernam wadat_ist INTO (gt_alv-ernam,gt_alv-wadat_ist) FROM likp WHERE vbeln = gt_alv-vgbel.
+    CALL FUNCTION 'Z_FMMM_001'
+      EXPORTING
+        i_ernam  = gt_alv-ernam
+*       i_usnam  = wa_mseg-usnam
+      IMPORTING
+*       ex_usrname = wa_mseg-lv_usrname
+        ex_ernam = gt_alv-bezei_kvgr2.
+    MODIFY gt_alv.
+  ENDLOOP.
+ENDFORM.

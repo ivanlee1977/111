@@ -1,0 +1,10 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPMM038S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_aufnr FOR ztmm008-aufnr,
+               s_erdat FOR ztmm008-erdat,
+               s_zsqno FOR ztmm008-zsqno,
+               s_ernam FOR ztmm008-ernam.
+PARAMETERS:p_zstat LIKE ztmm008-zstat AS LISTBOX VISIBLE LENGTH 12 OBLIGATORY DEFAULT '1'.
+SELECTION-SCREEN END OF BLOCK blc.

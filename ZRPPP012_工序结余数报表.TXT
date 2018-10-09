@@ -1,0 +1,21 @@
+*&---------------------------------------------------------------------*
+*& Report ZRPPP012
+*&---------------------------------------------------------------------*
+*&PP_工序结余数报表
+*&制作人：leimt  日期： 2017/09/20
+*&---------------------------------------------------------------------*
+REPORT ZRPPP012.
+
+INCLUDE ZRPPP012_t01.
+INCLUDE ZRPPP012_s01.
+INCLUDE ZRPPP012_f01.
+
+INITIALIZATION.
+
+AT SELECTION-SCREEN .
+
+START-OF-SELECTION.
+
+  PERFORM frm_getdata.
+  PERFORM frm_getfact.
+  PERFORM frm_show.

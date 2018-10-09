@@ -1,0 +1,75 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM001_TOP
+*&---------------------------------------------------------------------*
+TYPE-POOLS:slis,vrm.
+
+TABLES:qals.
+
+
+DATA:BEGIN OF gt_item  OCCURS 0,"展示内表
+       chk(1)     TYPE c,
+       aufnr      LIKE qals-aufnr,
+       prueflos   LIKE qals-prueflos,
+       matnr      LIKE qals-matnr,
+       ktextmat   LIKE qals-ktextmat,
+       mengeneinh LIKE qals-mengeneinh, "单位
+       psmng      LIKE afpo-psmng,
+       wemng      LIKE afpo-wemng,
+       lagortchrg LIKE qals-lagortchrg,
+       charg      LIKE qals-charg,
+       losmenge   LIKE qals-losmenge,
+       ZCJSL      TYPE P DECIMALS 3,
+       ZJYHGSL    TYPE P DECIMALS 3,
+       ZPDJG      TYPE C,
+       ZBLXX      TYPE C,
+       sgtxt      LIKE mseg-sgtxt,
+       objnr      LIKE qals-objnr,
+     END OF gt_item.
+
+
+DATA:ok_code   TYPE sy-ucomm,
+     save_ok   TYPE sy-ucomm,
+     errorcode TYPE i.
+
+DATA: gt_fcat   TYPE slis_t_fieldcat_alv WITH HEADER LINE,
+      gs_layout TYPE slis_layout_alv.
+
+
+DATA: gs_option  TYPE ssfcompop,
+      gs_control TYPE ssfctrlop.
+
+DATA lv_name TYPE rs38l_fnam.
+DEFINE g_fieldfcat .
+  gt_fcat-fieldname = &1.
+  gt_fcat-seltext_s = &2.
+  gt_fcat-ddictxt = 'S'.
+  gt_fcat-ref_fieldname = &3.
+  gt_fcat-ref_tabname = &4.
+  gt_fcat-decimals_out = &5.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.
+
+*CLASS lcl_event_receiver DEFINITION DEFERRED .
+*DATA: event_receiver TYPE REF TO lcl_event_receiver.
+
+*CLASS lcl_event_receiver DEFINITION.
+*  PUBLIC SECTION.
+*    METHODS catch_doubleclick
+*    FOR EVENT BUTTON_CLICK OF cl_gui_alv_grid
+*    IMPORTING e_row
+*              e_column
+*              es_row_no .
+*ENDCLASS.                    "lcl_event_receiver DEFINITION
+*
+**---------------------------------------------------------------------*
+**       CLASS lcl_event_receiver IMPLEMENTATION
+**---------------------------------------------------------------------*
+*CLASS lcl_event_receiver IMPLEMENTATION.
+*  METHOD catch_doubleclick.
+*    CALL METHOD cl_gui_cfw=>set_new_ok_code
+*      EXPORTING
+*        new_code = 'BACK'.
+*    CALL METHOD cl_gui_cfw=>flush.
+*  ENDMETHOD.                    "catch_doubleclick
+*ENDCLASS.                    "lcl_event_receiver IMPLEMENTATION

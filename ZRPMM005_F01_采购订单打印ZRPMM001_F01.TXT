@@ -1,0 +1,443 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM001_F01
+*&---------------------------------------------------------------------*
+
+
+FORM frm_show."ALV显示界面
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'SET_PF_STATUS'
+      i_callback_user_command  = 'ALV_USER_COMMAND'
+      is_layout                = gs_layout
+      it_fieldcat              = gt_fcat[]
+    TABLES
+      t_outtab                 = gt_mm[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+           WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+ENDFORM.
+
+FORM set_pf_status USING rt_extab TYPE slis_t_extab.
+
+  DATA: wa_extab TYPE slis_extab.
+
+  SET PF-STATUS '0100' EXCLUDING rt_extab.
+
+ENDFORM.                    "set_pf_status1
+
+FORM alv_user_command USING r_ucomm LIKE sy-ucomm  rs_selfield TYPE slis_selfield.
+
+  DATA: lv_grid TYPE REF TO cl_gui_alv_grid.
+
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = lv_grid.
+
+  CALL METHOD lv_grid->check_changed_data( ).
+
+  CASE r_ucomm.
+    WHEN 'ZCLICK'.
+      gv_print = 'ZCLICK'.
+      PERFORM frm_print.
+
+    WHEN 'DCLICK'.
+      gv_print = 'DCLICK'.
+      PERFORM frm_print.
+
+    WHEN '&IC1'.
+      IF rs_selfield-fieldname EQ 'VGBEL' AND rs_selfield-value IS NOT INITIAL.
+        SET PARAMETER ID 'BES' FIELD rs_selfield-value.
+        CALL TRANSACTION 'ME23N' AND SKIP FIRST SCREEN.
+      ENDIF.
+      IF rs_selfield-fieldname EQ 'VBELN' AND rs_selfield-value IS NOT INITIAL.
+        SET PARAMETER ID 'VL' FIELD rs_selfield-value.
+        CALL TRANSACTION 'VL03N' AND SKIP FIRST SCREEN.
+      ENDIF.
+  ENDCASE.
+
+
+ENDFORM.                    "alv_user_command
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GETDATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_getdata .
+
+  SELECT
+       a~vbeln
+       a~posnr
+*       a~werks
+*       b~kunnr
+       b~lfdat
+       a~lfimg
+       a~charg
+       a~vgbel
+       a~vgpos
+       a~meins
+       a~bwart
+       a~lgort
+       b~lifnr
+
+       INTO CORRESPONDING FIELDS OF TABLE gt_mm
+        FROM lips AS a
+        INNER JOIN likp AS b ON a~vbeln EQ b~vbeln
+        WHERE b~lifnr IN s_lifnr
+         AND  a~matnr IN s_matnr
+         AND  a~werks IN s_werks
+         AND  a~vbeln IN s_vbeln
+         AND  b~lfdat IN s_lfdat
+         AND  a~bwart IN ('541','542')
+.
+
+  CHECK gt_mm[] IS NOT INITIAL.
+  DATA : BEGIN OF lt_usnam  OCCURS 0,
+           mblnr LIKE mkpf-mblnr,
+           mjahr LIKE mkpf-mjahr,
+         END OF lt_usnam.
+  DATA lv_wbsta LIKE vbup-wbsta.
+  LOOP AT gt_mm.
+    SELECT SINGLE wbsta INTO lv_wbsta FROM vbup WHERE vbeln = gt_mm-vbeln AND wbsta = 'C'.
+    IF sy-subrc <> 0.
+      DELETE gt_mm .
+      CONTINUE.
+    ENDIF.
+    IF gt_mm-bwart = '542'.
+      SELECT SINGLE zvgbel zvgpos INTO (gt_mm-vgbel,gt_mm-vgpos) FROM lips WHERE vbeln = gt_mm-vbeln AND posnr = gt_mm-posnr.
+    ENDIF.
+    SELECT SINGLE matnr menge INTO (gt_mm-matnr , gt_mm-menge) FROM ekpo WHERE ebeln = gt_mm-vgbel AND ebelp = gt_mm-vgpos.
+    SELECT SINGLE maktx INTO gt_mm-maktx FROM makt WHERE matnr = gt_mm-matnr AND spras = 1.
+    SELECT SINGLE name1 INTO  gt_mm-name1 FROM lfa1 WHERE lifnr = gt_mm-lifnr.
+
+    SELECT SINGLE zsum INTO gt_mm-zsum FROM zprintnum WHERE zpo = gt_mm-vbeln AND zprgname = 'ZMM005'.
+
+*    SELECT SINGLE vbeln AS mblnr mjahr INTO (lt_usnam-mblnr , lt_usnam-mjahr) FROM vbfa WHERE
+*        posnv = gt_mm-vgpos AND vbelv = gt_mm-vbeln AND vbtyp_n = 'R' AND vbtyp_v = 'J'.
+
+    SELECT SINGLE vbeln AS mblnr mjahr INTO (lt_usnam-mblnr , lt_usnam-mjahr) FROM vbfa WHERE vbelv = gt_mm-vbeln AND vbtyp_n = 'R' AND vbtyp_v = 'J'.
+    SELECT SINGLE usnam INTO  gt_mm-usnam FROM mkpf WHERE mblnr = lt_usnam-mblnr AND mjahr = lt_usnam-mjahr .
+
+    CALL FUNCTION 'Z_FMMM_001'
+      EXPORTING
+        i_ernam    = gt_mm-usnam
+        i_usnam    = gt_mm-usnam
+      IMPORTING
+        ex_usrname = gt_mm-zwnam.
+
+    SELECT SINGLE budat_mkpf INTO gt_mm-budat_mkpf FROM mseg WHERE vbeln_im = gt_mm-vbeln  .
+    MODIFY gt_mm.
+  ENDLOOP.
+  SORT gt_mm BY vbeln.
+  DELETE ADJACENT DUPLICATES FROM gt_mm COMPARING vbeln vgbel.
+  SORT gt_mm BY lfdat.
+
+ENDFORM.
+
+FORM frm_getfact .
+  g_fieldfcat:
+    'VBELN' '交货单号' 'VBELN' 'LIPS' ,
+    'VGBEL' '采购订单号' 'VGBEL' 'LIPS' ,
+    'NAME1' '送达方' 'NAME1' 'LFA1' ,
+    'LFDAT' '交货日期' 'LFDAT' 'LIPS',
+    'ZSUM' '打印次数' '' ''
+  .
+  gs_layout-colwidth_optimize = 'X'.
+  gs_layout-box_fieldname = 'CHK'.
+  gs_layout-box_tabname = 'gt_mm'.
+*  gs_layout-edit = 'X'.
+  gs_layout-zebra = 'X'.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PRINT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_print .
+
+  PERFORM frm_chkprint.
+
+  PERFORM frm_open_print.
+
+  PERFORM frm_loopprint.
+
+  PERFORM frm_ssf_close.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OPEN_PRINT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_open_print .
+
+*  gs_control-no_open = 'X'.
+*  gs_control-no_close = 'X'.
+*  gs_option-tdimmed  = 'X'.
+*  CALL FUNCTION 'SSF_OPEN'
+*    EXPORTING
+*      control_parameters = gs_control
+*    IMPORTING
+*      job_output_options = job_output_options
+*    EXCEPTIONS
+*      formatting_error   = 1
+*      internal_error     = 2
+*      send_error         = 3
+*      user_canceled      = 4
+*      OTHERS             = 5.
+*  IF sy-subrc <> 0.
+** Implement suitable error handling here
+*  ENDIF.
+  IF gv_print = 'ZCLICK'..
+    CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
+      EXPORTING
+        formname           = 'ZSFMM_010'
+      IMPORTING
+        fm_name            = lv_name
+      EXCEPTIONS
+        no_form            = 1
+        no_function_module = 2
+        OTHERS             = 3.
+  ELSE.
+    CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
+      EXPORTING
+        formname           = 'ZSFMM_010A'
+      IMPORTING
+        fm_name            = lv_name
+      EXCEPTIONS
+        no_form            = 1
+        no_function_module = 2
+        OTHERS             = 3.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_LINE
+*&---------------------------------------------------------------------*
+*      不足8行补空行
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_line .
+  DATA lv_n  TYPE i .
+  lv_n = lines( gt_item ).
+  IF gv_print = 'DCLICK'.
+    IF lv_n MOD 21 NE 0 .
+      lv_n = 21 - lv_n MOD 21.
+      DO  lv_n TIMES.
+        CLEAR gt_item.
+        APPEND gt_item.
+      ENDDO.
+
+    ENDIF.
+  ELSE.
+    IF lv_n MOD 7 NE 0 .
+      lv_n = 7 - lv_n MOD 7.
+      DO  lv_n TIMES.
+        CLEAR gt_item.
+        APPEND gt_item.
+      ENDDO.
+
+    ENDIF.
+  ENDIF.
+
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SSF_CLOSE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_ssf_close .
+*  CALL FUNCTION 'SSF_CLOSE'
+** IMPORTING
+**   JOB_OUTPUT_INFO        =
+*    EXCEPTIONS
+*      formatting_error = 1
+*      internal_error   = 2
+*      send_error       = 3
+*      OTHERS           = 4.
+*  IF sy-subrc <> 0.
+** Implement suitable error handling here
+*  ENDIF.
+
+ENDFORM.
+
+FORM frm_chkprint .
+  READ TABLE gt_mm WITH KEY chk = 'X' TRANSPORTING NO FIELDS.
+  IF sy-subrc NE 0.
+    MESSAGE '请至少选择一行进行打印' TYPE 'E'.
+    EXIT.
+  ENDIF.
+
+*  READ TABLE gt_mm WITH KEY chk = 'X' frgke = 'N' TRANSPORTING NO
+*FIELDS.
+*  IF sy-subrc EQ 0.
+*    MESSAGE '未审批订单不能打印' TYPE 'E'.
+*    EXIT.
+*  ENDIF.
+*
+*  READ TABLE gt_mm WITH KEY chk = 'X' frgke = 'X' TRANSPORTING NO
+*FIELDS.
+*  IF sy-subrc EQ 0.
+*    MESSAGE '拒绝订单不能打印' TYPE 'E'.
+*    EXIT.
+*  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_LOOPPRINT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_loopprint .
+  DATA:w_job_output_info TYPE ssfcrescl.
+  DATA lv_bismt TYPE mara-bismt.
+  DATA: BEGIN OF lt_resb OCCURS 0,
+          matnr LIKE resb-matnr,
+          charg LIKE resb-charg,
+          bdmng LIKE resb-bdmng,
+          ebeln LIKE resb-ebeln,
+          ebelp LIKE resb-ebelp,
+        END OF lt_resb.
+  DATA lt_item LIKE TABLE OF gt_item WITH HEADER LINE.
+  DATA: lv_mm  LIKE TABLE OF gt_mm WITH HEADER LINE,
+        lv_mm1 LIKE TABLE OF gt_mm WITH HEADER LINE..
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_item FROM lips
+    FOR ALL ENTRIES IN gt_mm
+    WHERE vbeln = gt_mm-vbeln AND lfimg > 0.
+
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_resb FROM resb
+    FOR ALL ENTRIES IN lt_item
+    WHERE ebeln = lt_item-vgbel .
+
+  SORT gt_mm BY chk.
+  CLEAR:l_wa_ssfctrlop,w_job_output_info.
+  LOOP AT gt_mm WHERE chk = 'X'.
+    AT  NEW chk .
+      l_wa_ssfctrlop-no_close = 'X'.
+    ENDAT.
+
+    AT END OF chk.
+      l_wa_ssfctrlop-no_close = ''.
+    ENDAT.
+    MOVE-CORRESPONDING gt_mm TO gt_head.
+    APPEND gt_head.
+
+    LOOP AT lt_item WHERE vbeln = gt_head-vbeln.
+
+      IF gt_head-bwart = '542'.
+        lt_item-lfimg = lt_item-lfimg * -1.
+      ENDIF.
+      SELECT SINGLE maktx INTO  lt_item-maktx FROM makt WHERE matnr = lt_item-matnr AND spras = 1.
+      LOOP AT  lt_resb  WHERE  ebeln = lt_item-vgbel AND ebelp = lt_item-vgpos AND matnr = lt_item-matnr .
+        lt_item-bdmng = lt_resb-bdmng + lt_item-bdmng.
+      ENDLOOP.
+      SELECT SINGLE bismt INTO lv_bismt FROM mara WHERE matnr = lt_item-matnr.
+      IF lv_bismt <> ''.
+*        SHIFT lt_item-maktx right DELETING TRAILING ' '.
+        CONCATENATE lt_item-maktx lv_bismt INTO lt_item-maktx SEPARATED BY '/'.
+      ENDIF.
+
+      MODIFY lt_item.
+      MOVE-CORRESPONDING lt_item TO gt_item.
+      APPEND gt_item.
+    ENDLOOP.
+
+    PERFORM frm_line.
+
+    CALL FUNCTION lv_name
+      EXPORTING
+        control_parameters = l_wa_ssfctrlop
+*       control_parameters = gs_control
+*       zje                = zje
+*       zwje               = zwje
+      IMPORTING
+*       DOCUMENT_OUTPUT_INFO       =
+        job_output_info    = w_job_output_info
+      TABLES
+        gt_head            = gt_head[]
+        gt_item            = gt_item[]
+      EXCEPTIONS
+        formatting_error   = 1
+        internal_error     = 2
+        send_error         = 3
+        user_canceled      = 4
+        OTHERS             = 5.
+
+    l_wa_ssfctrlop-no_open = 'X'.
+
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+             WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ELSE.
+      IF  w_job_output_info-outputdone = 'X' . "是否输出到打印机
+        LOOP AT  gt_mm WHERE chk = 'X'.
+          PERFORM frm_addprintsum.
+          gt_mm-zsum = gt_mm-zsum + 1.
+          MODIFY gt_mm.
+        ENDLOOP.
+
+      ENDIF.
+    ENDIF.
+    CLEAR :gt_item,gt_head.
+    REFRESH :gt_item,gt_head.
+
+  ENDLOOP.
+
+  SORT gt_mm BY vbeln.
+ENDFORM.
+
+FORM frm_addprintsum.
+  DATA wa LIKE TABLE OF zprintnum WITH HEADER LINE.
+  wa-zpo = gt_head-vbeln.
+  wa-mandt = sy-mandt.
+  wa-zprgname = 'ZMM005'.
+  wa-zernam = sy-uname.
+  wa-zdate = sy-datum.
+  wa-ztime = sy-uzeit.
+
+  SELECT SINGLE * FROM zprintnum WHERE zpo = wa-zpo AND zprgname = 'ZMM005'.
+  IF sy-subrc EQ 0.
+
+    UPDATE zprintnum SET
+     zernam = @sy-uname,
+     zdate = @sy-datum,
+     ztime = @sy-uzeit,
+     zsum = zsum + 1
+     WHERE zpo = @wa-zpo AND zprgname = 'ZMM005'
+  .
+  ELSE.
+    wa-zsum = 1.
+    INSERT INTO zprintnum VALUES @wa.
+  ENDIF.
+
+ENDFORM.

@@ -1,0 +1,19 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPFI038S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+PARAMETERS:p_bukrs LIKE bkpf-bukrs OBLIGATORY DEFAULT '1000'.
+SELECT-OPTIONS:s_prctr FOR bseg-prctr.
+SELECT-OPTIONS:s_date FOR sy-datum.
+SELECT-OPTIONS:s_date1 FOR sy-datum MODIF ID m2.
+PARAMETERS:p_zyhzh LIKE ztfi002-zyhzh OBLIGATORY DEFAULT '1001010000'.
+SELECTION-SCREEN END OF BLOCK blc.
+
+SELECTION-SCREEN BEGIN OF BLOCK blc1 WITH FRAME TITLE TEXT-002.
+PARAMETERS:r1 RADIOBUTTON GROUP ra DEFAULT 'X' USER-COMMAND um,
+           r2 RADIOBUTTON GROUP ra.
+SELECTION-SCREEN END OF BLOCK blc1.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_zyhzh.
+  PERFORM frm_zyhzh_f4 USING 'P_ZYHZH'.

@@ -1,0 +1,81 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPFI006_T01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPFI006_D002
+*&---------------------------------------------------------------------*
+
+TABLES:faglflext.
+TYPE-POOLS:sils.
+
+DATA: BEGIN OF gt_fi OCCURS 0,
+        rbukrs LIKE faglflext-rbukrs,
+        prctr  LIKE faglflext-prctr,
+        ryear  LIKE faglflext-ryear,
+        rpmax  LIKE faglflext-rpmax,
+        racct  LIKE faglflext-racct,
+        hsl01  LIKE faglflext-hslvt,
+        hsl02  LIKE faglflext-hslvt,
+        hsl03  LIKE faglflext-hslvt,
+        hsl04  LIKE faglflext-hslvt,
+        hsl05  LIKE faglflext-hslvt,
+        hsl06  LIKE faglflext-hslvt,
+        hsl07  LIKE faglflext-hslvt,
+        hsl08  LIKE faglflext-hslvt,
+        hsl09  LIKE faglflext-hslvt,
+        hsl10  LIKE faglflext-hslvt,
+        hsl11  LIKE faglflext-hslvt,
+        hsl12  LIKE faglflext-hslvt,
+        hsl13  LIKE faglflext-hslvt,
+        hsl14  LIKE faglflext-hslvt,
+        hsl15  LIKE faglflext-hslvt,
+        hsl16  LIKE faglflext-hslvt,
+
+
+      END OF gt_fi.
+
+DATA: BEGIN OF gt_last OCCURS 0,
+        hsl1   LIKE faglflext-hslvt,
+        hsl2   LIKE faglflext-hslvt,
+        hsl3   LIKE faglflext-hslvt,
+        hsl4   LIKE faglflext-hslvt,
+        hsl5   LIKE faglflext-hslvt,
+        hsl11  LIKE faglflext-hslvt,
+        hsl12  LIKE faglflext-hslvt,
+        hsl13  LIKE faglflext-hslvt,
+        hsl14  LIKE faglflext-hslvt,
+        hsl15  LIKE faglflext-hslvt,
+        total1 LIKE faglflext-hslvt,
+        total2 LIKE faglflext-hslvt,
+
+      END OF gt_last.
+
+CONSTANTS:gcst_excel_template TYPE w3objid VALUE 'ZFI006'.
+DATA fmoney like faglflext-hslvt.
+*DATA: gt_fcat   TYPE slis_t_fieldcat_alv WITH HEADER LINE,
+*      gs_layout TYPE slis_layout_alv.
+*
+*DATA lv_name TYPE rs38l_fnam.
+
+FIELD-SYMBOLS:   <dyn_field_c> TYPE any.
+
+DATA:  fieldname TYPE string.
+
+DEFINE g_fieldfcat .
+  gt_fcat-fieldname = &1.
+  gt_fcat-seltext_s = &2.
+  gt_fcat-ddictxt = 'S'.
+  gt_fcat-ref_fieldname = &3.
+  gt_fcat-ref_tabname = &4.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.
+
+
+SELECT-OPTIONS:
+        s_rbukrs FOR faglflext-rbukrs,
+        s_prctr FOR faglflext-prctr.
+PARAMETERS p_ryear TYPE faglflext-ryear OBLIGATORY.
+SELECT-OPTIONS:s_rpmax FOR faglflext-rpmax OBLIGATORY no-EXTENSION.
+
+ranges:r_bukrs FOR t001-bukrs.

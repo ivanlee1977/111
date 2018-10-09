@@ -1,0 +1,13 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPMM029_S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+
+               .
+PARAMETERS: P_LIFNR LIKE LFA1-LIFNR OBLIGATORY.
+
+SELECT-OPTIONS: s_EBELN FOR EKkO-EBELN ,
+                s_AEDAT for EKKO-AEDAT.
+
+SELECTION-SCREEN END OF BLOCK b1.

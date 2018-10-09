@@ -1,0 +1,195 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZSDRP014T01
+*&---------------------------------------------------------------------*
+TABLES: knvv,likp.
+
+DATA: BEGIN OF gt_alv OCCURS 0 ,
+        box(1),
+        kkber       LIKE knkk-kkber, "贷方控制范围
+        knkli       LIKE knkk-knkli, "信贷帐户号
+        kunnr       LIKE knkk-kunnr, "客户
+        name(100),                   "客户名称
+        sortl       LIKE kna1-sortl, "客户简称
+        ktokd       LIKE kna1-ktokd, "客户帐户组  ADD BY PFT 20171227
+        zterm       LIKE knvv-zterm, "付款条件
+        vtext_zterm LIKE tvzbt-vtext, "付款条件描述
+        ctlpc       LIKE knkk-ctlpc, "风险类别
+        rtext       LIKE t691t-rtext, "风险类别描述
+        klimk       LIKE knkk-klimk, "信用额度
+        zyyed       TYPE klimk,      "已用额度
+        skfor       LIKE knkk-skfor, "应收总额
+        cxyed       TYPE klimk,      "超信用额度
+        ssobl       LIKE knkk-ssobl, "特别往来债务
+        oeikw       LIKE s066-oeikw, "未清销售订单金额
+        olikw       LIKE s067-olikw, "未清交货单金额
+        ofakw       LIKE s067-ofakw, "未清发票金额
+        zzcqts      TYPE int4, "最早超期天数
+        zcqje       TYPE klimk, "超期金额
+        grupp       LIKE knkk-grupp, "信用等级
+        vkorg       LIKE knvv-vkorg, "销售组织
+        vtext_vkorg LIKE tvkot-vtext, "销售组织名称
+        vtweg       LIKE knvv-vtweg, "渠道
+        vtext_vtweg LIKE tvtwt-vtext, "渠道名称
+        bzirk       LIKE knvv-bzirk, "销售大区代码
+        bztxt       LIKE t171t-bztxt, "销售大区
+        vkbur       LIKE knvv-vkbur, "行办代码
+        bezei_vkbur LIKE tvkbt-bezei, "行办
+        vkgrp       LIKE knvv-vkgrp, "销售组代码
+        bezei_vkgrp LIKE tvgrt-bezei, "销售组
+        kvgr1       LIKE knvv-kvgr1, "业务员代码
+        bezei_kvgr1 LIKE tvv1t-bezei, "业务员
+        kvgr2       LIKE knvv-kvgr2, "商务代码
+        bezei_kvgr2 LIKE tvv2t-bezei, "商务
+        zwycs       TYPE int4,       "违约次数
+        dtrev       LIKE knkk-dtrev, "上次信用评估日
+        nxtrv       LIKE knkk-nxtrv, "下次信用评估日
+        zfxsm       TYPE char255,    "客户放行说明
+        belnr       LIKE bsid-belnr, "会计凭证号
+        bldat       LIKE bsid-bldat, "凭证日期
+        zdqri       TYPE sy-datum, "到期日
+        dmbtr       LIKE bsid-dmbtr, "金额
+        zcqts       TYPE int4,       "超期天数
+        aubel       LIKE vbrp-aubel, "销售订单
+        vgbel       LIKE vbrp-vgbel, "交货单
+        zxsfp       LIKE vbrp-vbeln, "销售发票
+        zwqlx(10),"未清类型（未清应收、未清收款、特别往来债务、未清交货、未清销售订单）
+        name1       LIKE kna1-name1,
+        name2       LIKE kna1-name2,
+        waerk       LIKE vbak-waerk, "币别
+        fkyqcs      TYPE int4, "付款逾期次数
+        zfbdt       LIKE bsid-zfbdt, "收付基准日期 add by wusk 20170118
+        ernam       TYPE vbap-ernam,  "制单人 add by leimt 20180322
+        lv_ernam   TYPE char100,
+      END OF gt_alv,
+      gt_alv_mx    LIKE gt_alv OCCURS 0 WITH HEADER LINE,
+      gt_alv_kunnr LIKE gt_alv OCCURS 0 WITH HEADER LINE.
+
+*  未清销售额
+DATA: BEGIN OF gt_s066 OCCURS 0,
+        kkber LIKE s066-kkber, "信贷范围
+        knkli LIKE s066-knkli, "客户
+        oeikw LIKE s066-oeikw, "未清销售额
+      END OF gt_s066,
+      gt_s066_col LIKE gt_s066 OCCURS 0 WITH HEADER LINE.
+
+*  未清交货和未清发票金额
+DATA: BEGIN OF gt_s067 OCCURS 0,
+        kkber LIKE s067-kkber, "信贷范围
+        knkli LIKE s067-knkli, "客户
+        olikw LIKE s067-olikw, "未清交货
+        ofakw LIKE s067-ofakw, "未清发票
+      END OF gt_s067,
+      gt_s067_col LIKE gt_s067 OCCURS 0 WITH HEADER LINE.
+
+
+*  未清应收帐款
+DATA: BEGIN OF gt_bsid OCCURS 0,
+        bukrs      LIKE bsid-bukrs, "公司代码
+        blart      LIKE bsid-blart, "凭证类型
+        kunnr      LIKE bsid-kunnr, "客户
+        gjahr      LIKE bsid-gjahr, "会计年度
+        belnr      LIKE bsid-belnr, "会计凭证号
+        buzei      LIKE bsid-buzei, "会计凭证行项目
+        kkber      LIKE bsid-kkber, "信贷控制范围
+        bldat      LIKE bsid-bldat, "凭证日期
+        hkont      LIKE bsid-hkont, "会计科目
+        zterm      LIKE bsid-zterm, "付款条件
+        shkzg      LIKE bsid-shkzg, "借贷标识
+        dmbtr      LIKE bsid-dmbtr, "会计凭证金额
+        zfbdt      LIKE bsid-zfbdt, "付款基准日期
+        zbd1t      LIKE bsid-zbd1t, "付款天数
+        zbd2t      LIKE bsid-zbd2t, "付款天数
+        zuonr      LIKE vbrp-vbeln, "分配（销售发票号）
+        vbeln      LIKE vbrp-vbeln, "销售发票号
+        aubel(100), "销售订单
+        vgbel(100), "交货单
+        zfkrq      LIKE bsid-zfbdt, "付款日期（ZFBDT+ZBD1T+ZBD2T）
+        zcqts      TYPE int4, "超期天数（当前日期-付款日期，如果小于0则未超期）
+        augdt      LIKE bsad-augdt, "结算日期
+      END OF gt_bsid,
+      gt_bsad LIKE gt_bsid OCCURS 0 WITH HEADER LINE.
+
+* 根据销售发票号找到销售发票
+DATA: BEGIN OF gt_vbrp OCCURS 0,
+        vbeln LIKE vbrp-vbeln, "开票凭证号
+        posnr LIKE vbrp-posnr, "开票凭证行项目
+        aubel LIKE vbrp-aubel, "销售订单
+        aupos LIKE vbrp-aupos, "销售订单行项目
+        vgbel LIKE vbrp-vgbel, "交货单
+        vgpos LIKE vbrp-vgpos, "交货行项目
+      END OF gt_vbrp.
+
+*  ADD BY PFT 20171227
+*  逻辑：取一次性客户名称
+DATA: BEGIN OF gt_vbpa OCCURS 0 ,
+        vbeln LIKE vbpa-vbeln,
+        parvw LIKE vbpa-parvw,
+        adrnr LIKE vbpa-adrnr,
+      END OF gt_vbpa.
+DATA:BEGIN OF gt_adrc OCCURS 0,
+       addrnumber LIKE adrc-addrnumber,
+       name1      LIKE adrc-name1,
+       sort1      LIKE adrc-sort1,
+     END OF gt_adrc.
+*  END BY PFT 20171227
+
+*  汇总后的超期金额
+DATA: BEGIN OF gt_cqje OCCURS 0,
+        kunnr LIKE bsid-kunnr, "客户
+        kkber LIKE bsid-kkber, "信贷控制范围
+        dmbtr LIKE bsid-dmbtr, "会计凭证金额
+      END OF gt_cqje.
+
+
+*  未清交货
+DATA: BEGIN OF gt_likp OCCURS 0,
+        vbeln     LIKE lips-vbeln, "交货单号
+        posnr     LIKE lips-posnr, "交货单行项目
+        kunag     LIKE likp-kunag, "客户
+        kkber     LIKE likp-kkber, "信贷控制范围
+        erdat     LIKE likp-erdat, "创建日期
+        bldat     LIKE likp-bldat, "凭证日期
+        wadat_ist LIKE likp-wadat_ist, "实际发货日期
+        lfart     LIKE likp-lfart, "交货单类型
+        lfimg     LIKE lips-lfimg, "数量
+        vgbel     LIKE lips-vgbel, "SO
+        vgpos     LIKE lips-vgpos, "SO 行项目
+        dmbtr     TYPE dmbtr, "交货金额（交货数量*（销售金额/销售数量））
+      END OF gt_likp.
+DATA: BEGIN OF gt_likp_col OCCURS 0,
+        vbeln     LIKE lips-vbeln, "交货单号
+        kunag     LIKE likp-kunag, "客户
+        kkber     LIKE likp-kkber, "信贷控制范围
+        wadat_ist LIKE likp-wadat_ist, "凭证日期
+        vgbel     LIKE lips-vgbel, "SO
+        dmbtr     TYPE dmbtr, "交货金额（交货数量*（销售金额/销售数量））
+        waerk     LIKE vbak-waerk, "币别
+      END OF gt_likp_col.
+
+
+*  取交货金额
+DATA: BEGIN OF gt_vbap OCCURS 0,
+        vbeln  LIKE vbap-vbeln, "SO
+        posnr  LIKE vbap-posnr, "SO 行项目
+        kzwi1  LIKE vbap-kzwi1, "金额
+        zmeng  LIKE vbap-zmeng, "SO数量
+        kwmeng LIKE vbap-kwmeng, "SO数量
+        auart  LIKE vbak-auart, "SO类型
+        audat  LIKE vbak-audat, "凭证日期
+        kunnr  LIKE vbak-kunnr, "客户
+        kkber  LIKE vbak-kkber, "信贷控制范围
+        waerk  LIKE vbak-waerk, "币别
+      END OF gt_vbap.
+DATA: BEGIN OF gt_vbap_col OCCURS 0,
+        vbeln LIKE vbap-vbeln, "SO
+        kzwi1 LIKE vbap-kzwi1, "金额
+        kunnr LIKE vbak-kunnr, "客户
+        kkber LIKE vbak-kkber, "信贷控制范围
+        audat LIKE vbak-audat, "凭证日期
+        waerk LIKE vbak-waerk, "币别
+      END OF gt_vbap_col.
+
+* 根据信贷帐户号取相关客户
+DATA: gt_knkk LIKE knkk OCCURS 0 WITH HEADER LINE.
+*  可放行交货单所属的客户
+DATA: lv_kunag LIKE likp-kunag.

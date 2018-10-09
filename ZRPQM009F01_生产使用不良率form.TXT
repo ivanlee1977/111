@@ -1,0 +1,1195 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPQM009F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:lt_mseg LIKE gw_mseg OCCURS 0 WITH HEADER LINE.
+  DATA:lt_mseg_temp LIKE lt_mseg OCCURS 0 WITH HEADER LINE.
+  DATA:lw_mseg LIKE lt_mseg,
+       ls_mseg LIKE lt_mseg.
+
+  DATA:lt_bom_data LIKE gw_bom_data OCCURS 0 WITH HEADER LINE.
+  DATA:lt_mara LIKE gw_mara OCCURS 0 WITH HEADER LINE.
+  DATA:lt_makt LIKE makt OCCURS 0 WITH HEADER LINE.
+
+  DATA:lt_stb LIKE stpox OCCURS 0 WITH HEADER LINE.
+  DATA:lv_date_from LIKE sy-datum,
+       lv_date_to   LIKE sy-datum.
+
+  DATA:lt_stpu LIKE gw_stpu OCCURS 0 WITH HEADER LINE.
+  DATA:lt_stpu_total LIKE lt_stpu OCCURS 0 WITH HEADER LINE.
+
+  DATA:lt_qmfe LIKE gw_qmfe OCCURS 0 WITH HEADER LINE.
+  DATA:lt_qmur LIKE gw_qmur OCCURS 0 WITH HEADER LINE.
+
+  RANGES:r_mtart FOR mara-mtart.
+  DATA:lt_mara_s    LIKE TABLE OF mara WITH HEADER LINE,
+       lt_mara_temp LIKE TABLE OF mara WITH HEADER LINE.
+  IF s_budat-high IS INITIAL.
+    s_budat-high = s_budat-low.
+  ENDIF.
+  lv_date_from = s_budat-low.
+  CALL FUNCTION 'BKK_ADD_MONTH_TO_DATE'
+    EXPORTING
+      months  = '-1'
+      olddate = lv_date_from
+    IMPORTING
+      newdate = lv_date_from.
+  MOVE '01' TO lv_date_from+6(2).
+  CALL FUNCTION 'FKK_LAST_DAY_OF_MONTH'
+    EXPORTING
+      day_in            = lv_date_from
+    IMPORTING
+      last_day_of_month = lv_date_to
+    EXCEPTIONS
+      day_in_no_date    = 1
+      OTHERS            = 2.
+
+  IF r1 = 'X'.
+    r_mtart = 'IEQ'.
+    r_mtart-low = 'Z001'.
+    APPEND r_mtart.
+  ELSEIF r2 = 'X'.
+    r_mtart = 'IEQ'.
+    r_mtart-low = 'Z002'.
+    APPEND r_mtart.
+  ENDIF.
+***20180115增加考虑从子件开始查找
+  IF s_matnr2 IS NOT INITIAL.
+    SELECT mast~matnr INTO CORRESPONDING FIELDS OF TABLE lt_mara_s
+      FROM mast
+      INNER JOIN stko ON stko~stlnr = mast~stlnr
+      INNER JOIN stpo ON stpo~stlty = stko~stlty
+                          AND stpo~stlnr = stko~stlnr
+      WHERE stpo~lkenz = ''
+            AND stpo~idnrk IN s_matnr2
+            AND stpo~stlty = 'M'
+            AND mast~werks IN s_werks.
+*
+*以下需要多次取值，为了将组件的上层料号、上上层料号、上上上层料号取出（目前最多考虑4层
+    IF sy-subrc = 0.
+      DO 4 TIMES.
+        REFRESH lt_mara_temp.
+        APPEND LINES OF lt_mara_s TO lt_mara_temp.
+        SORT lt_mara_temp BY matnr.
+        DELETE ADJACENT DUPLICATES FROM lt_mara_temp COMPARING matnr.
+
+        SELECT mast~matnr APPENDING CORRESPONDING FIELDS OF TABLE lt_mara_s
+          FROM mast
+          INNER JOIN stko ON stko~stlnr = mast~stlnr
+          INNER JOIN stpo ON stpo~stlty = stko~stlty
+                              AND stpo~stlnr = stko~stlnr
+          FOR ALL ENTRIES IN lt_mara_temp
+          WHERE stpo~lkenz = ''
+                AND stpo~idnrk = lt_mara_temp-matnr
+                AND stpo~stlty = 'M'
+                AND mast~werks IN s_werks.
+      ENDDO.
+    ENDIF.
+    IF lt_mara_s[] IS NOT INITIAL.
+      SORT lt_mara_s BY matnr.
+      DELETE ADJACENT DUPLICATES FROM lt_mara_s COMPARING matnr.
+      LOOP AT lt_mara_s.
+        s_matnr-sign = 'I'.
+        s_matnr-option = 'EQ' .
+        s_matnr-low = lt_mara_s-matnr.
+        APPEND s_matnr.
+      ENDLOOP.
+    ENDIF.
+  ENDIF.
+
+***end 20180115
+
+***抓取满足条件的物料凭证信息
+  SELECT  a~mblnr
+          a~mjahr
+          a~zeile
+          a~matnr
+          a~werks
+          a~lgort
+          a~bwart
+          a~erfmg AS menge
+          a~sjahr
+          a~smbln
+          a~smblp
+          a~aufnr
+          a~budat_mkpf
+          b~mtart
+     INTO CORRESPONDING FIELDS OF TABLE lt_mseg
+    FROM mseg AS a
+    INNER JOIN mara AS b
+    ON a~matnr = b~matnr
+    WHERE a~matnr IN s_matnr
+      AND b~matkl IN s_matkl
+      AND a~aufnr IN s_aufnr
+      AND ( a~budat_mkpf BETWEEN s_budat-low AND s_budat-high OR a~budat_mkpf BETWEEN lv_date_from AND lv_date_to )
+      AND a~werks IN s_werks
+      AND a~bwart IN ('261','262')
+      AND b~mtart IN r_mtart.
+
+  LOOP AT lt_mseg WHERE smbln IS NOT INITIAL.
+    DELETE lt_mseg WHERE mjahr = lt_mseg-sjahr AND mblnr = lt_mseg-smbln AND zeile = lt_mseg-smblp.
+  ENDLOOP.
+  DELETE lt_mseg WHERE smbln IS NOT INITIAL.
+
+  IF r2 = 'X'.
+    APPEND LINES OF lt_mseg TO lt_mseg_temp.
+    SORT lt_mseg_temp BY matnr werks.
+    DELETE ADJACENT DUPLICATES FROM lt_mseg_temp COMPARING matnr werks.
+    IF lt_mseg_temp[] IS NOT INITIAL. "展BOM到最底层
+      LOOP AT lt_mseg_temp.
+        PERFORM frm_exp_bom TABLES lt_stb USING lt_mseg_temp-matnr lt_mseg_temp-werks.
+        LOOP AT lt_stb WHERE mtart EQ 'Z001'.
+          MOVE-CORRESPONDING lt_stb TO lt_bom_data.
+          lt_bom_data-matnr_f = lt_mseg_temp-matnr.
+          lt_bom_data-werks_f = lt_mseg_temp-werks.
+          APPEND lt_bom_data.
+          CLEAR lt_bom_data.
+        ENDLOOP.
+        REFRESH:lt_stpu.
+        SELECT *
+          INTO CORRESPONDING FIELDS OF TABLE lt_stpu
+          FROM stpo AS a
+          INNER JOIN stpu AS b
+          ON a~stlty = b~stlty
+          AND a~stlnr = b~stlnr
+          AND a~stlkn = b~stlkn
+          AND a~stpoz = b~stpoz
+          FOR ALL ENTRIES IN lt_stb
+          WHERE a~stlty = lt_stb-stlty
+            AND a~stlnr = lt_stb-stlnr
+            AND a~stlkn = lt_stb-stlkn
+            AND a~stpoz = lt_stb-stpoz.
+        LOOP AT lt_stpu.
+          MOVE-CORRESPONDING lt_stpu TO lt_stpu_total.
+          lt_stpu_total-matnr = lt_mseg_temp-matnr.
+          lt_stpu_total-werks = lt_mseg_temp-werks.
+          APPEND lt_stpu_total.
+          CLEAR lt_stpu_total.
+        ENDLOOP.
+      ENDLOOP.
+    ENDIF.
+    LOOP AT lt_mseg INTO lw_mseg WHERE mtart = 'Z002'.
+      DELETE lt_mseg INDEX sy-tabix.
+      LOOP AT lt_bom_data WHERE matnr_f = lw_mseg-matnr AND werks_f = lw_mseg-werks.
+        MOVE-CORRESPONDING lw_mseg TO ls_mseg.
+        ls_mseg-matnr = lt_bom_data-idnrk.
+        ls_mseg-menge = lt_bom_data-menge * lw_mseg-menge.
+        ls_mseg-mtart = lt_bom_data-mtart.
+        APPEND ls_mseg TO lt_mseg.
+        CLEAR ls_mseg.
+      ENDLOOP.
+    ENDLOOP.
+  ENDIF.
+
+  IF lt_mseg[] IS NOT INITIAL.
+    IF r2 = 'X' OR r6 = 'X' OR r7 = 'X' OR r8 = 'X'.
+      SELECT a~qmnum
+             a~fenum
+             a~bautl
+             b~fertaufnr AS fcoaufnr
+             a~anzfehler
+        INTO CORRESPONDING FIELDS OF TABLE lt_qmfe
+        FROM qmfe AS a
+        INNER JOIN qmel AS b
+        ON a~qmnum = b~qmnum
+        FOR ALL ENTRIES IN lt_mseg
+        WHERE a~bautl = lt_mseg-matnr
+          AND b~fertaufnr  = lt_mseg-aufnr
+          AND a~kzloesch EQ space.
+      SELECT a~qmnum
+             a~fenum
+             a~bautl
+             c~fertaufnr AS fcoaufnr
+             a~prueflinr
+             b~urnum
+             b~urtxt
+        INTO CORRESPONDING FIELDS OF TABLE lt_qmur
+        FROM qmfe AS a
+        INNER JOIN qmur AS b
+        ON a~qmnum = b~qmnum
+        AND a~fenum = b~fenum
+        INNER JOIN qmel AS c
+        ON a~qmnum = c~qmnum
+        FOR ALL ENTRIES IN lt_mseg
+        WHERE c~fertaufnr  = lt_mseg-aufnr
+          AND a~kzloesch EQ space.
+    ENDIF.
+***抓取物料组
+    SELECT a~matnr
+           a~matkl
+           b~wgbez
+      INTO CORRESPONDING FIELDS OF TABLE lt_mara
+      FROM mara AS a
+      LEFT JOIN t023t AS b
+      ON a~matkl = b~matkl
+      AND b~spras = sy-langu
+      FOR ALL ENTRIES IN lt_mseg
+      WHERE a~matnr = lt_mseg-matnr.
+***物料描述
+    SELECT matnr maktx
+      INTO CORRESPONDING FIELDS OF TABLE lt_makt
+      FROM makt
+      FOR ALL ENTRIES IN lt_mseg
+      WHERE matnr = lt_mseg-matnr
+        AND spras = sy-langu.
+  ENDIF.
+
+  SORT lt_mara BY matnr.
+  SORT lt_makt BY matnr.
+
+  REFRESH lt_mseg_temp.
+  APPEND lt_mseg TO lt_mseg_temp.
+  DELETE lt_mseg_temp WHERE budat_mkpf > lv_date_to. "上月数据
+  DELETE lt_mseg WHERE budat_mkpf <= lv_date_to.
+
+***--------------------------------------------------------------------***
+***物料上线使用明细表
+***--------------------------------------------------------------------***
+  IF r3 = 'X' OR r4 = 'X' OR r5 = 'X'.
+    PERFORM frm_get_sxsy_detail TABLES lt_mseg
+                                       lt_mara
+                                       lt_makt
+                                       lt_qmfe
+                                       lt_qmur
+                                       lt_stpu_total.
+  ENDIF.
+***--------------------------------------------------------------------***
+***物料上线不良率汇总表-物料组
+***--------------------------------------------------------------------***
+  IF r4 = 'X'.
+    PERFORM frm_get_sxbl_wlfl_data TABLES lt_mseg_temp
+                                          lt_mara
+                                          lt_qmfe
+                                          lt_qmur
+                                          lt_stpu_total.
+  ENDIF.
+***--------------------------------------------------------------------***
+***物料上线不良率汇总表-供应商
+***--------------------------------------------------------------------***
+  IF r5 = 'X'.
+    PERFORM frm_get_sxbl_vendor_data TABLES lt_mseg_temp
+                                            lt_qmfe
+                                            lt_qmur
+                                            lt_stpu_total..
+  ENDIF.
+***--------------------------------------------------------------------***
+***物料上线使用批合格明细表
+***--------------------------------------------------------------------***
+  IF r6 = 'X' OR r7 = 'X' OR r8 = 'X'.
+    PERFORM frm_get_phg_detail TABLES lt_mseg
+                                      lt_mara
+                                      lt_makt
+                                      lt_qmfe.
+  ENDIF.
+***--------------------------------------------------------------------***
+***物料上线批不良率汇总表-物料组
+***--------------------------------------------------------------------***
+  IF r7 = 'X'.
+    PERFORM frm_get_phg_wlfl   TABLES lt_mara.
+  ENDIF.
+***--------------------------------------------------------------------***
+***物料上线批不良率汇总表-供应商
+***--------------------------------------------------------------------***
+  IF r8 = 'X'.
+    PERFORM frm_get_phg_vendor.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_EXP_BOM
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LT_STB  text
+*      -->P_LT_MSEG_TEMP_MATNR  text
+*      -->P_LT_MSEG_TEMP_WERKS  text
+*----------------------------------------------------------------------*
+FORM frm_exp_bom  TABLES  lt_stb STRUCTURE stpox
+                  USING   u_matnr LIKE mara-matnr
+                          u_werks LIKE marc-werks.
+  REFRESH lt_stb.
+
+  CALL FUNCTION 'CS_BOM_EXPL_MAT_V2'
+    EXPORTING
+*     FTREL                 = ' '
+*     ALEKZ                 = ' '
+*     ALTVO                 = ' '
+*     AUFSW                 = ' '
+*     AUMGB                 = ' '
+*     AUMNG                 = 0
+*     AUSKZ                 = ' '
+*     AMIND                 = ' '
+*     BAGRP                 = ' '
+*     BEIKZ                 = ' '
+*     BESSL                 = ' '
+*     BGIXO                 = ' '
+*     BREMS                 = ' '
+      capid                 = 'PP01'
+*     CHLST                 = ' '
+*     COSPR                 = ' '
+*     CUOBJ                 = 000000000000000
+*     CUOVS                 = 0
+*     CUOLS                 = ' '
+      datuv                 = sy-datum
+*     DELNL                 = ' '
+*     DRLDT                 = ' '
+*     EHNDL                 = ' '
+*     EMENG                 = 0
+*     ERSKZ                 = ' '
+*     ERSSL                 = ' '
+*     FBSTP                 = ' '
+*     KNFBA                 = ' '
+*     KSBVO                 = ' '
+*     MBWLS                 = ' '
+*     MKTLS                 = 'X'
+*     MDMPS                 = ' '
+      mehrs                 = 'X'
+*     MKMAT                 = ' '
+*     MMAPS                 = ' '
+*     SALWW                 = ' '
+*     SPLWW                 = ' '
+*     MMORY                 = ' '
+      mtnrv                 = u_matnr
+*     NLINK                 = ' '
+*     POSTP                 = ' '
+*     RNDKZ                 = ' '
+*     RVREL                 = ' '
+*     SANFR                 = ' '
+*     SANIN                 = ' '
+*     SANKA                 = ' '
+*     SANKO                 = ' '
+*     SANVS                 = ' '
+*     SCHGT                 = ' '
+*     STKKZ                 = ' '
+*     STLAL                 = ' '
+*     STLAN                 = ' '
+*     STPST                 = 0
+*     SVWVO                 = 'X'
+      werks                 = u_werks
+*     NORVL                 = ' '
+*     MDNOT                 = ' '
+*     PANOT                 = ' '
+*     QVERW                 = ' '
+*     VERID                 = ' '
+*     VRSVO                 = 'X'
+*     SGT_SCAT              =
+*     SGT_REL               =
+*     CALLER_APP            =
+* IMPORTING
+*     TOPMAT                =
+*     DSTST                 =
+    TABLES
+      stb                   = lt_stb
+*     MATCAT                =
+    EXCEPTIONS
+      alt_not_found         = 1
+      call_invalid          = 2
+      material_not_found    = 3
+      missing_authorization = 4
+      no_bom_found          = 5
+      no_plant_data         = 6
+      no_suitable_bom_found = 7
+      conversion_error      = 8
+      OTHERS                = 9.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_SXSY_DETAIL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LT_MSEG  text
+*      -->P_LT_MARA  text
+*      -->P_LT_MAKT  text
+*      -->P_LT_QMFE  text
+*      -->P_LT_QMUR  text
+*----------------------------------------------------------------------*
+FORM frm_get_sxsy_detail  TABLES   lt_mseg STRUCTURE gw_mseg
+                                   lt_mara STRUCTURE gw_mara
+                                   lt_makt STRUCTURE makt
+                                   lt_qmfe STRUCTURE gw_qmfe
+                                   lt_qmur STRUCTURE gw_qmur
+                                   lt_stpu_total STRUCTURE gw_stpu.
+
+  DATA:ls_ekko  LIKE ekko,
+       lv_str   TYPE string,
+       lv_matnr LIKE mara-matnr.
+
+  LOOP AT lt_mseg.
+    gt_sxsy_detail-werks = lt_mseg-werks.
+***物料组&描述
+    READ TABLE lt_mara WITH KEY matnr = lt_mseg-matnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_sxsy_detail-matkl = lt_mara-matkl.
+      gt_sxsy_detail-wgbez = lt_mara-wgbez.
+    ENDIF.
+***物料编码 & 描述
+    gt_sxsy_detail-matnr = lt_mseg-matnr.
+    READ TABLE lt_makt WITH KEY matnr = lt_mseg-matnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_sxsy_detail-maktx = lt_makt-maktx.
+    ENDIF.
+    gt_sxsy_detail-aufnr = lt_mseg-aufnr.
+    IF lt_mseg-bwart = '261'.
+      gt_sxsy_detail-ztrs  = lt_mseg-menge.
+    ELSEIF lt_mseg-bwart = '262'.
+*     gt_sxsy_detail-ztrs  = -1 * lt_mseg-menge.
+***不良数
+      IF r1 = 'X'.
+        IF lt_mseg-lgort = '1050' OR lt_mseg-lgort = '1090'.
+          gt_sxsy_detail-zbls = lt_mseg-menge.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+    COLLECT gt_sxsy_detail.
+    CLEAR gt_sxsy_detail.
+  ENDLOOP.
+  LOOP AT gt_sxsy_detail.
+***计算不良数
+    IF r2 = 'X'.
+      LOOP AT lt_qmfe WHERE  bautl = gt_sxsy_detail-matnr AND fcoaufnr = gt_sxsy_detail-aufnr.
+        gt_sxsy_detail-zbls = gt_sxsy_detail-zbls + lt_qmfe-anzfehler.
+      ENDLOOP.
+      LOOP AT lt_qmur WHERE fcoaufnr = gt_sxsy_detail-aufnr AND prueflinr IS NOT INITIAL.
+        CLEAR:ls_ekko,lv_str,lv_matnr.
+*        CONCATENATE '%' lt_qmur-prueflinr+4(5) INTO lv_str.
+*        SELECT SINGLE * INTO CORRESPONDING FIELDS OF ls_ekko FROM ekko WHERE ebeln LIKE lv_str AND bsart = 'Z004'.
+        CONCATENATE '4' lt_qmur-prueflinr+3(1) '000' lt_qmur-prueflinr+4(5) INTO lv_str.  "20180111 change by chenhg becausse low performance of 'like'
+*        SELECT SINGLE ebeln INTO ls_ekko FROM ekko WHERE ebeln = lv_str .
+
+        SELECT SINGLE matnr INTO lv_matnr FROM ekpo WHERE ebeln =  lv_str.
+        IF sy-subrc = 0.
+          LOOP AT lt_stpu_total WHERE ebort = lt_qmur-urtxt AND idnrk = gt_sxsy_detail-matnr AND ( idnrk = lv_matnr OR matnr = lv_matnr ).
+            gt_sxsy_detail-zbls = gt_sxsy_detail-zbls + 1.
+          ENDLOOP.
+        ENDIF.
+      ENDLOOP.
+    ENDIF.
+***不良率
+    gt_sxsy_detail-zblv = gt_sxsy_detail-zbls / gt_sxsy_detail-ztrs * 100.
+    MODIFY gt_sxsy_detail.
+  ENDLOOP.
+  IF s_matnr2 IS NOT INITIAL.
+    DELETE gt_sxsy_detail WHERE matnr NOT IN s_matnr2.
+  ENDIF.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_SXBL_WLFL_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LT_MSEG_TEMP  text
+*----------------------------------------------------------------------*
+FORM frm_get_sxbl_wlfl_data  TABLES lt_mseg_temp STRUCTURE gw_mseg
+                                     lt_mara     STRUCTURE gw_mara
+                                     lt_qmfe     STRUCTURE gw_qmfe
+                                     lt_qmur     STRUCTURE gw_qmur
+                                     lt_stpu_total STRUCTURE gw_stpu.
+  DATA:BEGIN OF lt_sy_data OCCURS 0,
+         werks LIKE mseg-werks,
+         matnr LIKE mseg-matnr,   "物料号码
+         aufnr LIKE mseg-aufnr,   "生产订单号
+         ztrs  TYPE p DECIMALS 3, "投入数
+         zbls  TYPE p DECIMALS 3, "不良数
+       END OF lt_sy_data.
+  DATA:lt_sy_data_temp LIKE lt_sy_data OCCURS 0 WITH HEADER LINE.
+
+  DATA:BEGIN OF lt_sy_total OCCURS 0,
+         werks LIKE mseg-werks,
+         zwlfl TYPE c,             "物料类别
+         matkl TYPE mara-matkl,
+         ztrs  TYPE p DECIMALS 3,  "投入数
+         zbls  TYPE p DECIMALS 3,  "不良数
+       END OF lt_sy_total.
+
+  LOOP AT gt_sxsy_detail.
+****物料类别
+*    IF gt_sxsy_detail-matkl BETWEEN '1010' AND '1090'.
+*      gt_sxbl_wlfl-zwlfl = 'A'.
+*      gt_sxbl_wlfl-zwlfl_txt = c_dzl.
+*    ELSEIF gt_sxsy_detail-matkl BETWEEN '1110' AND '1114' OR gt_sxsy_detail-matkl = '1120' OR gt_sxsy_detail-matkl BETWEEN '1130' AND '1135'.
+*      gt_sxbl_wlfl-zwlfl = 'B'.
+*      gt_sxbl_wlfl-zwlfl_txt = c_wjjgj.
+*    ELSEIF gt_sxsy_detail-matkl = '1140'.
+*      gt_sxbl_wlfl-zwlfl = 'C'.
+*      gt_sxbl_wlfl-zwlfl_txt = c_bc.
+*    ELSEIF gt_sxsy_detail-matkl = '1150'.
+*      gt_sxbl_wlfl-zwlfl = 'D'.
+*      gt_sxbl_wlfl-zwlfl_txt = c_fl.
+*    ENDIF.
+    gt_sxbl_wlfl-matkl = gt_sxsy_detail-matkl. "物料组
+    gt_sxbl_wlfl-wgbez = gt_sxsy_detail-wgbez. "物料组描述
+***投入数
+    gt_sxbl_wlfl-ztrs = gt_sxsy_detail-ztrs.
+***不良数
+    gt_sxbl_wlfl-zbls = gt_sxsy_detail-zbls.
+    gt_sxbl_wlfl-werks = gt_sxsy_detail-werks.
+    COLLECT gt_sxbl_wlfl.
+    CLEAR gt_sxbl_wlfl.
+  ENDLOOP.
+***计算上月不良率
+  LOOP AT lt_mseg_temp.
+    IF lt_mseg_temp-bwart = '261'.
+      lt_sy_data-ztrs  = lt_mseg_temp-menge.
+    ELSEIF lt_mseg_temp-bwart = '262'.
+*      lt_sy_data-ztrs  = -1 * lt_mseg_temp-menge.
+***不良数
+      IF r1 = 'X'.
+        IF lt_mseg_temp-lgort = '1050' OR lt_mseg_temp-lgort = '1090'.
+          lt_sy_data-zbls = lt_mseg_temp-menge.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+    lt_sy_data-werks = lt_mseg_temp-werks.
+    lt_sy_data-matnr = lt_mseg_temp-matnr.
+    lt_sy_data-aufnr = lt_mseg_temp-aufnr.
+    COLLECT lt_sy_data.
+    CLEAR lt_sy_data.
+  ENDLOOP.
+***计算PCBA的上月不良
+  IF r2 = 'X'.
+    APPEND LINES OF lt_sy_data TO lt_sy_data_temp.
+    SORT lt_sy_data_temp BY werks matnr aufnr.
+    DELETE ADJACENT DUPLICATES FROM lt_sy_data_temp COMPARING werks matnr aufnr.
+    LOOP AT lt_sy_data_temp.
+      CLEAR:lt_sy_data.
+      LOOP AT lt_qmfe WHERE bautl = lt_sy_data_temp-matnr AND fcoaufnr = lt_sy_data_temp-aufnr.
+        lt_sy_data-zbls = lt_sy_data-zbls + lt_qmfe-anzfehler.
+      ENDLOOP.
+      LOOP AT lt_qmur WHERE  fcoaufnr = lt_sy_data_temp-aufnr.
+        READ TABLE lt_stpu_total WITH KEY ebort = lt_qmur-urtxt.
+        IF sy-subrc = 0 AND lt_stpu_total-idnrk = lt_sy_data_temp-matnr.
+          lt_sy_data-zbls = lt_sy_data-zbls + 1.
+        ENDIF.
+      ENDLOOP.
+      lt_sy_data-matnr = lt_sy_data_temp-matnr.
+      lt_sy_data-werks = lt_sy_data_temp-werks.
+      lt_sy_data-aufnr = lt_sy_data_temp-aufnr.
+      COLLECT lt_sy_data.
+    ENDLOOP.
+  ENDIF.
+***按物料分类汇总不良率
+  LOOP AT lt_sy_data.
+    CLEAR lt_mara.
+    READ TABLE lt_mara WITH KEY matnr = lt_sy_data-matnr BINARY SEARCH.
+*    IF lt_mara-matkl BETWEEN '1010' AND '1090'.
+*      lt_sy_total-zwlfl = 'A'.
+*    ELSEIF lt_mara-matkl BETWEEN '1110' AND '1114' OR lt_mara-matkl = '1120' OR lt_mara-matkl BETWEEN '1130' AND '1135'.
+*      lt_sy_total-zwlfl = 'B'.
+*    ELSEIF lt_mara-matkl = '1140'.
+*      lt_sy_total-zwlfl = 'C'.
+*    ELSEIF lt_mara-matkl = '1150'.
+*      lt_sy_total-zwlfl = 'D'.
+*    ENDIF.
+    lt_sy_total-matkl = lt_mara-matkl.
+    lt_sy_total-werks = lt_sy_data-werks.
+    lt_sy_total-ztrs  = lt_sy_data-ztrs.
+    lt_sy_total-zbls  = lt_sy_data-zbls.
+    COLLECT lt_sy_total.
+    CLEAR lt_sy_total.
+  ENDLOOP.
+***整理数据到输出表
+  LOOP AT gt_sxbl_wlfl.
+***不良率
+    IF gt_sxbl_wlfl-ztrs IS NOT INITIAL.
+      gt_sxbl_wlfl-zblv = gt_sxbl_wlfl-zbls / gt_sxbl_wlfl-ztrs * 100.
+    ENDIF.
+***目标值
+    SELECT SINGLE zmbz INTO gt_sxbl_wlfl-zmbz FROM ztqm009b WHERE werks = gt_sxbl_wlfl-werks AND matkl = gt_sxbl_wlfl-matkl.
+***与目标对比
+    IF gt_sxbl_wlfl-zblv > gt_sxbl_wlfl-zmbz.
+      gt_sxbl_wlfl-zmbdb = '上升'.
+    ELSEIF gt_sxbl_wlfl-zblv = gt_sxbl_wlfl-zmbz.
+      gt_sxbl_wlfl-zmbdb = '持平'.
+    ELSEIF gt_sxbl_wlfl-zblv < gt_sxbl_wlfl-zmbz.
+      gt_sxbl_wlfl-zmbdb = '下降'.
+    ENDIF.
+***上月不良率
+    READ TABLE lt_sy_total WITH KEY werks = gt_sxbl_wlfl-werks matkl = gt_sxbl_wlfl-matkl." zwlfl = gt_sxbl_wlfl-zwlfl.
+    IF sy-subrc = 0 AND lt_sy_total-ztrs IS NOT INITIAL.
+      gt_sxbl_wlfl-zblv_sy = lt_sy_total-zbls / lt_sy_total-ztrs  * 100.
+    ENDIF.
+***与上月份对比%
+    gt_sxbl_wlfl-zblv_db = gt_sxbl_wlfl-zblv - gt_sxbl_wlfl-zblv_sy.
+    MODIFY  gt_sxbl_wlfl.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_SXBL_VENDOR_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_sxbl_vendor_data   TABLES lt_mseg_temp STRUCTURE gw_mseg
+                                       lt_qmfe     STRUCTURE gw_qmfe
+                                       lt_qmur     STRUCTURE gw_qmur
+                                       lt_stpu_total STRUCTURE gw_stpu..
+  DATA:BEGIN OF lt_eord OCCURS 0,
+         matnr LIKE eord-matnr,
+         werks LIKE eord-werks,
+         zeord LIKE eord-zeord,
+         lifnr LIKE eord-lifnr,
+         ktokk LIKE lfa1-ktokk,
+         sortl LIKE lfa1-sortl,
+         txt30 LIKE t077y-txt30,
+       END OF lt_eord.
+
+  DATA:BEGIN OF lt_sy_data OCCURS 0,
+         werks LIKE mseg-werks,
+         matnr LIKE mseg-matnr,   "物料号码
+         aufnr LIKE mseg-aufnr,   "生产订单号
+         ztrs  TYPE p DECIMALS 3, "投入数
+         zbls  TYPE p DECIMALS 3, "不良数
+       END OF lt_sy_data.
+  DATA:lt_sy_data_temp LIKE lt_sy_data OCCURS 0 WITH HEADER LINE.
+
+  DATA:BEGIN OF lt_sy_total OCCURS 0,
+         werks LIKE mseg-werks,
+         matnr LIKE mseg-matnr,
+         ztrs  TYPE p DECIMALS 3,  "投入数
+         zbls  TYPE p DECIMALS 3,  "不良数
+       END OF lt_sy_total.
+
+  DATA:BEGIN OF lt_sxbl_vendor OCCURS 0,
+         werks   LIKE lfa1-werks,
+         txt30   LIKE t077y-txt30,  "供应商类别
+         lifnr   LIKE lfa1-lifnr,   "供应商
+         sortl   LIKE lfa1-sortl,   "供应商简称
+         matnr   LIKE mara-matnr,   "物料号码
+         ztrs    TYPE p DECIMALS 3, "投入数
+         zbls    TYPE p DECIMALS 3, "不良数
+         ztrs_sy TYPE p DECIMALS 3, "上月投入数
+         zbls_sy TYPE p DECIMALS 3, "上月不良数
+       END OF lt_sxbl_vendor.
+
+
+  CHECK gt_sxsy_detail[] IS NOT INITIAL.
+
+***抓取供应商信息
+  SELECT a~matnr a~werks a~zeord a~lifnr b~ktokk b~sortl c~txt30
+    INTO CORRESPONDING FIELDS OF TABLE lt_eord
+    FROM eord AS a
+    INNER JOIN lfa1 AS b
+    ON a~lifnr = b~lifnr
+    LEFT JOIN t077y AS c
+    ON b~ktokk = c~ktokk
+    AND c~spras = sy-langu
+    FOR ALL ENTRIES IN gt_sxsy_detail
+    WHERE a~matnr = gt_sxsy_detail-matnr
+      AND a~werks = gt_sxsy_detail-werks.
+
+  LOOP AT gt_sxsy_detail.
+***工厂
+    lt_sxbl_vendor-werks = gt_sxsy_detail-werks.
+***物料号码
+    lt_sxbl_vendor-matnr = gt_sxsy_detail-matnr.
+***投入数
+    lt_sxbl_vendor-ztrs = gt_sxsy_detail-ztrs.
+***不良数
+    lt_sxbl_vendor-zbls = gt_sxsy_detail-zbls.
+    COLLECT lt_sxbl_vendor.
+    CLEAR lt_sxbl_vendor.
+  ENDLOOP.
+
+***计算上月不良率
+  LOOP AT lt_mseg_temp.
+    IF lt_mseg_temp-bwart = '261'.
+      lt_sy_data-ztrs  = lt_mseg_temp-menge.
+    ELSEIF lt_mseg_temp-bwart = '262'.
+*      lt_sy_data-ztrs  = -1 * lt_mseg_temp-menge.
+***不良数
+      IF r1 = 'X'.
+        IF lt_mseg_temp-lgort = '1050' OR lt_mseg_temp-lgort = '1090'.
+          lt_sy_data-zbls = lt_mseg_temp-menge.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+    lt_sy_data-werks = lt_mseg_temp-werks.
+    lt_sy_data-matnr = lt_mseg_temp-matnr.
+    lt_sy_data-aufnr = lt_mseg_temp-aufnr.
+    COLLECT lt_sy_data.
+    CLEAR lt_sy_data.
+  ENDLOOP.
+***计算PCBA的上月不良
+  IF r2 = 'X'.
+    APPEND LINES OF lt_sy_data TO lt_sy_data_temp.
+    SORT lt_sy_data_temp BY werks matnr aufnr.
+    DELETE ADJACENT DUPLICATES FROM lt_sy_data_temp COMPARING werks matnr aufnr.
+    LOOP AT lt_sy_data_temp.
+      CLEAR:lt_sy_data.
+      LOOP AT lt_qmfe WHERE  bautl = lt_sy_data_temp-matnr AND fcoaufnr = lt_sy_data_temp-aufnr.
+        lt_sy_data-zbls = lt_sy_data-zbls + lt_qmfe-anzfehler.
+      ENDLOOP.
+      LOOP AT lt_qmur WHERE  fcoaufnr = lt_sy_data_temp-aufnr.
+        READ TABLE lt_stpu_total WITH KEY ebort = lt_qmur-urtxt.
+        IF sy-subrc = 0 AND lt_stpu_total-idnrk = lt_sy_data_temp-matnr.
+          lt_sy_data-zbls = lt_sy_data-zbls + 1.
+        ENDIF.
+      ENDLOOP.
+      lt_sy_data-matnr = lt_sy_data_temp-matnr.
+      lt_sy_data-werks = lt_sy_data_temp-werks.
+      lt_sy_data-aufnr = lt_sy_data_temp-aufnr.
+      COLLECT lt_sy_data.
+      CLEAR lt_sy_data.
+    ENDLOOP.
+  ENDIF.
+***按物料分类汇总不良率
+  LOOP AT lt_sy_data.
+    lt_sy_total-matnr = lt_sy_data-matnr.
+    lt_sy_total-werks = lt_sy_data-werks.
+    lt_sy_total-ztrs  = lt_sy_data-ztrs.
+    lt_sy_total-zbls  = lt_sy_data-zbls.
+    COLLECT lt_sy_total.
+    CLEAR lt_sy_total.
+  ENDLOOP.
+
+  LOOP AT lt_sxbl_vendor.
+    READ TABLE lt_sy_total WITH KEY werks = lt_sxbl_vendor-werks matnr = lt_sxbl_vendor-matnr.
+    IF sy-subrc = 0.
+      lt_sxbl_vendor-ztrs_sy = lt_sy_total-ztrs.
+      lt_sxbl_vendor-zbls_sy = lt_sy_total-zbls.
+      MODIFY lt_sxbl_vendor.
+    ENDIF.
+  ENDLOOP.
+
+***整理数据到输出表
+  LOOP AT lt_sxbl_vendor.
+    gt_sxbl_vendor-ztrs    = lt_sxbl_vendor-ztrs.
+    gt_sxbl_vendor-zbls    = lt_sxbl_vendor-zbls.
+    gt_sxbl_vendor-ztrs_sy = lt_sxbl_vendor-ztrs_sy.
+    gt_sxbl_vendor-zbls_sy = lt_sxbl_vendor-zbls_sy.
+    LOOP AT lt_eord WHERE werks = lt_sxbl_vendor-werks AND matnr = lt_sxbl_vendor-matnr.
+      gt_sxbl_vendor-werks = lt_eord-werks.   "供应商类别
+      gt_sxbl_vendor-txt30 = lt_eord-txt30.   "供应商类别
+      gt_sxbl_vendor-lifnr = lt_eord-lifnr.   "供应商
+      gt_sxbl_vendor-sortl = lt_eord-sortl.   "供应商简称
+      COLLECT gt_sxbl_vendor.
+    ENDLOOP.
+    CLEAR gt_sxbl_vendor.
+  ENDLOOP.
+
+  LOOP AT gt_sxbl_vendor.
+***不良率
+    IF gt_sxbl_vendor-ztrs NE 0.
+      gt_sxbl_vendor-zblv =  gt_sxbl_vendor-zbls / gt_sxbl_vendor-ztrs * 100.
+    ENDIF.
+***目标值
+    SELECT SINGLE zmbz INTO gt_sxbl_vendor-zmbz FROM ztqm009a WHERE werks = gt_sxbl_vendor-werks AND lifnr = gt_sxbl_vendor-lifnr.
+***与目标对比
+    IF gt_sxbl_vendor-zblv > gt_sxbl_vendor-zmbz.
+      gt_sxbl_vendor-zmbdb = '上升'.
+    ELSEIF gt_sxbl_vendor-zblv = gt_sxbl_vendor-zmbz.
+      gt_sxbl_vendor-zmbdb = '持平'.
+    ELSEIF gt_sxbl_vendor-zblv < gt_sxbl_vendor-zmbz.
+      gt_sxbl_vendor-zmbdb = '下降'.
+    ENDIF.
+***上月不良率
+    IF gt_sxbl_vendor-ztrs_sy NE 0.
+      gt_sxbl_vendor-zblv_sy =  gt_sxbl_vendor-zbls_sy / gt_sxbl_vendor-ztrs_sy * 100.
+    ENDIF.
+***与上月份对比%
+    gt_sxbl_vendor-zblv_db = gt_sxbl_vendor-zblv - gt_sxbl_vendor-zblv_sy.
+    MODIFY gt_sxbl_vendor.
+  ENDLOOP.
+  IF s_lifnr[] IS NOT INITIAL.
+    DELETE gt_sxbl_vendor WHERE lifnr NOT IN s_lifnr.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_PHG_DETAIL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_phg_detail TABLES lt_mseg STRUCTURE  gw_mseg
+                                lt_mara STRUCTURE gw_mara
+                                lt_makt STRUCTURE makt
+                                lt_qmfe STRUCTURE gw_qmfe.
+
+  DATA:lv_sttxt LIKE bsvx-sttxt.
+***同一个生产订单，同一个组件只算做一个生产批,只统计一次，不管有多少个物料凭证
+  SORT lt_mseg BY matnr werks aufnr.
+  DELETE ADJACENT DUPLICATES FROM lt_mseg COMPARING matnr werks aufnr.
+  LOOP AT lt_mseg.
+    gt_phg_detail-werks = lt_mseg-werks.
+***物料组&描述
+    READ TABLE lt_mara WITH KEY matnr = lt_mseg-matnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_phg_detail-matkl = lt_mara-matkl.
+      gt_phg_detail-wgbez = lt_mara-wgbez.
+    ENDIF.
+***物料编码 & 描述
+    gt_phg_detail-matnr = lt_mseg-matnr.
+    READ TABLE lt_makt WITH KEY matnr = lt_mseg-matnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_phg_detail-maktx = lt_makt-maktx.
+    ENDIF.
+***生产订单
+    gt_phg_detail-aufnr = lt_mseg-aufnr.
+***投入批
+    gt_phg_detail-ztrp = 1.
+***不良批
+    READ TABLE lt_qmfe WITH KEY bautl = lt_mseg-matnr fcoaufnr = lt_mseg-aufnr.
+    IF sy-subrc = 0.
+      "检查通知单状态
+      CLEAR:lv_sttxt.
+      PERFORM frm_get_qmnum_stat USING lt_qmfe-qmnum CHANGING lv_sttxt.
+      IF lv_sttxt CS 'NOPR' OR lv_sttxt CS 'NOCO'.
+        gt_phg_detail-zblp = 1.
+      ELSE.
+        gt_phg_detail-zblp = 0.
+      ENDIF.
+    ELSE.
+      gt_phg_detail-zblp = 0.
+    ENDIF.
+    COLLECT gt_phg_detail.
+    CLEAR gt_phg_detail.
+  ENDLOOP.
+***计算不良率
+  LOOP AT gt_phg_detail.
+    gt_phg_detail-zblv = gt_phg_detail-zblp / gt_phg_detail-ztrp * 100.
+    MODIFY gt_phg_detail.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_QMNUM_STAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LT_QMFE_QMNUM  text
+*      <--P_LV_STTXT  text
+*----------------------------------------------------------------------*
+FORM frm_get_qmnum_stat  USING  u_qmnum LIKE qmel-qmnum
+                         CHANGING c_sttxt TYPE bsvx-sttxt.
+  DATA:lv_objnr LIKE qmel-objnr.
+  SELECT SINGLE objnr INTO lv_objnr FROM qmel WHERE qmnum = u_qmnum.
+  CALL FUNCTION 'STATUS_TEXT_EDIT'
+    EXPORTING
+      client           = sy-mandt
+      objnr            = lv_objnr
+      only_active      = 'X'
+      spras            = sy-langu
+*     BYPASS_BUFFER    = ' '
+    IMPORTING
+*     ANW_STAT_EXISTING       =
+*     E_STSMA          =
+      line             = c_sttxt
+*     USER_LINE        =
+*     STONR            =
+    EXCEPTIONS
+      object_not_found = 1
+      OTHERS           = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_PHG_WLFL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LT_MSEG  text
+*      -->P_LT_MARA  text
+*      -->P_LT_MAKT  text
+*      -->P_LT_QMFE  text
+*----------------------------------------------------------------------*
+FORM frm_get_phg_wlfl  TABLES lt_mara STRUCTURE gw_mara.
+  LOOP AT gt_phg_detail.
+    CLEAR lt_mara.
+    READ TABLE lt_mara WITH KEY matnr = gt_phg_detail-matnr BINARY SEARCH.
+*    IF lt_mara-matkl BETWEEN '1010' AND '1090'.
+*      gt_phg_wlfl-zwlfl = 'A'.
+*      gt_phg_wlfl-zwlfl_txt = c_dzl.
+*    ELSEIF lt_mara-matkl BETWEEN '1110' AND '1114' OR lt_mara-matkl = '1120' OR lt_mara-matkl BETWEEN '1130' AND '1135'.
+*      gt_phg_wlfl-zwlfl = 'B'.
+*      gt_phg_wlfl-zwlfl_txt = c_wjjgj.
+*    ELSEIF lt_mara-matkl = '1140'.
+*      gt_phg_wlfl-zwlfl = 'C'.
+*      gt_phg_wlfl-zwlfl_txt = c_bc.
+*    ELSEIF lt_mara-matkl = '1150'.
+*      gt_phg_wlfl-zwlfl = 'D'.
+*      gt_phg_wlfl-zwlfl_txt = c_fl.
+*    ENDIF.
+    gt_phg_wlfl-matkl = gt_phg_detail-matkl.   "物料组
+    gt_phg_wlfl-wgbez = gt_phg_detail-wgbez.   "物料组描述
+    gt_phg_wlfl-werks = gt_phg_detail-werks.  "工厂
+    gt_phg_wlfl-ztrp  = gt_phg_detail-ztrp.   "投入批
+    gt_phg_wlfl-zblp  = gt_phg_detail-zblp.   "不良批
+    COLLECT gt_phg_wlfl.
+    CLEAR gt_phg_wlfl.
+  ENDLOOP.
+
+***计算不良率及目标值
+  LOOP AT gt_phg_wlfl.
+***不良率
+    IF gt_phg_wlfl-ztrp NE 0.
+      gt_phg_wlfl-zblv = gt_phg_wlfl-zblp / gt_phg_wlfl-ztrp * 100.
+    ENDIF.
+***目标值
+    SELECT SINGLE zmbz INTO gt_phg_wlfl-zmbz FROM ztqm009d WHERE werks = gt_phg_wlfl-werks AND matkl = gt_phg_wlfl-matkl.
+***与目标对比
+    IF gt_phg_wlfl-zblv > gt_phg_wlfl-zmbz.
+      gt_phg_wlfl-zmbdb = '上升'.
+    ELSEIF gt_phg_wlfl-zblv = gt_phg_wlfl-zmbz.
+      gt_phg_wlfl-zmbdb = '持平'.
+    ELSEIF gt_phg_wlfl-zblv < gt_phg_wlfl-zmbz.
+      gt_phg_wlfl-zmbdb = '下降'.
+    ENDIF.
+    MODIFY gt_phg_wlfl.
+  ENDLOOP.
+  "
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_PHG_VENDOR
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_phg_vendor .
+  DATA:BEGIN OF lt_phg_data OCCURS 0,
+         werks LIKE mseg-werks,
+         matnr LIKE mseg-matnr,   "物料编码
+         ztrp  TYPE i,            "投入批
+         zblp  TYPE i,            "不良批
+       END OF lt_phg_data.
+
+  DATA:BEGIN OF lt_eord OCCURS 0,
+         matnr LIKE eord-matnr,
+         werks LIKE eord-werks,
+         zeord LIKE eord-zeord,
+         lifnr LIKE eord-lifnr,
+         ktokk LIKE lfa1-ktokk,
+         sortl LIKE lfa1-sortl,
+         txt30 LIKE t077y-txt30,
+       END OF lt_eord.
+
+  LOOP AT gt_phg_detail.
+    MOVE-CORRESPONDING gt_phg_detail TO lt_phg_data.
+    COLLECT lt_phg_data .
+    CLEAR lt_phg_data .
+  ENDLOOP.
+
+  CHECK lt_phg_data[] IS NOT INITIAL.
+***抓取供应商信息
+  SELECT a~matnr a~werks a~zeord a~lifnr b~ktokk b~sortl c~txt30
+    INTO CORRESPONDING FIELDS OF TABLE lt_eord
+    FROM eord AS a
+    INNER JOIN lfa1 AS b
+    ON a~lifnr = b~lifnr
+    LEFT JOIN t077y AS c
+    ON b~ktokk = c~ktokk
+    AND c~spras = sy-langu
+    FOR ALL ENTRIES IN lt_phg_data
+    WHERE a~matnr = lt_phg_data-matnr
+      AND a~werks = lt_phg_data-werks.
+
+  LOOP AT lt_phg_data.
+    gt_phg_vendor-ztrp = lt_phg_data-ztrp. "投入批
+    gt_phg_vendor-zblp = lt_phg_data-zblp. "不良批
+
+    LOOP AT lt_eord WHERE werks = lt_phg_data-werks AND matnr = lt_phg_data-matnr.
+      gt_phg_vendor-werks = lt_eord-werks.
+      gt_phg_vendor-txt30 = lt_eord-txt30.
+      gt_phg_vendor-lifnr = lt_eord-lifnr.
+      gt_phg_vendor-sortl = lt_eord-sortl.
+      COLLECT gt_phg_vendor.
+    ENDLOOP.
+    CLEAR gt_phg_vendor.
+  ENDLOOP.
+
+  LOOP AT gt_phg_vendor.
+    "不良率
+    IF gt_phg_vendor-ztrp NE 0.
+      gt_phg_vendor-zblv = gt_phg_vendor-zblp / gt_phg_vendor-ztrp * 100.
+    ENDIF.
+    "目标值
+    SELECT SINGLE zmbz INTO gt_phg_vendor-zmbz FROM ztqm009c WHERE werks = gt_phg_vendor-werks AND lifnr = gt_phg_vendor-lifnr.
+    "与目标对比
+    IF gt_phg_vendor-zblv > gt_phg_vendor-zmbz.
+      gt_phg_vendor-zmbdb = '上升'.
+    ELSEIF gt_phg_vendor-zblv = gt_phg_vendor-zmbz.
+      gt_phg_vendor-zmbdb = '持平'.
+    ELSEIF gt_phg_vendor-zblv < gt_phg_vendor-zmbz.
+      gt_phg_vendor-zmbdb = '下降'.
+    ENDIF.
+    MODIFY gt_phg_vendor.
+  ENDLOOP.
+
+  IF s_lifnr[] IS NOT INITIAL.
+    DELETE gt_phg_vendor WHERE lifnr NOT IN s_lifnr.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  mcr_build_fieldcat:'WERKS'    '工厂'    'WERKS'    'MARC'     ''      ''.
+  IF r3 = 'X'.
+    mcr_build_fieldcat:'MATKL'     '物料组代码'          'MATKL'      'MARA'     ''     '',
+                       'WGBEZ'     '物料组描述'          'WGBEZ'      'T023T'    ''     '',
+                       'MATNR'     '物料编码'            'MATNR'      'MSEG'     ''     '',
+                       'MAKTX'     '物料描述'            'MAKTX'      'MAKT'     ''     '',
+                       'AUFNR'     '生产订单号'          'AUFNR'      'MSEG'     ''     '',
+                       'ZTRS'      '投入数'              ''           ''         'P'    '15',
+                       'ZBLS'      '不良数'              ''           ''         'P'    '15',
+                       'ZBLV'      '不良率%'             ''           ''         'P'    '15'.
+  ELSEIF r4 = 'X'.
+    mcr_build_fieldcat:'MATKL'     '物料组代码'          'MATKL'      'MARA'     ''     '',
+                       'WGBEZ'     '物料组描述'          'WGBEZ'      'T023T'    ''     '',
+*                     'ZWLFL_TXT' '物料类别'            ''           ''         'C'    '20',
+                       'ZTRS'      '投入数'              ''           ''         'P'    '15',
+                       'ZBLS'      '不良数'              ''           ''         'P'    '15',
+                       'ZBLV'      '不良率%'             ''           ''         'P'    '15',
+                       'ZMBZ'      '目标值'              ''           ''         'P'    '15',
+                       'ZMBDB'     '目标对比'            ''           ''         'C'    '10',
+                       'ZBLV_SY'   '上月不良率%'         ''           ''         'P'    '15',
+                       'ZBLV_DB'   '与上月份对比%'       ''           ''         'P'    '15'.
+  ELSEIF r5 = 'X'.
+    mcr_build_fieldcat:'TXT30'     '供应商类别'          'TXT30'     'T077Y'     ''      '',
+                       'LIFNR'     '供应商账号'          'LIFNR'     'LFA1'      ''      '',
+                       'SORTL'     '供应商名称'          'SORTL'      'LFA1'     ''      '',
+                       'ZTRS'      '投入数'              ''           ''         'P'    '15',
+                       'ZBLS'      '不良数'              ''           ''         'P'    '15',
+                       'ZBLV'      '不良率%'             ''           ''         'P'    '15',
+                       'ZMBZ'      '目标值'              ''           ''         'P'    '15',
+                       'ZMBDB'     '目标对比'            ''           ''         'C'    '10',
+                       'ZBLV_SY'   '上月不良率%'         ''           ''         'P'    '15',
+                       'ZBLV_DB'   '与上月份对比%'       ''           ''         'P'    '15'.
+  ELSEIF r6 = 'X'.
+    mcr_build_fieldcat:'MATKL'     '物料组代码'          'MATKL'      'MARA'     ''     '',
+                       'WGBEZ'     '物料组描述'          'WGBEZ'      'T023T'    ''     '',
+                       'MATNR'     '物料编码'            'MATNR'      'MSEG'     ''     '',
+                       'MAKTX'     '物料描述'            'MAKTX'      'MAKT'     ''     '',
+                       'AUFNR'     '生产订单号'          'AUFNR'      'MSEG'     ''     '',
+                       'ZTRP'      '投入批'              ''           ''         'P'    '15',
+                       'ZBLP'      '不良批'              ''           ''         'P'    '15',
+                       'ZBLV'      '不良率%'             ''           ''         'P'    '15'.
+  ELSEIF r7 = 'X'.
+    mcr_build_fieldcat:'MATKL'     '物料组代码'          'MATKL'      'MARA'     ''     '',
+                       'WGBEZ'     '物料组描述'          'WGBEZ'      'T023T'    ''     '',
+*                      'ZWLFL_TXT' '物料类别'            ''           ''         'C'    '20',
+                       'ZTRP'      '投入批'              ''           ''         'P'    '15',
+                       'ZBLP'      '不良批'              ''           ''         'P'    '15',
+                       'ZBLV'      '不良率%'             ''           ''         'P'    '15',
+                       'ZMBZ'      '目标值'              ''           ''         'P'    '15',
+                       'ZMBDB'     '目标对比'            ''           ''         'C'    '10'.
+  ELSEIF r8 = 'X'.
+    mcr_build_fieldcat:'TXT30'     '供应商类别'          'TXT30'     'T077Y'     ''      '',
+                       'LIFNR'     '供应商账号'          'LIFNR'     'LFA1'      ''      '',
+                       'SORTL'     '供应商名称'          'SORTL'      'LFA1'     ''      '',
+                       'ZTRP'      '投入批'              ''           ''         'P'    '15',
+                       'ZBLP'      '不良批'              ''           ''         'P'    '15',
+                       'ZBLV'      '不良率%'             ''           ''         'P'    '15',
+                       'ZMBZ'      '目标值'              ''           ''         'P'    '15',
+                       'ZMBDB'     '目标对比'            ''           ''         'C'    '10'.
+  ENDIF.
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  FIELD-SYMBOLS:<fs_tab> TYPE STANDARD TABLE.
+  CASE 'X'.
+    WHEN r3.
+      ASSIGN gt_sxsy_detail[] TO <fs_tab>.
+      SET TITLEBAR 'T_0100' WITH '物料上线使用明细表'.
+    WHEN r4.
+      ASSIGN gt_sxbl_wlfl[]   TO <fs_tab>.
+      SET TITLEBAR 'T_0100' WITH '物料上线不良率汇总表(物料分类)'.
+    WHEN r5.
+      ASSIGN gt_sxbl_vendor[] TO <fs_tab>.
+      SET TITLEBAR 'T_0100' WITH '物料上线不良率汇总表(供应商)'.
+    WHEN r6.
+      ASSIGN gt_phg_detail[]  TO <fs_tab>.
+      SET TITLEBAR 'T_0100' WITH '物料上线使用批合格率明细表'.
+    WHEN r7.
+      ASSIGN gt_phg_wlfl[]    TO <fs_tab>.
+      SET TITLEBAR 'T_0100' WITH '物料上线使用批合格率汇总表(物料分类)'.
+    WHEN r8.
+      ASSIGN gt_phg_vendor[]  TO <fs_tab>.
+      SET TITLEBAR 'T_0100' WITH '物料上线使用批合格率汇总表(供应商)'.
+    WHEN OTHERS.
+  ENDCASE.
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK  = ' '
+*     I_BYPASSING_BUFFER =
+*     I_BUFFER_ACTIVE    =
+      i_callback_program = sy-repid
+*     I_CALLBACK_PF_STATUS_SET          = ' '
+*     I_CALLBACK_USER_COMMAND           = ' '
+*     I_CALLBACK_TOP_OF_PAGE            = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME   =
+*     I_BACKGROUND_ID    = ' '
+*     I_GRID_TITLE       =
+*     I_GRID_SETTINGS    =
+      is_layout_lvc      = gs_layout
+      it_fieldcat_lvc    = gt_fcat[]
+*     IT_EXCLUDING       =
+*     IT_SPECIAL_GROUPS_LVC             =
+*     IT_SORT_LVC        =
+*     IT_FILTER_LVC      =
+*     IT_HYPERLINK       =
+*     IS_SEL_HIDE        =
+      i_default          = 'X'
+      i_save             = 'A'
+*     IS_VARIANT         =
+*     IT_EVENTS          =
+*     IT_EVENT_EXIT      =
+*     IS_PRINT_LVC       =
+*     IS_REPREP_ID_LVC   =
+*     I_SCREEN_START_COLUMN             = 0
+*     I_SCREEN_START_LINE               = 0
+*     I_SCREEN_END_COLUMN               = 0
+*     I_SCREEN_END_LINE  = 0
+*     I_HTML_HEIGHT_TOP  =
+*     I_HTML_HEIGHT_END  =
+*     IT_ALV_GRAPHICS    =
+*     IT_EXCEPT_QINFO_LVC               =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER           =
+*     ES_EXIT_CAUSED_BY_USER            =
+    TABLES
+      t_outtab           = <fs_tab>
+    EXCEPTIONS
+      program_error      = 1
+      OTHERS             = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.

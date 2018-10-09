@@ -1,0 +1,47 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM011T01
+*&---------------------------------------------------------------------*
+TABLES:sscrfields.
+
+DATA:gt_upload LIKE alsmex_tabline OCCURS 0 WITH HEADER LINE.
+FIELD-SYMBOLS:<fs_data> LIKE LINE OF gt_upload.
+
+DATA:gt_header TYPE alsmex_tabline OCCURS 0 WITH HEADER LINE.
+
+DATA:BEGIN OF gt_out OCCURS 0.
+    INCLUDE STRUCTURE zsmm_mat_inforecord_data.
+DATA:zicon(20) TYPE c,
+     msgty     LIKE sy-msgty,
+     zmsg      TYPE bapi_msg,
+     END OF gt_out.
+
+*  ADD BY PFT 20171219
+*  检查信息记录是否存在
+DATA: BEGIN OF gt_eina OCCURS 0,
+        infnr LIKE eina-infnr, "采购信息记录号
+        matnr LIKE eina-matnr, "物料号
+        lifnr LIKE eina-lifnr, "供应商
+        ekorg LIKE eine-ekorg, "采购组织
+        werks LIKE eine-werks, "工厂
+        esokz LIKE eine-esokz, "信息记录类别
+      END OF gt_eina.
+DATA: gv_exit TYPE c .
+*  END BY PFT 20171219
+
+DEFINE mcr_add_msg.
+  IF &1-zmsg IS INITIAL.
+   &1-zmsg = &2.
+  ELSE.
+    CONCATENATE &1-zmsg &2 INTO &1-zmsg.
+  ENDIF.
+END-OF-DEFINITION.
+
+
+DATA:   bdcdata LIKE bdcdata    OCCURS 0 WITH HEADER LINE.
+DATA:   messtab LIKE bdcmsgcoll OCCURS 0 WITH HEADER LINE.
+
+DATA:gv_mode TYPE c VALUE 'N'.
+
+***alv data definr
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.

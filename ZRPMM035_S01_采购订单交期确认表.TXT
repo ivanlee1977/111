@@ -1,0 +1,16 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPMM004_S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS: s_aedat FOR ekko-aedat ,
+                s_lifnr FOR ekko-lifnr.
+PARAMETERS      p_ekgrp TYPE ekko-ekgrp OBLIGATORY.
+SELECT-OPTIONS: s_matkl FOR mara-matkl,
+                s_matnr FOR ekpo-matnr,
+                s_bednr FOR ekpo-bednr,
+                s_ebeln for ekko-ebeln
+                .
+
+PARAMETERS p_elikz TYPE ekpo-elikz AS CHECKBOX DEFAULT 'X'.
+SELECTION-SCREEN END OF BLOCK b1.

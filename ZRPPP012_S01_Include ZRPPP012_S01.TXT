@@ -1,0 +1,14 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPPP012_S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+
+SELECT-OPTIONS:
+                s_aufnr FOR afko-aufnr,
+                s_dauat FOR afpo-dauat,
+                s_matnr FOR afpo-matnr,
+                s_werks FOR crhd-werks,
+                s_fevor FOR afko-fevor
+                          .
+SELECTION-SCREEN END OF BLOCK b1.

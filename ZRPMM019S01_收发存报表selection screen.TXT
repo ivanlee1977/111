@@ -1,0 +1,17 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPMM019S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_matnr FOR mara-matnr,
+               s_werks FOR mard-werks,
+               s_lgort FOR mard-lgort,
+               s_matkl FOR mara-matkl,
+               s_spart FOR mara-spart.
+SELECT-OPTIONS:s_budat FOR bkpf-budat OBLIGATORY NO-EXTENSION.
+PARAMETERS:p_chk AS CHECKBOX DEFAULT 'X'.
+SELECTION-SCREEN END OF BLOCK blc.
+
+SELECTION-SCREEN BEGIN OF BLOCK blc1 WITH FRAME TITLE TEXT-002.
+PARAMETERS:r1 RADIOBUTTON GROUP ra DEFAULT 'X',
+           r2 RADIOBUTTON GROUP ra.
+SELECTION-SCREEN END OF BLOCK blc1.

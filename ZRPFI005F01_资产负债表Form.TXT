@@ -1,0 +1,499 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI005F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:lt_ztfi001 TYPE TABLE OF ztfi001,
+       ls_ztfi001 TYPE ztfi001.
+  DATA:lt_faglflext TYPE TABLE OF faglflext,
+       ls_faglflext TYPE faglflext.
+  RANGES:r_racct FOR faglflext-racct.
+
+  DATA:lv_rpmax    TYPE monat,
+       lv_index(2) TYPE n.
+  DATA lv_fieldname TYPE fieldname.
+  FIELD-SYMBOLS <fs_hslvt>   TYPE hslvt12.
+  FIELD-SYMBOLS:<fs_list> TYPE tps_list.
+  DATA:ls_list TYPE tps_list.
+
+  SELECT * INTO TABLE lt_ztfi001 FROM ztfi001.
+  IF sy-subrc NE 0.
+    MESSAGE '请先维护科目配置表信息' TYPE  'E'.
+  ENDIF.
+
+  SORT lt_ztfi001 BY zexno.
+
+  LOOP AT lt_ztfi001 INTO ls_ztfi001
+                   WHERE fracct IS NOT INITIAL OR tracct IS NOT INITIAL.
+    r_racct-sign       = 'I'.
+    r_racct-option     = 'BT'.
+    r_racct-low        = ls_ztfi001-fracct.
+    IF ls_ztfi001-tracct IS NOT INITIAL.
+      r_racct-high      = ls_ztfi001-tracct.
+    ELSE.
+      r_racct-high      = ls_ztfi001-fracct.
+    ENDIF.
+    APPEND r_racct.
+    CLEAR  r_racct.
+  ENDLOOP.
+
+  SELECT * INTO TABLE lt_faglflext
+    FROM faglflext
+   WHERE ryear EQ p_ryear
+     AND rbukrs IN r_bukrs
+     AND prctr IN s_prctr
+     AND racct IN r_racct.
+
+  LOOP AT lt_faglflext INTO ls_faglflext.
+    LOOP AT lt_ztfi001 INTO ls_ztfi001 WHERE fracct LE ls_faglflext-racct
+                                          AND tracct GE ls_faglflext-racct.
+      lv_rpmax = p_rpmax.
+      IF lv_rpmax = 12.
+        lv_rpmax = 16.
+      ENDIF.
+      READ TABLE gt_list ASSIGNING <fs_list> WITH KEY zexno = ls_ztfi001-zexno.
+      IF sy-subrc EQ 0.
+        <fs_list>-zamount_nc = <fs_list>-zamount_nc + ls_faglflext-hslvt.
+        <fs_list>-zamount_qm = <fs_list>-zamount_qm + ls_faglflext-hslvt.
+        DO lv_rpmax TIMES.
+          lv_index = sy-index.
+          CONCATENATE 'HSL' lv_index INTO lv_fieldname.
+          ASSIGN COMPONENT lv_fieldname OF STRUCTURE ls_faglflext TO <fs_hslvt>.
+          IF sy-subrc EQ 0.
+            <fs_list>-zamount_qm  = <fs_list>-zamount_qm + <fs_hslvt>."期末
+          ENDIF.
+        ENDDO.
+      ELSE.
+        CLEAR ls_list.
+        ls_list-zexno = ls_ztfi001-zexno.
+        ls_list-zamount_nc = ls_faglflext-hslvt.
+        ls_list-zamount_qm = ls_faglflext-hslvt.
+        DO lv_rpmax TIMES.
+          lv_index = sy-index.
+          CONCATENATE 'HSL' lv_index INTO lv_fieldname.
+          ASSIGN COMPONENT lv_fieldname OF STRUCTURE ls_faglflext TO <fs_hslvt>.
+          IF sy-subrc EQ 0.
+            ls_list-zamount_qm  = ls_list-zamount_qm + <fs_hslvt>."期末
+          ENDIF.
+        ENDDO.
+        APPEND ls_list TO gt_list.
+        CLEAR ls_list.
+      ENDIF.
+    ENDLOOP.
+  ENDLOOP.
+
+***存货&未分配利润补充逻辑
+  LOOP AT lt_faglflext INTO ls_faglflext WHERE racct(1) EQ '6' AND rfarea = '1000'.
+    lv_rpmax = p_rpmax.
+    IF lv_rpmax = 12.
+      lv_rpmax = 16.
+    ENDIF.
+    READ TABLE gt_list ASSIGNING <fs_list> WITH KEY zexno = '12'.
+    IF sy-subrc EQ 0.
+      <fs_list>-zamount_nc = <fs_list>-zamount_nc + ls_faglflext-hslvt.
+      <fs_list>-zamount_qm = <fs_list>-zamount_qm + ls_faglflext-hslvt.
+      DO lv_rpmax TIMES.
+        lv_index = sy-index.
+        CONCATENATE 'HSL' lv_index INTO lv_fieldname.
+        ASSIGN COMPONENT lv_fieldname OF STRUCTURE ls_faglflext TO <fs_hslvt>.
+        IF sy-subrc EQ 0.
+          <fs_list>-zamount_qm  = <fs_list>-zamount_qm + <fs_hslvt>."期末
+        ENDIF.
+      ENDDO.
+    ELSE.
+      CLEAR ls_list.
+      ls_list-zexno = '12'.
+      ls_list-zamount_nc = ls_faglflext-hslvt.
+      ls_list-zamount_qm = ls_faglflext-hslvt.
+      DO lv_rpmax TIMES.
+        lv_index = sy-index.
+        CONCATENATE 'HSL' lv_index INTO lv_fieldname.
+        ASSIGN COMPONENT lv_fieldname OF STRUCTURE ls_faglflext TO <fs_hslvt>.
+        IF sy-subrc EQ 0.
+          ls_list-zamount_qm  = ls_list-zamount_qm + <fs_hslvt>."期末
+        ENDIF.
+      ENDDO.
+      APPEND ls_list TO gt_list.
+      CLEAR ls_list.
+    ENDIF.
+
+    READ TABLE gt_list ASSIGNING <fs_list> WITH KEY zexno = '60'.
+    IF sy-subrc EQ 0.
+      <fs_list>-zamount_nc = <fs_list>-zamount_nc - ls_faglflext-hslvt.
+      <fs_list>-zamount_qm = <fs_list>-zamount_qm - ls_faglflext-hslvt.
+      DO lv_rpmax TIMES.
+        lv_index = sy-index.
+        CONCATENATE 'HSL' lv_index INTO lv_fieldname.
+        ASSIGN COMPONENT lv_fieldname OF STRUCTURE ls_faglflext TO <fs_hslvt>.
+        IF sy-subrc EQ 0.
+          <fs_list>-zamount_qm  = <fs_list>-zamount_qm - <fs_hslvt>."期末
+        ENDIF.
+      ENDDO.
+    ELSE.
+      CLEAR ls_list.
+      ls_list-zexno = '60'.
+      ls_list-zamount_nc = -1 * ls_faglflext-hslvt.
+      ls_list-zamount_qm = -1 * ls_faglflext-hslvt.
+      DO lv_rpmax TIMES.
+        lv_index = sy-index.
+        CONCATENATE 'HSL' lv_index INTO lv_fieldname.
+        ASSIGN COMPONENT lv_fieldname OF STRUCTURE ls_faglflext TO <fs_hslvt>.
+        IF sy-subrc EQ 0.
+          ls_list-zamount_qm  = ls_list-zamount_qm - <fs_hslvt>."期末
+        ENDIF.
+      ENDDO.
+      APPEND ls_list TO gt_list.
+      CLEAR ls_list.
+    ENDIF.
+  ENDLOOP.
+
+***add by quyantao 20171225勾选合并时逻辑
+  CHECK p_chk = 'X'.
+  RANGES:r_kunnr FOR bsid-kunnr,
+         r_lifnr FOR bsik-lifnr.
+  DATA:BEGIN OF lt_bsid OCCURS 0,
+         bukrs LIKE bsid-bukrs,
+         kunnr LIKE bsid-kunnr,
+         gjahr LIKE bsid-gjahr,
+         belnr LIKE bsid-belnr,
+         buzei LIKE bsid-buzei,
+         budat LIKE bsid-budat,
+         shkzg LIKE bsid-shkzg,
+         dmbtr LIKE bsid-dmbtr,
+         hkont LIKE bsid-hkont,
+       END OF lt_bsid.
+  DATA:BEGIN OF lt_bsik OCCURS 0,
+         bukrs LIKE bsik-bukrs,
+         lifnr LIKE bsik-lifnr,
+         gjahr LIKE bsik-gjahr,
+         belnr LIKE bsik-belnr,
+         buzei LIKE bsik-buzei,
+         budat LIKE bsik-budat,
+         shkzg LIKE bsik-shkzg,
+         dmbtr LIKE bsik-dmbtr,
+         hkont LIKE bsik-hkont,
+       END OF lt_bsik.
+  DATA:lv_date LIKE sy-datum.
+***获取期间最后一天
+  CONCATENATE p_ryear p_rpmax+1 '01' INTO lv_date.
+  CALL FUNCTION 'FKK_LAST_DAY_OF_MONTH'
+    EXPORTING
+      day_in            = lv_date
+    IMPORTING
+      last_day_of_month = lv_date
+    EXCEPTIONS
+      day_in_no_date    = 1
+      OTHERS            = 2.
+  LOOP AT r_bukrs.
+    r_kunnr = 'IEQ'.
+    r_kunnr-low = r_bukrs-low.
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+      EXPORTING
+        input  = r_kunnr-low
+      IMPORTING
+        output = r_kunnr-low.
+    APPEND r_kunnr.
+    CLEAR r_kunnr.
+    r_lifnr = 'IEQ'.
+    r_lifnr-low = r_bukrs-low.
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+      EXPORTING
+        input  = r_lifnr-low
+      IMPORTING
+        output = r_lifnr-low.
+    APPEND r_lifnr.
+    CLEAR r_lifnr.
+  ENDLOOP.
+
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE lt_bsid
+    FROM bsid
+    WHERE bukrs IN r_bukrs
+      AND kunnr IN r_kunnr
+      AND budat <= lv_date
+      AND prctr IN s_prctr
+      AND ( hkont LIKE '1122%' OR  hkont LIKE '1221%' ).
+  SELECT *
+    APPENDING CORRESPONDING FIELDS OF TABLE lt_bsid
+    FROM bsad
+    WHERE bukrs IN r_bukrs
+      AND kunnr IN r_kunnr
+      AND budat <= lv_date
+      AND prctr IN s_prctr
+      AND ( hkont LIKE '1122%' OR  hkont LIKE '1221%' ).
+
+  LOOP AT lt_bsid.
+    CHECK lt_bsid-bukrs NE lt_bsid-kunnr+6.
+    IF lt_bsid-shkzg = 'H'.
+      lt_bsid-dmbtr = -1 * lt_bsid-dmbtr.
+    ENDIF.
+    CASE lt_bsid-hkont(4).
+      WHEN '1122'.
+        ls_list-zexno = '5'.
+      WHEN '1221'.
+        ls_list-zexno = '9'.
+      WHEN OTHERS.
+    ENDCASE.
+    READ TABLE gt_list ASSIGNING <fs_list> WITH KEY zexno = ls_list-zexno .
+    IF sy-subrc = 0.
+      IF lt_bsid-budat(4) < p_ryear.
+        <fs_list>-zamount_nc = <fs_list>-zamount_nc - lt_bsid-dmbtr."年初数
+      ENDIF.
+      <fs_list>-zamount_qm = <fs_list>-zamount_qm - lt_bsid-dmbtr. "期末数
+    ELSE.
+      IF lt_bsid-budat(4) < p_ryear.
+        ls_list-zamount_nc = -1 * lt_bsid-dmbtr."年初数
+      ENDIF.
+      ls_list-zamount_qm = -1 * lt_bsid-dmbtr. "期末数
+      APPEND ls_list TO gt_list.
+      CLEAR ls_list.
+    ENDIF.
+  ENDLOOP.
+
+  SELECT *
+     INTO CORRESPONDING FIELDS OF TABLE lt_bsik
+     FROM bsik
+     WHERE bukrs IN r_bukrs
+       AND lifnr IN r_lifnr
+       AND budat <= lv_date
+       AND prctr IN s_prctr
+       AND ( hkont LIKE '2202%' OR  hkont LIKE '2241%' ).
+  SELECT *
+    APPENDING CORRESPONDING FIELDS OF TABLE lt_bsik
+    FROM bsak
+    WHERE bukrs IN r_bukrs
+      AND lifnr IN r_lifnr
+      AND budat <= lv_date
+      AND prctr IN s_prctr
+      AND ( hkont LIKE '2202%' OR  hkont LIKE '2241%' ).
+
+  LOOP AT lt_bsik.
+    CHECK lt_bsik-bukrs NE lt_bsik-lifnr+6.
+    IF lt_bsik-shkzg = 'H'.
+      lt_bsik-dmbtr = -1 * lt_bsik-dmbtr.
+    ENDIF.
+    CASE lt_bsik-hkont(4).
+      WHEN '2202'.
+        ls_list-zexno = '37'.
+      WHEN '2241'.
+        ls_list-zexno = '42'.
+      WHEN OTHERS.
+    ENDCASE.
+    READ TABLE gt_list ASSIGNING <fs_list> WITH KEY zexno = ls_list-zexno .
+    IF sy-subrc = 0.
+      IF lt_bsik-budat(4) < p_ryear.
+        <fs_list>-zamount_nc = <fs_list>-zamount_nc - lt_bsik-dmbtr."年初数
+      ENDIF.
+      <fs_list>-zamount_qm = <fs_list>-zamount_qm - lt_bsik-dmbtr. "期末数
+    ELSE.
+      IF lt_bsik-budat(4) < p_ryear.
+        ls_list-zamount_nc = -1 * lt_bsik-dmbtr."年初数
+      ENDIF.
+      ls_list-zamount_qm = -1 * lt_bsik-dmbtr. "期末数
+      APPEND ls_list TO gt_list.
+      CLEAR ls_list.
+    ENDIF.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+********数据定义*******
+  DATA:lv_file   TYPE string,
+       lv_result TYPE c. "标识: 空表示文件不存在;否则,表示存在
+  DATA lv_answer TYPE c.
+  DATA:li_lines TYPE i.
+  DATA:ls_key   TYPE wwwdatatab,
+       lv_subrc TYPE sy-subrc.
+  DATA lv_file1 LIKE rlgrap-filename.
+*******初始化*******
+*******程序主体*******
+
+  CONCATENATE 'C:\FI\' sy-title '-'   sy-datum '.xls' INTO lv_file.
+
+  CALL METHOD cl_gui_frontend_services=>file_exist
+    EXPORTING
+      file                 = lv_file
+    RECEIVING
+      result               = lv_result
+    EXCEPTIONS
+      cntl_error           = 1
+      error_no_gui         = 2
+      wrong_parameter      = 3
+      not_supported_by_gui = 4
+      OTHERS               = 5.
+  IF lv_result IS NOT  INITIAL. "文件已经存在
+    CALL FUNCTION 'POPUP_TO_CONFIRM'
+      EXPORTING
+        titlebar              = '请确认'
+        text_question         = '文件已经存在，是否要覆盖?'
+        text_button_1         = '是'
+        text_button_2         = '否'
+        default_button        = '2' "缺省选中按钮: 1 是; 2 否
+        display_cancel_button = ''  "标识: 为空,不显示 取消按钮
+      IMPORTING
+        answer                = lv_answer "标识： 1 是;
+      EXCEPTIONS
+        text_not_found        = 1
+        OTHERS                = 2.
+    IF lv_answer NE '1'.
+      EXIT.
+    ENDIF.
+  ENDIF.
+
+  ls_key-relid = 'MI'.
+  ls_key-objid = gcst_excel_template.
+  lv_file1 = lv_file.
+  CALL FUNCTION 'DOWNLOAD_WEB_OBJECT'
+    EXPORTING
+      key         = ls_key
+      destination = lv_file1
+    IMPORTING
+      rc          = lv_subrc.
+  IF lv_subrc <> 0.
+    MESSAGE '下载模板出错，请检查，谢谢' TYPE 'E'.
+    EXIT.
+  ENDIF.
+
+***填充EXCEL数据
+  PERFORM frm_filldata_excel USING lv_file.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FILLDATA_EXCEL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LV_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_filldata_excel  USING  iv_file TYPE string.
+*******数据定义*******
+  DATA:lo_excel     TYPE ole2_object,
+       lo_workbooks TYPE ole2_object,
+       lo_workbook  TYPE ole2_object,
+       lo_sheet     TYPE ole2_object,
+       lo_range     TYPE ole2_object,
+       lo_cell      TYPE ole2_object,
+       lo_cell1     TYPE ole2_object.
+  DATA lv_file LIKE rlgrap-filename.
+  DATA:lt_excel_in                    "内表：从源文件中读取到的数据
+         TYPE STANDARD TABLE OF alsmex_tabline WITH HEADER LINE.
+  DATA ls_list TYPE tps_list.
+  DATA lv_value TYPE char200.
+
+  DATA lv_row TYPE i.
+  DATA lv_col TYPE i.
+
+  DEFINE mac_fill_cell.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+      EXPORTING
+        #1 = &1
+        #2 = &2.
+    SET PROPERTY OF lo_cell 'VALUE' = &3.
+  END-OF-DEFINITION.
+
+*******程序主体*******
+*读取模板数据
+
+  lv_file = iv_file.
+  CALL FUNCTION 'ALSM_EXCEL_TO_INTERNAL_TABLE'
+    EXPORTING
+      filename                = lv_file
+      i_begin_col             = 1
+      i_begin_row             = 1
+      i_end_col               = 10
+      i_end_row               = 70
+    TABLES
+      intern                  = lt_excel_in
+    EXCEPTIONS
+      inconsistent_parameters = 1
+      upload_ole              = 2
+      OTHERS                  = 3.
+
+*填充excel
+  CREATE OBJECT lo_excel 'EXCEL.APPLICATION'.
+  CALL METHOD OF lo_excel 'WORKBOOKS' = lo_workbooks.
+  CALL METHOD OF lo_workbooks 'OPEN' = lo_workbook EXPORTING #1 = iv_file.
+  CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = 1.
+
+  "数值
+  LOOP AT gt_list INTO ls_list.
+    lv_value = ls_list-zexno.
+    CONDENSE lv_value.
+    READ TABLE lt_excel_in WITH KEY value = lv_value.
+    IF sy-subrc EQ 0.
+      lv_row = lt_excel_in-row.
+      lv_col = lt_excel_in-col.
+      lv_col = lv_col + 1.
+      IF ls_list-zexno = '6' OR ls_list-zexno = '10' OR ls_list-zexno = '23' OR ls_list-zexno > 35. "行次35一会需要乘以-1
+        ls_list-zamount_nc = -1 * ls_list-zamount_nc.
+        ls_list-zamount_qm = -1 * ls_list-zamount_qm.
+      ENDIF.
+      mac_fill_cell lv_row lv_col ls_list-zamount_nc.
+      lv_col = lv_col + 1.
+      mac_fill_cell lv_row lv_col ls_list-zamount_qm.
+    ENDIF.
+  ENDLOOP.
+
+  CALL METHOD OF lo_sheet 'CELLS' = lo_cell EXPORTING #1 = 1 #2 = 1.
+  CALL METHOD OF lo_cell 'SELECT'.
+  SET PROPERTY OF lo_excel 'CutCopyMode' = 0.
+
+  CALL METHOD OF lo_workbook 'SAVE'.
+  SET PROPERTY OF lo_excel 'VISIBLE' = 1.
+  FREE OBJECT:lo_excel,lo_workbooks,lo_workbook,lo_sheet,lo_range,lo_cell.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_AUTH
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_auth .
+  DATA:BEGIN OF lt_bukrs OCCURS 0,
+         bukrs LIKE t001-bukrs,
+       END OF lt_bukrs.
+  CHECK sy-ucomm = 'ONLI'.
+  REFRESH r_bukrs.
+
+  SELECT bukrs INTO TABLE lt_bukrs FROM t001 WHERE bukrs IN s_bukrs.
+  IF sy-subrc NE 0.
+    MESSAGE '输入公司代码无效' TYPE 'E'.
+  ELSE.
+    LOOP AT lt_bukrs.
+      AUTHORITY-CHECK OBJECT 'F_BKPF_BUK'
+                    ID 'BUKRS' FIELD lt_bukrs-bukrs
+                    ID 'ACTVT' FIELD '03'.
+      IF sy-subrc <> 0.
+        DELETE lt_bukrs.
+        MESSAGE |你没有公司代码{ lt_bukrs-bukrs }的权限| TYPE 'E'.
+      ELSE.
+        r_bukrs = 'IEQ'.
+        r_bukrs-low = lt_bukrs-bukrs.
+        APPEND r_bukrs.
+        CLEAR r_bukrs.
+      ENDIF.
+    ENDLOOP.
+    IF r_bukrs[] IS INITIAL.
+      MESSAGE '你没有公司代码的权限' TYPE 'E'.
+    ELSE.
+      IF p_chk = 'X' AND lines( r_bukrs ) = 1.
+        MESSAGE '勾选合并时公司代码不能少于2家' TYPE 'E'.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+ENDFORM.

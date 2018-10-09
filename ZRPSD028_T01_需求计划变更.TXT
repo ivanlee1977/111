@@ -1,0 +1,98 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPQM001_TOP
+*&---------------------------------------------------------------------*
+*TYPE-POOLS:truxs,slis.
+*DATA:xlstab TYPE truxs_t_text_data.
+*TABLES:zlspt_qm_recty.
+********************ALV 事件****************
+TABLES: mara,marc,kna1.
+DATA:
+  it_fieldcat TYPE lvc_t_fcat,
+  wa_fieldcat LIKE LINE OF it_fieldcat,
+  gs_layout   TYPE lvc_s_layo,
+  it_events   TYPE slis_t_event, ""事件属性
+  wa_events   TYPE slis_alv_event.
+
+DATA c30 TYPE char30.
+
+CONSTANTS: cns_bpm TYPE char3  VALUE 'BMP'.
+DATA: exec_ref   TYPE REF TO cx_sy_native_sql_error,
+      error_text TYPE string.
+
+DATA:BEGIN OF gw_item,"展示内表
+       sel(1)        TYPE c,
+       bussno        TYPE c LENGTH 32,
+       bussstat      TYPE c LENGTH 5,
+       requsername   TYPE c LENGTH 50,
+       reqdeptname   TYPE c LENGTH 50,
+       reqdate       TYPE c LENGTH 11,
+       jhbresdate    TYPE c LENGTH 11,
+       hfrname       TYPE c LENGTH 50,
+       swqrdate      TYPE c LENGTH 11,
+       swqrpna       TYPE c LENGTH 50,
+       htpsdate      TYPE c LENGTH 11,
+       htpspna       TYPE c LENGTH 50,
+       sqbmappr      TYPE c LENGTH 50,
+       sqbmpna       TYPE c LENGTH 50,
+       swbqr         TYPE c LENGTH 50,
+       swbbz         TYPE c LENGTH 50,
+       jhbbz         TYPE c LENGTH 50,
+       htpsbz        TYPE c LENGTH 50,
+       sqbshdate     TYPE c LENGTH 11,
+       swqshna       TYPE c LENGTH 50,
+       is_swbsh      TYPE c LENGTH 50,
+       yfzjpna       TYPE c LENGTH 50,
+       yfzjappr      TYPE c LENGTH 50,
+       sjrkpna       TYPE c LENGTH 50,
+       sjrkptime     TYPE c LENGTH 11,
+       proccomtime   TYPE c LENGTH 11,
+       reqqrdate     TYPE c LENGTH 11,
+       pmcpna        TYPE c LENGTH 50,
+       cppna         TYPE c LENGTH 50,
+       cuspno        TYPE c LENGTH 50,
+       cuspna        TYPE c LENGTH 50,
+       matrn         TYPE c LENGTH 18,
+       proctype      TYPE c LENGTH 50,
+       changenum     TYPE c LENGTH 50,
+       changeway     TYPE c LENGTH 50,
+       changereason  TYPE c LENGTH 50,
+       expectdate    TYPE c LENGTH 11,
+       priorityorder TYPE c LENGTH 50,
+       firstjhdate   TYPE c LENGTH 11,
+       firstjhnum    TYPE c LENGTH 50,
+       endjhdate     TYPE c LENGTH 11,
+       endjhnum      TYPE c LENGTH 50,
+       nybz          TYPE c LENGTH 50,
+       swjhdate      TYPE c LENGTH 11,
+       swyj          TYPE c LENGTH 50,
+       htpsnum       TYPE c LENGTH 50,
+       htpsnewjq     TYPE c LENGTH 11,
+       matype        TYPE c LENGTH 50,
+       frkdate       TYPE c LENGTH 11,
+       frknum        TYPE c LENGTH 50,
+       frkno         TYPE c LENGTH 50,
+       wrkdate       TYPE c LENGTH 11,
+       wrknum        TYPE c LENGTH 50,
+       wrkno         TYPE c LENGTH 50,
+       is_jiexiang   TYPE c LENGTH 50,
+       reqjqdate     TYPE c LENGTH 11,
+       req_yj        TYPE c LENGTH 50,
+       htpsendnum    TYPE c LENGTH 50,
+       htpsendtime   TYPE c LENGTH 11,
+       matkl         TYPE mara-matkl,
+       wgbez         TYPE t023t-wgbez,
+       mrp           TYPE c LENGTH 3,
+       apprtime      TYPE c LENGTH 11,
+       apprusername  TYPE c LENGTH 50,
+       apprstepno    TYPE c LENGTH 50,
+       procnum       TYPE c LENGTH 50,
+     END OF gw_item.
+DATA:gt_item LIKE TABLE OF gw_item WITH HEADER LINE .
+*       it_bpm_zlspt_user LIKE wa_bpm_zlspt_user OCCURS 0.
+DATA cl_sqlerr_ref TYPE REF TO cx_sql_exception.
+
+DATA:dbcursor TYPE cursor.
+
+DATA:ok_code   TYPE sy-ucomm,
+     save_ok   TYPE sy-ucomm,
+     errorcode TYPE i.

@@ -1,0 +1,915 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI0001_F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_AUTHORITY
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_authority .
+  IF p_bukrs IS NOT INITIAL.
+    AUTHORITY-CHECK OBJECT 'F_BKPF_BUK'
+                  ID 'BUKRS' FIELD p_bukrs
+                  ID 'ACTVT' FIELD '03'.
+    IF sy-subrc <> 0.
+      MESSAGE '没有该公司的查看权限！' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+
+
+  IF rd_01 EQ 'X'.
+    AUTHORITY-CHECK OBJECT 'ZFI_TYPE'
+             ID 'ZFI_TYPE' FIELD '01'.
+    IF sy-subrc <> 0.
+      MESSAGE '你没有创建收款通知单的权限' TYPE 'E'.
+    ENDIF.
+  ELSE.
+    AUTHORITY-CHECK OBJECT 'ZFI_TYPE'
+             ID 'ZFI_TYPE' FIELD '02'.
+    IF sy-subrc <> 0.
+      MESSAGE '你没有查询收款通知单的权限' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+ENDFORM.
+
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FILTER_OPERATION
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_filter_operation .
+  LOOP AT SCREEN.
+    IF rd_01 EQ 'X' AND screen-group1 = 'MR1'.
+      screen-active = 0.
+      MODIFY SCREEN.
+    ENDIF.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  CTR01_GET_LINES
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM ctr01_get_lines .
+  g_ctr01_lines = sy-loopc.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_INSERT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_insert .
+  DATA:lwa_table LIKE gwa_table.
+  lwa_table-sel = 'X'.
+  APPEND lwa_table TO gt_table.
+  CLEAR lwa_table.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DELETE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_delete .
+  READ TABLE gt_table INTO gwa_table WITH KEY mark = 'X'.
+  IF sy-subrc = 0.
+    DELETE gt_table WHERE mark = 'X'.
+  ELSE.
+    MESSAGE '请先选择需要删除的行！' TYPE 'I'.
+    RETURN.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SAVE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_save .
+  DATA:l_num TYPE zficotdjh-znum.
+  DATA:l_date(8) TYPE c,
+       l_ls(4)   TYPE c.
+
+  DATA:l_dmt TYPE zficotskt-zskze.
+  DATA:l_dmz TYPE zficotskt-zskze.
+  DATA:l_line TYPE i.
+  DATA:l_bukrs TYPE knb1-bukrs.
+  DATA:ls_djh TYPE zficotdjh.
+
+  DATA:l_waers TYPE skb1-waers."汇率货币检查
+
+  IF NOT gwa_skt IS INITIAL.
+    "数据校验
+    IF gwa_skt-zgsdm IS INITIAL.
+      MESSAGE '公司代码必填！' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+    IF gwa_skt-zkhbm IS INITIAL.
+      MESSAGE '客户编码必填！' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+    IF gwa_skt-zskfs IS INITIAL.
+      MESSAGE '收款方式必填！' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+    IF gwa_skt-zbb IS INITIAL.
+      MESSAGE '收款货币必填！' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+    IF gwa_skt-zskrq IS INITIAL.
+      MESSAGE '收款日期必填！' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+*    IF gwa_skt-zywy IS INITIAL.
+*      MESSAGE '业务员必填！' TYPE 'S' DISPLAY LIKE 'E'.
+*      RETURN.
+*    ENDIF.
+    IF gwa_skt-zskze IS INITIAL OR gwa_skt-zskze = 0.
+      MESSAGE '收款总额必填！' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+
+    IF gwa_skt-kkber IS INITIAL.
+      MESSAGE '控制范围必填！' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+
+    IF gwa_skt-zskfs NE '1'
+      AND gwa_skt-zskfs NE '2'
+      AND gwa_skt-zskfs NE '3'
+      AND gwa_skt-zskfs NE '4'
+      AND gwa_skt-zskfs NE '5'
+      AND gwa_skt-zskfs NE '6'
+      AND gwa_skt-zskfs NE '7'.
+      MESSAGE '收款方式不正确！' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+    IF gwa_skt-zskfs = '1'
+      OR gwa_skt-zskfs = '2'
+      OR gwa_skt-zskfs = '7'.
+      IF gwa_skt-zhryh IS INITIAL.
+        MESSAGE '汇入账户必填！' TYPE 'S' DISPLAY LIKE 'E'.
+        RETURN.
+      ENDIF.
+
+      "汇率检查
+      CLEAR l_waers.
+      SELECT SINGLE waers
+        INTO l_waers
+        FROM skb1
+        WHERE bukrs = gwa_skt-zgsdm
+          AND saknr = gwa_skt-zhryh.
+
+      IF l_waers = gwa_skt-zbb
+        AND gwa_skt-zhl IS NOT INITIAL.
+        MESSAGE '汇入账户对应货币一致,不可填汇率！' TYPE 'S' DISPLAY LIKE 'E'.
+        RETURN.
+      ENDIF.
+    ENDIF.
+
+*    IF gwa_skt-zskfs = '1'  OR gwa_skt-zskfs = '5' OR gwa_skt-zskfs = '6'.
+*      IF gwa_skt-zyhlsh IS INITIAL.
+*        MESSAGE '银行流水号必填！' TYPE 'S' DISPLAY LIKE 'E'.
+*        RETURN.
+*      ENDIF.
+*    ENDIF.
+
+    CLEAR l_bukrs.
+    SELECT SINGLE bukrs
+      INTO l_bukrs
+      FROM knb1
+      WHERE kunnr = gwa_skt-zkhbm AND sperr = '' AND bukrs = gwa_skt-zgsdm. "by wangql 20170331 排除冻结的客户 会有多个值，只需要判断是否有值
+*    IF l_bukrs NE gwa_skt-zgsdm.
+    IF sy-subrc <> 0.
+      MESSAGE '客户与公司代码不匹配！' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+
+*    CLEAR l_line.
+*    DESCRIBE TABLE gt_table LINES l_line.
+*    IF l_line < 1.
+*      MESSAGE '请添加行项目再保存！' TYPE 'S' DISPLAY LIKE 'E'.
+*      RETURN.
+*    ELSE.
+*      CLEAR:l_dmt.
+*      LOOP AT gt_table INTO gwa_table.
+*        IF gwa_table-zskje = 0
+*          OR gwa_table-zskje IS INITIAL.
+*          MESSAGE '请输入行项目中的金额！' TYPE 'S' DISPLAY LIKE 'E'.
+*          RETURN.
+*        ELSEIF gwa_table-zhth IS INITIAL.
+*          MESSAGE '请输入合同号！' TYPE 'S' DISPLAY LIKE 'E'.
+*          RETURN.
+*        ELSE.
+*          l_dmt = l_dmt + gwa_table-zskje.
+*        ENDIF.
+*      ENDLOOP.
+*    ENDIF.
+
+    IF gwa_skt-zskfs = '3'
+      OR gwa_skt-zskfs = '4'.
+      IF gwa_skt-zhphm IS INITIAL
+        OR gwa_skt-zhpdqr IS INITIAL.
+        MESSAGE '汇票方式汇票号码和汇票到期日不能为空！' TYPE 'S' DISPLAY LIKE 'E'.
+        RETURN.
+      ENDIF.
+    ENDIF.
+
+    "收款总额= 出纳确认金额+手续费
+*    CLEAR L_DMZ.
+*    L_DMZ = GWA_SKT-ZCNQRE + GWA_SKT-ZQRSXF.
+*    IF GWA_SKT-ZSKZE NE L_DMZ.
+*      MESSAGE '金额不相等，请检查！' TYPE 'S' DISPLAY LIKE 'E'.
+*      RETURN.
+*    ENDIF.
+    "收款总额= 行项目总金额+代垫费用
+*    l_dmz = l_dmt + gwa_skt-zddfy.
+*    IF gwa_skt-zskze NE l_dmz.
+*      MESSAGE '合同金额与代垫费用之和需等于收款总额！' TYPE 'S' DISPLAY LIKE 'E'.
+*      RETURN.
+*    ENDIF.
+
+    "数据保存
+    CLEAR l_num.
+    SELECT MAX( znum )
+      INTO l_num
+      FROM zficotdjh
+      WHERE zdate = sy-datum
+        AND ztype = 'N'.
+    IF sy-subrc = 0.
+      l_num = l_num + 1.
+    ELSE.
+      l_num = '0001'.
+    ENDIF.
+    CLEAR ls_djh.
+    ls_djh-ztype = 'N'.
+    ls_djh-zdate = sy-datum.
+    ls_djh-znum  = l_num.
+
+    CLEAR:l_date,l_ls.
+    l_date = sy-datum.
+    l_ls = l_num.
+    CONCATENATE 'N' l_date l_ls
+           INTO gwa_skt-zdjhm.
+    gwa_skt-zdjzt = '1'.
+    gwa_skt-zzdrq = sy-datum.
+    MODIFY zficotdjh FROM ls_djh.
+    IF sy-subrc = 0.
+*    COLLECT GWA_SKT INTO GT_SKT.
+      MODIFY zficotskt FROM gwa_skt.
+      IF sy-subrc = 0.
+        COMMIT WORK.
+        DELETE gt_table WHERE zhth IS INITIAL.
+        LOOP AT gt_table INTO gwa_table.
+          gwa_skh-zgsdm = gwa_skt-zgsdm.
+          gwa_skh-zdjhm = gwa_skt-zdjhm.
+          gwa_skh-zhxm  = sy-tabix.
+          gwa_skh-zhth  = gwa_table-zhth.
+          gwa_skh-zskje = gwa_table-zskje.
+          COLLECT gwa_skh INTO gt_skh.
+          CLEAR gwa_skh.
+        ENDLOOP.
+        MODIFY zficotskh FROM TABLE gt_skh.
+        IF sy-subrc = 0.
+          COMMIT WORK.
+          CLEAR:gwa_skt,gwa_table,
+                gt_table,ls_djh,
+                gwa_skh,gt_skh,
+                g_khmc,g_zhmc.
+          MESSAGE '数据保存成功！' TYPE 'S'.
+        ELSE.
+          ROLLBACK WORK.
+        ENDIF.
+      ELSE.
+        ROLLBACK WORK.
+      ENDIF.
+    ELSE.
+      ROLLBACK WORK.
+    ENDIF.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM get_data.
+  DATA:l_begru LIKE kna1-begru.
+  DATA:lv_belnr LIKE bkpf-belnr.
+  DATA:lv_kvgr1 LIKE knvv-kvgr1,
+       lv_kvgr2 LIKE knvv-kvgr2.
+
+  CLEAR gt_alv[].
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE gt_alv
+    FROM zficotskt
+    WHERE zgsdm = p_bukrs
+      AND zskrq IN s_zskrq
+      AND zkhbm IN s_zkhbm
+      AND zdjhm IN s_zdjhm
+      AND zhryh IN s_zhryh
+      AND zywy  IN s_zywy.
+  SORT gt_alv BY zdjhm.
+  IF p_zskfs IS NOT INITIAL.
+    DELETE gt_alv WHERE zskfs NE p_zskfs.
+  ENDIF.
+  IF p_zbb IS NOT INITIAL.
+    DELETE gt_alv WHERE zbb NE p_zbb.
+  ENDIF.
+  IF p_zhkr IS NOT INITIAL.
+    DELETE gt_alv WHERE zhkr NE p_zhkr.
+  ENDIF.
+  IF p_zskze IS NOT INITIAL.
+    DELETE gt_alv WHERE zskze NE p_zskze.
+  ENDIF.
+  IF p_zdjzt IS NOT INITIAL.
+    DELETE gt_alv WHERE zdjzt NE p_zdjzt.
+  ENDIF.
+  LOOP AT gt_alv INTO gs_alv.
+    CLEAR l_begru.
+    SELECT SINGLE begru INTO l_begru FROM kna1 WHERE kunnr = gs_alv-zkhbm.
+    IF l_begru IS NOT INITIAL.
+      AUTHORITY-CHECK OBJECT 'F_KNA1_BED'
+               ID 'BRGRU' FIELD l_begru
+               ID 'ACTVT' FIELD '03'.
+      IF sy-subrc <> 0.
+        DELETE gt_alv WHERE zkhbm = gs_alv-zkhbm.
+        CONTINUE.
+      ENDIF.
+    ENDIF.
+
+***检查业务员权限对象
+    CLEAR:lv_kvgr1,lv_kvgr2.
+    SELECT SINGLE kvgr1 kvgr2 bzirk vkbur INTO (lv_kvgr1,lv_kvgr2,gs_alv-bzirk,gs_alv-vkbur) FROM knvv WHERE kunnr = gs_alv-zkhbm AND vkorg = gs_alv-kkber.
+    IF s_kvgr1[] IS NOT INITIAL AND lv_kvgr1 NOT IN s_kvgr1.
+      DELETE gt_alv.
+      CONTINUE.
+    ENDIF.
+
+    IF s_kvgr2[] IS NOT INITIAL AND lv_kvgr2 NOT IN s_kvgr2.
+      DELETE gt_alv.
+      CONTINUE.
+    ENDIF.
+
+    AUTHORITY-CHECK OBJECT 'Z_KVGR1'
+             ID 'KVGR1' FIELD lv_kvgr1.
+    IF sy-subrc <> 0.
+      DELETE gt_alv.
+      CONTINUE.
+    ELSE.
+      IF s_bzirk[] IS NOT INITIAL AND gs_alv-bzirk NOT IN s_bzirk.
+        DELETE gt_alv.
+        CONTINUE.
+      ENDIF.
+      SELECT SINGLE bztxt INTO gs_alv-bzirk_txt FROM t171t WHERE spras = sy-langu AND bzirk = gs_alv-bzirk.
+
+      IF s_vkbur[] IS NOT INITIAL AND gs_alv-vkbur NOT IN s_vkbur.
+        DELETE gt_alv.
+        CONTINUE.
+      ENDIF.
+      SELECT SINGLE bezei INTO gs_alv-vkbur_txt FROM tvkbt WHERE spras = sy-langu AND vkbur = gs_alv-vkbur.
+
+      SELECT SINGLE bezei INTO gs_alv-kvgr1_txt FROM tvv1t WHERE spras = sy-langu AND kvgr1 = lv_kvgr1.
+      SELECT SINGLE bezei INTO gs_alv-zsw FROM tvv2t WHERE spras = sy-langu AND kvgr2 = lv_kvgr2.
+    ENDIF.
+
+    CASE gs_alv-zdjzt.
+      WHEN '1'.
+        gs_alv-txt = '已创建'.
+      WHEN '2'.
+        gs_alv-txt = '已审核'.
+      WHEN '3'.
+        gs_alv-txt = '已过账'.
+    ENDCASE.
+
+    CASE gs_alv-zskfs.
+      WHEN '1'.
+        gs_alv-txt_s = '银行转账'.
+      WHEN '2'.
+        gs_alv-txt_s = '现金支付'.
+      WHEN '3'.
+        gs_alv-txt_s = '银行承兑汇票'.
+      WHEN '4'.
+        gs_alv-txt_s = '商业承兑汇票'.
+      WHEN '5'.
+        gs_alv-txt_s = '信用证'.
+      WHEN '6'.
+        gs_alv-txt_s = '支票'.
+      WHEN '7'.
+        gs_alv-txt_s = 'POS机刷卡'.
+      WHEN OTHERS.
+    ENDCASE.
+
+    SELECT SINGLE name1
+      INTO gs_alv-name1
+      FROM kna1
+      WHERE kunnr = gs_alv-zkhbm.
+
+***获取汇率 和 本位币金额
+    IF gs_alv-zbb = 'CNY' OR gs_alv-zbb = 'RMB' .
+      gs_alv-kursf = '1'.
+    ELSE.
+      IF gs_alv-zdjzt = '3'.
+        CLEAR lv_belnr.
+        CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+          EXPORTING
+            input  = gs_alv-zkjpzbh
+          IMPORTING
+            output = lv_belnr.
+        SELECT SINGLE kursf INTO gs_alv-kursf FROM bkpf WHERE bukrs = gs_alv-zgsdm AND belnr = lv_belnr AND gjahr = gs_alv-zkjnd.
+      ELSE.
+        CALL FUNCTION 'READ_EXCHANGE_RATE'
+          EXPORTING
+            client           = sy-mandt
+            date             = gs_alv-zskrq
+            foreign_currency = gs_alv-zbb
+            local_currency   = 'CNY'
+            type_of_rate     = 'M'
+*           EXACT_DATE       = ' '
+          IMPORTING
+            exchange_rate    = gs_alv-kursf
+          EXCEPTIONS
+            no_rate_found    = 1
+            no_factors_found = 2
+            no_spread_found  = 3
+            derived_2_times  = 4
+            overflow         = 5
+            zero_rate        = 6
+            OTHERS           = 7.
+      ENDIF.
+    ENDIF.
+    gs_alv-zamount = gs_alv-zskze * gs_alv-kursf.
+    MODIFY gt_alv FROM gs_alv.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  DIS_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM dis_data .
+  PERFORM frm_get_fcat.
+
+  PERFORM frm_get_layout.
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+      i_callback_program       = gv_repid
+      i_callback_pf_status_set = 'SUB_SET_STATUS'
+      i_callback_user_command  = 'USER_COMMAND'
+      is_layout                = gs_layout
+      it_fieldcat              = gt_fieldcat[]
+      i_save                   = 'A'
+    TABLES
+      t_outtab                 = gt_alv[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+ENDFORM.
+
+FORM sub_set_status USING rt_extab TYPE slis_t_extab.
+  SET PF-STATUS 'PF_1000'.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fcat .
+  mcr_append_field: 'ZGSDM' '公司代码' '8',
+               'ZDJHM' '单据号码' '10',
+               'ZSKRQ' '收款日期' '10',
+               'ZKHBM' '客户编号' '10',
+               'NAME1' '客户名称' '20',
+               'ZYWY' '收款单业务员' '10',
+               'KVGR1_TXT' '客户业务员' '10',
+               'ZSW' '商务' '10',
+               'ZSKFS' '收款方式' '8',
+               'TXT_S' '描述' '8',
+               'ZHPHM' '汇票号码' '10',
+               'ZHPDQR' '汇票到期日' '10',
+               'ZBB' '币别' '4',
+*               'ZHL' '汇率' '6',
+               'KURSF' '汇率' '6',
+               'ZAMOUNT' '本位币金额' '6',
+               'ZHKR' '汇款人' '6',
+               'ZHRYH' '汇入银行账户' '20',
+               'ZSKZE' '收款总额' '13',
+               'ZDDFY' '代垫费用' '13',
+               'ZBZ' '一次性客户名称/城市' '20',
+*              'ZCNQRE' '出纳确认金额' '13',
+*              'ZQRSXF' '确认手续费' '13',
+               'ZGZRQ' '过账日期' '10',
+               'ZDJZT' '单据状态' '8',
+               'TXT' '状态描述' '8',
+               'ZZDRQ' '制单日期' '10',
+               'ZSHRQ' '审核日期' '10',
+               'ZPZRQ' '凭证日期' '10',
+               'ZQFRQ' '签发日期' '10',
+               'ZCDR'  '承兑人'   '40',
+               'ZCPR'  '出票人'   '40',
+               'ZKJPZBH' '会计凭证编号' '12',
+               'ZKJND' '会计年度' '8',
+               'BZIRK' '销售大区' '6',
+               'BZIRK_TXT' '销售大区描述' '20',
+               'VKBUR' '销售办事处' '4',
+               'VKBUR_TXT' '销售办事处描述' '20'.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_LAYOUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_layout .
+  gs_layout-colwidth_optimize    = 'X'.
+  gs_layout-get_selinfos         = 'X'.
+  gs_layout-detail_popup         = 'X'.
+  gs_layout-no_keyfix            = 'X'.
+
+  gv_repid = sy-repid.
+ENDFORM.
+
+
+FORM user_command USING r_ucomm LIKE sy-ucomm
+                         rs_selfield TYPE slis_selfield.
+  DATA:l_ref_grid TYPE REF TO cl_gui_alv_grid. "add wus 20161018
+
+  DATA:BEGIN OF gs_alv1 OCCURS 0.  "add wus 20161018
+      INCLUDE STRUCTURE zficotskt.
+  DATA:END OF gs_alv1.
+
+
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = gs_grid.
+  CALL METHOD gs_grid->check_changed_data.
+
+  CASE r_ucomm.
+    WHEN '&IC1'."双击
+*      IF RS_SELFIELD-FIELDNAME = 'ZDJHM'.
+      READ TABLE gt_alv INTO gs_alv INDEX rs_selfield-tabindex.
+      IF sy-subrc = 0.
+        IF rd_02 EQ 'X'.
+          AUTHORITY-CHECK OBJECT 'ZFI_TYPE'
+                   ID 'ZFI_TYPE' FIELD '01'.
+          IF sy-subrc <> 0.
+            MESSAGE '你没有双击修改收款单的权限' TYPE 'E'.
+          ENDIF.
+        ENDIF.
+        CLEAR gwa_skt_200.
+        MOVE-CORRESPONDING gs_alv TO gwa_skt_200.
+        CLEAR gt_table_200[].
+        SELECT *
+          FROM zficotskh
+          INTO CORRESPONDING FIELDS OF TABLE gt_table_200
+         WHERE zgsdm = gwa_skt_200-zgsdm
+           AND zdjhm = gwa_skt_200-zdjhm.
+
+        LOOP AT gt_table_200 INTO gwa_table_200.
+          gwa_table_200-sel = 'X'.
+          MODIFY gt_table_200 FROM gwa_table_200.
+        ENDLOOP.
+        PERFORM get_name.
+        CLEAR: gs_delete,gt_delete[].
+        CALL SCREEN 9002 STARTING AT 40 1.
+        CALL METHOD gs_grid->refresh_table_display.
+      ENDIF.
+*      ENDIF.
+* add wus 增加删除按钮20161018
+    WHEN 'ZDELETE'.
+      CLEAR:gs_alv1,gs_alv.
+      READ TABLE gt_alv INTO gs_alv INDEX rs_selfield-tabindex.
+      IF sy-subrc = 0.
+        IF gs_alv-txt = '已审核' OR gs_alv-txt = '已过账'.
+          MESSAGE '只能删除已创建状态的通知单 'TYPE 'S' DISPLAY LIKE 'E'.
+        ELSE.
+          MOVE-CORRESPONDING gs_alv TO gs_alv1.
+          DELETE zficotskt FROM  gs_alv1.
+          DELETE FROM zficotskh WHERE zgsdm = gs_alv1-zgsdm AND zdjhm = gs_alv1-zdjhm.
+          IF sy-subrc = 0.
+            COMMIT WORK.
+            MESSAGE '删除成功！' TYPE 'S'.
+          ENDIF.
+          DELETE gt_alv INDEX rs_selfield-tabindex.
+        ENDIF.
+* 选择checkbox后更新到内表 显示
+        CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+          IMPORTING
+            e_grid = l_ref_grid.
+        CALL METHOD l_ref_grid->check_changed_data.
+        rs_selfield-refresh = 'X'.
+      ENDIF.
+
+    WHEN 'BACK' OR 'EXIT'.
+      LEAVE TO SCREEN 0.
+    WHEN 'CANCEL'.
+      LEAVE TO SCREEN 0.
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  CTR02_GET_LINES
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM ctr02_get_lines .
+  g_ctr02_lines = sy-loopc.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_INSERT_200
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_insert_200 .
+  DATA:lwa_table_200 LIKE gwa_table_200.
+  lwa_table_200-sel = 'X'.
+  APPEND lwa_table_200 TO gt_table_200.
+  CLEAR lwa_table_200.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DELETE_200
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_delete_200 .
+  CLEAR: gs_delete,gt_delete[].
+  READ TABLE gt_table_200 INTO gwa_table_200 WITH KEY mark = 'X'.
+  IF sy-subrc = 0.
+    LOOP AT gt_table_200 INTO gwa_table_200 WHERE mark = 'X'.
+      gs_delete-mandt = sy-mandt.
+      gs_delete-zgsdm = gwa_skt_200-zgsdm.
+      gs_delete-zdjhm = gwa_skt_200-zdjhm.
+      gs_delete-zhxm  = gwa_table_200-zhxm.
+      gs_delete-zhth  = gwa_table_200-zhth.
+      gs_delete-zskje = gwa_table_200-zskje.
+      COLLECT gs_delete INTO gt_delete.
+      CLEAR gs_delete.
+    ENDLOOP.
+    DELETE gt_table_200 WHERE mark = 'X'.
+  ELSE.
+    MESSAGE '请先选择需要删除的行！' TYPE 'I'.
+    RETURN.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SAVE_200
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_save_200 .
+  DATA:l_dmt TYPE zficotskt-zskze.
+  DATA:l_dmz TYPE zficotskt-zskze.
+  DATA:l_bukrs TYPE knb1-bukrs.
+  DATA:l_line TYPE i.
+
+  DATA:l_waers TYPE skb1-waers."汇率货币检查
+
+  IF NOT gwa_skt_200 IS INITIAL.
+    "数据校验
+    IF gwa_skt_200-zkhbm IS INITIAL.
+      MESSAGE '客户编码必填！' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+    IF gwa_skt_200-zskfs IS INITIAL.
+      MESSAGE '收款方式必填！' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+    IF gwa_skt_200-zbb IS INITIAL.
+      MESSAGE '收款货币必填！' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+    IF gwa_skt_200-zskrq IS INITIAL.
+      MESSAGE '收款日期必填！' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+*    IF gwa_skt_200-zywy IS INITIAL.
+*      MESSAGE '业务员必填！' TYPE 'S' DISPLAY LIKE 'E'.
+*      RETURN.
+*    ENDIF.
+    IF gwa_skt_200-zskze IS INITIAL OR gwa_skt_200-zskze = 0.
+      MESSAGE '收款总额必填！' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+    IF gwa_skt_200-kkber IS INITIAL.
+      MESSAGE '控制范围必填！' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+
+    IF gwa_skt_200-zskfs NE '1'
+      AND gwa_skt_200-zskfs NE '2'
+      AND gwa_skt_200-zskfs NE '3'
+      AND gwa_skt_200-zskfs NE '4'
+      AND gwa_skt_200-zskfs NE '5'
+      AND gwa_skt_200-zskfs NE '6'
+      AND gwa_skt_200-zskfs NE '7'.
+      MESSAGE '收款方式不正确！' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+    IF gwa_skt_200-zskfs = '1'
+      OR gwa_skt_200-zskfs = '2'
+      OR gwa_skt_200-zskfs = '7'.
+      IF gwa_skt_200-zhryh IS INITIAL.
+        MESSAGE '汇入账户必填！' TYPE 'S' DISPLAY LIKE 'E'.
+        RETURN.
+      ENDIF.
+
+      "汇率检查
+      CLEAR l_waers.
+      SELECT SINGLE waers
+        INTO l_waers
+        FROM skb1
+        WHERE bukrs = gwa_skt_200-zgsdm
+          AND saknr = gwa_skt_200-zhryh.
+
+      IF l_waers = gwa_skt_200-zbb
+        AND gwa_skt_200-zhl IS NOT INITIAL.
+        MESSAGE '汇入账户对应货币一致,不可填汇率！' TYPE 'S' DISPLAY LIKE 'E'.
+        RETURN.
+      ENDIF.
+    ENDIF.
+
+*    IF gwa_skt_200-zskfs = '1'  OR gwa_skt_200-zskfs = '5' OR gwa_skt_200-zskfs = '6'.
+*      IF gwa_skt_200-zyhlsh IS INITIAL.
+*        MESSAGE '银行流水号必填！' TYPE 'S' DISPLAY LIKE 'E'.
+*        RETURN.
+*      ENDIF.
+*    ENDIF.
+
+    CLEAR l_bukrs.
+    SELECT SINGLE bukrs
+      INTO l_bukrs
+      FROM knb1
+      WHERE kunnr = gwa_skt-zkhbm.
+    IF l_bukrs NE gwa_skt-zgsdm.
+      MESSAGE '客户与公司代码不匹配！' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+
+    IF gwa_skt_200-zskfs = '3'
+      OR gwa_skt_200-zskfs = '4'.
+      IF gwa_skt_200-zhphm IS INITIAL
+        OR gwa_skt_200-zhpdqr IS INITIAL.
+        MESSAGE '汇票方式汇票号码和汇票到期日不能为空！' TYPE 'S' DISPLAY LIKE 'E'.
+        RETURN.
+      ENDIF.
+    ENDIF.
+
+*    CLEAR l_line.
+*    DESCRIBE TABLE gt_table_200 LINES l_line.
+*    IF l_line < 1.
+*      MESSAGE '请添加行项目再保存！' TYPE 'S' DISPLAY LIKE 'E'.
+*      RETURN.
+*    ELSE.
+*      CLEAR:l_dmt.
+*      LOOP AT gt_table_200 INTO gwa_table_200.
+*        IF gwa_table_200-zskje = 0
+*          OR gwa_table_200-zskje IS INITIAL.
+*          MESSAGE '请输入行项目中的金额！' TYPE 'S' DISPLAY LIKE 'E'.
+*          RETURN.
+*        ELSEIF gwa_table_200-zhth IS INITIAL.
+*          MESSAGE '请输入合同号！' TYPE 'S' DISPLAY LIKE 'E'.
+*          RETURN.
+*        ELSE.
+*          l_dmt = l_dmt + gwa_table_200-zskje.
+*        ENDIF.
+*      ENDLOOP.
+*    ENDIF.
+    "收款总额= 出纳确认金额+手续费
+*    CLEAR L_DMZ.
+*    L_DMZ = GWA_SKT_200-ZCNQRE + GWA_SKT_200-ZQRSXF.
+*    IF GWA_SKT_200-ZSKZE NE L_DMZ.
+*      MESSAGE '金额不相等，请检查！' TYPE 'S' DISPLAY LIKE 'E'.
+*      RETURN.
+*    ENDIF.
+    "收款总额= 行项目总金额+代垫费用
+*    l_dmz = l_dmt + gwa_skt_200-zddfy.
+*    IF gwa_skt_200-zskze NE l_dmz.
+*      MESSAGE '合同金额与代垫费用之和需等于收款总额！' TYPE 'S' DISPLAY LIKE 'E'.
+*      RETURN.
+*    ENDIF.
+
+    IF gwa_skt_200-zskfs = '3'
+      OR gwa_skt_200-zskfs = '4'.
+      IF gwa_skt_200-zhphm IS INITIAL
+        OR gwa_skt_200-zhpdqr IS INITIAL.
+        MESSAGE '汇票方式汇票号码和汇票到期日不能为空！' TYPE 'S' DISPLAY LIKE 'E'.
+        RETURN.
+      ENDIF.
+    ENDIF.
+
+    "数据保存
+    LOOP AT gt_alv INTO gs_alv WHERE zgsdm = gwa_skt_200-zgsdm
+                                  AND zdjhm = gwa_skt_200-zdjhm.
+      MOVE-CORRESPONDING gwa_skt_200 TO gs_alv.
+      MODIFY gt_alv FROM gs_alv.
+    ENDLOOP.
+    MODIFY zficotskt FROM gwa_skt_200.
+    CLEAR gwa_skh_200.
+    IF sy-subrc = 0.
+      "删除后台表里对应的行项目
+      IF NOT gt_delete[] IS INITIAL.
+        DELETE zficotskh FROM TABLE gt_delete.
+      ENDIF.
+      CLEAR:gwa_skh_200,gt_skh_200.
+      DELETE gt_table_200 WHERE zhth IS INITIAL.
+      LOOP AT gt_table_200 INTO gwa_table_200.
+        gwa_skh_200-mandt = sy-mandt.
+        gwa_skh_200-zgsdm = gwa_skt_200-zgsdm.
+        gwa_skh_200-zdjhm = gwa_skt_200-zdjhm.
+        IF gwa_table_200-zhxm = ''.
+          gwa_skh_200-zhxm  = sy-tabix.
+        ELSE.
+          gwa_skh_200-zhxm  = gwa_table_200-zhxm.
+        ENDIF.
+        gwa_skh_200-zhxm  = sy-tabix.
+        gwa_skh_200-zhth  = gwa_table_200-zhth.
+        gwa_skh_200-zskje = gwa_table_200-zskje.
+        COLLECT gwa_skh_200 INTO gt_skh_200.
+        CLEAR gwa_skh_200.
+      ENDLOOP.
+      MODIFY zficotskh FROM TABLE gt_skh_200.
+      IF sy-subrc = 0.
+        COMMIT WORK.
+        CLEAR:gwa_skt_200,gt_table_200,gwa_table_200,
+              g_khmc,g_zhmc.
+        MESSAGE '数据保存成功！' TYPE 'S'.
+        LEAVE TO SCREEN 0.
+      ELSE.
+        ROLLBACK WORK.
+      ENDIF.
+    ELSE.
+      ROLLBACK WORK.
+    ENDIF.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  GET_NAME
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM get_name .
+  IF gwa_skt_200-zkhbm IS NOT INITIAL.
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+      EXPORTING
+        input  = gwa_skt_200-zkhbm
+      IMPORTING
+        output = gwa_skt_200-zkhbm.
+
+    SELECT SINGLE name1
+      INTO g_khmc
+      FROM kna1
+      WHERE kunnr = gwa_skt_200-zkhbm.
+  ENDIF.
+
+  SELECT SINGLE txt20
+      INTO (g_zhmc)
+      FROM skat
+      WHERE spras = '1'
+        AND saknr = gwa_skt_200-zhryh.
+ENDFORM.

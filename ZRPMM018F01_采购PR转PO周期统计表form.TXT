@@ -1,0 +1,211 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM013F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  REFRESH: gt_alv,gt_ekko,gt_cdhdr,gt_eban.
+*  根据选择屏幕的输入条件从表EBAN中取出采购申请记录
+  SELECT banfn bnfpo badat frgdt matnr txz01 matkl menge
+    INTO CORRESPONDING FIELDS OF TABLE gt_eban
+    FROM eban
+    WHERE badat IN s_badat
+      AND matkl IN s_matkl
+      AND loekz NE 'X'.
+
+  IF gt_eban[] IS NOT INITIAL.
+    SELECT a~ebeln a~ebelp a~menge b~aedat b~ernam b~ekgrp a~banfn a~bnfpo b~lifnr a~ebeln AS objectid
+      INTO CORRESPONDING FIELDS OF TABLE gt_ekko
+      FROM ekpo AS a INNER JOIN ekko AS b ON a~ebeln = b~ebeln
+      FOR ALL ENTRIES IN gt_eban
+      WHERE a~banfn = gt_eban-banfn
+        AND a~bnfpo = gt_eban-bnfpo
+        AND b~lifnr IN s_lifnr
+        AND b~ekgrp IN s_ekgrp.
+    SORT gt_ekko BY banfn bnfpo.
+  ENDIF.
+
+  IF gt_ekko[] IS NOT INITIAL.
+    SELECT a~objectclas a~objectid a~changenr a~tabname a~tabkey a~fname a~value_new
+           b~udate b~utime
+      INTO CORRESPONDING FIELDS OF TABLE gt_cdhdr
+      FROM cdpos AS a INNER JOIN cdhdr AS b ON a~objectclas = b~objectclas
+                                           AND a~objectid = b~objectid
+                                           AND a~changenr = b~changenr
+      FOR ALL ENTRIES IN gt_ekko
+      WHERE a~objectclas = 'EINKBELEG'
+        AND a~objectid = gt_ekko-objectid
+        AND a~tabname = 'EKKO'
+        AND a~value_new = 'R'.
+    SORT gt_cdhdr BY objectid ASCENDING udate DESCENDING utime DESCENDING.
+
+*  取供应商
+    SELECT * INTO TABLE gt_lfa1 FROM lfa1
+      FOR ALL ENTRIES IN gt_ekko
+      WHERE lifnr = gt_ekko-lifnr.
+    SORT gt_lfa1 BY lifnr.
+  ENDIF.
+
+  SELECT * INTO TABLE gt_t023t FROM t023t WHERE spras = sy-langu.
+  SORT gt_t023t BY matkl.
+  SELECT * INTO TABLE gt_t024 FROM t024.
+  SORT gt_t024 BY ekgrp.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PROCESS_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_process_data .
+  LOOP AT gt_eban.
+    CLEAR: gt_alv.
+    MOVE-CORRESPONDING gt_eban TO gt_alv.
+    READ TABLE gt_t023t WITH KEY matkl = gt_eban-matkl BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-wgbez = gt_t023t-wgbez.
+    ENDIF.
+*  根据采购申请取采购订单信息
+    LOOP AT gt_ekko WHERE banfn = gt_alv-banfn AND bnfpo = gt_alv-bnfpo.
+      gt_alv-ebeln = gt_ekko-ebeln."采购订单号
+      gt_alv-ebelp = gt_ekko-ebelp."采购订单行项目
+      gt_alv-menge_ekpo = gt_ekko-menge."数量
+      gt_alv-aedat = gt_ekko-aedat."订单日期
+      gt_alv-ernam = gt_ekko-ernam."采购员
+      gt_alv-ekgrp = gt_ekko-ekgrp."采购组
+      gt_alv-lifnr = gt_ekko-lifnr."供应商
+      READ TABLE gt_lfa1 WITH KEY lifnr = gt_ekko-lifnr BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_alv-name1 = gt_lfa1-name1.
+      ENDIF.
+      READ TABLE gt_t024 WITH KEY ekgrp = gt_ekko-ekgrp BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_alv-eknam = gt_t024-eknam.
+      ENDIF.
+      READ TABLE gt_cdhdr WITH KEY objectid = gt_ekko-objectid BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_alv-udate = gt_cdhdr-udate."订单审批日期
+        gt_alv-utime = gt_cdhdr-utime."订单审批时间
+      ENDIF.
+* 诗意创建日期和申请审批日期差
+      IF gt_alv-aedat IS NOT INITIAL.
+        gt_alv-djcjc = gt_alv-aedat - gt_alv-frgdt.
+      ENDIF.
+      IF gt_alv-udate IS NOT INITIAL.
+        gt_alv-djspc = gt_alv-udate - gt_alv-frgdt.
+      ENDIF.
+*  取采购员名称
+      PERFORM frm_get_eknam USING gt_alv-ernam CHANGING gt_alv-ernam_ms .
+      APPEND gt_alv.
+      CLEAR: gt_ekko.
+    ENDLOOP.
+    IF sy-subrc <> 0 .
+      APPEND gt_alv.
+    ENDIF.
+  ENDLOOP.
+
+  IF s_lifnr IS NOT INITIAL.
+    DELETE gt_alv WHERE lifnr NOT IN s_lifnr.
+  ENDIF.
+
+  IF s_ekgrp IS NOT INITIAL.
+    DELETE gt_alv WHERE ekgrp NOT IN s_ekgrp.
+  ENDIF.
+
+
+  SORT gt_alv BY banfn bnfpo.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SUB_BUILD_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM sub_build_fieldcat .
+  REFRESH:g_it_fieldcat.
+  PERFORM sub_set_fieldcat USING 'X' 'BANFN'      '采购申请单号'                 'X'  ''  ''  ''  ''  'BANFN'  'EBAN' ''.
+  PERFORM sub_set_fieldcat USING 'X' 'BNFPO'      '采购申请行项目号'             'X' '' ''  ''  ''  'BNFPO'  'EBAN' '' .
+  PERFORM sub_set_fieldcat USING ''  'BADAT'      '采购申请日期'                 'X' '' ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'FRGDT'      '采购申请审批日期'             'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'MATNR'      '物料号'                       'X' '' ''  ''  ''  'MATNR'  'MARA' '' .
+  PERFORM sub_set_fieldcat USING ''  'TXZ01'      '物料描述'                     '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'MATKL'      '物料组'                       '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'WGBEZ'      '物料组描述'                       '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'MENGE'      '采购申请数量'                 'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'EBELN'      '采购订单号'                   'X' '' ''  ''  ''  'EBELN'  'EKPO' ''.
+  PERFORM sub_set_fieldcat USING ''  'EBELP'      '采购订单行项目'               'X' '' ''  ''  ''  'EBELP'  'EKPO' '' .
+  PERFORM sub_set_fieldcat USING ''  'AEDAT'      '采购订单日期'                 'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'MENGE_EKPO' '采购订单数量'                 'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'UDATE'      '订单审批日期'                 'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'UTIME'      '订单审批时间'                 'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'DJCJC'      '订单创建日期和申请审批日期差' 'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'DJSPC'      '订单审批日期和申请审批日期差' 'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'ERNAM'      '采购员'                       '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'ERNAM_MS'   '采购员名称'                       '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'EKGRP'      '采购组'                       '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'EKNAM'      '采购组描述'                   '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''  'LIFNR'      '供应商'                       'X' '' ''  ''  ''  'LIFNR'  'LFA1' '' .
+  PERFORM sub_set_fieldcat USING ''  'NAME1'      '供应商描述'                   '' '' ''  ''  ''  ''  '' '' .
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  alv_user_command
+*&---------------------------------------------------------------------*
+*----------------------------------------------------------------------*
+*      -->UCOMM      text
+*      -->SELFIELD   text
+*----------------------------------------------------------------------*
+
+FORM alv_user_command USING ucomm LIKE sy-ucomm
+                          selfield TYPE slis_selfield.
+  PERFORM sub_check_changed_data.
+  CASE ucomm.
+    WHEN '&IC1'.
+      READ TABLE gt_alv INDEX selfield-tabindex."读取当前行
+      CASE selfield-fieldname.
+        WHEN 'BANFN'.
+          SET PARAMETER ID : 'BAN' FIELD gt_alv-banfn.
+          CALL TRANSACTION  'ME53N' AND SKIP FIRST SCREEN.
+        WHEN 'EBELN'.
+          SET PARAMETER ID : 'BES' FIELD gt_alv-ebeln.
+          CALL TRANSACTION  'ME23N' AND SKIP FIRST SCREEN.
+        WHEN OTHERS.
+      ENDCASE.
+
+    WHEN OTHERS.
+  ENDCASE.
+  PERFORM sub_refresh_data.
+ENDFORM. "alv_user_command
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_EKNAM
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_GT_ALV_ERNAM  text
+*      <--P_GT_ALV_ERNAM_MS  text
+*----------------------------------------------------------------------*
+FORM frm_get_eknam  USING    pv_ernam
+                    CHANGING pv_ernam_ms.
+  DATA:lv_pernr     LIKE usr21-persnumber,
+       lv_namelast  LIKE adrp-name_last,
+       lv_namefirst LIKE adrp-name_first.
+  CLEAR:lv_pernr,lv_namelast,lv_namefirst.
+  SELECT SINGLE persnumber INTO lv_pernr FROM usr21 WHERE bname = pv_ernam .
+  IF sy-subrc = 0.
+    SELECT SINGLE name_first name_last
+      INTO (lv_namefirst,lv_namelast)
+      FROM adrp
+     WHERE persnumber = lv_pernr.
+    CONCATENATE lv_namelast lv_namefirst INTO pv_ernam_ms.
+  ENDIF.
+ENDFORM.

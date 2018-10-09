@@ -1,0 +1,460 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP001F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+* 计算出当月第一天和最后一天
+  CONCATENATE sy-datum+0(6) '01' INTO lv_date_low.
+  CALL FUNCTION 'BKK_GET_MONTH_LASTDAY'
+    EXPORTING
+      i_date = sy-datum
+    IMPORTING
+      e_date = lv_date_high.
+
+* 成品物料信息
+  REFRESH:gt_mara.
+  SELECT a~matnr a~spart b~werks c~maktx a~meins
+    INTO CORRESPONDING FIELDS OF TABLE gt_mara
+    FROM mara AS a INNER JOIN marc AS b ON a~matnr = b~matnr
+                   INNER JOIN makt AS c ON a~matnr = c~matnr
+   WHERE a~matnr IN s_matnr
+     AND a~mtart EQ 'Z003'
+     AND a~spart IN s_spart
+     AND b~werks IN s_werks
+     AND b~dispo IN s_dispo
+     AND b~beskz EQ 'E'
+     AND c~spras EQ sy-langu.
+  SORT gt_mara BY matnr werks.
+
+  CHECK gt_mara[] IS NOT INITIAL.
+* 根据物料+工厂从表AUFK AFKO AFPO中取出工单信息（计算当月生产订单实际投入数量和当月返工生产订单实际入库数量）
+  SELECT a~aufnr a~auart a~werks a~objnr
+         b~gstrp
+         c~matnr c~psmng c~wemng
+    INTO CORRESPONDING FIELDS OF TABLE gt_afko
+    FROM aufk AS a INNER JOIN afko AS b ON a~aufnr = b~aufnr
+                   INNER JOIN afpo AS c ON a~aufnr = c~aufnr
+*                   INNER JOIN jest AS d ON a~objnr = d~objnr
+    FOR ALL ENTRIES IN gt_mara
+    WHERE c~matnr = gt_mara-matnr
+      AND a~werks IN s_werks.
+*      AND d~stat IN ('I0002','I0156','I0046')
+*      AND d~inact EQ space.
+
+* 根据取出的物料从表AUFM中取出所有的入库数量（计算当月生产订单实际入库数量）
+  SELECT a~mblnr a~mjahr a~zeile a~budat a~werks a~matnr a~aufnr a~menge a~bwart
+    INTO CORRESPONDING FIELDS OF TABLE gt_aufm
+    FROM aufm AS a INNER JOIN aufk AS b ON a~aufnr = b~aufnr
+    FOR ALL ENTRIES IN gt_mara
+    WHERE a~matnr = gt_mara-matnr
+      AND a~bwart IN ('101','102')
+      AND b~auart NE 'F001'
+      AND a~budat BETWEEN lv_date_low AND lv_date_high.
+
+* 根据物料+工厂从表MARD中取出库存数量
+  SELECT a~matnr a~werks a~lgort a~labst b~lgobe
+    INTO CORRESPONDING FIELDS OF TABLE gt_mard
+    FROM mard AS a INNER JOIN t001l AS b ON a~werks = b~werks AND a~lgort = b~lgort
+    FOR ALL ENTRIES IN gt_mara
+    WHERE a~matnr = gt_mara-matnr
+      AND a~werks = gt_mara-werks
+      AND a~labst NE 0
+      AND a~lgort IN ('1020','3020','1080').
+
+*  根据物料从表LIKP和表LIPS中取出本月销售出货数量
+  SELECT a~vbeln a~posnr a~matnr a~werks a~lfimg
+    INTO CORRESPONDING FIELDS OF TABLE gt_lips
+    FROM lips AS a INNER JOIN likp AS b ON a~vbeln = b~vbeln
+                   INNER JOIN vbuk AS c ON a~vbeln = c~vbeln
+    FOR ALL ENTRIES IN gt_mara
+    WHERE a~matnr = gt_mara-matnr
+      AND a~werks = gt_mara-werks
+      AND b~lfart IN ('ZLF1','ZLF3')
+      AND c~wbstk EQ 'C'
+*      AND c~lfstk = 'C'
+      AND b~wadat_ist BETWEEN lv_date_low AND lv_date_high.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PROCESS_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_process_data .
+  DATA:lt_tspat LIKE tspat OCCURS 0 WITH HEADER LINE,
+       lv_tabix LIKE sy-tabix.
+
+  REFRESH:gt_alv.
+  gt_alv[] = gt_mara[].
+  SORT gt_alv BY spart.
+  DELETE ADJACENT DUPLICATES FROM gt_alv COMPARING spart.
+
+*  计算当月生产订单实际入库数量
+  LOOP AT gt_aufm .
+    CLEAR:lt_aufm.
+    READ TABLE gt_mara WITH KEY matnr = gt_aufm-matnr werks = gt_aufm-werks BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_aufm-spart = gt_mara-spart.
+      gt_aufm-meins = gt_mara-meins.
+      gt_aufm-maktx = gt_mara-maktx.
+      lt_aufm-werks = gt_mara-werks.
+      lt_aufm-spart = gt_mara-spart.
+      IF gt_aufm-bwart = '101'.
+        lt_aufm-menge = gt_aufm-menge.
+      ELSEIF gt_aufm-bwart = '102'.
+        lt_aufm-menge = 0 - gt_aufm-menge.
+      ENDIF.
+      COLLECT lt_aufm.
+      MODIFY gt_aufm TRANSPORTING spart maktx meins.
+    ENDIF.
+  ENDLOOP.
+
+*  计算当月生产订单实际投入数量（基本开始日期在当月的工单数量）
+*      当月返工生产订单实际入库数量（基本开始日期在当月并且订单类型为F001）
+*      在制数量（AFKO中所有的REL订单，计划数-入库数）
+*      类型ZFLAG：A 当月生产订单实际投入数量 B:当月返工生产订单实际入库数量 C:在制数量
+  LOOP AT gt_afko .
+    CLEAR:lt_afko,gt_mara.
+    lv_tabix = sy-tabix.
+    READ TABLE gt_mara WITH KEY matnr = gt_afko-matnr werks = gt_afko-werks BINARY SEARCH.
+    IF sy-subrc <> 0.
+      DELETE gt_afko INDEX lv_tabix.
+      CONTINUE.
+    ELSE.
+      gt_afko-spart = gt_mara-spart.
+      gt_afko-maktx = gt_mara-maktx.
+      gt_afko-meins = gt_mara-meins.
+    ENDIF.
+
+    PERFORM frm_status_read USING gt_afko-objnr CHANGING gt_afko-sttxt.
+    MODIFY gt_afko TRANSPORTING spart maktx sttxt meins.
+
+    IF ( gt_afko-sttxt CS 'REL' OR gt_afko-sttxt CS 'TECO' OR gt_afko-sttxt CS 'CLSD' )
+      AND ( gt_afko-sttxt NS 'DLTD' AND gt_afko-sttxt NS '标记' ).
+      lt_afko-spart = gt_afko-spart.
+      lt_afko-werks = gt_afko-werks.
+      IF gt_afko-gstrp BETWEEN lv_date_low AND lv_date_high.
+        lt_afko-psmng = gt_afko-psmng.
+        lt_afko-zflag = 'A'.
+        COLLECT lt_afko.
+        IF gt_afko-auart EQ 'F001' AND gt_afko-sttxt CS 'REL'.
+          CLEAR: lt_afko-psmng ,lt_afko-zflag.
+*      CHANGE BY PFT 20171226
+*          lt_afko-psmng = gt_afko-psmng.
+          lt_afko-psmng = gt_afko-wemng.
+*      END BY PFT 20171226
+          lt_afko-zflag = 'B'.
+          COLLECT lt_afko.
+        ENDIF.
+      ENDIF.
+      CHECK gt_afko-sttxt CS 'REL'.
+      CLEAR: lt_afko-psmng ,lt_afko-zflag.
+      lt_afko-psmng = gt_afko-psmng - gt_afko-wemng.
+      lt_afko-zflag = 'C'.
+      COLLECT lt_afko.
+    ELSE.
+      DELETE gt_afko INDEX lv_tabix.
+    ENDIF.
+  ENDLOOP.
+
+* 处理库存
+  REFRESH:lt_mard.
+  LOOP AT gt_mard.
+    CLEAR:lt_mard.
+    READ TABLE gt_mara WITH KEY matnr = gt_mard-matnr werks = gt_mard-werks BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_mard-spart = gt_mara-spart.
+      gt_mard-maktx = gt_mara-maktx.
+      gt_mard-meins = gt_mara-meins.
+      lt_mard-werks = gt_mara-werks.
+      lt_mard-spart = gt_mara-spart.
+      lt_mard-labst = gt_mard-labst.
+      COLLECT lt_mard.
+      MODIFY gt_mard TRANSPORTING spart maktx meins.
+    ENDIF.
+  ENDLOOP.
+
+* 计算本月销售出货数量
+  LOOP AT gt_lips.
+    CLEAR:lt_lips.
+    READ TABLE gt_mara WITH KEY matnr = gt_lips-matnr werks = gt_lips-werks BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_lips-spart = gt_mara-spart.
+      gt_lips-maktx = gt_mara-maktx.
+      gt_lips-meins = gt_mara-meins.
+      lt_lips-werks = gt_mara-werks.
+      lt_lips-spart = gt_mara-spart.
+      lt_lips-lfimg = gt_lips-lfimg.
+      COLLECT lt_lips.
+      MODIFY gt_lips TRANSPORTING spart maktx meins.
+    ENDIF.
+  ENDLOOP.
+
+*  取产品组描述
+  SELECT * INTO TABLE lt_tspat FROM tspat WHERE spras = sy-langu.
+
+  SORT lt_afko BY werks spart.
+  SORT lt_aufm BY werks spart.
+  SORT lt_afko BY werks spart.
+  SORT lt_mard BY werks spart.
+  SORT lt_lips BY werks spart.
+  SORT lt_tspat BY spart.
+
+  LOOP AT gt_alv.
+*   取产品组名称
+    READ TABLE lt_tspat WITH KEY spart = gt_alv-spart BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-vtext = lt_tspat-vtext.
+    ENDIF.
+*   计算出当月生产订单实际投入数量\实际入库数量\在制数量
+    LOOP AT lt_afko WHERE werks = gt_alv-werks AND spart = gt_alv-spart.
+      CASE lt_afko-zflag.
+        WHEN 'A'."计算出当月生产订单实际投入数量（基本开始日期gstrp在当月）
+          gt_alv-sjtrl = lt_afko-psmng.
+        WHEN 'B'."计算出当月返工生产订单实际入库数量（基本开始日期gstrp在当月并且订单类型AUART=F001）
+          gt_alv-fgrks = lt_afko-psmng.
+        WHEN 'C'. "计算在制数量（计划数-入库数）
+          gt_alv-zzzsl = lt_afko-psmng.
+        WHEN OTHERS.
+      ENDCASE.
+    ENDLOOP.
+*  计算当月生产订单实际入库数量
+    READ TABLE lt_aufm WITH KEY werks = gt_alv-werks spart = gt_alv-spart BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-sjrkl = lt_aufm-menge.
+    ENDIF.
+*  计算库存数量
+    READ TABLE lt_mard WITH KEY werks = gt_alv-werks spart = gt_alv-spart BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-zkcsl = lt_mard-labst.
+    ENDIF.
+*  计算本月销售出货数量
+    READ TABLE lt_lips WITH KEY werks = gt_alv-werks spart = gt_alv-spart BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-xschl = lt_lips-lfimg.
+    ENDIF.
+    MODIFY gt_alv.
+  ENDLOOP.
+  DELETE gt_alv WHERE sjtrl = 0 AND sjrkl = 0 AND fgrks = 0 AND zzzsl = 0 AND zkcsl = 0 AND xschl = 0.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SUB_BUILD_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM sub_build_fieldcat .
+  REFRESH:g_it_fieldcat.
+  PERFORM sub_set_fieldcat USING 'X' 'WERKS'  '工厂'                         ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING 'X' 'SPART'  '产品组'                       ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING 'X' 'VTEXT'  '产品组名称'                   ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'SJTRL'  '当月生产订单实际投入数量'     'X'  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'SJRKL'  '当月生产订单实际入库数量'     'X'  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'FGRKS'  '当月返工生产订单实际入库数量' 'X'  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'ZZZSL'  '在制数量'                     'X'  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'ZKCSL'  '库存数量'                     'X'  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'XSCHL'  '本月销售出货数量'             'X'  ''  ''  ''  ''  ''  '' ''.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  alv_user_command
+*&---------------------------------------------------------------------*
+*----------------------------------------------------------------------*
+*      -->UCOMM      text
+*      -->SELFIELD   text
+*----------------------------------------------------------------------*
+FORM alv_user_command USING ucomm LIKE sy-ucomm
+      selfield TYPE slis_selfield.
+  PERFORM sub_check_changed_data.
+  CASE ucomm.
+    WHEN '&IC1'.
+      READ TABLE gt_alv INDEX selfield-tabindex."读取当前行
+      CASE selfield-fieldname.
+        WHEN 'SPART'.
+          REFRESH:lt_mara.
+          LOOP AT gt_mara WHERE spart = gt_alv-spart AND werks = gt_alv-werks.
+            MOVE-CORRESPONDING gt_mara TO lt_mara.
+            APPEND lt_mara.
+          ENDLOOP.
+          SORT lt_mara BY werks spart matnr.
+          PERFORM sub_build_fieldcat1 USING selfield-fieldname.
+          PERFORM sub_display_alv TABLES lt_mara USING '' ''.
+        WHEN 'SJTRL' OR 'FGRKS' OR 'ZZZSL'.  "当月生产订单实际投入数量
+          PERFORM frm_get_aufnr USING gt_alv selfield-fieldname.
+          SORT lt_afko BY werks spart aufnr.
+          PERFORM sub_build_fieldcat1 USING selfield-fieldname.
+          PERFORM sub_display_alv TABLES lt_afko USING '' ''.
+        WHEN 'SJRKL'. "当月生产订单实际入库数量
+          REFRESH:lt_aufm.
+          LOOP AT gt_aufm WHERE werks = gt_alv-werks AND spart = gt_alv-spart.
+            MOVE-CORRESPONDING gt_aufm TO lt_aufm.
+            APPEND lt_aufm.
+          ENDLOOP.
+          SORT lt_aufm BY werks spart aufnr mblnr mjahr zeile.
+          PERFORM sub_build_fieldcat1 USING selfield-fieldname.
+          PERFORM sub_display_alv TABLES lt_aufm USING '' ''.
+        WHEN 'ZKCSL'."库存数量
+          REFRESH:lt_mard.
+          LOOP AT gt_mard WHERE werks = gt_alv-werks AND spart = gt_alv-spart.
+            MOVE-CORRESPONDING gt_mard TO lt_mard.
+            APPEND lt_mard.
+          ENDLOOP.
+          SORT lt_mard BY werks spart matnr lgort.
+          PERFORM sub_build_fieldcat1 USING selfield-fieldname.
+          PERFORM sub_display_alv TABLES lt_mard USING '' ''.
+        WHEN 'XSCHL'."本月销售出货数量
+          REFRESH:lt_lips.
+          LOOP AT gt_lips WHERE werks = gt_alv-werks AND spart = gt_alv-spart.
+            MOVE-CORRESPONDING gt_lips TO lt_lips.
+            APPEND lt_lips.
+          ENDLOOP.
+          SORT lt_lips BY werks spart vbeln posnr.
+          PERFORM sub_build_fieldcat1 USING selfield-fieldname.
+          PERFORM sub_display_alv TABLES lt_lips USING '' ''.
+        WHEN OTHERS.
+      ENDCASE.
+    WHEN OTHERS.
+  ENDCASE.
+  PERFORM sub_refresh_data.
+ENDFORM. "alv_user_command
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_AUFNR
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_SELFIELD_FIELDNAME  text
+*----------------------------------------------------------------------*
+FORM frm_get_aufnr USING gt_alv STRUCTURE gt_alv
+                         lv_field TYPE slis_fieldname.
+
+*  逻辑：当月生产订单实际投入数量SJTRL：取当前月份的工单
+*        当月返工生产订单实际入库数量FGRKS ：取当前月份的工单并且订单类型为F001
+*        在制数量ZZZSL：取所有的工单
+  REFRESH:lt_afko.
+  CASE lv_field.
+    WHEN 'SJTRL'.
+      LOOP AT gt_afko WHERE spart = gt_alv-spart
+                         AND werks = gt_alv-werks
+                         AND gstrp BETWEEN lv_date_low AND lv_date_high.
+        MOVE-CORRESPONDING gt_afko TO lt_afko.
+        APPEND lt_afko.
+      ENDLOOP.
+    WHEN 'FGRKS'.
+      LOOP AT gt_afko WHERE spart = gt_alv-spart AND werks = gt_alv-werks
+                         AND gstrp BETWEEN lv_date_low AND lv_date_high
+                         AND auart EQ 'F001'
+                         AND sttxt CS 'REL'.
+        MOVE-CORRESPONDING gt_afko TO lt_afko.
+        APPEND lt_afko.
+      ENDLOOP.
+    WHEN 'ZZZSL'.
+      LOOP AT gt_afko WHERE spart = gt_alv-spart AND werks = gt_alv-werks
+                         AND sttxt CS 'REL'.
+        MOVE-CORRESPONDING gt_afko TO lt_afko.
+        APPEND lt_afko.
+      ENDLOOP.
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SUB_BUILD_FIELDCAT1
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM sub_build_fieldcat1 USING lv_field TYPE slis_fieldname.
+  REFRESH:g_it_fieldcat.
+  CASE lv_field.
+    WHEN 'SPART'.
+      PERFORM sub_set_fieldcat USING 'X' 'WERKS'  '工厂'           ''  ''  ''  ''  ''  ''  '' ''.
+      PERFORM sub_set_fieldcat USING 'X' 'SPART'  '产品组'         ''  ''  ''  ''  ''  ''  '' ''.
+      PERFORM sub_set_fieldcat USING ''  'MATNR'  '物料号'         'X'  ''  ''  ''  ''  'MATNR'  'MARA' ''.
+      PERFORM sub_set_fieldcat USING ''  'MAKTX'  '物料描述'       ''  ''  ''  ''  ''  ''  '' ''.
+    WHEN 'SJTRL' OR 'FGRKS' OR 'ZZZSL'.
+      PERFORM sub_set_fieldcat USING 'X' 'WERKS'  '工厂'           ''  ''  ''  ''  ''  ''  '' ''.
+      PERFORM sub_set_fieldcat USING 'X' 'SPART'  '产品组'         ''  ''  ''  ''  ''  ''  '' ''.
+      PERFORM sub_set_fieldcat USING ''  'AUFNR'  '生产订单号'     'X'  ''  ''  ''  ''  'AUFNR'  'AFKO' ''.
+      PERFORM sub_set_fieldcat USING ''  'AUART'  '订单类型'       ''  ''  ''  ''  ''  ''  '' ''.
+      PERFORM sub_set_fieldcat USING ''  'GSTRP'  '订单开始日期'   ''  ''  ''  ''  ''  ''  '' ''.
+      PERFORM sub_set_fieldcat USING ''  'MATNR'  '物料号'         'X'  ''  ''  ''  ''  'MATNR'  'MARA' ''.
+      PERFORM sub_set_fieldcat USING ''  'MAKTX'  '物料描述'       ''  ''  ''  ''  ''  ''  '' ''.
+      PERFORM sub_set_fieldcat USING ''  'PSMNG'  '订单数量'       'X'  ''  ''  ''  ''  ''  '' ''.
+      PERFORM sub_set_fieldcat USING ''  'WEMNG'  '入库数量'       'X'  ''  ''  ''  ''  ''  '' ''.
+    WHEN 'SJRKL'.
+      PERFORM sub_set_fieldcat USING 'X' 'WERKS'  '工厂'           ''  ''  ''  ''  ''  ''  '' ''.
+      PERFORM sub_set_fieldcat USING 'X' 'SPART'  '产品组'         ''  ''  ''  ''  ''  ''  '' ''.
+      PERFORM sub_set_fieldcat USING ''  'AUFNR'  '生产订单号'     'X'  ''  ''  ''  ''  'AUFNR'  'AFKO' ''.
+      PERFORM sub_set_fieldcat USING ''  'MBLNR'  '物料凭证号'     'X'  ''  ''  ''  ''  'MBLNR'  'AUFM' ''.
+      PERFORM sub_set_fieldcat USING ''  'MJAHR'  '物料凭证年度'   'X'  ''  ''  ''  ''  'MJAHR'  'AUFM' ''.
+      PERFORM sub_set_fieldcat USING ''  'ZEILE'  '凭证行项目'     'X'  ''  ''  ''  ''  'ZEILE'  'AUFM' ''.
+      PERFORM sub_set_fieldcat USING ''  'BUDAT'  '过帐日期'       ''  ''  ''  ''  ''  ''  '' ''.
+      PERFORM sub_set_fieldcat USING ''  'MATNR'  '物料号'         'X'  ''  ''  ''  ''  'MATNR'  'MARA' ''.
+      PERFORM sub_set_fieldcat USING ''  'MAKTX'  '物料描述'       ''  ''  ''  ''  ''  ''  '' ''.
+      PERFORM sub_set_fieldcat USING ''  'MENGE'  '订单数量'       'X'  ''  ''  ''  ''  ''  '' ''.
+      PERFORM sub_set_fieldcat USING ''  'BWART'  '移动类型'       ''  ''  ''  ''  ''  ''  '' ''.
+    WHEN 'ZKCSL'.
+      PERFORM sub_set_fieldcat USING 'X' 'WERKS'  '工厂'           ''  ''  ''  ''  ''  ''  '' ''.
+      PERFORM sub_set_fieldcat USING 'X' 'SPART'  '产品组'         ''  ''  ''  ''  ''  ''  '' ''.
+      PERFORM sub_set_fieldcat USING ''  'MATNR'  '物料号'         'X'  ''  ''  ''  ''  'MATNR'  'MARA' ''.
+      PERFORM sub_set_fieldcat USING ''  'MAKTX'  '物料描述'       ''  ''  ''  ''  ''  ''  '' ''.
+      PERFORM sub_set_fieldcat USING ''  'LGORT'  '库存地点'       ''  ''  ''  ''  ''  ''  '' ''.
+      PERFORM sub_set_fieldcat USING ''  'LGOBE'  '库存地点描述'   ''  ''  ''  ''  ''  ''  '' ''.
+      PERFORM sub_set_fieldcat USING ''  'LABST'  '数量'           'X'  ''  ''  ''  ''  ''  '' ''.
+    WHEN 'XSCHL'.
+      PERFORM sub_set_fieldcat USING 'X' 'WERKS'  '工厂'           ''  ''  ''  ''  ''  ''  '' ''.
+      PERFORM sub_set_fieldcat USING 'X' 'SPART'  '产品组'         ''  ''  ''  ''  ''  ''  '' ''.
+      PERFORM sub_set_fieldcat USING ''  'VBELN'  '交货单号'       'X'  ''  ''  ''  ''  'VBELN'  'LIPS' ''.
+      PERFORM sub_set_fieldcat USING ''  'POSNR'  '行项目号'       'X'  ''  ''  ''  ''  'POSNR'  'LIPS' ''.
+      PERFORM sub_set_fieldcat USING ''  'MATNR'  '物料号'         'X'  ''  ''  ''  ''  'MATNR'  'MARA' ''.
+      PERFORM sub_set_fieldcat USING ''  'MAKTX'  '物料描述'       ''  ''  ''  ''  ''  ''  '' ''.
+      PERFORM sub_set_fieldcat USING ''  'LFIMG'  '数量'           'X'  ''  ''  ''  ''  ''  '' ''.
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_STATUS_READ
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_GT_AFKO_OBJNR  text
+*      <--P_GT_AFKO_STATUS  text
+*----------------------------------------------------------------------*
+FORM frm_status_read  USING    pv_objnr
+                      CHANGING pv_sttxt.
+*  DATA :lt_status TYPE STANDARD TABLE OF jstat.
+*
+*  CALL FUNCTION 'STATUS_READ'
+*    EXPORTING
+*      client           = sy-mandt
+*      objnr            = pv_objnr
+*      only_active      = 'X'
+*    TABLES
+*      status           = lt_status
+*    EXCEPTIONS
+*      object_not_found = 1
+*      OTHERS           = 2.
+
+  CALL FUNCTION 'STATUS_TEXT_EDIT'
+    EXPORTING
+      objnr            = pv_objnr
+      spras            = sy-langu
+    IMPORTING
+      line             = pv_sttxt
+    EXCEPTIONS
+      object_not_found = 1
+      OTHERS           = 2.
+
+ENDFORM.

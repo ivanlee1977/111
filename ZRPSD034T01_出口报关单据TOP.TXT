@@ -1,0 +1,68 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPSD011T01
+*&---------------------------------------------------------------------*
+
+TABLES:ztsd003zxdb,lips,ztsd003jhdy,ztsd003cpys,vbak,likp.
+
+DATA:BEGIN OF gt_out OCCURS 0.
+    INCLUDE       STRUCTURE ztsd003jhdy.
+DATA: vgbel       TYPE lips-vgbel,
+      vgpos       TYPE lips-vgpos,
+      matnr       TYPE lips-matnr,
+      ernam       TYPE vbak-ernam,
+      zname1(100) TYPE c,
+      kunnr       TYPE vbak-kunnr,
+      zname(100)  TYPE c,
+      zzwpm       TYPE ztsd003cpys-zzwpm,
+      zdesc       TYPE ztsd003cpys-zdesc,
+      zxh         TYPE ztsd003cpys-zxh,
+      kzwi1       TYPE vbap-kzwi1,
+      zterm       TYPE vbkd-zterm,
+      zterm_txt   LIKE tvzbt-vtext,  "付款条件描述
+      zbght(12)   TYPE c,   "r报关合同
+      zfhrq       TYPE ztsd003zxdb-zfhrq,
+      vsart       TYPE ztsd003zxdb-vsart,
+      bezei_vsart TYPE t173t-vsart,
+      zysdh       TYPE ztsd003zxdb-zysdh,
+      zbgdh       TYPE ztsd003zxdb-zbgdh,
+      country     LIKE adrc-country, "贸易国地区
+      landx       LIKE t005t-landx,  "贸易国地区描述
+      country_t   LIKE adrc-country, "运抵国（地区）
+      landx_t     LIKE t005t-landx,  "运抵国（地区）描述
+      lfimg       LIKE lips-lfimg,        "数量
+      netpr       TYPE p DECIMALS 2,      "单价
+      netpr_t     TYPE p DECIMALS 2,      "金额
+      rate        TYPE ukursp,
+      zts         TYPE p DECIMALS 2,      "退税
+      netpr1      TYPE p DECIMALS 2,
+      netpr2      TYPE p DECIMALS 2,
+      netpr3      TYPE p DECIMALS 2,
+      zdw(11)     TYPE c,
+      zwx(11)     TYPE c,
+      zmy(11)     TYPE c,
+      ztk(11)     TYPE c,
+      waerk       LIKE vbak-waerk.        "币别
+DATA:END OF gt_out.
+
+CONSTANTS:gcst_excel_template TYPE w3objid VALUE 'ZSD011'.
+
+***alv data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  gt_fcat-inttype = &5.
+  gt_fcat-intlen = &6.
+  IF &1 = 'ZMSG' OR &1 = 'ZSTAT'.
+    gt_fcat-tech = 'X'.
+  ENDIF.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

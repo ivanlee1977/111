@@ -1,0 +1,520 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPSD013F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  frm_get_data
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  REFRESH:gt_out.
+  IF p_r0 = 'X'.
+***抓取满足条件的数据,排除冻结的客户
+    SELECT a~name4
+           a~kunnr
+           a~erdat
+           a~name1
+           a~name2
+           a~sortl
+           a~land1
+           a~regio
+           a~ort01 AS city1
+           a~pstlz
+           a~adrnr
+           b~kdgrp
+           a~kukla
+           a~katr1
+           a~katr2
+           a~katr3
+           b~zterm
+           a~lifnr
+           b~vkorg
+           b~vtweg
+           b~spart
+           b~bzirk
+           b~vkbur
+           b~vkgrp
+           b~kvgr1
+           b~kvgr2
+           b~kvgr3
+           b~kvgr4
+           b~waers
+           b~ktgrd
+           b~inco1
+           b~inco2
+           a~zvat_num
+           a~zaccount
+           a~zaddr
+           b~kvgr5
+           a~katr4
+           a~katr5
+           a~katr6
+           a~katr7
+           a~katr8
+           a~katr9
+           a~katr10
+           a~aufsd
+      INTO CORRESPONDING FIELDS OF TABLE gt_out
+      FROM kna1 AS a INNER JOIN knvv AS b ON a~kunnr = b~kunnr
+      WHERE b~vkorg IN s_vkorg
+        AND b~vtweg IN s_vtweg
+        AND b~kunnr IN s_kunnr
+        AND a~erdat IN s_erdat
+        AND b~bzirk IN s_bzirk
+        AND b~vkbur IN s_vkbur
+        AND b~kvgr1 IN s_kvgr1
+        AND b~kvgr2 IN s_kvgr2
+        AND a~loevm EQ space
+        AND b~loevm EQ space
+        AND a~ktokd EQ 'ZAG1'
+       AND a~aufsd = space.
+
+  ELSE.
+***抓取满足条件的数据
+    SELECT a~name4
+           a~kunnr
+           a~erdat
+           a~name1
+           a~name2
+           a~sortl
+           a~land1
+           a~regio
+           a~ort01 AS city1
+           a~pstlz
+           a~adrnr
+           b~kdgrp
+           a~kukla
+           a~katr1
+           a~katr2
+           a~katr3
+           b~zterm
+           a~lifnr
+           b~vkorg
+           b~vtweg
+           b~spart
+           b~bzirk
+           b~vkbur
+           b~vkgrp
+           b~kvgr1
+           b~kvgr2
+           b~kvgr3
+           b~kvgr4
+           b~waers
+           b~ktgrd
+           b~inco1
+           b~inco2
+           a~zvat_num
+           a~zaccount
+           a~zaddr
+           b~kvgr5
+           a~katr4
+           a~katr5
+           a~katr6
+           a~katr7
+           a~katr8
+           a~katr9
+           a~katr10
+           a~aufsd
+      INTO CORRESPONDING FIELDS OF TABLE gt_out
+      FROM kna1 AS a INNER JOIN knvv AS b ON a~kunnr = b~kunnr
+      WHERE b~vkorg IN s_vkorg
+        AND b~vtweg IN s_vtweg
+        AND b~kunnr IN s_kunnr
+        AND a~erdat IN s_erdat
+        AND b~bzirk IN s_bzirk
+        AND b~vkbur IN s_vkbur
+        AND b~kvgr1 IN s_kvgr1
+        AND b~kvgr2 IN s_kvgr2
+        AND a~loevm EQ space
+        AND b~loevm EQ space
+        AND a~ktokd EQ 'ZAG1'.
+
+
+  ENDIF.
+
+  SORT gt_out BY kunnr.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PROCESS_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_GT_OUT  text
+*----------------------------------------------------------------------*
+FORM frm_process_data .
+  DATA:lt_adrc  LIKE adrc OCCURS 0 WITH HEADER LINE,
+       lt_adr2  LIKE adr2 OCCURS 0 WITH HEADER LINE,
+       lt_knvi  LIKE knvi OCCURS 0 WITH HEADER LINE,
+       lt_tvkot LIKE tvkot OCCURS 0 WITH HEADER LINE,
+       lt_tvtwt LIKE tvtwt OCCURS 0 WITH HEADER LINE,
+       lt_tspat LIKE tspat OCCURS 0 WITH HEADER LINE,
+       lt_t171t LIKE t171t OCCURS 0 WITH HEADER LINE,
+       lt_tvkbt LIKE tvkbt OCCURS 0 WITH HEADER LINE,
+       lt_tvgrt LIKE tvgrt OCCURS 0 WITH HEADER LINE,
+       lt_tvv1t LIKE tvv1t OCCURS 0 WITH HEADER LINE,
+       lt_tvv2t LIKE tvv2t OCCURS 0 WITH HEADER LINE.
+
+  DATA:lv_name  LIKE thead-tdname,
+       lv_tabix LIKE sy-tabix.
+
+  IF gt_out[] IS NOT INITIAL.
+*  取经营地址、收货地址、电话
+    SELECT * INTO TABLE lt_adrc FROM adrc FOR ALL ENTRIES IN gt_out WHERE addrnumber = gt_out-adrnr.
+    SORT lt_adrc BY addrnumber.
+*  取电话
+    SELECT * INTO TABLE lt_adr2 FROM adr2 FOR ALL ENTRIES IN gt_out WHERE addrnumber = gt_out-adrnr AND persnumber = space.
+    SORT lt_adr2 BY addrnumber.
+*  取客户税分类
+    SELECT * INTO TABLE lt_knvi FROM knvi FOR ALL ENTRIES IN gt_out WHERE kunnr = gt_out-kunnr AND aland = 'CN' AND tatyp = 'MWST'.
+    SORT lt_knvi BY kunnr.
+***销售组织描述
+    SELECT * INTO TABLE lt_tvkot FROM tvkot WHERE spras = sy-langu AND vkorg IN s_vkorg.
+    SORT lt_tvkot BY vkorg.
+***分销渠道描述
+    SELECT * INTO TABLE lt_tvtwt FROM tvtwt WHERE spras = sy-langu.
+    SORT lt_tvtwt BY vtweg.
+***产品组描述
+    SELECT * INTO TABLE lt_tspat FROM tspat WHERE spras = sy-langu.
+    SORT lt_tspat BY spart.
+***销售大区描述
+    SELECT * INTO TABLE lt_t171t FROM t171t WHERE spras = sy-langu AND bzirk IN s_bzirk.
+    SORT lt_t171t BY bzirk.
+***销售办事处描述
+    SELECT * INTO TABLE lt_tvkbt FROM tvkbt WHERE spras = sy-langu AND vkbur IN s_vkbur.
+    SORT lt_tvkbt BY vkbur.
+***销售组描述
+    SELECT * INTO TABLE lt_tvgrt FROM tvgrt WHERE spras = sy-langu.
+    SORT lt_tvgrt BY vkgrp.
+***销售业务员描述
+    SELECT * INTO TABLE lt_tvv1t FROM tvv1t WHERE spras = sy-langu AND kvgr1 IN s_kvgr1.
+    SORT lt_tvv1t BY kvgr1.
+***商务描述
+    SELECT * INTO TABLE lt_tvv2t FROM tvv2t WHERE spras = sy-langu AND kvgr2 IN s_kvgr2.
+    SORT lt_tvv2t BY kvgr2.
+  ENDIF.
+
+  LOOP AT gt_out.
+***ADD BY PFT 20171116 增加权限检查
+    lv_tabix = sy-tabix.
+    AUTHORITY-CHECK OBJECT 'Z_KVGR1'
+             ID 'KVGR1' FIELD gt_out-kvgr1.
+    IF sy-subrc <> 0.
+      DELETE gt_out INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+    AUTHORITY-CHECK OBJECT 'V_VBAK_VKO'
+             ID 'VKORG' FIELD gt_out-vkorg
+             ID 'VTWEG' DUMMY
+             ID 'SPART' DUMMY
+             ID 'ACTVT' FIELD '03'.
+    IF sy-subrc <> 0.
+      DELETE gt_out INDEX lv_tabix .
+      CONTINUE.
+    ENDIF.
+    CONCATENATE gt_out-name1 gt_out-name2 INTO gt_out-name.
+***END BY PFT 20171116
+***  取经营地址、收货地址、电话
+    READ TABLE lt_adrc WITH KEY addrnumber = gt_out-adrnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-ad_strspp1 = lt_adrc-name_co && lt_adrc-str_suppl1 && lt_adrc-str_suppl2.
+      gt_out-ad_strspp2 = lt_adrc-street  && lt_adrc-str_suppl3 && lt_adrc-location.
+      gt_out-extension1 = lt_adrc-extension1.
+*      gt_out-tel_number = lt_adrc-tel_number.
+      gt_out-fax_number = lt_adrc-fax_number.
+    ENDIF.
+***  取电话
+    LOOP AT lt_adr2 WHERE addrnumber = gt_out-adrnr .
+      CASE lt_adr2-r3_user.
+        WHEN '1'.
+          gt_out-tel_number = lt_adr2-tel_number.
+        WHEN '3'.
+          gt_out-umber = lt_adr2-tel_number.
+      ENDCASE.
+    ENDLOOP.
+***  取客户税分类
+    READ TABLE lt_knvi WITH KEY kunnr = gt_out-kunnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-taxkd = lt_knvi-taxkd.
+    ENDIF.
+***读取长文本
+    CLEAR lv_name .
+    CONCATENATE gt_out-kunnr gt_out-vkorg gt_out-vtweg gt_out-spart INTO lv_name.
+    PERFORM frm_get_text USING  'Z001' '1'  'KNVV' lv_name CHANGING gt_out-ztext1. "文本注意事项
+    PERFORM frm_get_text USING  'Z006' '1'  'KNVV' lv_name CHANGING gt_out-ztext2. "文本特殊包装
+    PERFORM frm_get_text USING  'Z002' '1'  'KNVV' lv_name CHANGING gt_out-ztext3. "文本-提单要求
+    PERFORM frm_get_text USING  'Z003' '1'  'KNVV' lv_name CHANGING gt_out-ztext4. "文本-标签要求
+    PERFORM frm_get_text USING  'Z004' '1'  'KNVV' lv_name CHANGING gt_out-ztext5. "文本-箱唛要求
+    PERFORM frm_get_text USING  'Z005' '1'  'KNVV' lv_name CHANGING gt_out-ztext6. "文本-随货单证
+***国家描述
+    SELECT SINGLE landx INTO gt_out-land1_txt FROM t005t WHERE spras = sy-langu AND land1 = gt_out-land1.
+***地区描述
+    SELECT SINGLE bezei INTO gt_out-regio_txt FROM t005u WHERE spras = sy-langu AND land1 = gt_out-land1 AND bland = gt_out-regio.
+***所属行业描述
+    SELECT SINGLE ktext INTO gt_out-kdgrp_txt FROM t151t WHERE spras = sy-langu AND kdgrp = gt_out-kdgrp.
+***客户等级描述
+    SELECT SINGLE vtext INTO gt_out-kukla_txt FROM tkukt WHERE spras = sy-langu AND kukla = gt_out-kukla.
+***开票备注描述
+    SELECT SINGLE vtext INTO gt_out-katr1_txt FROM tvk1t WHERE spras = sy-langu AND katr1 = gt_out-katr1.
+***地理区域描述
+    SELECT SINGLE vtext INTO gt_out-katr2_txt FROM tvk2t WHERE spras = sy-langu AND katr2 = gt_out-katr2.
+***文本备注描述
+    SELECT SINGLE vtext INTO gt_out-katr3_txt FROM tvk3t WHERE spras = sy-langu AND katr3 = gt_out-katr3.
+***付款方式描述
+    SELECT SINGLE vtext INTO gt_out-zterm_txt FROM tvzbt WHERE spras = sy-langu AND zterm = gt_out-zterm.
+***销售组织描述
+    READ TABLE lt_tvkot WITH KEY vkorg = gt_out-vkorg BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-vkorg_txt = lt_tvkot-vtext.
+    ENDIF.
+***分销渠道描述
+    READ TABLE lt_tvtwt WITH KEY vtweg = gt_out-vtweg BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-vtweg_txt = lt_tvtwt-vtext.
+    ENDIF.
+***产品组描述
+    READ TABLE lt_tspat WITH KEY spart = gt_out-spart BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-spart_txt = lt_tspat-vtext.
+    ENDIF.
+***销售大区描述
+    READ TABLE lt_t171t WITH KEY bzirk = gt_out-bzirk BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-bzirk_txt = lt_t171t-bztxt.
+    ENDIF.
+***销售办事处描述
+    READ TABLE lt_tvkbt WITH KEY vkbur = gt_out-vkbur BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-vkbur_txt = lt_tvkbt-bezei.
+    ENDIF.
+***销售组描述
+    READ TABLE lt_tvgrt WITH KEY vkgrp = gt_out-vkgrp BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-vkgrp_txt = lt_tvgrt-bezei.
+    ENDIF.
+***销售业务员描述
+    READ TABLE lt_tvv1t WITH KEY kvgr1 = gt_out-kvgr1 BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-kvgr1_txt = lt_tvv1t-bezei.
+    ENDIF.
+***商务描述
+    READ TABLE lt_tvv2t WITH KEY kvgr2 = gt_out-kvgr2 BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-kvgr2_txt = lt_tvv2t-bezei.
+    ENDIF.
+***运输方式描述
+    SELECT SINGLE bezei INTO gt_out-kvgr3_txt FROM tvv3t WHERE spras = sy-langu AND kvgr3 = gt_out-kvgr3.
+***开票类型描述
+    SELECT SINGLE bezei INTO gt_out-kvgr4_txt FROM tvv4t WHERE spras = sy-langu AND kvgr4 = gt_out-kvgr4.
+***币别描述
+    SELECT SINGLE ktext INTO gt_out-waers_txt FROM tcurt WHERE spras = sy-langu AND waers = gt_out-waers.
+***账户分配组描述
+    SELECT SINGLE vtext INTO gt_out-ktgrd_txt FROM tvktt WHERE spras = sy-langu AND ktgrd = gt_out-ktgrd.
+***税分类描述
+    SELECT SINGLE vtext INTO gt_out-taxkd_txt FROM tskdt WHERE spras = sy-langu AND taxkd = gt_out-taxkd.
+***国际贸易条款1描述
+    SELECT SINGLE bezei INTO gt_out-inco1_txt FROM tinct WHERE spras = sy-langu AND inco1 = gt_out-inco1.
+***客户组5
+    SELECT SINGLE bezei INTO gt_out-kvgr5_txt FROM tvv5t WHERE spras = sy-langu AND kvgr5 = gt_out-kvgr5.
+***属性4
+    SELECT SINGLE vtext INTO gt_out-katr4_txt FROM tvk4t WHERE spras = sy-langu AND katr4 = gt_out-katr4.
+***属性5
+    SELECT SINGLE vtext INTO gt_out-katr5_txt FROM tvk5t WHERE spras = sy-langu AND katr5 = gt_out-katr5.
+***属性6
+    SELECT SINGLE vtext INTO gt_out-katr6_txt FROM tvk6t WHERE spras = sy-langu AND katr6 = gt_out-katr6.
+***属性7
+    SELECT SINGLE vtext INTO gt_out-katr7_txt FROM tvk7t WHERE spras = sy-langu AND katr7 = gt_out-katr7.
+***属性8
+    SELECT SINGLE vtext INTO gt_out-katr8_txt FROM tvk8t WHERE spras = sy-langu AND katr8 = gt_out-katr8.
+***属性9
+    SELECT SINGLE vtext INTO gt_out-katr9_txt FROM tvk9t WHERE spras = sy-langu AND katr9 = gt_out-katr9.
+***属性10
+    SELECT SINGLE vtext INTO gt_out-katr10_txt FROM tvk0t WHERE spras = sy-langu AND katr10 = gt_out-katr10.
+
+***冻结状态
+    IF gt_out-aufsd = space.
+      gt_out-status = '未冻结'.
+    ELSE.
+      gt_out-status = '已冻结'.
+    ENDIF.
+
+    MODIFY gt_out.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  mcr_build_fieldcat:'NAME4'       'CRM客户编码'         'NAME4'    'KNA1'   ''     '',
+                     'KUNNR'       '客户编码'            'KUNNR'    'KNA1'       ''    '',
+                     'NAME'        '客户名称'            ''    ''       ''    '',
+                     'SORTL'       '客户简称'            'SORTL'    'KNA1'   ''     '',
+                     'LAND1'       '国家'                'LAND1'    'KNA1'   ''     '',
+                     'REGIO'       '地区'                'REGIO'    'KNA1'   ''     '',
+                     'CITY1'       '城市'                'CITY1'    'KNA1'   ''     '',
+                     'PSTLZ'       '邮政编码'            'PSTLZ'    'KNA1'   ''     '',
+                     'AD_STRSPP1'  '经营地址'            ''         ''       ''     '',
+                     'AD_STRSPP2'  '收货地址'            ''         ''       ''     '',
+                     'EXTENSION1'  '收货联系人'          ''         ''       ''     '',
+                     'TEL_NUMBER'  '收货电话'            ''         ''       ''     '',
+                     'FAX_NUMBER'  '收货传真'            ''         ''       ''     '',
+                     'UMBER'       '收货手机'            ''         ''   ''     '',
+                     'KDGRP'       '所属行业'            'KDGRP'    'KNVV'   ''     '',
+                     'KUKLA'       '客户等级'            'KUKLA'    'KNA1'       ''     '',
+                     'KATR1'       '开票备注'            'KATR1'    'KNA1'       ''     '',
+                     'KATR2'       '地理区域'            'KATR2'    'KNA1'       ''     '',
+                     'KATR3'       '固定包装'            'KATR3'    'KNA1'       ''     '',
+                     'ZTERM'       '付款方式'            'ZTERM'    'KNVV'   ''     '',
+                     'LIFNR'       '供应商编码'          'LIFNR'    'KNA1'   ''     '',
+                     'VKORG'       '销售组织'            'VKORG'    'KNVV'   ''     '',
+                     'VTWEG'       '分销渠道'            'VTWEG'    'KNVV'   ''     '',
+                     'SPART'       '产品组'              'SPART'    'KNVV'   ''     '',
+                     'BZIRK'       '销售大区'            'BZIRK'    'KNVV'   ''     '',
+                     'VKBUR'       '销售办事处'          'VKBUR'    'KNVV'   ''     '',
+                     'VKGRP'       '销售组'              'VKGRP'    'KNVV'   ''     '',
+                     'KVGR1'       '销售业务员'          'KVGR1'    'KNVV'   ''     '',
+                     'KVGR2'       '商务'                'KVGR2'    'KNVV'   ''     '',
+                     'KVGR3'       '运输方式'            'KVGR3'    'KNVV'   ''     '',
+                     'KVGR4'       '开票类型'            'KVGR4'    'KNVV'   ''     '',
+                     'WAERS'       '币别'                'WAERS'    'KNVV'   ''     '',
+                     'KTGRD'       '账户分配组'          'KTGRD'    'KNVV'   ''     '',
+                     'TAXKD'       '税分类'              'TAXKD'    'KNVV'   ''     '',
+                     'INCO1'       '国际贸易条款1'       'INCO1'    'KNVV'   ''     '',
+                     'INCO2'       '国际贸易条款2'       'INCO2'    'KNVV'   ''     '',
+                     'ZVAT_NUM'    '纳税人识别号'        'ZVAT_NUM' 'KNA1'   ''     '',
+                     'ZACCOUNT'    '开户行&账号'         'ZACCOUNT' 'KNA1'   ''     '',
+                     'ZADDR'       '地址&电话'           'ZADDR'    'KNA1'       ''     '',
+                     'ZTEXT1'      '文本-注意事项'       ''         ''       ''     '',
+                     'ZTEXT2'      '文本-特殊包装'       ''         ''       ''     '',
+                     'ZTEXT3'      '文本-提单要求'       ''         ''       ''     '',
+                     'ZTEXT4'      '文本-标签要求'       ''         ''       ''     '',
+                     'ZTEXT5'      '文本-箱唛要求'       ''         ''       ''     '',
+                     'ZTEXT6'      '文本-随货单证'       ''         ''       ''     '',
+                     'KVGR5'       '客户组5'             'KVGR5'    'KNA1'   ''     '',
+                     'KATR4'       '金税物料'               'KATR4'    'KNA1'   ''     '',
+                     'KATR5'       '属性5'               'KATR5'    'KNA1'   ''     '',
+                     'KATR6'       '属性6'               'KATR6'    'KNA1'   ''     '',
+                     'KATR7'       '属性7'               'KATR7'    'KNA1'   ''     '',
+                     'KATR8'       '属性8'               'KATR8'    'KNA1'   ''     '',
+                     'KATR9'       '属性9'               'KATR9'    'KNA1'   ''     '',
+                     'KATR10'      '属性10'              'KATR10'   'KNA1'   ''     '',
+                     'LAND1_TXT'   '国家描述'            ''         ''       ''     '',
+                     'REGIO_TXT'   '地区描述'            ''         ''       ''     '',
+                     'KDGRP_TXT'   '所属行业描述'        ''         ''       ''     '',
+                     'KUKLA_TXT'   '客户等级描述'        ''         ''       ''     '',
+                     'KATR1_TXT'   '开票备注描述'        ''         ''       ''     '',
+                     'KATR2_TXT'   '地理区域描述'        ''         ''       ''     '',
+                     'KATR3_TXT'   '固定包装描述'        ''         ''       ''     '',
+                     'ZTERM_TXT'   '付款方式描述'        ''         ''       ''     '',
+                     'VKORG_TXT'   '销售组织描述'        ''         ''       ''     '',
+                     'VTWEG_TXT'   '分销渠道描述'        ''         ''       ''     '',
+                     'SPART_TXT'   '产品组描述'          ''         ''       ''     '',
+                     'BZIRK_TXT'   '销售大区描述'        ''         ''       ''     '',
+                     'VKBUR_TXT'   '销售办事处描述'      ''         ''       ''     '',
+                     'VKGRP_TXT'   '销售组描述'          ''         ''       ''     '',
+                     'KVGR1_TXT'   '销售业务员描述'      ''         ''       ''     '',
+                     'KVGR2_TXT'   '商务描述'            ''         ''       ''     '',
+                     'KVGR3_TXT'   '运输方式描述'        ''         ''       ''     '',
+                     'KVGR4_TXT'   '开票类型描述'        ''         ''       ''     '',
+                     'WAERS_TXT'   '币别描述'            ''         ''       ''     '',
+                     'KTGRD_TXT'   '账户分配组描述'      ''         ''       ''     '',
+                     'TAXKD_TXT'   '税分类描述'          ''         ''       ''     '',
+                     'INCO1_TXT'   '国际贸易条款1描述'   ''         ''       ''     '',
+                     'KVGR5_TXT'   '客户组5描述'             ''         ''       ''     '',
+                     'KATR4_TXT'   '金税物料描述'               ''         ''       ''     '',
+                     'KATR5_TXT'   '属性5描述'               ''         ''       ''     '',
+                     'KATR6_TXT'   '属性6描述'               ''         ''       ''     '',
+                     'KATR7_TXT'   '属性7描述'               ''         ''       ''     '',
+                     'KATR8_TXT'   '属性8描述'               ''         ''       ''     '',
+                     'KATR9_TXT'   '属性9描述'               ''         ''       ''     '',
+                     'KATR10_TXT'  '属性10描述'             ''         ''       ''     '',
+                     'ERDAT'  '创建时间'                 ''         ''       ''     '',
+                     'STATUS'  '冻结状态'                 ''         ''       ''     ''.
+
+  gs_layout-zebra                = 'X'.
+  gs_layout-no_vline             = ''.
+  gs_layout-colwidth_optimize    = 'X'.
+  gs_layout-detail_popup         = 'X'.
+  gs_layout-detail_initial_lines = 'X'.
+  gs_layout-confirmation_prompt  = ''.
+  gs_layout-box_fieldname = 'BOX'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  frm_output_data
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+      i_callback_program = sy-repid
+*     i_callback_user_command = 'FRM_USER_COMMAND'
+      is_layout          = gs_layout
+      it_fieldcat        = gt_fcat[]
+      i_default          = 'X'
+      i_save             = 'A'
+    TABLES
+      t_outtab           = gt_out[]
+    EXCEPTIONS
+      program_error      = 1
+      OTHERS             = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_TEXT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0246   text
+*      -->P_ENDLOOP  text
+*----------------------------------------------------------------------*
+FORM frm_get_text  USING u_id LIKE thead-tdid
+                         u_language LIKE thead-tdspras
+                         u_object   LIKE thead-tdobject
+                         u_name     LIKE thead-tdname
+                   CHANGING c_text TYPE c.
+  DATA:lt_lines LIKE tline OCCURS 0 WITH HEADER LINE.
+
+  CLEAR c_text.
+  CALL FUNCTION 'READ_TEXT'
+    EXPORTING
+      client                  = sy-mandt
+      id                      = u_id
+      language                = u_language
+      name                    = u_name
+      object                  = u_object
+    TABLES
+      lines                   = lt_lines
+    EXCEPTIONS
+      id                      = 1
+      language                = 2
+      name                    = 3
+      not_found               = 4
+      object                  = 5
+      reference_check         = 6
+      wrong_access_to_archive = 7
+      OTHERS                  = 8.
+  DELETE lt_lines WHERE tdline IS INITIAL.
+  LOOP AT lt_lines.
+    IF sy-tabix = 1.
+      c_text = lt_lines-tdline.
+    ELSE.
+      CONCATENATE c_text lt_lines-tdline INTO c_text SEPARATED BY space.
+    ENDIF.
+    CONDENSE  c_text.
+  ENDLOOP.
+ENDFORM.

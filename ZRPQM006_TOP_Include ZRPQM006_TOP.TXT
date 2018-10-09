@@ -1,0 +1,96 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPQM001_TOP
+*&---------------------------------------------------------------------*
+*TYPE-POOLS:truxs,slis.
+*DATA:xlstab TYPE truxs_t_text_data.
+TABLES:qals,qamr,afpo,qamv,qasv,ausp,makt.
+********************ALV 事件****************
+DATA:
+  it_fieldcat TYPE lvc_t_fcat,
+  wa_fieldcat LIKE LINE OF it_fieldcat,
+  gs_layout   TYPE lvc_s_layo,
+  it_events   TYPE slis_t_event, ""事件属性
+  wa_events   TYPE slis_alv_event.
+
+DATA c30 TYPE char30.
+
+DATA:BEGIN OF gw_item,"展示内表
+       sel(1)     TYPE c,
+       pruefdatub TYPE qamr-pruefdatub,
+       pastrterm  TYPE qals-pastrterm,
+       vorglfnr   LIKE qamr-vorglfnr,
+       merknr     LIKE qamr-merknr,
+       prueflos   LIKE qals-prueflos,
+       aufpl      LIKE qals-aufpl,
+       werk       TYPE qals-werk,
+       aufnr      TYPE qals-aufnr,
+       dauat      TYPE afpo-dauat,
+       spart      TYPE mara-spart,
+       vtext      TYPE tspat-vtext,
+       cpx        TYPE char30,
+       cpzxh      TYPE char30,
+       xl         TYPE char30,
+       zxl        TYPE char30,
+       dyzxh      TYPE char30,
+       cpmc       TYPE char30,
+       cpxh       TYPE char30,
+       matnr      TYPE qals-matnr,
+       ktextmat   TYPE qals-ktextmat,
+       ppsortkey  TYPE qapp-ppsortkey,
+       revlv      TYPE aeoi-revlv,
+       arbid      LIKE v_qapo-arbid,
+       arbpl      LIKE crhd-arbpl,
+       vornr      TYPE qapo-vornr,
+       vorktxt    TYPE qapo-vorktxt,
+       verwmerkm  LIKE qamv-verwmerkm,
+       mittelwert TYPE qamr-mittelwert,
+       ntrs       TYPE p DECIMALS 3,
+       nhgs       TYPE p DECIMALS 3,
+       objek      LIKE ausp-objek,
+       objkt      LIKE aeoi-objkt,
+       zhgl       TYPE p DECIMALS 3,
+       zmbz       TYPE p DECIMALS 3,
+       zhgs       TYPE p DECIMALS 3,
+     END OF gw_item.
+DATA:gt_item LIKE TABLE OF gw_item WITH HEADER LINE .
+
+DATA:BEGIN OF gt_item1 OCCURS 0,"展示内表
+       sel(1)     TYPE c,
+       pruefdatub TYPE qamr-pruefdatub,
+       pastrterm  TYPE qals-pastrterm,
+*       vorglfnr   LIKE qamr-vorglfnr,
+*       merknr     LIKE qamr-merknr,
+*       prueflos   LIKE qals-prueflos,
+*       aufpl      LIKE qals-aufpl,
+       werk       TYPE qals-werk,
+*       aufnr      TYPE qals-aufnr,
+       dauat      TYPE afpo-dauat,
+       spart      TYPE mara-spart,
+       vtext      TYPE tspat-vtext,
+       cpx        TYPE char30,
+       cpzxh      TYPE char30,
+       xl         TYPE char30,
+       zxl        TYPE char30,
+       dyzxh      TYPE char30,
+       cpmc       TYPE char30,
+       cpxh       TYPE char30,
+       matnr      TYPE qals-matnr,
+       ktextmat   TYPE qals-ktextmat,
+*  PPSORTKEY type QAPP-PPSORTKEY,
+       revlv      TYPE aeoi-revlv,
+*       verwmerkm  LIKE qamv-verwmerkm,
+*       mittelwert TYPE qamr-mittelwert,
+       ntrs       TYPE p DECIMALS 3,
+       nhgs       TYPE p DECIMALS 3,
+       zsjhgl     TYPE p DECIMALS 3,
+       zmbhgl     TYPE p DECIMALS 3,
+       zhgs       TYPE p DECIMALS 3,
+     END OF gt_item1.
+
+DATA: i_grid_settings TYPE lvc_s_glay.
+
+DATA:ok_code   TYPE sy-ucomm,
+     save_ok   TYPE sy-ucomm,
+     errorcode TYPE i.
+DATA: l_grid TYPE REF TO cl_gui_alv_grid,
+      stbl   TYPE lvc_s_stbl. ""稳定刷新

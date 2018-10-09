@@ -1,0 +1,108 @@
+*&---------------------------------------------------------------------*
+*& Report ZRPSD023
+*& 创建者(公司)/日期： PFT/20171028
+*& 程序描述:销售实际与计划报表
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    PFT           20171028     创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpsd023 MESSAGE-ID z001.
+
+INCLUDE zrpsd023t01.
+
+INCLUDE zrpsd023s01.
+
+INCLUDE zrpsd023f01.
+
+************************************************************************
+*INITIALIZATION.
+************************************************************************
+INITIALIZATION.
+  PERFORM frm_get_ausp."取产品线和系列
+************************************************************************
+*AT SELECTION-SCREEN ON VALUE_REQUEST.
+************************************************************************
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_cpx-low.
+  PERFORM sub_search_help_zxl USING 'CPX' 'S_CPX'  'ZFER_CPX'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_cpx-high.
+  PERFORM sub_search_help_zxl USING 'CPX' 'S_CPX'  'ZFER_CPX'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_xl-low.
+  PERFORM sub_search_help_zxl USING 'XL' 'S_XL' 'ZFER_XL'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_xl-high.
+  PERFORM sub_search_help_zxl USING 'XL' 'S_XL'  'ZFER_XL'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_zxl-low.
+  PERFORM sub_search_help_zxl USING 'ZXL' 'S_ZXL' 'ZFER_ZXL'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_zxl-high.
+  PERFORM sub_search_help_zxl USING 'ZXL' 'S_ZXL'  'ZFER_ZXL'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_zxh-low.
+  PERFORM sub_search_help_zxl USING 'ZXH' 'S_ZXH' 'ZFER_DYZXH'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_zxh-high.
+  PERFORM sub_search_help_zxl USING 'ZXH' 'S_ZXH'  'ZFER_DYZXH'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_xh-low.
+  PERFORM sub_search_help_zxl USING 'XH' 'S_XH' 'ZFER_CPXH'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_xh-high.
+  PERFORM sub_search_help_zxl USING 'XH' 'S_XH'  'ZFER_CPXH'.
+************************************************************************
+* AT SELECTION-SCREEN OUTPUT
+************************************************************************
+AT SELECTION-SCREEN OUTPUT.
+************************************************************************
+* 注释：获取当前日期的最后一天 PERFORM frm_get_last_data
+*       获取当前日期的上一个月 PERFORM frm_get_jh_date
+************************************************************************
+AT SELECTION-SCREEN.
+  CHECK sy-ucomm EQ 'ONLI'.
+
+  CLEAR:lv_date_low,lv_date_high,lv_date,lv_zmonth_low,lv_zmonth_high.
+*  计算开始日期、结束日期、计划开始日期和计划结束日期
+***  实际开始日期
+  CONCATENATE s_datum-low '01' INTO lv_date_low.
+***  计划开始日期
+  CLEAR:lv_date.
+  PERFORM frm_get_jh_date USING lv_date_low '-' CHANGING lv_date.
+  lv_zmonth_low = lv_date+0(6).
+***  实际结束日期  计划结束日期
+  IF s_datum-high IS INITIAL.
+    PERFORM frm_get_last_data USING lv_date_low CHANGING lv_date_high .  "取当月的最后一天
+    CLEAR:lv_date.
+    PERFORM frm_get_jh_date USING lv_date_high '-' CHANGING lv_date.  "取当月的前一个月
+    lv_zmonth_high = lv_date+0(6).
+  ELSE.
+    CONCATENATE s_datum-high '01' INTO lv_date.
+    PERFORM frm_get_last_data USING lv_date CHANGING lv_date_high. "取当月的最后一天
+    CLEAR:lv_date.
+    PERFORM frm_get_jh_date USING lv_date_high '-' CHANGING lv_date. "取当月的前一个月
+    lv_zmonth_high = lv_date+0(6).
+  ENDIF.
+
+*  判断屏幕所输入的月份不能超过12个月
+  CALL FUNCTION 'FIMA_DAYS_AND_MONTHS_AND_YEARS'
+    EXPORTING
+      i_date_from    = lv_date_low
+      i_key_day_from = '00'
+      i_date_to      = lv_date_high
+      i_key_day_to   = '00'
+      i_flg_separate = ' '
+    IMPORTING
+      e_months       = e_months.
+
+  IF e_months > 12.
+    MESSAGE e398(00) WITH '销售月份不能超过12个月，请重新输入'.
+  ENDIF.
+************************************************************************
+* START-OF-SELECTION
+************************************************************************
+START-OF-SELECTION.
+  PERFORM frm_get_data."取数
+  PERFORM frm_process_data."对取出的数据进行处理
+  PERFORM sub_build_fieldcat.
+  PERFORM frm_output_data TABLES gt_alv.

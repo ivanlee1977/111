@@ -1,0 +1,82 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPQM011_T01
+*&---------------------------------------------------------------------*
+
+TYPE-POOLS:slis,vrm.
+
+TABLES:mseg,mkpf,ekko,zprintnum.
+
+
+DATA:BEGIN OF gt_item  OCCURS 0,"展示内表
+       chk(1) TYPE c,
+       budat  LIKE  mkpf-budat,
+       mblnr  LIKE  mseg-mblnr,
+       mjahr  TYPE mseg-mjahr,
+*       zeile  TYPE mseg-zeile,
+       matnr  LIKE  mseg-matnr,
+       maktx  LIKE  makt-maktx,
+       charg  LIKE  mseg-charg,
+       lgort  LIKE  mseg-lgort,
+       menge  LIKE  mseg-menge,
+       meins  LIKE  mseg-meins,
+       werks  LIKE  mseg-werks,
+       usnam  LIKE  mkpf-usnam,
+       sgtxt  TYPE mseg-sgtxt,
+     END OF gt_item.
+DATA gt_item1 LIKE TABLE OF gt_item WITH HEADER LINE.
+*DATA:BEGIN OF gt_item2  OCCURS 0,"展示内表
+*       chk(1) TYPE c,
+*       budat  LIKE  mkpf-budat,
+*       mblnr  LIKE  mseg-mblnr,
+*       mjahr  TYPE mseg-mjahr,
+**       zeile  TYPE mseg-zeile,
+*       matnr  LIKE  mseg-matnr,
+*       maktx  LIKE  makt-maktx,
+*       charg  LIKE  mseg-charg,
+*       lgort  LIKE  mseg-lgort,
+*       menge  LIKE  mseg-menge,
+*       meins  LIKE  mseg-meins,
+*       werks  LIKE  mseg-werks,
+*       usnam  LIKE  mkpf-usnam,
+*       sgtxt  TYPE mseg-sgtxt,
+*     END OF gt_item2.
+DATA gt_item2 LIKE TABLE OF gt_item WITH HEADER LINE.
+
+DATA:BEGIN OF gt_item3  OCCURS 0,"展示内表
+       chk(1) TYPE c,
+       budat  LIKE  mkpf-budat,
+       mblnr  LIKE  mseg-mblnr,
+       matnr  LIKE  mseg-matnr,
+       maktx  LIKE  makt-maktx,
+*       charg  LIKE  mseg-charg,
+*       lgort  LIKE  mseg-lgort,
+       menge  LIKE  mseg-menge,
+       meins  LIKE  mseg-meins,
+       werks  LIKE  mseg-werks,
+       usnam  LIKE  mkpf-usnam,
+       zsum   TYPE zprintnum-zsum,
+     END OF gt_item3.
+
+DATA:ok_code   TYPE sy-ucomm,
+     save_ok   TYPE sy-ucomm,
+     errorcode TYPE i.
+
+DATA: gt_fcat   TYPE slis_t_fieldcat_alv WITH HEADER LINE,
+      gs_layout TYPE slis_layout_alv.
+
+
+DATA: gs_option          TYPE ssfcompop,
+      gs_control         TYPE ssfctrlop,
+      job_output_options TYPE ssfcresop. ""SF使用参数
+
+DATA lv_name TYPE rs38l_fnam.
+DEFINE g_fieldfcat .
+  gt_fcat-fieldname = &1.
+  gt_fcat-seltext_s = &2.
+  gt_fcat-ddictxt = 'S'.
+  gt_fcat-ref_fieldname = &3.
+  gt_fcat-ref_tabname = &4.
+  gt_fcat-decimals_out = &5.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

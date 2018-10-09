@@ -1,0 +1,16 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPQM009S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+PARAMETERS:p_fxqj LIKE sy-datum+0(6) OBLIGATORY DEFAULT sy-datum+0(6).
+SELECT-OPTIONS: s_werks FOR mseg-werks,
+                s_kunnr FOR mseg-kunnr,"客户
+                s_matnr FOR mseg-matnr,"物料
+                s_kdgrp FOR knvv-kdgrp,"所属行业
+                s_spart FOR mara-spart,"产品组
+                s_cpx FOR ausp-atwrt,"产品线
+                s_xl FOR ausp-atwrt,"系列
+                s_zxl FOR ausp-atwrt,"子系列
+                s_zxh FOR ausp-atwrt."主型号
+PARAMETERS :p_r1 AS CHECKBOX .
+SELECTION-SCREEN END OF BLOCK blc.

@@ -1,0 +1,131 @@
+*----------------------------------------------------------------------*
+***INCLUDE ZXQQMI02.
+*----------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Module  ZCHECK_WH  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE zcheck_wh INPUT.
+  DATA:lt_stb  LIKE stpox OCCURS 0 WITH HEADER LINE,
+       lt_stpu LIKE stpu OCCURS 0 WITH HEADER LINE.
+  REFRESH:lt_stb.
+***通过位号找到BOM的物料号
+  IF ( gt_data-zwhwl1 IS NOT INITIAL AND strlen( gt_data-zwhwl1 )  BETWEEN '2' AND '3' )  OR
+     ( gt_data-zwhwl2 IS NOT INITIAL AND strlen( gt_data-zwhwl2 )  BETWEEN '2' AND '3' )  OR
+     ( gt_data-zwhwl3 IS NOT INITIAL AND strlen( gt_data-zwhwl3 )  BETWEEN '2' AND '3' )  OR
+     ( gt_data-zwhwl4 IS NOT INITIAL AND strlen( gt_data-zwhwl4 )  BETWEEN '2' AND '3' )  OR
+     ( gt_data-zwhwl5 IS NOT INITIAL AND strlen( gt_data-zwhwl5 )  BETWEEN '2' AND '3' )  .
+    CALL FUNCTION 'CS_BOM_EXPL_MAT_V2'
+      EXPORTING
+        capid                 = 'PP01'
+        datuv                 = sy-datum
+        mehrs                 = 'X'
+        mtnrv                 = gt_data-matnr
+        werks                 = '1000'
+      TABLES
+        stb                   = lt_stb
+      EXCEPTIONS
+        alt_not_found         = 1
+        call_invalid          = 2
+        material_not_found    = 3
+        missing_authorization = 4
+        no_bom_found          = 5
+        no_plant_data         = 6
+        no_suitable_bom_found = 7
+        conversion_error      = 8
+        OTHERS                = 9.
+    IF lt_stb[] IS NOT INITIAL.
+      SELECT * INTO TABLE lt_stpu FROM stpu FOR ALL ENTRIES IN lt_stb
+       WHERE stlty = lt_stb-stlty
+         AND stlnr = lt_stb-stlnr
+         AND stlkn = lt_stb-stlkn
+         AND stpoz = lt_stb-stpoz.
+    ENDIF.
+    PERFORM frm_get_comp_matnr TABLES lt_stb lt_stpu CHANGING gt_data-zwhwl1 gt_data-zwh1.
+    PERFORM frm_get_comp_matnr TABLES lt_stb lt_stpu CHANGING gt_data-zwhwl2 gt_data-zwh2.
+    PERFORM frm_get_comp_matnr TABLES lt_stb lt_stpu CHANGING gt_data-zwhwl3 gt_data-zwh3.
+    PERFORM frm_get_comp_matnr TABLES lt_stb lt_stpu CHANGING gt_data-zwhwl4 gt_data-zwh4.
+    PERFORM frm_get_comp_matnr TABLES lt_stb lt_stpu CHANGING gt_data-zwhwl5 gt_data-zwh5.
+  ENDIF.
+***计算更换器件成本
+  SELECT SUM( stprs ) INTO gt_data-zcb FROM mbew WHERE bwkey = '1000' AND matnr IN (gt_data-zwhwl1+2,gt_data-zwhwl2+2,gt_data-zwhwl3+2,gt_data-zwhwl4+2,gt_data-zwhwl5+2).
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  ZGET_BARCODE_INFO  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE zget_barcode_info INPUT.
+  DATA:ls_barcode_data LIKE ztwmsbarcode,
+       lv_spart        LIKE mara-spart.
+  DATA:lv_days   TYPE i,
+       lv_months TYPE vtbbewe-atage,
+       lv_years  TYPE vtbbewe-atage.
+***获取条码相关信息,从条码系统获取相关数据信息
+  CHECK gt_data-zbarcode IS NOT INITIAL.
+  REPLACE ALL OCCURRENCES OF 'HTTP://S.LEISAI.COM/Q/' IN gt_data-zbarcode WITH space.
+  CONDENSE gt_data-zbarcode NO-GAPS.
+  SELECT SINGLE *
+    INTO CORRESPONDING FIELDS OF ls_barcode_data
+    FROM ztwmsbarcode
+    WHERE sn = gt_data-zbarcode
+      AND delivery_order NE space
+      AND state = '3'
+      AND delete_flag EQ 0.
+  IF sy-subrc = 0.
+    gt_data-matnr = ls_barcode_data-product_id.
+    SELECT SINGLE kunag wadat_ist INTO (gt_data-kunnr,gt_data-zjhrq) FROM likp WHERE vbeln = ls_barcode_data-delivery_order.
+    IF sy-subrc = 0.
+      SELECT SINGLE name1 INTO gt_data-zkhms FROM kna1 WHERE kunnr = gt_data-kunnr.
+    ENDIF.
+    gt_data-zversion = ls_barcode_data-lot.
+
+*  CHANGE BY PFT 20171108  驱动器2年，电机18个月
+    "判断是否过保
+*    lv_days = sy-datum - gt_data-zjhrq.
+
+    CALL FUNCTION 'FIMA_DAYS_AND_MONTHS_AND_YEARS'
+      EXPORTING
+        i_date_from = gt_data-zjhrq
+        i_date_to   = sy-datum
+      IMPORTING
+        e_months    = lv_months
+        e_years     = lv_years.
+
+    SELECT SINGLE spart INTO lv_spart FROM mara WHERE matnr = gt_data-matnr.
+    IF lv_spart = '11'. "驱动器
+*      IF lv_days >= '730'.
+      IF lv_years > 2.
+        gt_data-zgbbs = 'X'.
+      ELSE.
+        CLEAR gt_data-zgbbs.
+      ENDIF.
+    ELSEIF lv_spart = '12' OR lv_spart = '13'.
+*      IF lv_days >= '365'.
+      IF lv_months > 18.
+        gt_data-zgbbs = 'X'.
+      ELSE.
+        CLEAR gt_data-zgbbs.
+      ENDIF.
+    ENDIF.
+  ELSE.
+    MESSAGE '没有找到有效的条码信息' TYPE 'I'.
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  ZCHECK_WXY  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE zcheck_wxy INPUT.
+  DATA:ls_wxy LIKE ztcs005.
+  IF gt_data-zwxy IS NOT INITIAL.
+    SELECT SINGLE * INTO ls_wxy FROM ztcs005 WHERE zcode = gt_data-zwxy OR zwxy = gt_data-zwxy.
+    IF sy-subrc NE 0.
+      MESSAGE '维修员不存在' TYPE 'E'.
+    ELSE.
+      gt_data-zwxy = ls_wxy-zwxy.
+    ENDIF.
+  ENDIF.
+ENDMODULE.

@@ -1,0 +1,502 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI027_F01
+*&---------------------------------------------------------------------*
+
+FORM check_enter.
+  DATA:lv_date(20)   TYPE c.
+  DATA:lv_num(2) TYPE c VALUE 1,
+       lv_lins   TYPE i.
+  DATA:lv_das(5) TYPE c,
+       lv_now(5) TYPE c.
+
+  it_pdate-lv_date = 'P_DATE1'.
+  it_pdate-date    = p_date1.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE2'.
+  it_pdate-date    = p_date2.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE3'.
+  it_pdate-date    = p_date3.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE4'.
+  it_pdate-date    = p_date4.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE5'.
+  it_pdate-date    = p_date5.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE6'.
+  it_pdate-date    = p_date6.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE7'.
+  it_pdate-date    = p_date7.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE8'.
+  it_pdate-date    = p_date8.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE9'.
+  it_pdate-date    = p_date9.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE10'.
+  it_pdate-date    = p_date10.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE11'.
+  it_pdate-date    = p_date11.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE12'.
+  it_pdate-date    = p_date12.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE13'.
+  it_pdate-date    = p_date13.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE14'.
+  it_pdate-date    = p_date14.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE15'.
+  it_pdate-date    = p_date15.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE16'.
+  it_pdate-date    = p_date16.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE17'.
+  it_pdate-date    = p_date17.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE18'.
+  it_pdate-date    = p_date18.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE19'.
+  it_pdate-date    = p_date19.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE20'.
+  it_pdate-date    = p_date20.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE21'.
+  it_pdate-date    = p_date21.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE22'.
+  it_pdate-date    = p_date22.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE23'.
+  it_pdate-date    = p_date23.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE24'.
+  it_pdate-date    = p_date24.
+  APPEND it_pdate.
+  DELETE  it_pdate WHERE date EQ '000'.
+
+  DATA:l_dec TYPE i.
+  DESCRIBE TABLE it_pdate LINES l_dec.
+  "多加一个大于最后一个期间的字段
+  l_dec = l_dec + 1.
+  DO l_dec TIMES.
+    CONDENSE lv_num.
+    CONCATENATE 'P_DATE' lv_num  INTO lv_date.
+    IF lv_date IS NOT INITIAL .
+      lg_num = lv_num."取动态字段个数
+      lv_num = lv_num + 1.
+      READ TABLE it_pdate WITH KEY lv_date = lv_date.
+      IF sy-subrc EQ 0.
+        lv_now = it_pdate-date.
+      ELSE.
+        CONCATENATE lv_das+0(3) '1' INTO  lv_now.
+        it_pdate-lv_date = lv_date.
+        it_pdate-date    = lv_das."取上一阶的天数
+        APPEND it_pdate.
+      ENDIF.
+      IF lv_now LE lv_das.
+        MESSAGE '账龄天数应按升序条件填写！' TYPE 'E'.
+      ENDIF.
+      READ TABLE it_pdate WITH KEY lv_date = lv_date.
+      IF sy-subrc EQ 0.
+        lv_das = it_pdate-date.
+      ENDIF.
+    ENDIF.
+  ENDDO.
+
+ENDFORM.
+FORM get_data."取数据
+  DATA:lv_budat LIKE bsik-budat.
+
+  REFRESH: gt_bsik.
+  SELECT bukrs lifnr gjahr belnr buzei prctr budat hkont waers dmbtr wrbtr shkzg rebzg
+    INTO CORRESPONDING FIELDS OF TABLE gt_bsik
+    FROM bsak
+    WHERE bukrs EQ p_bukrs
+      AND hkont IN s_hkont
+      AND lifnr IN s_lifnr
+      AND prctr IN s_prctr
+      AND budat LE p_budat
+      AND augdt GT p_budat.
+
+  SELECT bukrs lifnr gjahr belnr buzei prctr budat hkont waers dmbtr wrbtr shkzg rebzg
+   APPENDING CORRESPONDING FIELDS OF TABLE gt_bsik
+    FROM bsik
+    WHERE bukrs EQ p_bukrs
+      AND hkont IN s_hkont
+      AND lifnr IN s_lifnr
+      AND prctr IN s_prctr
+      AND budat LE p_budat.
+
+  REFRESH:gt_bsak.
+  gt_bsak[] = gt_bsik[].
+  SORT gt_bsik BY belnr.
+
+  DATA:  lv_tabix  LIKE sy-tabix.
+  LOOP AT gt_bsak WHERE rebzg IS NOT INITIAL.
+*    READ TABLE gt_bsik WITH KEY belnr = gt_bsak-rebzg BINARY SEARCH.
+*    IF sy-subrc = 0.
+*      gt_bsak-budat = gt_bsik-budat.
+*    ENDIF.
+    CLEAR:lv_budat.
+    SELECT SINGLE budat INTO lv_budat FROM bsik WHERE belnr = gt_bsak-rebzg AND bukrs = gt_bsak-bukrs AND lifnr = gt_bsak-lifnr.
+    IF sy-subrc = 0.
+      gt_bsak-budat = lv_budat.
+    ELSE.
+      SELECT SINGLE budat INTO lv_budat FROM bsak WHERE belnr = gt_bsak-rebzg AND bukrs = gt_bsak-bukrs AND lifnr = gt_bsak-lifnr.
+      IF sy-subrc = 0.
+        gt_bsak-budat = lv_budat.
+      ENDIF.
+    ENDIF.
+
+    MODIFY gt_bsak TRANSPORTING budat.
+    CLEAR: gt_bsak.
+  ENDLOOP.
+
+  REFRESH: gt_bsik[].
+  gt_bsik[] = gt_bsak[].
+  REFRESH: gt_bsak.
+ENDFORM.
+
+FORM process_data."处理数据
+  DATA: gt_lfa1  LIKE lfa1 OCCURS 0 WITH HEADER LINE,
+        gt_lfb1  LIKE lfb1 OCCURS 0 WITH HEADER LINE,
+        gt_t052u LIKE t052u OCCURS 0 WITH HEADER LINE.
+  DATA: lv_days TYPE int4."计算天数
+  DATA:lv_date(20)   TYPE c.
+  DATA:lv_num(2) TYPE c VALUE 1.
+  DATA: lv_now(5) TYPE c.
+
+  IF gt_bsik[] IS NOT INITIAL.
+    SELECT * INTO TABLE gt_lfa1 FROM lfa1 FOR ALL ENTRIES IN gt_bsik WHERE lifnr = gt_bsik-lifnr.
+    SELECT * INTO TABLE gt_lfb1 FROM lfb1 FOR ALL ENTRIES IN gt_bsik WHERE lifnr = gt_bsik-lifnr AND bukrs = gt_bsik-bukrs.
+  ENDIF.
+  SELECT * INTO TABLE gt_t052u FROM t052u WHERE spras = sy-langu.
+
+  SORT gt_lfa1 BY lifnr.
+  SORT gt_lfb1 BY lifnr.
+  SORT gt_t052u BY zterm.
+
+  LOOP AT gt_bsik.
+    CLEAR: gt_alv,lv_num.
+    MOVE-CORRESPONDING gt_bsik TO gt_alv.
+*  CHANGE BY pft 20171225
+*  如果原币取WRBTR(币别取WAERS),如果本币取DMBTR(币别取CNY)
+*    gt_alv-zdmbtr = gt_bsik-dmbtr.
+    IF p_r0 EQ 'X'.  "本币
+      gt_alv-waers = 'CNY'.
+      gt_alv-zdmbtr = gt_bsik-dmbtr.
+    ELSE.
+      gt_alv-waers = gt_bsik-waers.
+      gt_alv-zdmbtr = gt_bsik-wrbtr.
+    ENDIF.
+*  END BY PFT 20171225
+    IF gt_bsik-shkzg = 'S'.
+      gt_alv-zdmbtr = gt_alv-zdmbtr * ( -1 ).
+    ENDIF.
+    COLLECT gt_alv.
+*  计算帐龄（屏幕日期-过帐日期）
+    lv_days = p_budat - gt_bsik-budat.
+    gt_pdate-lifnr = gt_bsik-lifnr.
+*  ADD BY PFT 20171225
+    gt_pdate-waers = gt_alv-waers.
+*  END BY PFT 20171225
+    "循环界面输入的账龄有多少个，此次循环是确定账龄在输入框哪个期间
+    lv_num = 1.
+    DO lg_num TIMES.
+      "将账龄描述拼接起来
+      CONDENSE lv_num.
+      CONCATENATE 'P_DATE' lv_num INTO lv_date.
+      IF lv_date IS NOT INITIAL .
+        "读取对应的账龄天数
+        READ TABLE it_pdate WITH KEY lv_date = lv_date.
+        IF sy-subrc EQ 0.
+          lv_now = it_pdate-date.
+        ENDIF.
+        "如果报表日期 - 过账日期  小于账龄，则输出
+        IF lv_days LE lv_now .
+          gt_pdate-lv_date = lv_date.
+          EXIT.
+        ELSE.
+          "考虑最后一个值，将超过最后一个值的全部放进最后一个值里
+          IF lv_num = lg_num.
+            IF lv_days > lv_now.
+              gt_pdate-lv_date = lv_date.
+              EXIT.
+            ENDIF.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+      lv_num = lv_num + 1.
+    ENDDO.
+    gt_pdate-dmbtr = gt_alv-zdmbtr.
+    COLLECT gt_pdate.
+  ENDLOOP.
+
+  LOOP AT gt_alv.
+*  取客户描述
+    READ TABLE gt_lfa1 WITH KEY lifnr = gt_alv-lifnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-name1 = gt_lfa1-name1.
+    ENDIF.
+    READ TABLE gt_lfb1 WITH KEY lifnr = gt_alv-lifnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-zterm = gt_lfb1-zterm.
+    ENDIF.
+    READ TABLE gt_t052u WITH KEY zterm = gt_alv-zterm BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-text1 = gt_t052u-text1.
+    ENDIF.
+    MODIFY gt_alv .
+    CLEAR: gt_alv.
+  ENDLOOP.
+ENDFORM.
+
+FORM sub_dny_field_create .
+  CLEAR compdesc.
+  compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'BSIK-LIFNR' ). "客户
+  compdesc-name = 'LIFNR'.
+  APPEND compdesc TO components.
+  compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'KNA1-NAME1' ). "客户名称
+  compdesc-name = 'NAME1'.
+  APPEND compdesc TO components.
+  compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'T052U-TEXT1' ). "付款条件
+  compdesc-name = 'TEXT1'.
+  APPEND compdesc TO components.
+* ADD BY PFT 20171225
+  compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'BSID-WAERS' ). "币别
+  compdesc-name = 'WAERS'.
+  APPEND compdesc TO components.
+* END BY PFT 20171225
+  compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'BSIK-DMBTR' ). "金额
+  compdesc-name = 'ZDMBTR'.
+  APPEND compdesc TO components.
+
+  LOOP AT it_pdate  .   "按天显示
+    CONCATENATE '' it_pdate-lv_date INTO wa_flname.
+    compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'BSIK-DMBTR' ).
+    compdesc-name  = wa_flname.
+    APPEND compdesc TO components.
+  ENDLOOP.
+
+ENDFORM.                    " SUB_DNY_FIELD_CREATE
+
+
+FORM sub_dny_table_create .
+  cl_stru = cl_abap_structdescr=>create( components ).
+  cl_tabl = cl_abap_tabledescr=>create( cl_stru ).
+  CREATE DATA cl_handle TYPE HANDLE cl_tabl.
+  ASSIGN cl_handle->* TO <dynitab>.
+  CREATE DATA cl_strue TYPE HANDLE cl_stru.
+  ASSIGN cl_strue->* TO <dynwa>.
+ENDFORM.                    " SUB_DNY_TABLE_CREATE
+
+
+FORM sub_dny_field_update .
+************************按汇总条件取数*************************
+  LOOP AT gt_alv  .
+    ASSIGN COMPONENT 'LIFNR' OF STRUCTURE <dynwa> TO <field>. "客户
+    <field> =  gt_alv-lifnr.
+    ASSIGN COMPONENT 'NAME1' OF STRUCTURE <dynwa> TO <field>. "客户名称
+    <field> =  gt_alv-name1.
+    ASSIGN COMPONENT 'TEXT1' OF STRUCTURE <dynwa> TO <field>. "付款条件
+    <field> =  gt_alv-text1.
+*   ADD BY pft 20171225
+    ASSIGN COMPONENT 'WAERS' OF STRUCTURE <dynwa> TO <field>. "币别
+    <field> =  gt_alv-waers.
+*   END BY PFT 20171225
+    ASSIGN COMPONENT 'ZDMBTR' OF STRUCTURE <dynwa> TO <field>. "金额
+    <field> =  gt_alv-zdmbtr.
+
+    LOOP AT it_pdate.
+      CONCATENATE '' it_pdate-lv_date  INTO  wa_flname.
+      ASSIGN COMPONENT wa_flname OF STRUCTURE <dynwa> TO <field>.
+      READ TABLE gt_pdate WITH KEY lifnr = gt_alv-lifnr waers = gt_alv-waers lv_date = it_pdate-lv_date."ADD BY PFT 20171225 增加币别
+      IF sy-subrc EQ 0.
+        <field> = gt_pdate-dmbtr.
+      ENDIF.
+    ENDLOOP.
+    APPEND <dynwa> TO <dynitab>.
+    CLEAR <dynwa>.
+
+  ENDLOOP.
+
+ENDFORM.
+FORM sub_write_data .
+  CLEAR fieldcat.
+  REFRESH fieldcat.
+  PERFORM frm_get_event.           "设置自定义事件处理程序
+  PERFORM build_fieldcat.
+  PERFORM display_alv.
+ENDFORM.                    " SUB_WRITE_DATA
+*&---------------------------------------------------------------------*
+*&      Form  frm_get_event
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+FORM frm_get_event .
+  DATA l_events TYPE LINE OF slis_t_event.
+  CLEAR l_events.
+  l_events-name = 'CALLER_EXIT'.
+  l_events-form = 'FM_BUTTON'.
+  APPEND l_events TO git_events.
+ENDFORM.                    " FRM_GET_EVENT
+*&---------------------------------------------------------------------*
+*&      Form  build_fieldcat
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+FORM build_fieldcat .
+  DATA : col_pos TYPE i VALUE 1.
+  ps_layout-zebra             = 'X'.
+  ps_layout-cwidth_opt        = 'X'.
+  DATA:l_date        TYPE idcn_segm.
+  DATA:lv_num(2) TYPE c VALUE 1.
+*----------------------------------------------------------------------*
+*& Rerference
+*&  _fieldname scrtext_l  _no_zero  _edit _decimals_out
+*----------------------------------------------------------------------*
+
+  PERFORM field USING 'LIFNR' '供应商代码' 'X' '' '' '' 'LIFNR' 'BSIK' ''.
+  PERFORM field USING 'NAME1' '供应商描述' 'X' '' '' '' '' '' ''.
+  PERFORM field USING 'TEXT1' '付款条件' 'X' '' '' '' '' '' ''.
+  PERFORM field USING 'WAERS' '币别'     'X' '' '' '' 'WAERS' 'BSIK' ''.
+  PERFORM field USING 'ZDMBTR' '金额' 'X' '' '' '' '' '' 'X'.
+
+  LOOP AT it_pdate .
+    IF lv_num EQ lg_num.
+      CONDENSE l_date.
+      CONDENSE it_pdate-date.
+      CONCATENATE '>' it_pdate-date '天' INTO wa_field.
+      CONCATENATE '' it_pdate-lv_date INTO wa_flname.
+
+      PERFORM field USING wa_flname wa_field 'X' '' '' '' '' '' 'X'.
+      l_date = it_pdate-date + 1.
+    ELSE.
+      CONDENSE l_date.
+      CONDENSE it_pdate-date.
+      CONCATENATE l_date '~' it_pdate-date '天' INTO wa_field.
+      CONCATENATE '' it_pdate-lv_date INTO wa_flname.
+
+      PERFORM field USING wa_flname wa_field 'X' '' '' '' '' '' 'X'.
+      l_date = it_pdate-date + 1.
+    ENDIF.
+    lv_num = lv_num + 1.
+  ENDLOOP.
+
+ENDFORM.                    " BUILD_FIELDCAT
+
+*&---------------------------------------------------------------------*
+*&      Form  display_alv
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+FORM field  USING   p_fieldname       "
+                     p_seltext_l       "
+                     p_no_zero         "
+                     p_edit            "
+                     p_check
+                     p_deci
+                     p_field
+                     p_table
+                     p_sum.
+  fieldcat_ln-fieldname     = p_fieldname.
+  fieldcat_ln-reptext     = p_seltext_l.
+  fieldcat_ln-no_zero       = p_no_zero.
+  fieldcat_ln-edit          = p_edit.
+  fieldcat_ln-checkbox          = p_check.
+  fieldcat_ln-decimals_o  = p_deci.
+  fieldcat_ln-ref_field  = p_field.
+  fieldcat_ln-ref_table  = p_table.
+  fieldcat_ln-do_sum  = p_sum.
+
+  APPEND fieldcat_ln TO fieldcat.
+  CLEAR: fieldcat_ln.
+ENDFORM.                    " field
+
+*&---------------------------------------------------------------------*
+*&      Form  display_alv
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+FORM display_alv .
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program          = sy-cprog
+      is_layout_lvc               = ps_layout
+      it_fieldcat_lvc             = fieldcat
+      i_save                      = 'A'
+*     i_callback_user_command     = 'USER_COMMAND'
+*     it_events                   = git_events
+*     i_callback_pf_status_set    = 'SET_PFSTATUS'
+*     i_grid_title                = ztitle
+      i_callback_html_top_of_page = 'ALV_TOP_OF_PAGE'
+      i_html_height_top           = 22     "HTML框的高度
+    TABLES
+      t_outtab                    = <dynitab>
+    EXCEPTIONS
+      program_error               = 1
+      OTHERS                      = 2.
+
+ENDFORM.                    " DISPLAY_ALV
+**&---------------------------------------------------------------------*
+**&      设置状态条
+**&---------------------------------------------------------------------*
+*FORM set_pfstatus USING extab TYPE slis_t_extab.
+*
+*  SET PF-STATUS 'ZRPFI009'." 标准ALV功能
+*
+*ENDFORM.                    "set_pf_status_1000
+
+FORM alv_top_of_page USING cl_dd TYPE REF TO cl_dd_document.
+  DATA: m_pos TYPE i.
+  DATA: m_con TYPE string.
+  DATA: tablen TYPE p,lenstr TYPE string.
+  DATA: comp_t(50) TYPE c.
+
+  SELECT SINGLE butxt INTO comp_t FROM t001 WHERE bukrs EQ p_bukrs.
+
+  m_con = '<html>'.
+  CALL METHOD cl_dd->html_insert
+    EXPORTING
+      contents = m_con
+    CHANGING
+      position = m_pos.
+
+*  m_con =  '<H3>销售业务台帐</H3>'.
+  CONCATENATE '<H4>应收账款按天分布明细表</H4>' '' INTO  m_con. "ALV表头标题
+  CALL METHOD cl_dd->html_insert
+    EXPORTING
+      contents = m_con
+    CHANGING
+      position = m_pos.
+
+  CONCATENATE '<H5>' p_budat+0(4) '年' p_budat+4(2) '月' p_budat+6(2) '日 </H5>' INTO  m_con. "ALV表头标题
+  CALL METHOD cl_dd->html_insert
+    EXPORTING
+      contents = m_con
+    CHANGING
+      position = m_pos.
+*应收余额（按币种分开合计）：'ysye_a '___
+  CONCATENATE '<H5>编制单位：'  comp_t'</H5>' INTO  m_con. "ALV表头标题
+  CALL METHOD cl_dd->html_insert
+    EXPORTING
+      contents = m_con
+    CHANGING
+      position = m_pos.
+  m_con = '</html>'.
+  CALL METHOD cl_dd->html_insert
+    EXPORTING
+      contents = m_con
+    CHANGING
+      position = m_pos.
+ENDFORM.                    "alv_top_of_page

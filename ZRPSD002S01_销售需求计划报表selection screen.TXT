@@ -1,0 +1,19 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPSD002S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-002.
+PARAMETERS:r1 RADIOBUTTON GROUP ra DEFAULT 'X' USER-COMMAND um,
+           r2 RADIOBUTTON GROUP ra,
+           r3 RADIOBUTTON GROUP ra.
+SELECTION-SCREEN END OF BLOCK blc.
+
+SELECTION-SCREEN BEGIN OF BLOCK blc1 WITH FRAME TITLE TEXT-001.
+PARAMETERS:p_month     LIKE sy-datum(6) OBLIGATORY DEFAULT sy-datum(6).
+SELECT-OPTIONS:s_vkorg FOR knvv-vkorg MODIF ID m3,
+               s_bzirk FOR knvv-bzirk MODIF ID m1,
+               s_kvgr1 FOR knvv-kvgr1 MODIF ID m2,
+               s_kvgr2 FOR knvv-kvgr2 MODIF ID m2,
+               s_kunnr FOR kna1-kunnr MODIF ID m2,
+               s_matnr FOR ztsd001a-matnr.
+PARAMETERS:p_chk AS CHECKBOX MODIF ID m4.
+SELECTION-SCREEN END OF BLOCK blc1.

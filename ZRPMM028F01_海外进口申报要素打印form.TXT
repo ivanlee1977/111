@@ -1,0 +1,365 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM028F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_INITIAL_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_initial_data .
+  s_bedat = 'IBT'.
+  s_bedat-low = sy-datum - 90.
+  s_bedat-high = sy-datum.
+  APPEND s_bedat.
+  CLEAR s_bedat.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:BEGIN OF lt_lfa1 OCCURS 0,
+         lifnr LIKE lfa1-lifnr,
+         name1 LIKE lfa1-name1,
+       END OF lt_lfa1.
+
+  SELECT lifnr
+         ebeln
+    INTO CORRESPONDING FIELDS OF TABLE gt_out
+    FROM ekko
+    WHERE lifnr = p_lifnr
+      AND ebeln IN s_ebeln
+      AND bedat IN s_bedat.
+
+  CHECK gt_out[] IS NOT INITIAL.
+  SELECT lifnr name1
+    INTO CORRESPONDING FIELDS OF TABLE lt_lfa1
+    FROM lfa1
+    FOR ALL ENTRIES IN gt_out
+    WHERE lifnr = gt_out-lifnr.
+
+  SORT lt_lfa1 BY lifnr.
+
+  LOOP AT gt_out.
+    READ TABLE lt_lfa1 WITH KEY lifnr = gt_out-lifnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-name1 = lt_lfa1-name1.
+      MODIFY gt_out.
+    ENDIF.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  mcr_build_fieldcat:'CHECK'  '选择'         ''         ''         'C'   '1',
+                     'LIFNR'  '供应商号码'   'LIFNR'    'EKKO'     ''    '',
+                     'NAME1'  '供应商名称'   'NAME1'    'LFA1'     ''    '',
+                     'EBELN'  '采购订单号'   'EBELN'    'LFA1'     ''    ''.
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra      = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK        = ' '
+*     I_BYPASSING_BUFFER       =
+*     I_BUFFER_ACTIVE          =
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'FRM_PF_STATUS'
+      i_callback_user_command  = 'FRM_USER_COMMAND'
+*     I_CALLBACK_TOP_OF_PAGE   = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME         =
+*     I_BACKGROUND_ID          = ' '
+*     I_GRID_TITLE             =
+*     I_GRID_SETTINGS          =
+      is_layout_lvc            = gs_layout
+      it_fieldcat_lvc          = gt_fcat[]
+*     IT_EXCLUDING             =
+*     IT_SPECIAL_GROUPS_LVC    =
+*     IT_SORT_LVC              =
+*     IT_FILTER_LVC            =
+*     IT_HYPERLINK             =
+*     IS_SEL_HIDE              =
+*     I_DEFAULT                = 'X'
+*     I_SAVE                   = ' '
+*     IS_VARIANT               =
+*     IT_EVENTS                =
+*     IT_EVENT_EXIT            =
+*     IS_PRINT_LVC             =
+*     IS_REPREP_ID_LVC         =
+*     I_SCREEN_START_COLUMN    = 0
+*     I_SCREEN_START_LINE      = 0
+*     I_SCREEN_END_COLUMN      = 0
+*     I_SCREEN_END_LINE        = 0
+*     I_HTML_HEIGHT_TOP        =
+*     I_HTML_HEIGHT_END        =
+*     IT_ALV_GRAPHICS          =
+*     IT_EXCEPT_QINFO_LVC      =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER  =
+*     ES_EXIT_CAUSED_BY_USER   =
+    TABLES
+      t_outtab                 = gt_out[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PF_STATUS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_pf_status USING rt_extab TYPE slis_t_extab.
+  SET PF-STATUS 'PF_1000'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_USER_COMMAND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_user_command USING r_ucomm LIKE sy-ucomm
+                            rs_selfield TYPE slis_selfield..
+  DATA:lv_grid TYPE REF TO cl_gui_alv_grid.
+
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = lv_grid.
+
+  CALL METHOD lv_grid->check_changed_data( ).
+
+  CASE r_ucomm.
+    WHEN 'ZDOWNLOAD'.  "审批
+      READ TABLE gt_out WITH KEY check = 'X'.
+      IF sy-subrc = 0.
+        PERFORM frm_download_data.
+      ELSE.
+        MESSAGE '请至少选择一行数据' TYPE 'I'.
+      ENDIF.
+    WHEN 'ZALL'. "全选
+      PERFORM frm_select_data USING 'X'.
+    WHEN 'ZDALL'."取消全选
+      PERFORM frm_select_data USING space.
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DOWNLOAD_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_download_data .
+  DATA:ls_key   TYPE wwwdatatab,
+       lv_subrc TYPE sy-subrc.
+  DATA lv_file LIKE rlgrap-filename.
+  DATA:lv_sortl LIKE lfa1-sortl.
+
+  SELECT SINGLE sortl INTO lv_sortl FROM lfa1 WHERE lifnr = p_lifnr.
+
+  CONCATENATE 'C:\MM\' lv_sortl  '_申报要素_'  sy-datum  '_' sy-uzeit '.xlsx' INTO lv_file.
+
+  ls_key-relid = 'MI'.
+  ls_key-objid = gcst_excel_template.
+  CALL FUNCTION 'DOWNLOAD_WEB_OBJECT'
+    EXPORTING
+      key         = ls_key
+      destination = lv_file
+    IMPORTING
+      rc          = lv_subrc.
+  IF lv_subrc <> 0.
+    MESSAGE '下载模板出错，请检查，谢谢' TYPE 'E'.
+    EXIT.
+  ENDIF.
+***填充EXCEL数据
+  PERFORM frm_filldata_excel USING lv_file.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FILLDATA_EXCEL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LV_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_filldata_excel USING iv_file TYPE rlgrap-filename.
+*******数据定义*******
+  DATA:lo_excel     TYPE ole2_object,
+       lo_workbooks TYPE ole2_object,
+       lo_workbook  TYPE ole2_object,
+       lo_sheet     TYPE ole2_object,
+       lo_range     TYPE ole2_object,
+       lo_cell      TYPE ole2_object,
+       lo_cell1     TYPE ole2_object,
+       activewindow TYPE ole2_object.
+  DATA lv_file LIKE rlgrap-filename.
+
+  DATA lv_row TYPE i.
+  DATA lv_col TYPE i.
+  DATA:lv_times TYPE i.
+  DATA:lv_row_c TYPE i,
+       lv_row_l TYPE i.
+
+  DEFINE mac_fill_cell.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+      EXPORTING
+        #1 = &1
+        #2 = &2.
+    SET PROPERTY OF lo_cell 'VALUE' = &3.
+  END-OF-DEFINITION.
+
+  DATA:BEGIN OF lt_ekpo OCCURS 0,
+         matnr LIKE ekpo-matnr,
+       END OF lt_ekpo.
+  DATA:lt_ztsd003cpys LIKE ztsd003cpys OCCURS 0 WITH HEADER LINE.
+
+  DATA:lt_data LIKE gt_out OCCURS 0 WITH HEADER LINE.
+  DATA:lv_line TYPE i,
+       lv_num  TYPE i.
+  DATA:lv_matnr LIKE mara-matnr.
+
+  APPEND LINES OF gt_out TO lt_data.
+  DELETE lt_data WHERE check IS INITIAL.
+
+  CHECK lt_data[] IS NOT INITIAL.
+  SELECT matnr
+    INTO CORRESPONDING FIELDS OF TABLE lt_ekpo
+    FROM ekpo
+    FOR ALL ENTRIES IN lt_data
+    WHERE ebeln = lt_data-ebeln
+      AND loekz EQ space.
+
+  IF lt_ekpo[] IS INITIAL.
+    MESSAGE '没有需要输出的数据' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  SORT lt_ekpo BY matnr.
+  DELETE ADJACENT DUPLICATES FROM lt_ekpo COMPARING matnr.
+***抓取产品要素信息
+  SELECT * INTO TABLE lt_ztsd003cpys FROM ztsd003cpys FOR ALL ENTRIES IN lt_ekpo WHERE matnr = lt_ekpo-matnr.
+
+*填充excel
+  CREATE OBJECT lo_excel 'EXCEL.APPLICATION'.
+  CALL METHOD OF lo_excel 'WORKBOOKS' = lo_workbooks.
+
+  CALL METHOD OF lo_workbooks 'OPEN' = lo_workbook EXPORTING #1 = iv_file.
+  CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = 1.
+*  CALL METHOD OF lo_sheet 'ACTIVATE'.
+
+********************************************************************************************
+***------------------------填充 申请要素清单sheet --------------------------------------***
+********************************************************************************************
+*  CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = '申请要素清单'.
+*  CALL METHOD OF lo_sheet 'ACTIVATE'.
+  SORT lt_ztsd003cpys BY matnr.
+
+  DESCRIBE TABLE lt_ztsd003cpys LINES lv_line.
+  lv_line = lv_line - 4.
+  IF lv_line > 0.
+    DO lv_line TIMES.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell EXPORTING #1 = 3 #2 = 1.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell1 EXPORTING #1 = 10 #2 = 8.
+      CALL METHOD OF lo_sheet 'Range' = lo_range EXPORTING #1 = lo_cell #2 = lo_cell1.
+      CALL METHOD OF lo_range 'Select' .
+      CALL METHOD OF lo_range 'Copy'.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell EXPORTING #1 = 11 #2 = 1.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell1 EXPORTING #1 = 18 #2 = 8.
+      CALL METHOD OF lo_sheet 'Range' = lo_range EXPORTING #1 = lo_cell #2 = lo_cell1.
+      CALL METHOD OF lo_range 'Insert'.
+    ENDDO.
+  ENDIF.
+
+  lv_num = 0.
+  LOOP AT lt_ztsd003cpys.
+    lv_num = lv_num + 1.
+    lv_row = ( lv_num - 1 ) * 8 + 3.
+    mac_fill_cell  lv_row  'A'  lv_num.                      "序号
+*    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+*      EXPORTING
+*        input  = lt_ztsd003cpys-matnr
+*      IMPORTING
+*        output = lv_matnr.
+    mac_fill_cell  lv_row  'C'  lt_ztsd003cpys-zhs.                 "商品编码
+    lv_row = lv_row + 1.
+    mac_fill_cell  lv_row  'C'  lt_ztsd003cpys-zspbm.               "商品描述
+    lv_row = lv_row + 1.
+    mac_fill_cell  lv_row  'D'  lt_ztsd003cpys-zzwpm.               "品名
+    mac_fill_cell  lv_row  'F'  lt_ztsd003cpys-zpp.                 "品牌
+    mac_fill_cell  lv_row  'H'  lt_ztsd003cpys-zxh.                 "型号
+    lv_row = lv_row + 1.
+    mac_fill_cell  lv_row  'D'  lt_ztsd003cpys-zdy.                 "电压
+    mac_fill_cell  lv_row  'F'  lt_ztsd003cpys-zgl.                 "功率
+    mac_fill_cell  lv_row  'H'  lt_ztsd003cpys-zjd.                 "精度
+    lv_row = lv_row + 1.
+    mac_fill_cell  lv_row  'D'  lt_ztsd003cpys-zjzcc.                "机座尺寸
+    mac_fill_cell  lv_row  'F'  lt_ztsd003cpys-zjzl.                 "交直流
+    mac_fill_cell  lv_row  'H'  lt_ztsd003cpys-zkbh.                 "开闭环
+    lv_row = lv_row + 1.
+    mac_fill_cell  lv_row  'D'  lt_ztsd003cpys-zyt.                  "用途
+    lv_row = lv_row + 1.
+    mac_fill_cell  lv_row  'D'  lt_ztsd003cpys-zgn.                  "功能
+    lv_row = lv_row + 1.
+    mac_fill_cell  lv_row  'D'  lt_ztsd003cpys-zgzyl.                "工作原理
+  ENDLOOP.
+
+  CALL METHOD OF lo_sheet 'CELLS' = lo_cell EXPORTING #1 = 1 #2 = 1.
+  CALL METHOD OF lo_cell 'SELECT'.
+  SET PROPERTY OF lo_excel 'CutCopyMode' = 0.
+
+  CALL METHOD OF lo_workbook 'SAVE'.
+  SET PROPERTY OF lo_excel 'VISIBLE' = 1.
+  FREE OBJECT:lo_excel,lo_workbooks,lo_workbook,lo_sheet,lo_range,lo_cell.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SELECT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0265   text
+*----------------------------------------------------------------------*
+FORM frm_select_data  USING  u_flag TYPE c.
+  LOOP AT gt_out WHERE check NE u_flag.
+    gt_out-check = u_flag.
+    MODIFY gt_out.
+  ENDLOOP.
+ENDFORM.

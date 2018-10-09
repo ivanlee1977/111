@@ -1,0 +1,57 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP001T01
+*&---------------------------------------------------------------------*
+TABLES:sscrfields,mara,t001w.
+
+DATA:gt_upload LIKE alsmex_tabline OCCURS 0 WITH HEADER LINE.
+FIELD-SYMBOLS:<fs_data> LIKE LINE OF gt_upload.
+
+DATA:gt_header TYPE alsmex_tabline OCCURS 0 WITH HEADER LINE.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       plnum     LIKE plaf-plnum, "计划订单号
+       psttr     LIKE plaf-psttr, "计划开始日期
+       pedtr     LIKE plaf-pedtr, "计划完成日期
+       zicon(20) TYPE c,
+       msgty     LIKE sy-msgty,
+       zmsg      TYPE bapi_msg,
+     END OF gt_out.
+DATA: gt_plaf LIKE plaf OCCURS 0 WITH HEADER LINE."计划订单内表
+
+FIELD-SYMBOLS:<fs_out> LIKE gt_out.
+
+DEFINE mcr_add_msg.
+  IF gt_out-zmsg IS INITIAL.
+    gt_out-zmsg = &1.
+  ELSE.
+    CONCATENATE gt_out-zmsg &1 INTO gt_out-zmsg SEPARATED BY ','.
+  ENDIF.
+END-OF-DEFINITION.
+
+DATA: bdcdata_itab LIKE bdcdata OCCURS 0 WITH HEADER LINE.
+DATA: messtab LIKE bdcmsgcoll OCCURS 0 WITH HEADER LINE.
+
+*  BDC错误消息
+DATA: l_msgtyp       TYPE bdc_mart,
+      l_message_nr   LIKE sy-msgno,
+      l_message_var1 TYPE symsgv,
+      l_message_var2 TYPE symsgv,
+      l_message_var3 TYPE symsgv,
+      l_message_var4 TYPE symsgv,
+      l_message_text LIKE sy-lisel.
+
+***alv data definr
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE  mcr_fieldcat.
+  CLEAR: gt_fcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext  = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-inttype = &3.
+  gt_fcat-intlen = &4.
+  APPEND gt_fcat.
+END-OF-DEFINITION.

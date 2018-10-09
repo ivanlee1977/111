@@ -1,0 +1,859 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM033F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_MODIFY_SCREEN
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_modify_screen .
+  IF r1 = 'X'.
+    LOOP AT SCREEN.
+      IF screen-group1 = 'M2'.
+        screen-active = 0.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+  ELSEIF r2 = 'X'.
+    LOOP AT SCREEN.
+      IF screen-group1 = 'M1'.
+        screen-active = 0.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA1
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data1 .
+  DATA:BEGIN OF lt_pp_data OCCURS 0,
+         aufnr LIKE aufk-aufnr,
+         objnr LIKE aufk-objnr,
+         matnr LIKE afpo-matnr,
+         rsnum LIKE afko-rsnum,
+         gstrp TYPE afko-gstrp,
+       END OF lt_pp_data.
+
+  DATA:BEGIN OF lt_resb OCCURS 0,
+         rsnum LIKE resb-rsnum,
+         rspos LIKE resb-rspos,
+         matnr LIKE resb-matnr,
+         werks LIKE resb-werks,
+         bdmng LIKE resb-bdmng,
+         aufnr LIKE resb-aufnr,
+       END OF lt_resb.
+
+  DATA:BEGIN OF lt_mseg OCCURS 0,
+         mblnr LIKE mseg-mblnr,
+         mjahr LIKE mseg-mjahr,
+         zeile LIKE mseg-zeile,
+         matnr LIKE mseg-matnr,
+         werks LIKE mseg-werks,
+         bwart LIKE mseg-bwart,
+         menge LIKE mseg-menge,
+         aufnr LIKE mseg-aufnr,
+       END OF lt_mseg.
+
+  DATA:BEGIN OF lt_mard OCCURS 0,
+         matnr LIKE mard-matnr,
+         werks LIKE mard-werks,
+         lgort LIKE mard-lgort,
+         labst LIKE mard-labst,
+         insme LIKE mard-insme,
+       END OF lt_mard.
+  "抓取生产订单信息
+  SELECT a~aufnr a~objnr b~matnr c~rsnum c~gstrp
+    INTO CORRESPONDING FIELDS OF TABLE lt_pp_data
+    FROM aufk AS a    INNER JOIN afpo AS b    ON a~aufnr = b~aufnr
+    INNER JOIN afko AS c    ON a~aufnr = c~aufnr
+    INNER JOIN jest AS d      ON a~objnr = d~objnr
+  WHERE a~aufnr IN s_aufnr
+    AND b~matnr IN s_matnr
+    AND a~erdat IN s_erdat
+    AND c~gstrp IN s_gstrp
+    AND a~werks = p_werks
+    AND d~stat = 'I0002'
+    AND d~inact EQ space.
+
+  CHECK lt_pp_data[] IS NOT INITIAL.
+
+  SELECT rsnum
+         rspos
+         matnr
+         werks
+         bdmng
+         aufnr
+    INTO CORRESPONDING FIELDS OF TABLE lt_resb
+    FROM resb
+    FOR ALL ENTRIES IN lt_pp_data
+    WHERE rsnum = lt_pp_data-rsnum
+    AND kzear <> 'X'
+    AND xloek <> 'X'
+    .
+
+  IF lt_resb[] IS NOT INITIAL.
+***抓取物料凭证信息
+    SELECT mblnr
+           mjahr
+           zeile
+           matnr
+           werks
+           bwart
+           menge
+           aufnr
+      INTO CORRESPONDING FIELDS OF TABLE lt_mseg
+      FROM mseg
+      FOR ALL ENTRIES IN lt_resb
+      WHERE matnr = lt_resb-matnr
+        AND werks = lt_resb-werks
+        AND aufnr = lt_resb-aufnr
+        AND bwart IN ('261','262').
+***抓取库存数量
+    SELECT matnr
+           werks
+           lgort
+           labst
+           insme
+      INTO CORRESPONDING FIELDS OF TABLE lt_mard
+      FROM mard
+      FOR ALL ENTRIES IN lt_resb
+      WHERE matnr = lt_resb-matnr
+        AND werks = lt_resb-werks.
+  ENDIF.
+
+  SORT lt_pp_data BY aufnr.
+  LOOP AT lt_resb.
+    gt_out-aufnr = lt_resb-aufnr.
+    READ TABLE lt_pp_data WITH KEY aufnr = lt_resb-aufnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-matnr = lt_pp_data-matnr.
+      gt_out-gstrp = lt_pp_data-gstrp .
+      SELECT SINGLE maktx INTO gt_out-maktx FROM makt WHERE matnr = gt_out-matnr AND spras = sy-langu.
+    ENDIF.
+    gt_out-zmatn = lt_resb-matnr.
+    SELECT SINGLE maktx INTO gt_out-zmakt FROM makt WHERE matnr = gt_out-zmatn AND spras = sy-langu.
+    gt_out-menge = lt_resb-bdmng.
+
+    COLLECT gt_out.
+    CLEAR gt_out.
+  ENDLOOP.
+  LOOP AT gt_out.
+    "已发数量
+    LOOP AT lt_mseg WHERE aufnr = gt_out-aufnr AND matnr = gt_out-zmatn.
+      CASE lt_mseg-bwart.
+        WHEN '261'.
+          gt_out-zyfsl = gt_out-zyfsl + lt_mseg-menge.
+        WHEN '262'.
+          gt_out-zyfsl = gt_out-zyfsl - lt_mseg-menge.
+        WHEN OTHERS.
+      ENDCASE.
+    ENDLOOP.
+    "欠料数量
+    gt_out-zqlsl = gt_out-menge - gt_out-zyfsl.
+    "库存数量
+    LOOP AT lt_mard WHERE matnr = gt_out-zmatn.
+      gt_out-zkcsl = gt_out-zkcsl + lt_mard-labst + lt_mard-insme.
+    ENDLOOP.
+***反冲标识
+    SELECT SINGLE rgekz INTO gt_out-rgekz FROM marc WHERE matnr = gt_out-zmatn AND werks = '1000'.
+    MODIFY gt_out.
+  ENDLOOP.
+  IF p_chk EQ 'X'.
+    DELETE gt_out WHERE zqlsl <= 0.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA2
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data2 .
+  DATA:BEGIN OF lt_po_data OCCURS 0,
+         ebeln LIKE ekko-ebeln,
+         ebelp LIKE ekpo-ebelp,
+         matnr LIKE ekpo-matnr,
+         etenr LIKE eket-etenr,
+         rsnum LIKE eket-rsnum,
+         lifnr LIKE ekko-lifnr,
+         bedat TYPE ekko-bedat, "add by leimt 20180402
+       END OF lt_po_data.
+
+  DATA:BEGIN OF lt_resb OCCURS 0,
+         rsnum LIKE resb-rsnum,
+         rspos LIKE resb-rspos,
+         matnr LIKE resb-matnr,
+         werks LIKE resb-werks,
+         bdmng LIKE resb-bdmng,
+         ebeln LIKE resb-ebeln,
+         ebelp LIKE resb-ebelp,
+       END OF lt_resb.
+
+  DATA:BEGIN OF lt_mseg OCCURS 0,
+         mblnr LIKE mseg-mblnr,
+         mjahr LIKE mseg-mjahr,
+         zeile LIKE mseg-zeile,
+         matnr LIKE mseg-matnr,
+         werks LIKE mseg-werks,
+         bwart LIKE mseg-bwart,
+         menge LIKE mseg-menge,
+         ebeln LIKE mseg-ebeln,
+         ebelp LIKE mseg-ebelp,
+       END OF lt_mseg.
+  DATA:BEGIN OF lt_mseg_temp OCCURS 0,
+         mblnr LIKE mseg-mblnr,
+         mjahr LIKE mseg-mjahr,
+         zeile LIKE mseg-zeile,
+         matnr LIKE mseg-matnr,
+         werks LIKE mseg-werks,
+         bwart LIKE mseg-bwart,
+         menge LIKE mseg-menge,
+         ebeln LIKE mseg-ebeln,
+         ebelp LIKE mseg-ebelp,
+         sjahr LIKE mseg-sjahr,
+         smbln LIKE mseg-smbln,
+         smblp LIKE mseg-smblp,
+       END OF lt_mseg_temp.
+
+  DATA:BEGIN OF lt_mard OCCURS 0,
+         matnr LIKE mard-matnr,
+         werks LIKE mard-werks,
+         lgort LIKE mard-lgort,
+         labst LIKE mard-labst,
+         insme LIKE mard-insme,
+       END OF lt_mard.
+
+  DATA:BEGIN OF lt_dn_data OCCURS 0,
+         vbeln LIKE lips-vbeln,
+         posnr LIKE lips-posnr,
+         matnr LIKE lips-matnr,
+         lfimg LIKE lips-lfimg,
+         vgbel LIKE lips-vgbel,
+         vgpos LIKE lips-vgpos,
+         wbstk LIKE vbuk-wbstk,
+         bwart LIKE lips-bwart,
+       END OF lt_dn_data.
+
+  DATA:lt_mssl LIKE mssl OCCURS 0 WITH HEADER LINE.
+
+***抓取采购订单信息
+  SELECT  a~ebeln
+          b~ebelp
+          b~matnr
+          c~etenr
+          c~rsnum
+          a~lifnr
+    a~bedat
+    INTO CORRESPONDING FIELDS OF TABLE lt_po_data
+    FROM ekko AS a
+    INNER JOIN ekpo AS b
+    ON a~ebeln = b~ebeln
+    INNER JOIN eket AS c
+    ON b~ebeln = c~ebeln
+    AND b~ebelp = c~ebelp
+    WHERE a~ebeln IN s_ebeln
+      AND b~matnr IN s_matnr
+      AND a~aedat IN s_erdat
+      AND b~werks = p_werks
+      AND a~frgrl IN s_frgrl
+      AND b~elikz = space
+      AND b~loekz = space
+      AND c~rsnum NE space
+      AND a~lifnr IN s_lifnr
+      AND b~bednr IN s_bednr
+      AND a~bedat IN s_bedat.
+
+  CHECK lt_po_data[] IS NOT INITIAL.
+
+  SELECT rsnum
+         rspos
+         matnr
+         werks
+         bdmng
+         ebeln
+         ebelp
+    INTO CORRESPONDING FIELDS OF TABLE lt_resb
+    FROM resb
+    FOR ALL ENTRIES IN lt_po_data
+    WHERE rsnum = lt_po_data-rsnum.
+
+***抓取未过账的交货单的数量
+  SELECT a~vbeln
+         a~posnr
+         a~matnr
+         a~lfimg
+         a~vgbel
+         a~vgpos
+         b~wbstk
+         a~bwart
+    INTO CORRESPONDING FIELDS OF TABLE lt_dn_data
+    FROM lips AS a
+    INNER JOIN vbuk AS b
+    ON a~vbeln = b~vbeln
+    FOR ALL ENTRIES IN lt_resb
+    WHERE a~vgbel = lt_resb-ebeln
+      AND a~matnr = lt_resb-matnr
+      AND b~wbstk NE 'C'
+      AND a~bwart IN ('541','Z41').
+
+  SELECT a~vbeln
+         a~posnr
+         a~matnr
+         a~lfimg
+         a~zvgbel AS vgbel
+         a~zvgpos AS vgpos
+         b~wbstk
+         a~bwart
+    APPENDING CORRESPONDING FIELDS OF TABLE lt_dn_data
+    FROM lips AS a
+    INNER JOIN vbuk AS b
+    ON a~vbeln = b~vbeln
+    FOR ALL ENTRIES IN lt_resb
+    WHERE a~zvgbel = lt_resb-ebeln
+      AND a~matnr = lt_resb-matnr
+      AND b~wbstk NE 'C'
+      AND a~bwart IN ('542','Z42').
+  SORT lt_dn_data.
+  DELETE ADJACENT DUPLICATES FROM lt_dn_data COMPARING ALL FIELDS.
+
+  IF lt_resb[] IS NOT INITIAL.
+***抓取物料凭证信息
+    SELECT mblnr
+           mjahr
+           zeile
+           matnr
+           werks
+           bwart
+           menge
+           ebeln
+           ebelp
+      INTO CORRESPONDING FIELDS OF TABLE lt_mseg
+      FROM mseg
+      FOR ALL ENTRIES IN lt_resb
+      WHERE matnr = lt_resb-matnr
+        AND werks = lt_resb-werks
+        AND ebeln = lt_resb-ebeln
+*        AND ebelp = lt_resb-ebelp
+        AND bwart IN ('541','542','Z41','Z42')
+        AND xauto EQ space.
+
+    SELECT a~mblnr
+           a~mjahr
+           a~zeile
+           a~matnr
+           a~werks
+           a~bwart
+           a~menge
+           b~zvgbel AS ebeln
+           b~zvgpos AS ebelp
+      APPENDING CORRESPONDING FIELDS OF TABLE lt_mseg
+      FROM mseg AS a
+      INNER JOIN lips AS b
+      ON a~vbeln_im = b~vbeln
+      AND a~vbelp_im = b~posnr
+      FOR ALL ENTRIES IN lt_resb
+      WHERE a~matnr = lt_resb-matnr
+        AND a~werks = lt_resb-werks
+        AND b~zvgbel = lt_resb-ebeln
+*        AND ebelp = lt_resb-ebelp
+        AND a~bwart IN ('541','542','Z41','Z42')
+        AND a~xauto EQ space.
+
+***由于VL09 541的MSEG表里面VBELN_IM字段没有值，所以导致少抓物料凭证
+    IF lt_mseg[] IS NOT INITIAL.
+      SELECT  mblnr
+              mjahr
+              zeile
+              matnr
+              werks
+              bwart
+              menge
+              sjahr
+              smbln
+              smblp
+        INTO CORRESPONDING FIELDS OF TABLE lt_mseg_temp
+        FROM mseg
+        FOR ALL ENTRIES IN lt_mseg
+        WHERE sjahr = lt_mseg-mjahr
+          AND smbln = lt_mseg-mblnr
+          AND smblp = lt_mseg-zeile
+          AND bwart IN ('541','542','Z41','Z42').
+      LOOP AT lt_mseg_temp.
+        READ TABLE lt_mseg WITH KEY mjahr = lt_mseg_temp-sjahr mblnr = lt_mseg_temp-smbln zeile = lt_mseg_temp-smblp.
+        IF sy-subrc = 0.
+          lt_mseg_temp-ebeln = lt_mseg-ebeln.
+          lt_mseg_temp-ebelp = lt_mseg-ebelp.
+          MODIFY lt_mseg_temp.
+        ENDIF.
+      ENDLOOP.
+      APPEND LINES OF lt_mseg_temp TO lt_mseg.
+      SORT lt_mseg.
+      DELETE ADJACENT DUPLICATES FROM lt_mseg COMPARING mblnr mjahr zeile.
+    ENDIF.
+
+
+***抓取库存数量
+    SELECT matnr
+           werks
+           lgort
+           labst
+           insme
+      INTO CORRESPONDING FIELDS OF TABLE lt_mard
+      FROM mard
+      FOR ALL ENTRIES IN lt_resb
+      WHERE matnr = lt_resb-matnr
+        AND werks = lt_resb-werks.
+***抓取供应商库存
+    SELECT *
+      INTO CORRESPONDING FIELDS OF TABLE lt_mssl
+      FROM mssl
+      FOR ALL ENTRIES IN lt_resb
+      WHERE matnr = lt_resb-matnr
+        AND werks = lt_resb-werks
+        AND sobkz = 'O'.
+  ENDIF.
+
+  SORT lt_po_data BY ebeln ebelp.
+  LOOP AT lt_resb.
+    gt_out-ebeln = lt_resb-ebeln.
+    READ TABLE lt_po_data WITH KEY ebeln = lt_resb-ebeln ebelp = lt_resb-ebelp BINARY SEARCH.
+    IF sy-subrc = 0.
+*      gt_out-matnr = lt_po_data-matnr.
+*      SELECT SINGLE maktx INTO gt_out-maktx FROM makt WHERE matnr = gt_out-matnr AND spras = sy-langu.
+      gt_out-lifnr = lt_po_data-lifnr.
+      gt_out-bedat = lt_po_data-bedat.
+      SELECT SINGLE name1 INTO gt_out-name1 FROM lfa1 WHERE lifnr = gt_out-lifnr.
+    ENDIF.
+    gt_out-zmatn = lt_resb-matnr.
+    SELECT SINGLE maktx INTO gt_out-zmakt FROM makt WHERE matnr = gt_out-zmatn AND spras = sy-langu.
+    gt_out-menge = lt_resb-bdmng.
+    COLLECT gt_out.
+    CLEAR gt_out.
+  ENDLOOP.
+  LOOP AT gt_out.
+    "已发数量
+    LOOP AT lt_mseg WHERE ebeln = gt_out-ebeln  AND matnr = gt_out-zmatn.
+      CASE lt_mseg-bwart.
+        WHEN '541' OR 'Z41'.
+          gt_out-zyfsl = gt_out-zyfsl + lt_mseg-menge.
+        WHEN '542' OR 'Z42'.
+          gt_out-zyfsl = gt_out-zyfsl - lt_mseg-menge.
+        WHEN OTHERS.
+      ENDCASE.
+    ENDLOOP.
+    "欠料数量
+    gt_out-zqlsl = gt_out-menge - gt_out-zyfsl.
+    "库存数量
+    LOOP AT lt_mard WHERE matnr = gt_out-zmatn.
+      gt_out-zkcsl = gt_out-zkcsl + lt_mard-labst + lt_mard-insme.
+      IF lt_mard-lgort = '1160'.
+        gt_out-zmeng1 = gt_out-zmeng1 + lt_mard-labst.
+      ELSEIF lt_mard-lgort = '1170'.
+        gt_out-zmeng2 = gt_out-zmeng2 + lt_mard-labst.
+      ELSE.
+        gt_out-zmeng3 = gt_out-zmeng3 + lt_mard-labst.
+      ENDIF.
+      gt_out-insme = lt_mard-insme.
+    ENDLOOP.
+    "供应商库存数量
+    LOOP AT lt_mssl WHERE matnr = gt_out-zmatn.
+      gt_out-zwwkc = gt_out-zwwkc + lt_mssl-sllab.
+    ENDLOOP.
+***反冲标识
+    SELECT SINGLE rgekz INTO gt_out-rgekz FROM marc WHERE matnr = gt_out-zmatn AND werks = '1000'.
+***物料未到数量
+    gt_out-zwlwd = gt_out-zqlsl - gt_out-zmeng3 - gt_out-insme.
+    IF gt_out-lifnr EQ '0000060087'.
+      gt_out-zwlwd = gt_out-zwlwd - gt_out-zmeng1.
+    ELSEIF gt_out-lifnr EQ '0000060089'.
+      gt_out-zwlwd = gt_out-zwlwd - gt_out-zmeng2.
+    ENDIF.
+    IF gt_out-zwlwd < 0.
+      gt_out-zwlwd = 0.
+    ENDIF.
+***盘装料仓库未扣数
+    IF gt_out-rgekz NE space.
+      IF gt_out-lifnr EQ '0000060087'.
+        gt_out-zpzwk = gt_out-zqlsl - gt_out-zmeng1.
+      ELSEIF gt_out-lifnr EQ '0000060089'.
+        gt_out-zpzwk = gt_out-zqlsl - gt_out-zmeng2.
+      ENDIF.
+    ENDIF.
+    IF gt_out-zpzwk < 0.
+      gt_out-zpzwk = 0.
+    ENDIF.
+
+    IF gt_out-rgekz IS INITIAL.
+***已创建交货未过账数量
+      LOOP AT lt_dn_data WHERE vgbel = gt_out-ebeln  AND matnr = gt_out-zmatn.
+        IF lt_dn_data-bwart EQ 'Z42' OR lt_dn_data-bwart EQ '542'.
+          gt_out-zwjh = gt_out-zwjh - lt_dn_data-lfimg.
+        ELSE.
+          gt_out-zwjh = gt_out-zwjh + lt_dn_data-lfimg.
+        ENDIF.
+      ENDLOOP.
+***待创建交货
+      gt_out-zdjh = gt_out-zqlsl - gt_out-zwjh.
+    ENDIF.
+
+    MODIFY gt_out.
+  ENDLOOP.
+  SORT gt_out BY ebeln.
+  IF p_chk EQ 'X'.
+    DELETE gt_out WHERE zqlsl <= 0.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  IF r1 = 'X'.
+    mcr_build_fieldcat:'AUFNR'  '订单号码'  'AUFNR'   'AUFK'     ''      '',
+                       'MATNR'  '产品型号'      'MATNR'   'MARA'     ''      '',
+                       'MAKTX'  '产品描述'      'MAKTX'   'MAKT'     ''      '',
+                       'ZMATN'  '物料代码'      'MATNR'   'MARA'     ''      '',
+                       'ZMAKT'  '物料描述'      'MAKTX'   'MAKT'     ''      '',
+                       'RGEKZ'  '反冲标识'      'RGEKZ'   'MARC'     ''      '',
+                       'MENGE'  '组件需求数量'  'BDMNG'   'RESB'     'P'      '15',
+                       'ZYFSL'  '已发数量'      ''        ''         'P'      '15',
+                       'ZQLSL'  '欠料数量'      ''        ''         'P'      '15',
+                       'ZKCSL'  '库存数量'      ''        ''         'P'      '15',
+                       'GSTRP '  '基本开始日期'      'GSTRP '        'AFKO'         ''      ''.
+  ELSEIF r2 = 'X'.
+    mcr_build_fieldcat:'EBELN'  '订单号码'  'EBELN'   'EKKO'     ''      '',
+
+*                      'MATNR'  '产品型号'      'MATNR'   'MARA'     ''      '',
+*                      'MAKTX'  '产品描述'      'MAKTX'   'MAKT'     ''      '',
+                       'BEDAT'  '凭证日期'      'BEDAT'   'EKKO'     ''      '',
+                       'ZMATN'  '物料代码'      'MATNR'   'MARA'     ''      '',
+                       'ZMAKT'  '物料描述'      'MAKTX'   'MAKT'     ''      '',
+                       'RGEKZ'  '反冲标识'      'RGEKZ'   'MARC'     ''      '',
+                       'LIFNR'  '供应商'        'LIFNR'   'EKKO'     ''      '',
+                       'NAME1'  '供应商名称'    'NAME1'   'LFA1'     ''      '',
+                       'MENGE'  '组件需求数量'  'BDMNG'   'RESB'     'P'      '15',
+                       'ZYFSL'  '已发数量'      ''        ''         'P'      '15',
+                       'ZQLSL'  '欠料数量'      ''        ''         'P'      '15',
+                       'ZKCSL'  '库存数量'      ''        ''         'P'      '15',
+                       'ZWWKC'  '委外库存'       ''        ''         'P'      '15',
+                       'ZMENG1' '1160爱讯仓库存' ''        ''         'P'      '15',
+                       'ZMENG2' '1170维嘉意仓库存'         ''        ''         'P'      '15',
+                       'ZMENG3' '其它仓非限制库存'         ''        ''         'P'      '15',
+                       'INSME'  '质检库存'       ''        ''         'P'      '15',
+                       'ZWLWD'  '物料未到数量'   ''        ''         'P'      '15',
+                       'ZPZWK'  '盘装料仓库未扣数'   ''        ''         'P'      '15',
+                       'ZDJH'   '待创建交货'   ''        ''         'P'      '15',
+                       'ZWJH'   '已创建交货未过账数量'   ''        ''         'P'      '15'.
+
+  ENDIF.
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK        = ' '
+*     I_BYPASSING_BUFFER       =
+*     I_BUFFER_ACTIVE          =
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'FRM_SET_PF_STATUS'
+      i_callback_user_command  = 'FRM_USER_COMMAND'
+*     I_CALLBACK_TOP_OF_PAGE   = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME         =
+*     I_BACKGROUND_ID          = ' '
+*     I_GRID_TITLE             =
+*     I_GRID_SETTINGS          =
+      is_layout_lvc            = gs_layout
+      it_fieldcat_lvc          = gt_fcat[]
+*     IT_EXCLUDING             =
+*     IT_SPECIAL_GROUPS_LVC    =
+*     IT_SORT_LVC              =
+*     IT_FILTER_LVC            =
+*     IT_HYPERLINK             =
+*     IS_SEL_HIDE              =
+      i_default                = 'X'
+      i_save                   = 'A'
+*     IS_VARIANT               =
+*     IT_EVENTS                =
+*     IT_EVENT_EXIT            =
+*     IS_PRINT_LVC             =
+*     IS_REPREP_ID_LVC         =
+*     I_SCREEN_START_COLUMN    = 0
+*     I_SCREEN_START_LINE      = 0
+*     I_SCREEN_END_COLUMN      = 0
+*     I_SCREEN_END_LINE        = 0
+*     I_HTML_HEIGHT_TOP        =
+*     I_HTML_HEIGHT_END        =
+*     IT_ALV_GRAPHICS          =
+*     IT_EXCEPT_QINFO_LVC      =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER  =
+*     ES_EXIT_CAUSED_BY_USER   =
+    TABLES
+      t_outtab                 = gt_out[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.
+
+FORM frm_user_command  USING r_ucomm LIKE sy-ucomm
+                             rs_selfield TYPE slis_selfield.
+
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CASE r_ucomm.
+    WHEN '&IC1'.
+      CHECK rs_selfield-fieldname = 'EBELN'.
+      SET PARAMETER ID 'BES' FIELD rs_selfield-value.
+      CALL TRANSACTION 'ME23N' AND SKIP FIRST SCREEN.
+    WHEN 'ZDOWNLOAD'.
+      PERFORM frm_download_data.
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SET_PF_STATUS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_set_pf_status  USING rt_extab TYPE slis_t_extab.
+  IF r1 = 'X'.
+    SET PF-STATUS 'PF_1000' EXCLUDING 'ZDOWNLOAD'.
+  ELSEIF r2 = 'X'.
+    SET PF-STATUS 'PF_1000'.
+  ENDIF.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DOWNLOAD_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_download_data .
+  DATA:BEGIN OF lt_data OCCURS 0,
+         zmatn  LIKE mara-matnr,
+         zmakt  LIKE makt-maktx,
+         rgekz  TYPE marc-rgekz,
+         lifnr  TYPE ekko-lifnr,  "供应商
+         name1  TYPE lfa1-name1,  "供应商名称
+         menge  LIKE resb-bdmng,  "组件需求数量
+         zyfsl  TYPE p DECIMALS 3, "已发数量
+         zqlsl  TYPE p DECIMALS 3, "欠料数量
+         zkcsl  TYPE p DECIMALS 3, "库存数量
+         zwwkc  TYPE p DECIMALS 3, "委外库存
+         zmeng1 TYPE p DECIMALS 3, "1160库位爱讯仓库存
+         zmeng2 TYPE p DECIMALS 3, "1170库位维嘉意仓库存
+         zmeng3 TYPE p DECIMALS 3, "非1160&1170仓未限制使用数量
+         zwlwd  TYPE p DECIMALS 3, "物料未到数量
+         zpzwk  TYPE p DECIMALS 3, "盘装料仓库未扣数
+         zdjh   TYPE p DECIMALS 3, "待创建交货
+         zwjh   TYPE p DECIMALS 3, "已创建交货未过账数量
+         insme  TYPE mard-insme,
+       END OF lt_data.
+
+  DATA:lt_mapping   TYPE zsexcel_mapping_t WITH HEADER LINE.
+  DATA:lv_ok TYPE c.
+
+  LOOP AT gt_out.
+    READ TABLE lt_data WITH KEY zmatn = gt_out-zmatn lifnr = gt_out-lifnr.
+    IF sy-subrc = 0.
+      lt_data-menge = lt_data-menge + gt_out-menge.
+      lt_data-zyfsl = lt_data-zyfsl + gt_out-zyfsl.
+      lt_data-zqlsl = lt_data-zqlsl + gt_out-zqlsl.
+      lt_data-zwjh  = lt_data-zwjh  + gt_out-zwjh.
+      MODIFY lt_data INDEX sy-tabix.
+    ELSE.
+      MOVE-CORRESPONDING gt_out TO lt_data.
+      APPEND lt_data.
+      CLEAR lt_data.
+    ENDIF.
+  ENDLOOP.
+
+  LOOP AT lt_data.
+***物料未到数量
+    lt_data-zwlwd = lt_data-zqlsl - lt_data-zmeng3 - lt_data-insme.
+    IF lt_data-lifnr EQ '00000060087'.
+      lt_data-zwlwd = lt_data-zwlwd - lt_data-zmeng1.
+    ELSEIF lt_data-lifnr EQ '00000060089'.
+      lt_data-zwlwd = lt_data-zwlwd - lt_data-zmeng2.
+    ENDIF.
+    IF lt_data-zwlwd < 0.
+      lt_data-zwlwd = 0.
+    ENDIF.
+***盘装料仓库未扣数
+    IF lt_data-rgekz NE space.
+      IF lt_data-lifnr EQ '00000060087'.
+        lt_data-zpzwk = lt_data-zqlsl - lt_data-zmeng1.
+      ELSEIF lt_data-lifnr EQ '00000060089'.
+        lt_data-zpzwk = lt_data-zqlsl - lt_data-zmeng2.
+      ENDIF.
+    ENDIF.
+    IF lt_data-zpzwk < 0.
+      lt_data-zpzwk = 0.
+    ENDIF.
+***待创建交货
+    lt_data-zdjh = lt_data-zqlsl - lt_data-zwjh.
+    CALL FUNCTION 'CONVERSION_EXIT_MATN1_OUTPUT'
+      EXPORTING
+        input  = lt_data-zmatn
+      IMPORTING
+        output = lt_data-zmatn.
+
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+      EXPORTING
+        input  = lt_data-lifnr
+      IMPORTING
+        output = lt_data-lifnr.
+
+    MODIFY lt_data.
+  ENDLOOP.
+
+  lt_mapping-headertext = '物料代码'.
+  lt_mapping-fieldname  = 'ZMATN'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '物料描述'.
+  lt_mapping-fieldname  = 'ZMAKT'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '反冲标识'.
+  lt_mapping-fieldname  = 'RGEKZ'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '供应商'.
+  lt_mapping-fieldname  = 'LIFNR'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '供应商名称'.
+  lt_mapping-fieldname  = 'NAME1'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '组件需求数量'.
+  lt_mapping-fieldname  = 'MENGE'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '已发数量'.
+  lt_mapping-fieldname  = 'ZYFSL'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '欠料数量'.
+  lt_mapping-fieldname  = 'ZQLSL'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '库存数量'.
+  lt_mapping-fieldname  = 'ZKCSL'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '委外库存'.
+  lt_mapping-fieldname  = 'ZWWKC'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '1160爱讯仓库存'.
+  lt_mapping-fieldname  = 'ZMENG1'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '1170维嘉意仓库存'.
+  lt_mapping-fieldname  = 'ZMENG2'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '其它仓非限制库存'.
+  lt_mapping-fieldname  = 'ZMENG3'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '质检库存'.
+  lt_mapping-fieldname  = 'INSME'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '物料未到数量'.
+  lt_mapping-fieldname  = 'ZWLWD'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '盘装料仓库未扣数'.
+  lt_mapping-fieldname  = 'ZPZWK'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '待创建交货'.
+  lt_mapping-fieldname  = 'ZDJH'.
+  APPEND lt_mapping.
+
+  lt_mapping-headertext = '已创建交货未过账数量'.
+  lt_mapping-fieldname  = 'ZWJH'.
+  APPEND lt_mapping.
+
+  DATA: lc_filename TYPE string VALUE '新建文件',
+        lc_fullpath TYPE string  VALUE 'C:\Users\Administrator\Desktop\',
+        lc_path     TYPE  string VALUE 'C:\Users\Administrator\Desktop\'.
+
+  CALL METHOD cl_gui_frontend_services=>file_save_dialog
+    EXPORTING
+      window_title              = '请选择'
+      default_extension         = 'XLS'
+      default_file_name         = 'C:\ZMM033.XLS'
+*     with_encoding             =
+*     file_filter               =
+*     initial_directory         =
+*     prompt_on_overwrite       = 'X'
+    CHANGING
+      filename                  = lc_filename
+      path                      = lc_path
+      fullpath                  = lc_fullpath
+    EXCEPTIONS
+      cntl_error                = 1
+      error_no_gui              = 2
+      not_supported_by_gui      = 3
+      invalid_default_file_name = 4
+      OTHERS                    = 5.
+
+  CALL METHOD zcl_ole_excel=>generate_excel_data
+    EXPORTING
+      it_data          = lt_data[]
+      iv_filename      = lc_fullpath
+      it_mapping_table = lt_mapping[]
+    RECEIVING
+      rv_save_ok       = lv_ok.
+  IF lv_ok IS NOT INITIAL.
+    MESSAGE '导出数据成功' TYPE 'S'.
+  ELSE.
+    MESSAGE '导出数据失败' TYPE 'E'.
+  ENDIF.
+ENDFORM.

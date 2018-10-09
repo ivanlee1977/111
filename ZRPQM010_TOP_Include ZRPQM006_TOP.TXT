@@ -1,0 +1,68 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPQM001_TOP
+*&---------------------------------------------------------------------*
+*TYPE-POOLS:truxs,slis.
+*DATA:xlstab TYPE truxs_t_text_data.
+*TABLES:zlspt_qm_recty.
+********************ALV 事件****************
+TABLES vbap.
+DATA:
+  it_fieldcat TYPE lvc_t_fcat,
+  wa_fieldcat LIKE LINE OF it_fieldcat,
+  gs_layout   TYPE lvc_s_layo,
+  it_events   TYPE slis_t_event, ""事件属性
+  wa_events   TYPE slis_alv_event.
+
+DATA c30 TYPE char30.
+
+CONSTANTS: cns_bpm TYPE char3  VALUE 'BMP'.
+DATA: exec_ref   TYPE REF TO cx_sy_native_sql_error,
+      error_text TYPE string.
+
+DATA:BEGIN OF gw_item,"展示内表
+       sel(1)     TYPE c,
+       creatdate  TYPE c LENGTH 14,
+       zcdate     TYPE date,
+       bussno     TYPE c LENGTH 32,
+       status     TYPE c LENGTH 5,
+       zstatus    TYPE c LENGTH 3,
+       cgdd       TYPE c LENGTH 32,
+       jyph       TYPE c LENGTH 32,
+       sortx      TYPE c LENGTH 20,
+       matnr      TYPE c LENGTH 32,
+       maktx      TYPE c LENGTH 60,
+       gyspc      TYPE c LENGTH 20,
+       llnum      TYPE c LENGTH 20,
+       lldate     TYPE c LENGTH 14,
+       zlldate    TYPE date,
+       kcsl       TYPE c LENGTH 20,
+       cgy        TYPE c LENGTH 40,
+       reqdate    TYPE c LENGTH 14,
+       zreqdate   TYPE date,
+       enddate    TYPE c LENGTH 14,
+       zenddate   TYPE date,
+       tsyt       TYPE c LENGTH 2,
+       zcscddh    TYPE c LENGTH 32,
+       zctrnum    TYPE c LENGTH 15,
+       zcblnum    TYPE c LENGTH 15,
+       zcblv      TYPE c LENGTH 15,
+       zcblms     TYPE c LENGTH 600,
+       zccldate   TYPE c LENGTH 14,
+       zzccldate  TYPE date,
+       sqemst     TYPE c LENGTH 600,
+       sqemsth    TYPE c LENGTH 600,
+       pzmst      TYPE c LENGTH 600,
+       cgcldate   TYPE c LENGTH 20,
+       zcgcldate  TYPE date,
+       cgcldatet  TYPE c LENGTH 20,
+       zcgcldatet TYPE date,
+     END OF gw_item.
+DATA:gt_item LIKE TABLE OF gw_item WITH HEADER LINE .
+*       it_bpm_zlspt_user LIKE wa_bpm_zlspt_user OCCURS 0.
+DATA cl_sqlerr_ref TYPE REF TO cx_sql_exception.
+
+DATA:dbcursor TYPE cursor.
+
+DATA:ok_code   TYPE sy-ucomm,
+     save_ok   TYPE sy-ucomm,
+     errorcode TYPE i.

@@ -1,0 +1,404 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP001F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      FORM  frm_initial_data
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_initial_data .
+*******数据定义*******
+  INCLUDE <icon>.
+  DATA ls_functxt TYPE smp_dyntxt.
+  DATA:gt_exbut TYPE TABLE OF sy-ucomm.
+*******初始化*******
+*******程序主体******
+  "屏幕工具栏中按饼
+  "启用自定义工具
+  CLEAR ls_functxt.
+  ls_functxt-icon_text = '模板下载'."'Download Template'.
+  ls_functxt-icon_id   = '@49@'.
+  ls_functxt-quickinfo =  '模板下载'.
+  sscrfields-functxt_01 = ls_functxt.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  frm_filename_find
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      <--p_p_file  text
+*----------------------------------------------------------------------*
+FORM frm_filename_find CHANGING xc_file.
+  CALL FUNCTION 'WS_FILENAME_GET'
+    EXPORTING
+      def_filename     = xc_file
+      def_path         = 'C:\'
+      mask             = ',*.XLS.'
+      mode             = 'O'
+      title            = '文件名'
+    IMPORTING
+      filename         = xc_file
+    EXCEPTIONS
+      inv_winsys       = 1
+      no_batch         = 2
+      selection_cancel = 3
+      selection_error  = 4
+      OTHERS           = 5.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  frm_download_template
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->p_0036   text
+*      <--p_p_file  text
+*----------------------------------------------------------------------*
+FORM frm_download_template USING u_objid LIKE wwwdatatab-objid CHANGING ic_file.
+  DATA:l_path   TYPE string.
+
+  CALL METHOD zcl_ole_excel=>download_templet
+    EXPORTING
+      iv_objid        = u_objid
+      iv_win_title    = '请指定下载路径'
+      iv_df_extension = 'XLS'
+    IMPORTING
+      ev_fullpath     = l_path.
+
+  CALL METHOD cl_gui_frontend_services=>execute
+    EXPORTING
+      document = l_path
+    EXCEPTIONS
+      OTHERS   = 10.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  frm_upload_data
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_upload_data .
+  DATA:ls_header LIKE LINE OF gt_header.
+  DATA:ls_table_field LIKE  tabfield,
+       lv_string      TYPE string.
+  FIELD-SYMBOLS:<fs_field>    TYPE any..
+
+  CALL FUNCTION 'ALSM_EXCEL_TO_INTERNAL_TABLE'
+    EXPORTING
+      filename                = p_file
+      i_begin_col             = 1
+      i_begin_row             = 2
+      i_end_col               = 10
+      i_end_row               = 9999
+    TABLES
+      intern                  = gt_upload
+    EXCEPTIONS
+      inconsistent_parameters = 1
+      upload_ole              = 2
+      OTHERS                  = 3.
+***将数据整理到内表中
+
+  LOOP AT gt_upload ASSIGNING <fs_data>.
+    AT NEW row.
+      CLEAR:gt_out.
+    ENDAT.
+    PERFORM frm_convert_data.
+    AT END OF row.
+      PERFORM frm_check_data.
+      APPEND gt_out.
+      CLEAR: gt_out.
+    ENDAT.
+  ENDLOOP.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  frm_check_data
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_data .
+  IF gt_out-paart IS INITIAL OR
+     gt_out-plwrk IS INITIAL OR
+     gt_out-matnr IS INITIAL OR
+     gt_out-gsmng IS INITIAL OR
+     gt_out-psttr IS INITIAL OR
+     gt_out-pedtr IS INITIAL .
+    mcr_add_msg:'请输入必输字段'.
+  ENDIF.
+
+  IF gt_out-paart NE 'LA' AND gt_out-paart NE 'NB' AND gt_out-paart NE 'LB' AND gt_out-paart NE 'LC'.
+    mcr_add_msg:'计划订单类型有误'.
+  ENDIF.
+  IF gt_out-matnr IS NOT INITIAL.
+    CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+      EXPORTING
+        input        = gt_out-matnr
+      IMPORTING
+        output       = gt_out-matnr
+      EXCEPTIONS
+        length_error = 1
+        OTHERS       = 2.
+
+    SELECT SINGLE * FROM mara WHERE matnr = gt_out-matnr.
+    IF sy-subrc NE 0.
+      mcr_add_msg:'物料不存在'.
+    ENDIF.
+  ENDIF.
+
+  IF gt_out-plwrk IS NOT INITIAL.
+    SELECT SINGLE * FROM t001w WHERE werks = gt_out-plwrk.
+    IF sy-subrc NE 0.
+      mcr_add_msg:'工厂不存在'.
+    ENDIF.
+  ENDIF.
+
+  IF gt_out-zmsg IS NOT INITIAL.
+    gt_out-zicon = icon_led_red.
+    gt_out-msgty = 'E'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  frm_get_fieldcat
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
+    EXPORTING
+*     I_BUFFER_ACTIVE        =
+      i_structure_name       = 'ZSPP_PLANNEDORDER_DATA'
+*     I_CLIENT_NEVER_DISPLAY = 'X'
+*     i_bypassing_buffer     =
+*     i_internal_tabname     =
+    CHANGING
+      ct_fieldcat            = gt_fcat[]
+    EXCEPTIONS
+      inconsistent_interface = 1
+      program_error          = 2
+      OTHERS                 = 3.
+
+  gt_fcat-fieldname = 'ZICON'.
+  gt_fcat-coltext  = '状态'.
+  gt_fcat-scrtext_l = '状态'.
+  gt_fcat-scrtext_m = '状态'.
+  gt_fcat-scrtext_s = '状态'.
+  gt_fcat-inttype = 'C'.
+  gt_fcat-intlen = '30'.
+  INSERT gt_fcat INDEX 1.
+  CLEAR gt_fcat.
+
+  gt_fcat-fieldname = 'ZMSG'.
+  gt_fcat-coltext  = '消息'.
+  gt_fcat-scrtext_l = '消息'.
+  gt_fcat-scrtext_m = '消息'.
+  gt_fcat-scrtext_s = '消息'.
+  gt_fcat-inttype = 'C'.
+  gt_fcat-intlen = '200'.
+  APPEND gt_fcat..
+  CLEAR gt_fcat.
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+  gs_layout-no_toolbar = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  frm_output_data
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'FRM_PF_STATUS'
+      i_callback_user_command  = 'FRM_USER_COMMAND'
+*     I_CALLBACK_TOP_OF_PAGE   = ' '
+*     i_callback_html_top_of_page = ' '
+*     i_callback_html_end_of_list = ' '
+*     i_structure_name         =
+*     i_background_id          = ' '
+*     i_grid_title             =
+*     i_grid_settings          =
+      is_layout_lvc            = gs_layout
+      it_fieldcat_lvc          = gt_fcat[]
+*     IT_EXCLUDING             =
+*     it_special_groups_lvc    =
+*     it_sort_lvc              =
+*     it_filter_lvc            =
+*     it_hyperlink             =
+*     is_sel_hide              =
+      i_default                = 'X'
+      i_save                   = 'A'
+**     IS_VARIANT                  =
+*     it_events                =
+*     it_event_exit            =
+*     is_print_lvc             =
+*     is_reprep_id_lvc         =
+*     i_screen_start_column    = 0
+*     i_screen_start_line      = 0
+*     i_screen_end_column      = 0
+*     i_screen_end_line        = 0
+*     i_html_height_top        =
+*     i_html_height_end        =
+*     it_alv_graphics          =
+*     it_except_qinfo_lvc      =
+*     ir_salv_fullscreen_adapter  =
+*   IMPORTING
+*     e_exit_caused_by_caller  =
+*     es_exit_caused_by_user   =
+    TABLES
+      t_outtab                 = gt_out[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  frm_pf_status
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_pf_status USING rt_extab TYPE slis_t_extab.
+  SET PF-STATUS 'PF_001'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  frm_user_command
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_user_command USING r_ucomm LIKE sy-ucomm
+                            rs_selfield TYPE slis_selfield..
+
+  DATA:lv_grid TYPE REF TO cl_gui_alv_grid.
+
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = lv_grid.
+
+  CASE r_ucomm.
+    WHEN 'ZUPLOAD'.  "导入数据
+      PERFORM frm_create_routing.
+      CALL METHOD lv_grid->set_frontend_layout
+        EXPORTING
+          is_layout = gs_layout.
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  frm_create_routing
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_create_routing .
+  DATA: lw_header       TYPE bapiplaf_i1,
+        lw_return       TYPE bapireturn1,
+        lw_plannedorder TYPE bapi_pldord-pldord_num.
+
+  READ TABLE gt_out WITH KEY msgty = 'E'.
+  IF sy-subrc = 0.
+    MESSAGE '上传数据存在错误，请先修正' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  LOOP AT gt_out ASSIGNING <fs_out> WHERE msgty IS INITIAL.
+    CLEAR: lw_header,lw_return,lw_plannedorder.
+    lw_header-pldord_profile = <fs_out>-paart.  "计划订单参数文件
+    lw_header-plan_plant = <fs_out>-plwrk.   "计划工厂
+    lw_header-material = <fs_out>-matnr.   "物料
+    lw_header-total_plord_qty = <fs_out>-gsmng.
+    lw_header-prod_plant = <fs_out>-plwrk. "生产工厂
+    lw_header-order_start_date = <fs_out>-psttr."订单开始日期
+    lw_header-order_fin_date = <fs_out>-pedtr."订单结束日期
+    lw_header-firming_ind = 'X'.  " 确定的计划订单
+    IF <fs_out>-paart EQ 'LA'.
+      lw_header-det_schedule = 'X'.  "安排计划订单
+    ENDIF.
+
+    CALL FUNCTION 'BAPI_PLANNEDORDER_CREATE'
+      EXPORTING
+        headerdata   = lw_header
+      IMPORTING
+        return       = lw_return
+        plannedorder = lw_plannedorder.
+
+    IF  lw_plannedorder IS NOT INITIAL.
+      CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+        EXPORTING
+          wait = 'X'.
+      <fs_out>-zicon = icon_led_green.
+      <fs_out>-msgty = 'S'.
+      <fs_out>-zmsg = lw_plannedorder.
+    ELSE.
+      CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+      <fs_out>-zicon = icon_led_red.
+      <fs_out>-msgty = 'E'.
+      <fs_out>-zmsg = lw_return-message.
+    ENDIF.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CONVERT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_convert_data .
+  CASE <fs_data>-col.
+    WHEN '1'.         "计划类型
+      gt_out-paart = <fs_data>-value.
+    WHEN '2'.         "计划物料
+      gt_out-matnr = <fs_data>-value.
+    WHEN '3'.         "计划工厂
+      gt_out-plwrk = <fs_data>-value.
+    WHEN '4'.         "计划数量
+      gt_out-gsmng = <fs_data>-value.
+    WHEN '5'.         "计划开始日期
+      CALL FUNCTION 'CONVERT_DATE_TO_INTERNAL'
+        EXPORTING
+          date_external            = <fs_data>-value
+        IMPORTING
+          date_internal            = gt_out-psttr
+        EXCEPTIONS
+          date_external_is_invalid = 1.
+    WHEN '6'.         "计划结束日期
+      CALL FUNCTION 'CONVERT_DATE_TO_INTERNAL'
+        EXPORTING
+          date_external            = <fs_data>-value
+        IMPORTING
+          date_internal            = gt_out-pedtr
+        EXCEPTIONS
+          date_external_is_invalid = 1.
+    WHEN OTHERS.
+  ENDCASE.
+
+ENDFORM.

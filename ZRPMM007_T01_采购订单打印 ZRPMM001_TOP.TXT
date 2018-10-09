@@ -1,0 +1,45 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM001_TOP
+*&---------------------------------------------------------------------*
+TYPE-POOLS:slis,vrm.
+
+TABLES:eban,marc.
+
+
+DATA:BEGIN OF gt_mm  OCCURS 0,"展示内表
+       znum type i,
+       banfn LIKE eban-banfn,
+       matnr LIKE eban-matnr,
+       txz01 LIKE eban-txz01,
+       plifz LIKE marc-plifz,
+       bstmi LIKE marc-bstmi,
+       menge LIKE eban-menge,
+       meins LIKE eban-meins,
+       lfdat LIKE eban-lfdat,
+       werks LIKE eban-werks,
+       ekgrp LIKE eban-ekgrp,
+       bsart LIKE eban-bsart,
+       matkl LIKE eban-matkl,
+       badat TYPE eban-badat,
+     END OF gt_mm.
+
+
+DATA:ok_code   TYPE sy-ucomm,
+     save_ok   TYPE sy-ucomm,
+     errorcode TYPE i.
+
+DATA: gt_fcat   TYPE slis_t_fieldcat_alv WITH HEADER LINE,
+      gs_layout TYPE slis_layout_alv.
+
+CONSTANTS:gcst_excel_template TYPE w3objid VALUE 'ZMM007'.
+
+DEFINE g_fieldfcat .
+  gt_fcat-fieldname = &1.
+  gt_fcat-seltext_s = &2.
+  gt_fcat-ddictxt = 'S'.
+  gt_fcat-ref_fieldname = &3.
+  gt_fcat-ref_tabname = &4.
+*  gt_fcat-decimals_out = &5.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

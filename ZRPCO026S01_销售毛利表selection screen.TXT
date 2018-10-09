@@ -1,0 +1,10 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPCO026S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE text-001.
+  SELECT-OPTIONS:s_PERIO FOR ce11000-PERIO,
+                 s_KAUFN FOR ce11000-KAUFN,
+                 s_BUKRS FOR ce11000-BUKRS,
+                 s_KNDNR FOR ce11000-KNDNR,
+                 s_ARTNR FOR ce11000-ARTNR.
+SELECTION-SCREEN END OF BLOCK blc.

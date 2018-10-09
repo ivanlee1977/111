@@ -1,0 +1,12 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPMM021_S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:
+                s_aufnr FOR qals-aufnr,
+                s_pruef FOR qals-prueflos,
+                s_erstel FOR qals-ersteldat DEFAULT sy-datum .
+
+PARAMETERS p_chk AS CHECKBOX.
+SELECTION-SCREEN END OF BLOCK b1.

@@ -1,0 +1,81 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM029_TOP
+*&---------------------------------------------------------------------*
+TYPE-POOLS:truxs,slis.
+DATA:xlstab TYPE truxs_t_text_data.
+TABLES:ekko,ekpo,lfa1,adrc.
+
+********************ALV 事件****************
+DATA:
+  it_fieldcat TYPE lvc_t_fcat,
+  wa_fieldcat LIKE LINE OF it_fieldcat,
+  gs_layout   TYPE lvc_s_layo,
+  it_events   TYPE slis_t_event, ""事件属性
+  wa_events   TYPE slis_alv_event.
+
+DATA: BEGIN OF gw_item,
+        sel(1)      TYPE c,
+        lifnr       TYPE ekko-lifnr, "供应商代码
+        name1       TYPE lfa1-name1,   "供应商描述
+        ebeln       TYPE ekko-ebeln,  "采购订单
+        ebelp       TYPE  ekpo-ebelp,  "采购订单项次
+        zxhm        TYPE ztmm004-zxhm,  "装箱单号
+        land1       TYPE lfa1-land1,    "国家
+        telf1       TYPE lfa1-telf1,    "电话
+        street      TYPE adrc-street,   "地址
+        zxh         TYPE ztsd003cpys-zxh, " 型号
+        zdesc       TYPE ztsd003cpys-zdesc, " 规格
+        ztext       TYPE char200,        "
+        zzwpm       TYPE ztsd003cpys-zzwpm,
+        menge       TYPE ekpo-menge, "  数量
+        zmenge      TYPE ztmm004-menge,"箱数
+        ntgew       TYPE mara-ntgew, " 净重
+        brgew       TYPE mara-brgew, " 毛重
+        zbz         TYPE ztmm004-zbz,  "包装
+        adrnr       TYPE ekko-adrnr,
+        matnr       TYPE mara-matnr,
+        field_style TYPE lvc_t_styl, " 为内表添加设置编辑状态所需的字段
+      END OF gw_item.
+
+DATA :gt_item LIKE gw_item OCCURS 0.
+data:gt_item_total LIKE gw_item occurs 0 WITH HEADER LINE.
+
+
+"检查是否勾选数据
+DATA:gw_check LIKE gw_item,
+     gt_check LIKE gw_item OCCURS 0.
+
+
+DATA: lt_head LIKE gw_item OCCURS 0 WITH HEADER LINE,
+      lt_item LIKE gw_item OCCURS 0 WITH HEADER LINE.
+
+DATA: i_grid_settings TYPE lvc_s_glay.
+
+DATA:ok_code   TYPE sy-ucomm,
+     save_ok   TYPE sy-ucomm,
+     errorcode TYPE i.
+
+DATA:lv_zxhm  TYPE ztmm004-zxhm,
+     lv_zbz   TYPE ztmm004-zbz,
+     lv_brgew TYPE mseg-menge,
+     lv_menge TYPE mseg-menge.
+
+DATA: l_grid TYPE REF TO cl_gui_alv_grid,
+      stbl   TYPE lvc_s_stbl. ""稳定刷新
+CONSTANTS:gcst_excel_template TYPE w3objid VALUE 'ZMM029'.
+
+
+*******数据定义*******
+DATA:lo_excel     TYPE ole2_object,
+     lo_workbooks TYPE ole2_object,
+     lo_workbook  TYPE ole2_object,
+     lo_sheet     TYPE ole2_object,
+     tmp_sheet    TYPE ole2_object, "EMPTY SHEET
+     lo_cell      TYPE ole2_object,
+     borders_obj  TYPE ole2_object,
+     lo_range     TYPE ole2_object,
+     row_obj      TYPE ole2_object,
+     lo_cell1     TYPE ole2_object.
+DATA lv_file LIKE rlgrap-filename.
+DATA:lt_excel_in                    "内表：从源文件中读取到的数据
+       TYPE STANDARD TABLE OF alsmex_tabline WITH HEADER LINE.

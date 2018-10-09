@@ -1,0 +1,9 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPCO008S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_rbukrs FOR faglflext-rbukrs DEFAULT '1000',
+               s_prctr  FOR faglflext-prctr.
+PARAMETERS:p_ryear LIKE faglflext-ryear OBLIGATORY DEFAULT sy-datum+0(4),
+           p_rpmax LIKE bsid-monat OBLIGATORY DEFAULT sy-datum+4(2).
+SELECTION-SCREEN END OF BLOCK blc.

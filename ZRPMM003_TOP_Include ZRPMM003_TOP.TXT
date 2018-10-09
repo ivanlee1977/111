@@ -1,0 +1,60 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM003_TOP
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP014_TOP
+*&---------------------------------------------------------------------*
+TYPE-POOLS:TRUXS,SLIS.
+DATA:XLSTAB TYPE TRUXS_T_TEXT_DATA.
+TABLES:AFKO,AFPO,AFRU.
+
+
+********************ALV 事件****************
+DATA:
+  IT_FIELDCAT TYPE LVC_T_FCAT,
+  WA_FIELDCAT LIKE LINE OF IT_FIELDCAT,
+  GS_LAYOUT   TYPE LVC_S_LAYO,
+  IT_EVENTS   TYPE SLIS_T_EVENT, ""事件属性
+  WA_EVENTS   TYPE SLIS_ALV_EVENT.
+
+
+DATA:BEGIN OF GW_ITEM,"展示内表
+       SEL(1)      TYPE C,
+       AUFNR       TYPE AFPO-AUFNR, "生产订单
+       PWERK       TYPE AFPO-PWERK, "工厂
+       GSTRP       TYPE AFKO-GSTRP, "基本开始日期
+       GLTRP       TYPE AFKO-GLTRP, "基本结束日期
+       DAUAT       TYPE AFPO-DAUAT, "订单类型
+       MATNR       TYPE AFPO-MATNR, "c
+       MAKTX       TYPE MAKT-MAKTX, "物料描述
+       CHARG       TYPE AFPO-CHARG, "版本
+       FIELD_STYLE TYPE LVC_T_STYL, " 为内表添加设置编辑状态所需的字段
+     END OF GW_ITEM.
+DATA:GT_ITEM LIKE GW_ITEM OCCURS 0.
+
+DATA: I_GRID_SETTINGS TYPE LVC_S_GLAY.
+
+DATA:OK_CODE   TYPE SY-UCOMM,
+     SAVE_OK   TYPE SY-UCOMM,
+     ERRORCODE TYPE I.
+DATA: L_GRID TYPE REF TO CL_GUI_ALV_GRID,
+      STBL   TYPE LVC_S_STBL. ""稳定刷新
+
+
+CONSTANTS:GCST_EXCEL_TEMPLATE TYPE W3OBJID VALUE 'ZMM003'.
+
+
+*******数据定义*******
+DATA:LO_EXCEL     TYPE OLE2_OBJECT,
+     LO_WORKBOOKS TYPE OLE2_OBJECT,
+     LO_WORKBOOK  TYPE OLE2_OBJECT,
+     LO_SHEET     TYPE OLE2_OBJECT,
+     TMP_SHEET    TYPE OLE2_OBJECT, "EMPTY SHEET
+     LO_CELL      TYPE OLE2_OBJECT,
+     BORDERS_OBJ  TYPE OLE2_OBJECT,
+     LO_RANGE     TYPE OLE2_OBJECT,
+     ROW_OBJ      TYPE OLE2_OBJECT,
+     LO_CELL1     TYPE OLE2_OBJECT.
+DATA LV_FILE LIKE RLGRAP-FILENAME.
+DATA:LT_EXCEL_IN                    "内表：从源文件中读取到的数据
+       TYPE STANDARD TABLE OF ALSMEX_TABLINE WITH HEADER LINE.

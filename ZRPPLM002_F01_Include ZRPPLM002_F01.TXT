@@ -1,0 +1,343 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPLM002_F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GEDATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_gedata .
+  DATA : BEGIN OF lt_cs001 OCCURS 0,
+           atwrt    TYPE ausp-atwrt,
+           matnr    TYPE  ztcs001-matnr,
+           objek    TYPE ausp-objek,
+           zversion TYPE ztcs001-zversion,
+           zwh1     TYPE ztcs001-zwh1,
+           zwh2     TYPE ztcs001-zwh1,
+           zwh3     TYPE ztcs001-zwh1,
+           zwh4     TYPE ztcs001-zwh1,
+           zwh5     TYPE ztcs001-zwh1,
+           qmnum    TYPE ztcs001-qmnum,
+           zindx    TYPE ztcs001-zindx,
+           menge    TYPE ztcs001-menge,
+           zthwx    TYPE ztcs001-zthwx,
+         END OF lt_cs001.
+  DATA: lv_atwrt TYPE char18, lv_atinn TYPE cabn-atinn.
+  SELECT matnr  zversion zwh1 zwh2 zwh3 zwh4 zwh5 qmnum zindx menge zthwx  INTO CORRESPONDING FIELDS OF TABLE lt_cs001 FROM ztcs001
+    WHERE erdat GE p_begin AND erdat LE p_end AND matnr IN s_matnr.
+  CALL FUNCTION 'CONVERSION_EXIT_ATINN_INPUT'
+    EXPORTING
+      input  = 'ZFER_CPXH'
+    IMPORTING
+      output = lv_atinn.
+  LOOP AT lt_cs001.
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'   "前缀补零
+      EXPORTING
+        input  = lt_cs001-matnr
+      IMPORTING
+        output = lv_atwrt.
+    SELECT SINGLE atwrt INTO lt_cs001-atwrt FROM ausp WHERE objek = lv_atwrt AND atinn = lv_atinn.
+    MODIFY lt_cs001.
+    IF  p_atwrt <> '' AND p_atwrt <> lt_cs001-atwrt.
+      DELETE lt_cs001.
+      CONTINUE.
+    ENDIF.
+    MOVE-CORRESPONDING lt_cs001 TO gt_cs001.
+    APPEND gt_cs001.
+  ENDLOOP.
+
+  SORT gt_cs001 BY matnr zversion.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PROCESSDATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_processdata .
+  DATA: BEGIN OF lt_plm OCCURS 0,
+          atwrt    TYPE ausp-atwrt,
+          matnr    TYPE ztcs001-matnr,
+          maktx    TYPE makt-maktx,
+          zversion TYPE ztcs001-zversion,
+          menge    TYPE ztcs001-menge,
+          zmenge   TYPE ztcs001-menge,
+          zmenge_w TYPE ztcs001-menge,
+          zmenge_t TYPE ztcs001-menge,
+          lfimg    TYPE lips-lfimg,
+          zgzl     TYPE p DECIMALS 2,
+          zthwx    TYPE ztcs001-zthwx,
+        END OF lt_plm.
+  DATA ls_cs001 TYPE gs_cs001.
+  DATA: lv_matnr    TYPE ztcs001-matnr, lv_zversion TYPE char10.
+
+  LOOP AT gt_cs001 INTO ls_cs001.
+    IF ls_cs001-matnr = ''.
+      DELETE gt_cs001.
+      CONTINUE.
+    ENDIF.
+    AT NEW matnr.
+      lv_matnr = ls_cs001-matnr.
+      lv_zversion = ls_cs001-zversion.
+      PERFORM frm_countwh USING lv_matnr lv_zversion.
+    ENDAT.
+    IF ls_cs001-matnr = lv_matnr AND ls_cs001-zversion <> lv_zversion.
+      lv_zversion = ls_cs001-zversion.
+      PERFORM frm_countwh USING lv_matnr lv_zversion.
+    ENDIF.
+  ENDLOOP.
+
+  LOOP AT gt_plm.
+    SELECT SUM( lfimg ) INTO gt_plm-zlfimg FROM likp AS a INNER JOIN lips AS b ON a~vbeln = b~vbeln
+      WHERE b~matnr = gt_plm-matnr AND
+      b~charg = gt_plm-zversion AND
+      a~wadat_ist LE p_end AND
+      a~wadat_ist GE p_begin.
+    IF gt_plm-zlfimg > 0.
+      gt_plm-zgzl = gt_plm-zmenge_w / gt_plm-zlfimg * 100.
+    ENDIF.
+    SELECT SINGLE maktx INTO gt_plm-maktx FROM makt WHERE matnr = gt_plm-matnr AND spras = 1.
+    SELECT SINGLE kurztext INTO gt_plm-kurztext FROM qpct WHERE codegruppe = gt_plm-urcod.
+
+    SELECT SINGLE zwhwl1 INTO gt_plm-zwhwl FROM ztcs001 WHERE zwh1 = gt_plm-zwh.
+    SELECT SINGLE zwhwl2 INTO gt_plm-zwhwl FROM ztcs001 WHERE zwh2 = gt_plm-zwh.
+    SELECT SINGLE zwhwl3 INTO gt_plm-zwhwl FROM ztcs001 WHERE zwh3 = gt_plm-zwh.
+    SELECT SINGLE zwhwl4 INTO gt_plm-zwhwl FROM ztcs001 WHERE zwh4 = gt_plm-zwh.
+    SELECT SINGLE zwhwl5 INTO gt_plm-zwhwl FROM ztcs001 WHERE zwh5 = gt_plm-zwh.
+    IF gt_plm-zwhwl <> ''.
+      SELECT SINGLE maktx INTO gt_plm-zmaktx FROM makt WHERE matnr = gt_plm-zwhwl AND spras = 1.
+    ENDIF.
+
+    MODIFY gt_plm.
+  ENDLOOP.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SHOW
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_show .
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'SET_PF_STATUS'
+      i_callback_user_command  = 'ALV_USER_COMMAND'
+      is_layout                = gs_layout
+      it_fieldcat              = gt_fcat[]
+    TABLES
+      t_outtab                 = gt_plm[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+           WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+ENDFORM.
+
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_COUNTWH
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LV_MATNR  text
+*      -->P_LV_ZVERSION  text
+*----------------------------------------------------------------------*
+FORM frm_countwh  USING    p_lv_matnr TYPE ztcs001-matnr
+                           p_lv_zversion TYPE ztcs001-zversion.
+  DATA: BEGIN OF lt_wh OCCURS 0,
+          zwh1 TYPE char20,
+          zwh2 TYPE char20,
+          zwh3 TYPE char20,
+          zwh4 TYPE char20,
+          zwh5 TYPE char20,
+        END OF lt_wh.
+  DATA: BEGIN OF lt_loopwh OCCURS 0,
+          wh  TYPE char20,
+          num TYPE i,
+        END OF lt_loopwh.
+  DATA: BEGIN OF lt_ur OCCURS 0,
+          qmnum TYPE ztcs001-qmnum,
+          zindx TYPE ztcs001-zindx,
+
+        END OF lt_ur.
+  DATA: BEGIN OF lt_loopur OCCURS 0,
+          urcod TYPE ztcs004-urcod,
+          num   TYPE i,
+        END OF lt_loopur.
+  DATA: lv_i  TYPE char1, lv_wh TYPE char10.
+  DATA : lv_menge  TYPE int4,lv_mengew TYPE int4,lv_menget TYPE int4,lv_index TYPE i.
+  FIELD-SYMBOLS : <f1> TYPE any.
+  IF p_lv_zversion = '**********' .
+    p_lv_zversion = ''.
+  ENDIF.
+  LOOP AT gt_cs001 WHERE matnr = p_lv_matnr AND zversion = p_lv_zversion.
+    lv_menge = lv_menge + gt_cs001-menge.
+    IF gt_cs001-zthwx = 'X'.
+      lv_menget = lv_menget + gt_cs001-menge.
+    ELSE.
+      lv_mengew = lv_mengew + gt_cs001-menge.
+    ENDIF.
+    MOVE-CORRESPONDING gt_cs001 TO lt_ur.
+    APPEND lt_ur.
+    MOVE-CORRESPONDING gt_cs001 TO lt_wh.
+    APPEND lt_wh.
+  ENDLOOP.
+  LOOP AT lt_wh.
+    DO 5 TIMES.
+      lv_i = sy-index.
+      CONCATENATE 'LT_WH-ZWH' lv_i INTO lv_wh.
+      ASSIGN (lv_wh) TO <f1>.
+      READ TABLE lt_loopwh WITH  KEY wh = <f1> .
+      IF sy-subrc = 0.
+        lt_loopwh-num = lt_loopwh-num + 1.
+        MODIFY lt_loopwh INDEX sy-tabix.
+      ELSE.
+        lt_loopwh-wh = <f1>.
+        lt_loopwh-num = 1.
+        APPEND lt_loopwh.
+      ENDIF.
+    ENDDO.
+  ENDLOOP.
+  SORT lt_loopwh BY num DESCENDING.
+  READ TABLE  gt_cs001 WITH KEY matnr = p_lv_matnr  zversion = p_lv_zversion.
+  DO 5 TIMES.
+    READ TABLE lt_loopwh INDEX sy-index.
+    MOVE-CORRESPONDING gt_cs001 TO gt_plm.
+    gt_plm-zmenge = lv_menge.
+    gt_plm-zmenge_t = lv_menget.
+    gt_plm-zmenge_w = lv_mengew.
+    gt_plm-znum = sy-index.
+    IF sy-subrc = 0.
+      gt_plm-zwh = lt_loopwh-wh.
+      gt_plm-zcs1 = lt_loopwh-num.
+    ENDIF.
+    APPEND gt_plm.
+    CLEAR :gt_plm.
+  ENDDO.
+
+  SELECT urcod INTO CORRESPONDING FIELDS OF TABLE lt_loopur FROM ztcs004
+    FOR ALL ENTRIES IN lt_ur
+    WHERE qmnum = lt_ur-qmnum AND zindx = lt_ur-zindx
+    .
+  DATA : lv_urcod TYPE ztcs004-urcod,lv TYPE sy-tabix,lv_num TYPE i.
+  SORT lt_loopur BY urcod.
+  LOOP AT lt_loopur.
+    AT NEW urcod.
+      lv_urcod = lt_loopur-urcod.
+      lv = sy-tabix.
+    ENDAT.
+    IF lv_urcod = lt_loopur-urcod.
+      lv_num = lv_num + 1.
+    ENDIF.
+    AT END OF urcod.
+      lt_loopur-urcod  = lv_urcod.
+      lt_loopur-num = lv_num.
+      MODIFY lt_loopur INDEX lv.
+    ENDAT.
+  ENDLOOP.
+  DELETE  lt_loopur WHERE num = 0.
+  lv = lines( lt_loopur ).
+  IF lv > 5 .
+    LOOP AT lt_loopur FROM 1 TO 5.
+      READ TABLE gt_plm WITH KEY matnr = p_lv_matnr  zversion = p_lv_zversion znum = sy-tabix.
+      IF sy-subrc = 0.
+        lv_index = sy-tabix.
+        gt_plm-urcod = lt_loopur-urcod.
+        gt_plm-zcs2 = lt_loopur-num.
+        MODIFY gt_plm INDEX lv_index.
+      ENDIF.
+    ENDLOOP.
+  ELSEIF lv > 0.
+    LOOP AT lt_loopur FROM 1 TO lv.
+      READ TABLE gt_plm WITH KEY matnr = p_lv_matnr  zversion = p_lv_zversion znum = sy-tabix.
+      IF sy-subrc = 0.
+        lv_index = sy-tabix.
+        gt_plm-urcod = lt_loopur-urcod.
+        gt_plm-zcs2 = lt_loopur-num.
+        MODIFY gt_plm INDEX lv_index.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_fieldcat .
+  g_fieldfcat:
+    'ATWRT' '主型号' 'ATWRT' 'AUSP' '',
+    'MATNR' '物料编码' 'MATNR' 'EKPO' '',
+    'MAKTX' '物料描述' 'MAKTX' 'MAKT' '',
+    'ZVERSION' '版本批次' 'ZVERSION' 'ZTCS001' '',
+    'ZMENGE' '维修退货数量' 'MENGE' 'ZTCS001' '0',
+    'ZMENGE_W' '维修数量' 'MENGE' 'ZTCS001' '0',
+    'ZMENGE_T' '退货数量' 'MENGE' 'ZTCS001' '0',
+    'ZLFIMG' '期间销售总数' 'MENGE' 'ZTCS001' '0',
+    'ZGZL' '故障率(%)' '' '' '0',
+    'ZNUM' '序号' 'MENGE' 'ZTCS001' '0',
+    'ZWH' '位号' 'ZWH1' 'ZTCS001' '0',
+    'ZMAKTX' '更换原器件' 'MAKTX' 'MAKT' '',
+    'ZCS1 ' '数量' 'MENGE' 'ZTCS001' '0',
+    'URCOD ' '故障代码' 'URCOD' 'ZTCS004' '0',
+    'KURZTEXT' '不良原因' '' '' '0',
+    'ZCS2 ' '数量' 'MENGE' 'ZTCS001' '0'
+
+  .
+
+  gs_layout-colwidth_optimize = 'X'.
+*  gs_layout-box_fieldname = 'CHK'.
+*  gs_layout-box_tabname = 'gt_item'.
+  gs_layout-zebra = 'X'.
+ENDFORM.
+
+FORM set_pf_status USING rt_extab TYPE slis_t_extab.
+
+  DATA: wa_extab TYPE slis_extab.
+
+  SET PF-STATUS '0100' EXCLUDING rt_extab.
+
+ENDFORM.                    "set_pf_status1
+
+FORM alv_user_command USING r_ucomm LIKE sy-ucomm  rs_selfield TYPE slis_selfield.
+*   获取ALV中的鼠标勾选记录
+  DATA: l_grid TYPE REF TO cl_gui_alv_grid.
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = l_grid.
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+*  r_ucomm = sy-ucomm.
+*  save_ok =  r_ucomm .
+*  CASE r_ucomm.
+*      "打印
+*    WHEN 'ZPRINT'.
+*      gv_type = 'FORM'.
+*      PERFORM frm_print.
+*    WHEN 'TOEXCEL'.
+*      gv_type = 'EXCE'.
+*      PERFORM frm_excel.
+*  ENDCASE.
+
+
+ENDFORM.                    "alv_user_command

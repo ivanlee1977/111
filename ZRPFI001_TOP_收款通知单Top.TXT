@@ -1,0 +1,91 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI0001_TOP
+*&---------------------------------------------------------------------*
+INCLUDE <icon>.
+TYPE-POOLS: truxs,
+            soi,
+            cntl,
+            cntb,
+            abap,
+            slis,
+            vrm.
+TABLES:zficotskt,zficotskh,bsid,knvv.
+
+*****************************************100
+CONTROLS ctr01 TYPE TABLEVIEW USING SCREEN 100.
+DATA: g_ctr01_lines LIKE sy-loopc.
+DATA: g_khmc TYPE kna1-name1,
+      g_zhmc TYPE skat-txt20.
+
+DATA:g_lines TYPE i.
+DATA: ok_code LIKE sy-ucomm,
+      save_ok LIKE ok_code.
+DATA: l_field TYPE char50,
+      l_line1 TYPE i.
+
+DATA:BEGIN OF gwa_table.
+DATA:sel(1)  TYPE c,
+     mark(1) TYPE c.
+    INCLUDE STRUCTURE zficotskh.
+DATA:END OF gwa_table.
+DATA:gt_table LIKE TABLE OF gwa_table.
+
+DATA:gwa_skt TYPE zficotskt,
+     gt_skt  TYPE TABLE OF zficotskt,
+
+     gwa_skh TYPE zficotskh,
+     gt_skh  TYPE TABLE OF zficotskh.
+****************************************100
+****************************************200
+CONTROLS ctr02 TYPE TABLEVIEW USING SCREEN 9002.
+DATA: g_ctr02_lines LIKE sy-loopc.
+
+DATA: gs_grid          TYPE REF TO cl_gui_alv_grid,
+      gt_fieldcat      TYPE slis_t_fieldcat_alv WITH HEADER LINE,
+      gwa_fieldcatalog LIKE gt_fieldcat,
+      gs_layout        TYPE slis_layout_alv,
+      gv_i             TYPE        i,
+      gv_repid         TYPE        sy-repid VALUE sy-repid.
+
+DATA:BEGIN OF gs_alv.
+DATA:txt(6)    TYPE c,
+     txt_s(20) TYPE c,
+     name1     TYPE kna1-name1.
+DATA:kursf     LIKE bkpf-kursf,
+     zamount   LIKE bseg-dmbtr,
+     bzirk     LIKE knvv-bzirk,
+     bzirk_txt LIKE t171t-bztxt,
+     vkbur     LIKE knvv-vkbur,
+     vkbur_txt LIKE tvkbt-bezei,
+     kvgr1_txt LIKE tvv1t-bezei,
+     zsw(20)   TYPE c.
+    INCLUDE STRUCTURE zficotskt.
+DATA:END OF gs_alv.
+DATA:gt_alv LIKE TABLE OF gs_alv.
+
+DEFINE mcr_append_field.
+  CLEAR gwa_fieldcatalog.
+  gwa_fieldcatalog-fieldname = &1.
+  gwa_fieldcatalog-seltext_l = &2.
+  gwa_fieldcatalog-outputlen = &3.
+  gwa_fieldcatalog-ddictxt   = 'L'.
+  APPEND gwa_fieldcatalog TO gt_fieldcat.
+END-OF-DEFINITION.
+
+DATA: gwa_skt_200 TYPE zficotskt,
+      gt_skt_200  TYPE TABLE OF zficotskt,
+
+      gwa_skh_200 TYPE zficotskh,
+      gt_skh_200  TYPE TABLE OF zficotskh.
+
+"删除行项目
+DATA: gs_delete TYPE zficotskh,
+      gt_delete TYPE TABLE OF zficotskh.
+
+DATA:BEGIN OF gwa_table_200.
+DATA:sel(1)  TYPE c,
+     mark(1) TYPE c.
+    INCLUDE STRUCTURE zficotskh.
+DATA:END OF gwa_table_200.
+DATA:gt_table_200 LIKE TABLE OF gwa_table.
+****************************************200

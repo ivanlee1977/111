@@ -1,0 +1,14 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPSD013S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK blc1 WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_vkorg FOR knvv-vkorg,
+               s_vtweg FOR knvv-vtweg,
+               s_kunnr FOR knvv-kunnr,
+               s_erdat FOR kna1-erdat,
+               s_bzirk FOR knvv-bzirk,
+               s_vkbur FOR knvv-vkbur,
+               s_kvgr1 FOR knvv-kvgr1,
+               s_kvgr2 FOR knvv-kvgr2.
+PARAMETERS:p_r0 AS CHECKBOX DEFAULT 'X'.
+SELECTION-SCREEN END OF BLOCK blc1.

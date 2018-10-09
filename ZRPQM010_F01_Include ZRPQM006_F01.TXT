@@ -1,0 +1,307 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPQM001_F01
+*&---------------------------------------------------------------------*
+
+FORM get_data."取数据
+  DATA: g_errorstr(250) TYPE c.
+  EXEC SQL.
+    CONNECT TO :CNS_BPM
+  ENDEXEC.
+  if sy-subrc = 0.
+    MESSAGE '数据库连接成功' TYPE 'S'.
+**  **获取表数据
+    TRY.
+        exec sql.
+          open dbcursor for
+              SELECT CREATDATE,BUSSNO,STATUS,CGDD,JYPH,SORTX,MATNR,MAKTX,GYSPC,LLNUM,LLDATE,KCSL,CGY,REQDATE,ENDDATE,TSYT,ZCSCDDH,ZCTRNUM,ZCBLNUM,ZCBLV,ZCBLMS,ZCCLDATE,SQEMST,SQEMSTH,PZMST,CGCLDATE,CGCLDATET
+                  FROM ZLSPT_QM_RECTY
+        ENDEXEC.
+      CATCH cx_sy_native_sql_error INTO exec_ref.
+        g_errorstr = exec_ref->get_text( ).
+        CONCATENATE '读取数据出错,'  g_errorstr INTO g_errorstr.
+
+        WRITE:/ g_errorstr.
+    ENDTRY.
+    DO.
+      TRY.
+          EXEC SQL.
+            FETCH NEXT dbcursor INTO
+            :GW_ITEM-CREATDATE,
+            :GW_ITEM-BUSSNO,
+            :GW_ITEM-STATUS,
+            :GW_ITEM-CGDD,
+            :GW_ITEM-JYPH,
+            :GW_ITEM-SORTX,
+            :GW_ITEM-MATNR ,
+            :GW_ITEM-MAKTX  ,
+            :GW_ITEM-GYSPC,
+            :GW_ITEM-LLNUM,
+            :GW_ITEM-LLDATE,
+            :GW_ITEM-KCSL,
+            :GW_ITEM-CGY,
+            :GW_ITEM-REQDATE,
+            :GW_ITEM-ENDDATE,
+            :GW_ITEM-TSYT,
+            :GW_ITEM-ZCSCDDH,
+            :GW_ITEM-ZCTRNUM,
+            :GW_ITEM-ZCBLNUM,
+            :GW_ITEM-ZCBLV,
+            :GW_ITEM-ZCBLMS,
+            :GW_ITEM-ZCCLDATE,
+            :GW_ITEM-SQEMST,
+            :GW_ITEM-SQEMSTH,
+            :GW_ITEM-PZMST,
+            :GW_ITEM-CGCLDATE,
+            :GW_ITEM-CGCLDATET
+          ENDEXEC.
+          IF sy-subrc EQ 0.
+            CALL FUNCTION 'CONVERT_DATE_TO_INTERNAL'
+              EXPORTING
+                date_external            = gw_item-creatdate
+              IMPORTING
+                date_internal            = gw_item-zcdate
+              EXCEPTIONS
+                date_external_is_invalid = 1
+                OTHERS                   = 2.
+            CALL FUNCTION 'CONVERT_DATE_TO_INTERNAL'
+              EXPORTING
+                date_external            = gw_item-lldate
+              IMPORTING
+                date_internal            = gw_item-zlldate
+              EXCEPTIONS
+                date_external_is_invalid = 1
+                OTHERS                   = 2.
+            CALL FUNCTION 'CONVERT_DATE_TO_INTERNAL'
+              EXPORTING
+                date_external            = gw_item-reqdate
+              IMPORTING
+                date_internal            = gw_item-zreqdate
+              EXCEPTIONS
+                date_external_is_invalid = 1
+                OTHERS                   = 2.
+            CALL FUNCTION 'CONVERT_DATE_TO_INTERNAL'
+              EXPORTING
+                date_external            = gw_item-enddate
+              IMPORTING
+                date_internal            = gw_item-zenddate
+              EXCEPTIONS
+                date_external_is_invalid = 1
+                OTHERS                   = 2.
+            CALL FUNCTION 'CONVERT_DATE_TO_INTERNAL'
+              EXPORTING
+                date_external            = gw_item-zccldate
+              IMPORTING
+                date_internal            = gw_item-zzccldate
+              EXCEPTIONS
+                date_external_is_invalid = 1
+                OTHERS                   = 2.
+            CALL FUNCTION 'CONVERT_DATE_TO_INTERNAL'
+              EXPORTING
+                date_external            = gw_item-cgcldate
+              IMPORTING
+                date_internal            = gw_item-zcgcldate
+              EXCEPTIONS
+                date_external_is_invalid = 1
+                OTHERS                   = 2.
+            CALL FUNCTION 'CONVERT_DATE_TO_INTERNAL'
+              EXPORTING
+                date_external            = gw_item-cgcldatet
+              IMPORTING
+                date_internal            = gw_item-zcgcldatet
+              EXCEPTIONS
+                date_external_is_invalid = 1
+                OTHERS                   = 2.
+            CASE gw_item-status.
+              WHEN '01'.
+                gw_item-zstatus = '已保存'.
+              WHEN '02'.
+                gw_item-zstatus = '审批中'.
+              WHEN '03'.
+                gw_item-zstatus = '已审批'.
+              WHEN '04'.
+                gw_item-zstatus = '已取消'.
+              WHEN '05'.
+                gw_item-zstatus = '已退回'.
+              WHEN OTHERS.
+            ENDCASE.
+            APPEND gw_item TO gt_item.
+          ELSE.
+            EXIT.
+          ENDIF.
+
+        CATCH cx_sy_native_sql_error INTO exec_ref.
+          g_errorstr = exec_ref->get_text( ).
+          CONCATENATE '读取数据出错,'  g_errorstr INTO g_errorstr.
+
+          WRITE:/ g_errorstr.
+      ENDTRY.
+    ENDDO.
+
+    EXEC SQL.
+      CLOSE dbcursor
+    ENDEXEC.
+*    BREAK-POINT.
+**关闭连接
+    EXEC SQL.
+      DISCONNECT :CNS_BPM
+    ENDEXEC.
+
+  else.
+    MESSAGE '数据库连接失败' TYPE 'S'.
+  endif.
+*
+  CHECK gt_item[] IS NOT INITIAL .
+*  SORT gt_item BY prueflos.
+ENDFORM.
+
+FORM process_data."处理数据
+*      CONCATENATE '%' s_matnr '%' INTO s_matnr-low.
+*    MODIFY s_matnr INDEX 1.
+  LOOP AT gt_item.
+    IF p_status IS NOT INITIAL and  gt_item-status <> p_status.
+      DELETE gt_item.
+      CONTINUE.
+    ENDIF.
+    IF s_cdate[] IS NOT INITIAL and  gt_item-zcdate not in s_cdate.
+      DELETE gt_item.
+      CONTINUE.
+    ENDIF.
+    IF s_bussno[] IS NOT INITIAL and  gt_item-bussno  not in s_bussno .
+      DELETE gt_item.
+      CONTINUE.
+    ENDIF.
+    IF s_sortX[] IS NOT INITIAL and  gt_item-sortX not in s_sortX.
+      DELETE gt_item.
+      CONTINUE.
+    ENDIF.
+    IF s_cgy[] IS NOT INITIAL and  gt_item-cgy not in s_cgy.
+      DELETE gt_item.
+      CONTINUE.
+    ENDIF.
+
+    IF s_matnr[] IS NOT INITIAL and  gt_item-matnr not in s_matnr.
+
+      DELETE gt_item.
+      CONTINUE.
+    ENDIF.
+
+    MODIFY gt_item.
+  ENDLOOP.
+
+
+
+ENDFORM.
+
+
+FORM get_alv."ALV显示界面
+  DATA : col_pos TYPE i VALUE 1.
+
+  CLEAR:it_fieldcat,wa_fieldcat.
+
+  gs_layout-zebra = 'X'.
+  gs_layout-cwidth_opt = 'X'."
+  gs_layout-stylefname = 'FIELD_STYLE'. " 将内表中的字段名存入显示格式
+  gs_layout-box_fname        = 'SEL'.
+
+  PERFORM FIELDCAT_INT USING COL_POS  'ZCDATE' '日期'    '' .
+  PERFORM FIELDCAT_INT USING COL_POS  'BUSSNO'   '单据编号'  ''  .
+*  PERFORM FIELDCAT_INT USING COL_POS  'STATUS' 'BPM审批状态'  ''    .
+  PERFORM FIELDCAT_INT USING COL_POS  'ZSTATUS' 'BPM审批状态'  ''    .
+  PERFORM FIELDCAT_INT USING COL_POS  'CGDD'   '采购订单'  ''  .
+  PERFORM FIELDCAT_INT USING COL_POS  'JYPH'   '检验批号'  ''  .
+  PERFORM FIELDCAT_INT USING COL_POS  'SORTX'   '供应商'  ''  .
+  PERFORM FIELDCAT_INT USING COL_POS  'MATNR'   '物料编码'  'VBAP'  .
+  PERFORM FIELDCAT_INT USING COL_POS  'MAKTX'   '物料名称'  ''  .
+  PERFORM FIELDCAT_INT USING COL_POS  'GYSPC'   '供应商批次'  ''  .
+  PERFORM FIELDCAT_INT USING COL_POS  'LLNUM'   '来料数量'  ''  .
+  PERFORM FIELDCAT_INT USING COL_POS  'ZLLDATE'   '来料日期'  ''  .
+  PERFORM FIELDCAT_INT USING COL_POS  'KCSL'   '库存数量'  ''  .
+  PERFORM FIELDCAT_INT USING COL_POS  'CGY'   '采购员'  ''  .
+  PERFORM FIELDCAT_INT USING COL_POS  'ZREQDATE'   '通知单发起时间'  ''  .
+  PERFORM FIELDCAT_INT USING COL_POS  'ZENDDATE'   '期望供应商回复时间'  ''  .
+  PERFORM FIELDCAT_INT USING COL_POS  'TSYT'   '投诉源头'  ''  .
+  PERFORM FIELDCAT_INT USING COL_POS  'ZCSCDDH'   '订单号'  ''  .
+  PERFORM FIELDCAT_INT USING COL_POS  'ZCTRNUM'   '投入数'  ''  .
+  PERFORM FIELDCAT_INT USING COL_POS  'ZCBLNUM'   '不良数'  ''  .
+  PERFORM FIELDCAT_INT USING COL_POS  'ZCBLV'   '不良率'  ''  .
+  PERFORM FIELDCAT_INT USING COL_POS  'ZCBLMS'   '不良描述'  ''  .
+  PERFORM FIELDCAT_INT USING COL_POS  'ZCGCLDATE'   '采购接收整改通知书时间'  ''  .
+  PERFORM FIELDCAT_INT USING COL_POS  'ZCGCLDATET'   '接收供应商回复报告及上传整改通知书时间'  ''  .
+  PERFORM FIELDCAT_INT USING COL_POS  'SQEMST'   '供应商执行改善方案'  ''  .
+  PERFORM FIELDCAT_INT USING COL_POS  'SQEMSTH'   '确认长期措施是否有效'  ''  .
+  PERFORM FIELDCAT_INT USING COL_POS  'PZMST'   '效果跟进做最终确认'  ''  .
+
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program       = sy-repid
+      is_layout_lvc            = gs_layout
+      it_fieldcat_lvc          = it_fieldcat
+      it_events                = it_events
+*     i_save                   = 'A'
+      i_callback_pf_status_set = 'SET_PF_STATUS'
+      i_callback_user_command  = 'ALV_USER_COMMAND'
+*     i_grid_settings          = i_grid_settings
+    TABLES
+      t_outtab                 = gt_item[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+            WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+
+
+
+ENDFORM.
+
+
+FORM set_pf_status USING rt_extab TYPE slis_t_extab.
+
+  DATA: wa_extab TYPE slis_extab.
+
+  SET PF-STATUS '0100' EXCLUDING rt_extab.
+
+ENDFORM.                    "set_pf_status1
+
+FORM alv_user_command USING r_ucomm LIKE sy-ucomm  rs_selfield TYPE slis_selfield.
+*   获取ALV中的鼠标勾选记录
+  DATA: l_grid TYPE REF TO cl_gui_alv_grid.
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = l_grid.
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  r_ucomm = sy-ucomm.
+  save_ok =  r_ucomm .
+  CASE r_ucomm.
+      "打印
+    WHEN 'C_PRINT'.
+*      PERFORM print_report.
+  ENDCASE.
+
+
+ENDFORM.                    "alv_user_command
+
+FORM fieldcat_int  USING   p_col_pos         " 1
+                            p_fieldname       " 2
+                            p_seltext_l       " 4
+                           p_talbename
+                            .
+
+  wa_fieldcat-col_pos       = p_col_pos.
+  wa_fieldcat-fieldname     = p_fieldname.
+*  wa_fieldcat-key           = p_key.
+  wa_fieldcat-coltext     = p_seltext_l.
+*  wa_fieldcat-no_zero        = p_zero.
+*  wa_fieldcat-ref_field   = p_fieldname.
+  wa_fieldcat-ref_table    = p_talbename.
+  wa_fieldcat-tipddictxt       = 'L'.
+*  wa_fieldcat-edit           = p_edit  .
+  APPEND wa_fieldcat TO it_fieldcat.
+  p_col_pos = p_col_pos + 1.
+  CLEAR: wa_fieldcat.
+ENDFORM.                    " FIELDCAT_INT

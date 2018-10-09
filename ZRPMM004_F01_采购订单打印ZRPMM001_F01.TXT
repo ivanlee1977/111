@@ -1,0 +1,510 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM001_F01
+*&---------------------------------------------------------------------*
+
+
+FORM frm_show."ALV显示界面
+
+
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'SET_PF_STATUS'
+      i_callback_user_command  = 'ALV_USER_COMMAND'
+      is_layout                = gs_layout
+      it_fieldcat              = gt_fcat[]
+      i_save                   = 'A'
+    TABLES
+      t_outtab                 = gt_item[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+           WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+ENDFORM.
+
+FORM set_pf_status USING rt_extab TYPE slis_t_extab.
+
+  DATA: wa_extab TYPE slis_extab.
+
+  SET PF-STATUS 'ZRPMM001_STATUS' EXCLUDING rt_extab.
+
+ENDFORM.                    "set_pf_status1
+
+FORM alv_user_command USING r_ucomm LIKE sy-ucomm  rs_selfield TYPE slis_selfield.
+*   获取ALV中的鼠标勾选记录
+  DATA: lv_grid TYPE REF TO cl_gui_alv_grid.
+
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = lv_grid.
+
+  CALL METHOD lv_grid->check_changed_data( ).
+
+  CASE r_ucomm.
+    WHEN 'ZCLICK'.
+*      PERFORM frm_print.
+    WHEN '&IC1'.
+*      IF rs_selfield-fieldname EQ 'VGBEL' AND rs_selfield-value IS NOT INITIAL.
+*        SET PARAMETER ID 'BES' FIELD rs_selfield-value.
+*        CALL TRANSACTION 'ME23N' AND SKIP FIRST SCREEN.
+*      ENDIF.
+      IF rs_selfield-fieldname EQ 'EBELN' AND rs_selfield-value IS NOT INITIAL.
+        SET PARAMETER ID 'BES' FIELD rs_selfield-value.
+        CALL TRANSACTION 'ME22N' AND SKIP FIRST SCREEN.
+      ENDIF.
+      IF rs_selfield-fieldname EQ 'MBLNR' AND rs_selfield-value IS NOT INITIAL.
+        SET PARAMETER ID 'MBN' FIELD rs_selfield-value.
+        CALL TRANSACTION 'MB03' AND SKIP FIRST SCREEN.
+      ENDIF.
+      IF rs_selfield-fieldname EQ 'MENGE3' AND rs_selfield-value IS NOT INITIAL.
+        READ TABLE gt_item INDEX rs_selfield-tabindex.
+        PERFORM show_ekbe122 USING gt_item-mjahr gt_item-mblnr gt_item-zeile gt_item-zbudat.
+      ENDIF.
+  ENDCASE.
+
+
+ENDFORM.                    "alv_user_command
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GETDATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_getdata .
+  CLEAR:gt_item[].
+  SELECT
+       b~lifnr
+       b~bukrs
+        b~bsart
+        b~bstyp
+       a~ebeln
+       a~ebelp
+       a~matnr
+       a~txz01
+       a~menge AS menge1
+*       a~lmein
+       a~meins AS lmein
+       a~bpumn
+       a~bpumz
+       a~netpr
+       a~peinh
+       a~mwskz
+       a~matkl
+    a~pstyp
+    a~knttp
+       b~waers
+       c~zeile
+       c~erfmg AS menge2
+       c~erfme
+       c~shkzg
+       c~mjahr
+       c~mblnr
+       a~retpo
+       c~smblp
+       c~sjahr
+       c~smbln
+       d~budat
+       INTO CORRESPONDING FIELDS OF TABLE gt_item
+        FROM ekpo AS a
+        INNER JOIN ekko AS b ON a~ebeln EQ b~ebeln
+        INNER JOIN mseg AS c ON a~ebelp EQ c~ebelp AND a~ebeln EQ c~ebeln
+        INNER JOIN mkpf AS d ON d~mblnr = c~mblnr AND d~mjahr = c~mjahr
+        WHERE b~bukrs IN s_bukrs
+         AND  a~ebeln IN s_ebeln
+         AND  b~ekgrp IN s_ekgrp
+         AND  a~matkl IN s_matkl
+         AND  b~lifnr IN s_lifnr
+         AND  d~budat IN s_budat
+         AND  c~bwart IN ('101','102','161','162','122','123')
+         AND  c~lfbnr NE ''.
+
+  DATA:lv_fwste TYPE fwste.
+
+  DATA: BEGIN OF lt_cx  OCCURS 0,
+          smbln LIKE mseg-smbln,
+          sjahr LIKE mseg-sjahr,
+          smblp LIKE mseg-smblp,
+        END OF lt_cx.
+
+  DATA: BEGIN OF lt_qamb  OCCURS 0,
+          mblnr    TYPE qamb-mblnr,
+          mjahr    TYPE qamb-mjahr,
+          zeile    TYPE qamb-zeile,
+          prueflos TYPE qamb-prueflos,
+          typ      TYPE qamb-typ,
+        END OF lt_qamb.
+  DATA: BEGIN OF lt_mseg  OCCURS 0,
+          prueflos   TYPE qamb-prueflos,
+          budat_mkpf TYPE mseg-budat_mkpf,
+        END OF lt_mseg.
+
+  SELECT a~mblnr  a~prueflos  a~typ a~mblnr a~mjahr a~zeile  INTO CORRESPONDING FIELDS OF TABLE lt_qamb FROM qamb AS a
+    INNER JOIN mseg AS b ON  a~mblnr = b~mblnr AND a~mjahr = b~mjahr AND a~mblnr = b~mblnr
+    FOR ALL ENTRIES IN gt_item
+    WHERE a~mblnr = gt_item-mblnr
+    .
+
+
+  LOOP AT gt_item  WHERE smbln <> ''.
+    MOVE-CORRESPONDING gt_item TO lt_cx.
+    APPEND lt_cx.
+    DELETE gt_item.
+  ENDLOOP.
+
+  LOOP AT lt_cx.
+    READ TABLE gt_item WITH KEY mblnr = lt_cx-smbln mjahr = lt_cx-sjahr zeile = lt_cx-smblp .
+    IF sy-subrc = 0.
+      DELETE gt_item INDEX sy-tabix.
+      CONTINUE.
+    ENDIF.
+  ENDLOOP.
+
+  SELECT a~prueflos b~budat_mkpf INTO CORRESPONDING FIELDS OF TABLE lt_mseg FROM qamb AS a INNER JOIN mseg AS b ON a~mblnr = b~mblnr AND a~mjahr = b~mjahr AND a~zeile = b~zeile
+    FOR ALL ENTRIES IN lt_qamb
+    WHERE a~prueflos = lt_qamb-prueflos AND a~typ = '3' AND ( b~bwart = '321' OR b~bwart = '350' ) .
+  SORT lt_mseg BY prueflos budat_mkpf DESCENDING.
+  LOOP AT gt_item .
+
+    READ TABLE lt_qamb WITH  KEY  mblnr = gt_item-mblnr  mjahr = gt_item-mjahr zeile = gt_item-zeile.
+    IF sy-subrc = 0.
+
+      SELECT SINGLE * FROM qamb WHERE prueflos = lt_qamb-prueflos AND typ = '3'.
+      IF sy-subrc NE 0.
+        IF  p_chk <> 'X'. "增加在检条目选择 20180123
+          DELETE gt_item.
+          CONTINUE.
+        ENDIF.
+      ELSE.
+        READ TABLE lt_mseg WITH  KEY prueflos = lt_qamb-prueflos.
+        gt_item-zbudat = lt_mseg-budat_mkpf.
+      ENDIF.
+    ELSE.
+      gt_item-zbudat = gt_item-budat.
+    ENDIF.
+    IF gt_item-zbudat = '00000000'.
+      gt_item-zbudat = ''.
+    ENDIF.
+
+    SELECT SINGLE hrkft INTO gt_item-hrkft FROM mbew WHERE matnr = gt_item-matnr AND  bwkey = '1000'.
+    SELECT SINGLE hrktx INTO  gt_item-hrktx FROM tkkh2 WHERE hrkft = gt_item-hrkft AND spras = 1.
+    SELECT SINGLE name1 INTO  gt_item-name1 FROM lfa1 WHERE lifnr = gt_item-lifnr.
+    SELECT SINGLE batxt INTO gt_item-batxt FROM t161t WHERE bsart = gt_item-bsart AND bstyp = gt_item-bstyp AND spras = 1.
+    SELECT SINGLE ptext INTO gt_item-ptext FROM t163y WHERE pstyp = gt_item-pstyp AND spras = 1.
+    SELECT SINGLE knttx INTO gt_item-knttx FROM t163i WHERE knttp = gt_item-knttp AND spras = 1.
+
+    IF gt_item-retpo = 'X'.
+      gt_item-menge1 = gt_item-menge1 * -1.
+    ENDIF.
+
+
+    IF gt_item-shkzg = 'H'.
+      gt_item-menge2 = gt_item-menge2 * -1.
+    ENDIF.
+
+
+    CALL FUNCTION 'RECP_FI_TAX_CALCULATE'
+      EXPORTING
+        ic_bukrs    = gt_item-bukrs
+        ic_mwskz    = gt_item-mwskz
+        ic_waers    = 'CNY'
+      IMPORTING
+        ep_tax_rate = lv_fwste
+      EXCEPTIONS
+        not_found   = 1
+        OTHERS      = 2.
+    IF gt_item-bpumz EQ 0 .
+      gt_item-bpumz = 1.
+*      gt_item-bpumn = 1.
+    ENDIF.
+
+    gt_item-zdj = gt_item-netpr / gt_item-peinh / gt_item-bpumn * gt_item-bpumz  .
+    gt_item-zdj1 = gt_item-netpr / gt_item-peinh / gt_item-bpumn * gt_item-bpumz  * ( 1 + lv_fwste / 100 ).
+
+    gt_item-zzj1 = gt_item-zdj1 * gt_item-menge2 .
+*    gt_item-zsum  = gt_item-zzj1 * lv_fwste / 100.
+*    gt_item-zzj = gt_item-zzj1 - gt_item-zsum.
+    gt_item-zzj = gt_item-menge2 * gt_item-zdj.
+    gt_item-zsum = gt_item-zzj1 - gt_item-zzj .
+    PERFORM get_longtxt_po_item  USING gt_item-ebeln  CHANGING gt_item-beizhu."行项目文本
+    PERFORM get_zorh USING gt_item-matnr CHANGING gt_item-zroh_pcbcs.
+    MODIFY gt_item .
+  ENDLOOP.
+
+***20180228 以下为更新跨月冲销数量的过程
+
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE gt_ekbe122
+    FROM ekbe WHERE bwart IN ( '122', '123' ).
+  LOOP AT gt_item.
+    LOOP AT gt_ekbe122 WHERE lfgja = gt_item-mjahr AND lfbnr = gt_item-mblnr AND lfpos = gt_item-zeile.  "122\123凭证的参考凭证为101凭证。
+      IF gt_ekbe122-budat+0(6) > gt_item-zbudat+0(6).  "如果122的日期大于入库日期,则为跨月的退货
+        CASE gt_ekbe122-bwart.
+          WHEN '122'.
+            gt_item-menge3 = gt_item-menge3 +  gt_ekbe122-menge.
+          WHEN '123'.
+            gt_item-menge3 = gt_item-menge3 -  gt_ekbe122-menge.
+          WHEN OTHERS.
+            gt_item-menge3 =  gt_item-menge3.
+        ENDCASE.
+      ENDIF.
+    ENDLOOP.
+    MODIFY gt_item TRANSPORTING menge3.
+  ENDLOOP.
+
+
+ENDFORM.
+
+FORM frm_getfact .
+  g_fieldfcat:
+    'LIFNR' '供应商代码' 'LIFNR' 'EKKO' '',
+    'NAME1' '供应商名称' 'NAME1' 'LFA1' '',
+    'BUKRS' '公司代码' 'BUKRS' 'EKKO' '',
+    'MATKL' '物料组' 'MATKL' 'EKPO' '',
+    'EBELN' '采购订单号' 'EBELN' 'EKPO' '',
+    'EBELP' '采购行项目' 'EBELP' 'EKPO' '',
+    'MATNR' '物料' 'MATNR' 'EKPO' '',
+    'TXZ01' '描述' 'TXZ01' 'EKPO' '',
+    'MENGE1' '订单数量' 'MENGE' 'MSEG' '0',
+    'LMEIN' '订单单位' 'LMEIN' 'EKPO' '',
+    'ZDJ' '单价（不含税）' '' '' '',
+    'ZDJ1' '单价（含税）' '' '' '',
+    'MWSKZ' '税率' 'MWSKZ' 'EKPO' '',
+    'ZZJ' '收货总金额（不含税）' 'BRTWR' 'EKPO' '',
+    'ZZJ1' '收货总金额（含税）' 'BRTWR' 'EKPO' '',
+*    'ZZJ1' '收货总金额（含税）' '' '' '',
+    'ZSUM' '税额' 'BRTWR' 'EKPO' '',
+    'WAERS' '货币' 'WAERS' 'EKPO' '',
+    'MBLNR' '物料凭证' 'MBLNR' 'MKPF' '',         "参考表错误 modi by leimt 20180408
+    'ZEILE' '物料凭证行号' 'ZEILE' 'MKPF' '',     "参考表错误 modi by leimt 20180408
+    'MENGE2' '收货数量' 'MENGE' 'MSEG' '0',
+    'ERFME'  '收货单位' 'ERFME' 'MSEG' '',
+    'BUDAT' '收货日期' 'BUDAT' 'MKPF' '',       "参考表错误 modi by leimt 20180408
+    'ZBUDAT' '入库日期' 'BUDAT' 'MKPF' '',      "参考表错误 modi by leimt 20180408
+    'HRKFT'  '原始组' 'HRKFT' 'MBEW' '',
+    'HRKTX'  '原始组名称' 'HRKTX' 'TKKH2' '',
+    'ZROH_PCBCS' 'PCB参数' '' '' '',
+    'BEIZHU' '抬头文本' '' '' '',
+     'BATXT' '采购订单类型' 'BATXT' 'EKKO' '',
+     'PTEXT' '项目类型' '' '' '',
+      'KNTTX' '科目类型' '' '' '',
+      'MENGE3' '跨月退货数量' '' '' ''
+     .
+
+  LOOP AT gt_fcat.
+    IF gt_fcat-fieldname = 'MENGE1' OR gt_fcat-fieldname = 'MENGE2' OR gt_fcat-fieldname = 'MENGE3'.
+      gt_fcat-qfieldname = 'LMEIN'.
+*      gt_fcat-qtabname =  'EKPO'.
+      MODIFY gt_fcat.
+    ENDIF.
+    IF  gt_fcat-fieldname = 'ZZJ' OR gt_fcat-fieldname = 'ZSUM'.
+      gt_fcat-cfieldname = 'WAERS'.
+*      gt_fcat-ctabname =  'EKPO'.
+      MODIFY gt_fcat.
+    ENDIF.
+
+
+
+  ENDLOOP.
+  gs_layout-colwidth_optimize = 'X'.
+*  gs_layout-box_fieldname = 'CHK'.
+*  gs_layout-box_tabname = 'gt_item'.
+*  gs_layout-edit = 'X'.
+  gs_layout-zebra = 'X'.
+
+
+
+
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CREATE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_create .
+  DATA: g_low  LIKE sy-datum,g_high LIKE sy-datum.
+  CONCATENATE sy-datum+0(6) '01' INTO g_low."第一天
+  CALL FUNCTION 'DATE_GET_MONTH_LASTDAY'
+    EXPORTING
+      i_date = sy-datum
+    IMPORTING
+      e_date = g_high.
+  s_budat-low = g_low.
+  s_budat-high = g_high.
+*  w_line-low = g_low.
+
+*  w_line-high = g_high.
+*  APPEND w_line.
+*  CALL FUNCTION 'VRM_SET_VALUES'
+*    EXPORTING
+*      id     = 'S_BUDAT'
+*      values = w_line[].
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CREATEDATE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_createdate .
+  CONCATENATE sy-datum+0(6) '01' INTO g_low."第一天
+  CALL FUNCTION 'DATE_GET_MONTH_LASTDAY'
+    EXPORTING
+      i_date = sy-datum
+    IMPORTING
+      e_date = g_high.
+  s_budat-low = g_low.
+  s_budat-high = g_high.
+  APPEND s_budat.
+
+ENDFORM.
+
+FORM get_longtxt_po_item  USING pebeln  CHANGING pztext2.
+  CLEAR:pztext2.
+  DATA: gt_tline TYPE STANDARD TABLE OF tline WITH HEADER LINE.
+  DATA: tdname TYPE thead-tdname.
+  CONCATENATE  pebeln '' INTO tdname.
+  CALL FUNCTION 'READ_TEXT'
+    EXPORTING
+      client                  = sy-mandt
+      id                      = 'F01'
+      language                = sy-langu
+      name                    = tdname
+      object                  = 'EKKO'
+    TABLES
+      lines                   = gt_tline
+    EXCEPTIONS
+      id                      = 1
+      language                = 2
+      name                    = 3
+      not_found               = 4
+      object                  = 5
+      reference_check         = 6
+      wrong_access_to_archive = 7
+      OTHERS                  = 8.
+  IF sy-subrc EQ 0 AND  gt_tline[] IS NOT INITIAL .
+    LOOP AT gt_tline.
+      CONCATENATE pztext2 gt_tline-tdline INTO pztext2.
+    ENDLOOP.
+  ENDIF.
+ENDFORM.                    " GET_LONGTXT_FRM
+*&---------------------------------------------------------------------*
+*&      Form  GET_ZORH
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_GT_ITEM_MATNR  text
+*      <--P_GT_ITEM_ZROH_PCBCS  text
+*----------------------------------------------------------------------*
+FORM get_zorh  USING    p_gt_item_matnr
+               CHANGING p_zroh_pcbcs.
+  DATA :lv_objek LIKE ausp-objek.
+  DATA: ls_class      LIKE TABLE OF sclass WITH HEADER LINE,
+        ls_objectdata LIKE TABLE OF clobjdat WITH HEADER LINE.
+
+  lv_objek = p_gt_item_matnr.
+  CALL FUNCTION 'CLAF_CLASSIFICATION_OF_OBJECTS'
+    EXPORTING
+*     CLASS              = ' '
+*     CLASSTEXT          = 'X'
+      classtype          = '001'
+*     CLINT              = 0
+*     FEATURES           = 'X'
+      language           = sy-langu
+      object             = lv_objek
+      objecttable        = 'MARA'
+*     KEY_DATE           = SY-DATUM
+*     INITIAL_CHARACT    = 'X'
+*     NO_VALUE_DESCRIPT  =
+*     CHANGE_SERVICE_CLF = 'X'
+*     INHERITED_CHAR     = ' '
+*     CHANGE_NUMBER      = ' '
+    TABLES
+      t_class            = ls_class
+      t_objectdata       = ls_objectdata
+*     I_SEL_CHARACTERISTIC       =
+*     T_NO_AUTH_CHARACT  =
+    EXCEPTIONS
+      no_classification  = 1
+      no_classtypes      = 2
+      invalid_class_type = 3
+      OTHERS             = 4.
+
+  LOOP AT ls_objectdata WHERE ausp1 <> '?'.
+    CASE ls_objectdata-atnam.
+      WHEN 'ZROH_PCBCS'.
+        p_zroh_pcbcs = ls_objectdata-ausp1.
+      WHEN OTHERS.
+    ENDCASE.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SHOW_EKBE122
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_GT_ITEM_MJAHR  text
+*      -->P_GT_ITEM_MBLNR  text
+*      -->P_GT_ITEM_ZEILE  text
+*----------------------------------------------------------------------*
+FORM show_ekbe122  USING    p_gt_item_mjahr
+                            p_gt_item_mblnr
+                            p_gt_item_zeile
+                            p_gt_item_zbudat.
+
+  DATA: lt_ekbe122 LIKE TABLE OF ekbe WITH HEADER LINE.
+  REFRESH: lt_ekbe122[], gt_fcat2[].
+  LOOP AT gt_ekbe122 WHERE  lfgja = p_gt_item_mjahr AND lfbnr = p_gt_item_mblnr AND lfpos = p_gt_item_zeile.  .
+*    LOOP AT gt_ekbe122 WHERE lfgja = gt_item-mjahr AND lfbnr = gt_item-mblnr AND lfpos = gt_item-zeile.  "122\123凭证的参考凭证为101凭证。
+      IF gt_ekbe122-budat+0(6) > p_gt_item_zbudat+0(6).  "如果122的日期大于入库日期,则为跨月的退货
+        lt_ekbe122 = gt_ekbe122.
+        APPEND lt_ekbe122.
+      ENDIF.
+*    ENDLOOP.
+  ENDLOOP.
+  g_fieldfcat2:
+    'EBELN' '采购订单号' 'EBELN' 'EKPO' '',
+    'EBELP' '采购凭证项目' 'EBELP' 'EKBE' '',
+        'BELNR' '物料凭证' 'BELNR' 'EKBE' '',
+            'BUZEI' '物料凭证项目' 'BUZEI' 'EKBE' '',
+                'BWART' '移动类型' 'BWART' 'EKBE' '',
+                    'BUDAT' '过帐日期 ' 'BUDAT' 'EKBE' '',
+                     'MENGE' '数量 ' 'MENGE' 'EKBE' ''
+     .
+    CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+      i_callback_program       = sy-repid
+*      i_callback_pf_status_set = 'SET_PF_STATUS'
+*      i_callback_user_command  = 'ALV_USER_COMMAND'
+*      is_layout                = gs_layout2
+      it_fieldcat              = gt_fcat2[]
+      i_save                   = 'A'
+    TABLES
+      t_outtab                 = lt_ekbe122[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+           WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+ENDFORM.

@@ -1,0 +1,92 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM010T01
+*&---------------------------------------------------------------------*
+TABLES : sscrfields,rlgrap,icon.
+
+DATA: functxt TYPE smp_dyntxt.
+
+DATA: it_raw TYPE truxs_t_text_data.
+TYPES: BEGIN OF t_datatab,
+         col01 TYPE char200,
+         col02 TYPE char200,
+         col03 TYPE char200,
+         col04 TYPE char200,
+         col05 TYPE char200,
+         col06 TYPE char200,
+         col07 TYPE char200,
+         col08 TYPE char200,
+         col09 TYPE char200,
+         col10 TYPE char200,
+         col11 TYPE char200,
+         col12 TYPE char200,
+         col13 TYPE char200,
+         col14 TYPE char200,
+         col15 TYPE char200,
+         col16 TYPE char200,
+         col17 TYPE char200,
+         col18 TYPE char200,
+         col19 TYPE char200,
+         col20 TYPE char200,
+         col21 TYPE char200,
+         col22 TYPE char200,
+         col23 TYPE char200,
+         col24 TYPE char200,
+         col25 TYPE char200,
+         col26 TYPE char200,
+         col27 TYPE char200,
+         col28 TYPE char200,
+         col29 TYPE char200,
+       END OF t_datatab.
+DATA: itab TYPE STANDARD TABLE OF t_datatab WITH HEADER LINE.
+
+
+DATA: BEGIN OF gt_alv OCCURS 0,
+        box(1),
+        matnr       LIKE equk-matnr, "物料编码
+        werks       LIKE equk-werks, "工厂
+        vdatu       LIKE equk-vdatu, "生效时间从
+        bdatu       LIKE equk-bdatu, "生效时间到
+        scmng       LIKE equk-scmng, "拆分配额的最小数量
+        beskz       LIKE equp-beskz, "采购类型
+        sobes       LIKE equp-sobes, "特殊采购类型
+        lifnr       LIKE equp-lifnr, "供应商
+        quote       LIKE equp-quote, "配额
+        maxmg       LIKE equp-maxmg, "最大配额数量
+        qubmg       LIKE equp-qubmg, "配额的基本数量
+        maxls       LIKE equp-maxls, "配额最大批次数量
+        minls       LIKE equp-minls, "配额最小批次数量
+        kzein       LIKE equp-kzein, "仅一次采购标识
+        ematn       LIKE equp-ematn, "MPN
+        zicon(30)   TYPE c,            "icon
+        text        TYPE c LENGTH 200, "信息文本2
+        flag        TYPE c , "是否要维护MPN X表示维护 空表示不维护
+        rowcolor(4) TYPE c,
+      END OF gt_alv.
+DATA: BEGIN OF gt_head OCCURS 0,
+        werks     LIKE equk-werks, "工厂
+        matnr     LIKE equk-matnr, "物料编码
+        zicon(30) TYPE c,            "icon
+        text      TYPE c LENGTH 200, "信息文本2
+      END OF gt_head.
+
+DATA:gt_mara LIKE mara OCCURS 0 WITH HEADER LINE, "物料主数据
+     gt_marc LIKE marc OCCURS 0 WITH HEADER LINE, "物料工厂信息
+     gt_lfa1 LIKE lfa1 OCCURS 0 WITH HEADER LINE, "供应商主数据
+     gt_eina LIKE eina OCCURS 0 WITH HEADER LINE. "供应商采购信息记录
+
+DATA: gt_equk LIKE equk OCCURS 0 WITH HEADER LINE, "配额抬头\
+      gt_equp LIKE equp OCCURS 0 WITH HEADER LINE. "配额行项目
+
+DATA: lv_flag TYPE c."控制不允许重复导入
+
+DATA: bdcdata_itab LIKE bdcdata OCCURS 0 WITH HEADER LINE.
+DATA: messtab LIKE bdcmsgcoll OCCURS 0 WITH HEADER LINE.
+
+*  BDC错误消息
+DATA: l_msgtyp       TYPE bdc_mart,
+      l_message_nr   LIKE sy-msgno,
+      l_message_var1 TYPE symsgv,
+      l_message_var2 TYPE symsgv,
+      l_message_var3 TYPE symsgv,
+      l_message_var4 TYPE symsgv,
+      l_message_text LIKE sy-lisel.

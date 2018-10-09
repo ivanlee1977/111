@@ -1,0 +1,306 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM019F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:BEGIN OF lt_makt OCCURS 0,
+         matnr LIKE makt-matnr,
+         maktx LIKE makt-maktx,
+       END OF lt_makt.
+  DATA:lt_mara LIKE mara OCCURS 0 WITH HEADER LINE.
+  DATA lt_mbewh LIKE mbewh OCCURS 0 WITH HEADER LINE.
+  DATA lt_mbew LIKE mbew OCCURS 0 WITH HEADER LINE.
+  DATA:lv_index LIKE sy-tabix.
+  DATA:BEGIN OF lt_t001l OCCURS 0,
+         werks LIKE t001l-werks,
+         lgort LIKE t001l-lgort,
+         lgobe LIKE t001l-lgobe,
+       END OF lt_t001l.
+*  DATA:lt_t023t LIKE t023t OCCURS 0 WITH HEADER LINE.
+  DATA ls_out LIKE LINE OF gt_out.
+  DATA lt_out LIKE gt_out OCCURS 0 WITH HEADER LINE.
+  DATA lt_mslb LIKE mslb OCCURS 0 WITH HEADER LINE.
+  DATA ls_mslb TYPE  mslb.
+*  DATA lt_mslbh LIKE mslbh OCCURS 0 WITH HEADER LINE.
+
+  SELECT a~matnr b~werks INTO CORRESPONDING FIELDS OF TABLE gt_out FROM mara AS  a
+    INNER JOIN marc AS b ON a~matnr = b~matnr
+      WHERE a~matnr IN s_matnr
+      AND a~mtart IN s_mtart
+      AND a~matkl IN s_matkl
+      AND b~werks IN s_werks.
+
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_mslb    FROM mslb
+    WHERE  matnr IN s_matnr
+    AND lifnr = p_lifnr.
+*    AND lfgja = p_lfgja
+*    AND lfmon = p_lfmon.
+
+
+*  SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_mslbh  FROM mslbh WHERE  matnr IN s_matnr.
+  SELECT * APPENDING CORRESPONDING FIELDS OF TABLE lt_mslb  FROM mslbh
+    WHERE  matnr IN s_matnr
+    AND lifnr = p_lifnr
+    AND ( ( lfgja = p_lfgja AND  lfmon >= p_lfmon ) OR lfgja > p_lfgja ).
+*      ORDER BY lfgja ASCENDING lfmon ASCENDING .
+
+  CHECK gt_out[] IS NOT INITIAL.
+
+
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_mbew FROM mbew
+    FOR ALL ENTRIES IN gt_out
+    WHERE matnr = gt_out-matnr.
+
+
+  SELECT * APPENDING CORRESPONDING FIELDS OF TABLE lt_mbewh FROM mbewh
+    FOR ALL ENTRIES IN gt_out
+    WHERE matnr = gt_out-matnr.
+
+
+***抓取物料描述
+  SELECT matnr maktx
+    INTO CORRESPONDING FIELDS OF TABLE lt_makt
+    FROM makt
+    FOR ALL ENTRIES IN gt_out
+    WHERE matnr = gt_out-matnr
+      AND spras = sy-langu.
+
+
+  DATA:date1      TYPE sy-datum,date2 TYPE sy-datum,lv_mon(2) TYPE n,lv_year(4) TYPE n,lv TYPE i.
+  SORT lt_makt BY matnr.
+
+
+*  SORT lt_mslb BY lfgja DESCENDING lfmon DESCENDING.
+  SORT gt_out BY matnr.
+  SORT lt_mslb BY matnr lifnr lfgja lfmon .
+  DELETE ADJACENT DUPLICATES FROM lt_mslb COMPARING ALL FIELDS.
+  SORT lt_mbewh BY lfgja DESCENDING lfmon DESCENDING.
+  LOOP AT gt_out INTO ls_out.
+    AT NEW matnr.
+      CLEAR lv.
+    ENDAT.
+    LOOP AT lt_mslb  WHERE  matnr = ls_out-matnr .
+      lv_year = lt_mslb-lfgja.
+      lv_mon = lt_mslb-lfmon.
+      CONCATENATE lv_year lv_mon '01' INTO date1.
+      CONCATENATE p_lfgja p_lfmon '01' INTO date2.
+      IF date1 = date2.
+        ls_out-lblab = lt_mslb-lblab.
+        ls_out-lifnr = lt_mslb-lifnr.
+        ls_out-lfgja = lt_mslb-lfgja.
+        ls_out-lfmon = lt_mslb-lfmon.
+        APPEND ls_out TO lt_out .
+      ELSE.
+        IF date1 > date2.
+          READ TABLE lt_out WITH KEY matnr = lt_mslb-matnr .
+          IF sy-subrc <> 0.
+            MOVE-CORRESPONDING lt_mslb TO lt_out.
+            APPEND lt_out.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+      lv = lv + 1.
+      AT END OF matnr.
+        IF lv = 1.
+          READ TABLE lt_out WITH KEY matnr = lt_mslb-matnr lifnr = lt_mslb-lifnr.
+          IF sy-subrc <> 0.
+            READ TABLE lt_mslb WITH  KEY matnr = lt_mslb-matnr .
+            MOVE-CORRESPONDING lt_mslb TO lt_out.
+            APPEND lt_out.
+          ENDIF.
+        ENDIF.
+      ENDAT.
+    ENDLOOP.
+
+    CLEAR ls_out.
+  ENDLOOP.
+  CLEAR : gt_out[].
+  REFRESH gt_out[].
+  gt_out[] = lt_out[].
+  DELETE ADJACENT DUPLICATES FROM gt_out COMPARING ALL FIELDS.
+
+  LOOP AT gt_out INTO ls_out WHERE lblab > 0.
+    READ TABLE lt_mbew WITH  KEY matnr = ls_out-matnr  lfgja = ls_out-lfgja lfmon = ls_out-lfmon.
+    IF sy-subrc = 0 AND ls_out-lfgja = p_lfgja AND ls_out-lfmon = p_lfmon.
+      ls_out-zqjjc = lt_mbew-salk3 / lt_mbew-lbkum * ls_out-lblab.
+    ELSE.
+*      READ TABLE lt_mbewh WITH  KEY matnr = ls_out-matnr lfmon = p_lfmon lfgja = p_lfgja.
+      READ TABLE lt_mbewh WITH KEY matnr = ls_out-matnr lfgja = ls_out-lfgja lfmon = ls_out-lfmon .
+      IF sy-subrc = 0.
+        ls_out-zqjjc = lt_mbewh-salk3 / lt_mbewh-lbkum * ls_out-lblab.
+      ENDIF.
+    ENDIF.
+*    ls_out-lfgja = p_lfgja.
+*    ls_out-lfmon = p_lfmon.
+    MODIFY gt_out FROM ls_out .
+    CLEAR ls_out.
+  ENDLOOP.
+
+
+  LOOP AT gt_out.
+    IF gt_out-lifnr <> '' AND gt_out-lifnr NOT IN s_lifnr[].
+      DELETE gt_out.
+      CONTINUE.
+    ENDIF.
+
+    IF gt_out-zqjjc = 0 AND gt_out-lblab = 0  AND p1 = 'X'.
+      DELETE gt_out.
+      CONTINUE.
+    ENDIF.
+    gt_out-werks = '1000'.
+    READ TABLE lt_makt WITH KEY matnr = gt_out-matnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-maktx = lt_makt-maktx.
+    ENDIF.
+
+    SELECT SINGLE name1 INTO gt_out-name1 FROM lfa1 WHERE lifnr = gt_out-lifnr.
+    MODIFY gt_out.
+  ENDLOOP.
+  SORT gt_out BY matnr.
+ENDFORM.
+
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+
+  mcr_build_fieldcat:'WERKS'    '工厂'          'WERKS'     'MARD'    ''     '',
+                     'MATNR'    '物料'          'MATNR'     'MARD'    ''     '',
+                     'MAKTX'    '物料描述'      'MAKTX'     'MAKT'    ''     '',
+                     'LIFNR'    '供应商'         'LIFNR'     'LFA1'    ''     '',
+                     'NAME1'    '供应商描述'         'NAME1'     'LFA1'    ''     '',
+                     'LFGJA'    '期间年'         'LFGJA'     'MSLB'    ''     '',
+                     'LFMON'    '期间月'         'LFMON'     'MSKB'    ''     '',
+                     'LBLAB'    '期间结存'      'LBLAB'     'MSLB'    ''     '',
+                     'ZQJJC'    '结存金额'      ''     ''    ''     ''.
+
+
+*                     'MATKL'    '物料组'        'MATKL'     'MARA'    ''     '',
+*                     'WGBEZ'    '物料组描述'    'WGBEZ'     'T023T'   ''     '',
+*                     'SPART'    '产品组'        'SPART'     'MARA'    ''     '',
+*                     'VTEXT'    '产品组描述'    'VTEXT'     'TSPAT'   ''     '',
+
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK       = ' '
+*     I_BYPASSING_BUFFER      =
+*     i_buffer_active         =
+      i_callback_program      = sy-repid
+*     i_callback_pf_status_set = ' '
+      i_callback_user_command = 'FRM_USER_COMMAND'
+*     I_CALLBACK_TOP_OF_PAGE  = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME        =
+*     I_BACKGROUND_ID         = ' '
+*     I_GRID_TITLE            =
+*     I_GRID_SETTINGS         =
+      is_layout_lvc           = gs_layout
+      it_fieldcat_lvc         = gt_fcat[]
+*     IT_EXCLUDING            =
+*     IT_SPECIAL_GROUPS_LVC   =
+*     IT_SORT_LVC             =
+*     IT_FILTER_LVC           =
+*     IT_HYPERLINK            =
+*     IS_SEL_HIDE             =
+      i_default               = 'X'
+      i_save                  = 'A'
+*     IS_VARIANT              =
+*     IT_EVENTS               =
+*     IT_EVENT_EXIT           =
+*     IS_PRINT_LVC            =
+*     IS_REPREP_ID_LVC        =
+*     I_SCREEN_START_COLUMN   = 0
+*     I_SCREEN_START_LINE     = 0
+*     I_SCREEN_END_COLUMN     = 0
+*     I_SCREEN_END_LINE       = 0
+*     I_HTML_HEIGHT_TOP       =
+*     I_HTML_HEIGHT_END       =
+*     IT_ALV_GRAPHICS         =
+*     IT_EXCEPT_QINFO_LVC     =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER =
+*     ES_EXIT_CAUSED_BY_USER  =
+    TABLES
+      t_outtab                = gt_out[]
+    EXCEPTIONS
+      program_error           = 1
+      OTHERS                  = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_USER_COMMAND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_user_command USING r_ucomm LIKE sy-ucomm
+                            rs_selfield TYPE slis_selfield..
+  DATA:lv_grid TYPE REF TO cl_gui_alv_grid.
+
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = lv_grid.
+  DATA lv_mblnr TYPE mseg-mblnr.
+  lv_mblnr = rs_selfield-value.
+  CASE r_ucomm.
+    WHEN '&IC1'.
+*      IF rs_selfield-fieldname EQ 'MBLNR' AND rs_selfield-value IS NOT INITIAL.
+**        SET PARAMETER ID 'ACTION' FIELD 'A04'.
+**        SET PARAMETER ID 'MBN' FIELD rs_selfield-value.
+**        CALL TRANSACTION 'MIGO' AND SKIP FIRST SCREEN.
+*        CALL FUNCTION 'MIGO_DIALOG'
+*          EXPORTING
+*            i_action            = 'A04'
+*            i_refdoc            = 'R02'
+*            i_notree            = 'X'
+*            i_skip_first_screen = 'X'
+*            i_okcode            = 'OK_GO'
+*            i_mblnr             = lv_mblnr
+**           i_mjahr             = itab-gjahr
+*          EXCEPTIONS
+*            illegal_combination = 1
+*            OTHERS              = 2.
+*      ENDIF.
+
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.

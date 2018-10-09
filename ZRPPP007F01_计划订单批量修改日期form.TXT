@@ -1,0 +1,372 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP001F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      FORM  frm_initial_data
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_initial_data .
+*******数据定义*******
+  INCLUDE <icon>.
+  DATA ls_functxt TYPE smp_dyntxt.
+  DATA:gt_exbut TYPE TABLE OF sy-ucomm.
+*******初始化*******
+*******程序主体******
+  "屏幕工具栏中按饼
+  "启用自定义工具
+  CLEAR ls_functxt.
+  ls_functxt-icon_text = '模板下载'."'Download Template'.
+  ls_functxt-icon_id   = '@49@'.
+  ls_functxt-quickinfo =  '模板下载'.
+  sscrfields-functxt_01 = ls_functxt.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  frm_filename_find
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      <--p_p_file  text
+*----------------------------------------------------------------------*
+FORM frm_filename_find CHANGING xc_file.
+  CALL FUNCTION 'WS_FILENAME_GET'
+    EXPORTING
+      def_filename     = xc_file
+      def_path         = 'C:\'
+      mask             = ',*.XLS.'
+      mode             = 'O'
+      title            = '文件名'
+    IMPORTING
+      filename         = xc_file
+    EXCEPTIONS
+      inv_winsys       = 1
+      no_batch         = 2
+      selection_cancel = 3
+      selection_error  = 4
+      OTHERS           = 5.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  frm_download_template
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->p_0036   text
+*      <--p_p_file  text
+*----------------------------------------------------------------------*
+FORM frm_download_template USING u_objid LIKE wwwdatatab-objid CHANGING ic_file.
+  DATA:l_path   TYPE string.
+
+  CALL METHOD zcl_ole_excel=>download_templet
+    EXPORTING
+      iv_objid        = u_objid
+      iv_win_title    = '请指定下载路径'
+      iv_df_extension = 'XLS'
+    IMPORTING
+      ev_fullpath     = l_path.
+
+  CALL METHOD cl_gui_frontend_services=>execute
+    EXPORTING
+      document = l_path
+    EXCEPTIONS
+      OTHERS   = 10.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  frm_upload_data
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_upload_data .
+  DATA:ls_header LIKE LINE OF gt_header.
+  DATA:ls_table_field LIKE  tabfield,
+       lv_string      TYPE string.
+  FIELD-SYMBOLS:<fs_field>    TYPE any..
+
+  CALL FUNCTION 'ALSM_EXCEL_TO_INTERNAL_TABLE'
+    EXPORTING
+      filename                = p_file
+      i_begin_col             = 1
+      i_begin_row             = 2
+      i_end_col               = 10
+      i_end_row               = 9999
+    TABLES
+      intern                  = gt_upload
+    EXCEPTIONS
+      inconsistent_parameters = 1
+      upload_ole              = 2
+      OTHERS                  = 3.
+***将数据整理到内表中
+
+  LOOP AT gt_upload ASSIGNING <fs_data>.
+    AT NEW row.
+      CLEAR:gt_out.
+    ENDAT.
+    PERFORM frm_convert_data.
+    AT END OF row.
+      APPEND gt_out.
+      CLEAR: gt_out.
+    ENDAT.
+  ENDLOOP.
+
+  IF gt_out[] IS NOT INITIAL.
+    SELECT * INTO TABLE gt_plaf
+      FROM plaf
+      FOR ALL ENTRIES IN gt_out
+      WHERE plnum = gt_out-plnum.
+    SORT gt_plaf BY plnum.
+  ENDIF.
+
+*"检查数据有效性
+  CLEAR: gt_out.
+  LOOP AT gt_out .
+    PERFORM frm_check_data.
+    MODIFY gt_out.
+    CLEAR: gt_out.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  frm_check_data
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_data .
+  IF gt_out-plnum IS INITIAL OR
+      gt_out-psttr IS INITIAL OR
+      gt_out-pedtr IS INITIAL.
+    mcr_add_msg:'请输入必输字段'.
+  ENDIF.
+
+  IF gt_out-plnum IS NOT INITIAL.
+    READ TABLE gt_plaf WITH KEY plnum = gt_out-plnum BINARY SEARCH.
+    IF sy-subrc <> 0.
+      mcr_add_msg:'计划订单号不存在'.
+    ENDIF.
+  ENDIF.
+
+  IF gt_out-zmsg IS NOT INITIAL.
+    gt_out-zicon = icon_led_red.
+    gt_out-msgty = 'E'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  frm_get_fieldcat
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  REFRESH:gt_fcat.
+  mcr_fieldcat: 'ZICON' '状态'         'C' '30'.
+  mcr_fieldcat: 'PLNUM' '计划订单号'   'C' '10'.
+  mcr_fieldcat: 'PSTTR' '计划开始日期' 'C' '10'.
+  mcr_fieldcat: 'PEDTR' '计划完成日期' 'C' '10'.
+  mcr_fieldcat: 'ZMSG'  '消息'         'C' '200'.
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+  gs_layout-no_toolbar = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  frm_output_data
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'FRM_PF_STATUS'
+      i_callback_user_command  = 'FRM_USER_COMMAND'
+      is_layout_lvc            = gs_layout
+      it_fieldcat_lvc          = gt_fcat[]
+      i_default                = 'X'
+      i_save                   = 'A'
+    TABLES
+      t_outtab                 = gt_out[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  frm_pf_status
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_pf_status USING rt_extab TYPE slis_t_extab.
+  SET PF-STATUS 'PF_001'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  frm_user_command
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_user_command USING r_ucomm LIKE sy-ucomm
+                            rs_selfield TYPE slis_selfield..
+
+  DATA:lv_grid TYPE REF TO cl_gui_alv_grid.
+
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = lv_grid.
+
+  CASE r_ucomm.
+    WHEN 'ZUPLOAD'.  "导入数据
+      PERFORM frm_create_routing.
+      CALL METHOD lv_grid->set_frontend_layout
+        EXPORTING
+          is_layout = gs_layout.
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  frm_create_routing
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_create_routing .
+  DATA:lv_msg TYPE string."BDC消息
+
+  READ TABLE gt_out WITH KEY msgty = 'E'.
+  IF sy-subrc = 0.
+    MESSAGE '上传数据存在错误，请先修正' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  LOOP AT gt_out ASSIGNING <fs_out>.
+    REFRESH:bdcdata_itab,messtab.
+    PERFORM bdc_dynpro      USING 'SAPMM61P' '0101'.
+    PERFORM bdc_field       USING 'BDC_OKCODE'   '/00'.
+    PERFORM bdc_field       USING 'RM61P-PLNUM'  <fs_out>-plnum.
+    PERFORM bdc_dynpro      USING 'SAPLM61O' '0110'.
+    PERFORM bdc_field       USING 'BDC_OKCODE'  '/00'.
+    PERFORM bdc_field       USING 'PLAF-PEDTR'  <fs_out>-pedtr.
+    PERFORM bdc_field       USING 'PLAF-PSTTR'  <fs_out>-psttr.
+    PERFORM bdc_field       USING 'PLAF-PERTR'  <fs_out>-psttr.
+    PERFORM bdc_dynpro      USING 'SAPLM61O' '0110'.
+    PERFORM bdc_field       USING 'BDC_OKCODE'  '=HZPL'.
+    CALL TRANSACTION 'MD12' USING bdcdata_itab MODE 'N' UPDATE 'L' MESSAGES INTO messtab.
+    LOOP AT messtab WHERE msgtyp = 'E' OR msgtyp = 'A'.
+      EXIT.
+    ENDLOOP.
+    IF sy-subrc = 0.
+      <fs_out>-msgty = 'E'.
+      <fs_out>-zicon = icon_led_red.
+      LOOP AT messtab WHERE msgtyp = 'E' OR msgtyp = 'A'.
+        CLEAR lv_msg.
+        CALL FUNCTION 'MESSAGE_TEXT_BUILD'
+          EXPORTING
+            msgid               = messtab-msgid
+            msgnr               = messtab-msgnr
+            msgv1               = messtab-msgv1
+            msgv2               = messtab-msgv2
+            msgv3               = messtab-msgv3
+            msgv4               = messtab-msgv4
+          IMPORTING
+            message_text_output = lv_msg.
+        IF <fs_out>-zmsg IS INITIAL.
+          <fs_out>-zmsg =  lv_msg.
+        ELSE.
+          CONCATENATE <fs_out>-zmsg  lv_msg INTO <fs_out>-zmsg .
+        ENDIF.
+      ENDLOOP.
+    ELSE.
+      <fs_out>-msgty = 'S'.
+      <fs_out>-zicon = icon_led_green.
+      <fs_out>-zmsg = '计划订单修改成功'.
+    ENDIF.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CONVERT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_convert_data .
+  CASE <fs_data>-col.
+    WHEN '1'.         "计划订单号
+      gt_out-plnum = <fs_data>-value.
+      CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+        EXPORTING
+          input  = gt_out-plnum
+        IMPORTING
+          output = gt_out-plnum.
+    WHEN '2'.         "计划开始日期
+      CALL FUNCTION 'CONVERT_DATE_TO_INTERNAL'
+        EXPORTING
+          date_external            = <fs_data>-value
+        IMPORTING
+          date_internal            = gt_out-psttr
+        EXCEPTIONS
+          date_external_is_invalid = 1.
+    WHEN '3'.         "计划完成日期
+      CALL FUNCTION 'CONVERT_DATE_TO_INTERNAL'
+        EXPORTING
+          date_external            = <fs_data>-value
+        IMPORTING
+          date_internal            = gt_out-pedtr
+        EXCEPTIONS
+          date_external_is_invalid = 1.
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  BDC_DYNPRO
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_1152   text
+*      -->P_1153   text
+*----------------------------------------------------------------------*
+FORM bdc_dynpro USING program dynpro.
+  CLEAR bdcdata_itab.
+  bdcdata_itab-program  = program.
+  bdcdata_itab-dynpro   = dynpro.
+  bdcdata_itab-dynbegin = 'X'.
+  APPEND bdcdata_itab.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  BDC_FIELD
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_1317   text
+*      -->P_1318   text
+*----------------------------------------------------------------------*
+FORM bdc_field USING fnam fval.
+  CLEAR bdcdata_itab.
+  bdcdata_itab-fnam = fnam.
+  bdcdata_itab-fval = fval.
+  APPEND bdcdata_itab.
+ENDFORM.

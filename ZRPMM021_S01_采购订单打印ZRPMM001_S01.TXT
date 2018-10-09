@@ -1,0 +1,14 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPMM021_S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:
+
+                s_ekgrp FOR ekko-ekgrp OBLIGATORY DEFAULT '190',
+                s_lifnr FOR ekko-lifnr OBLIGATORY DEFAULT '60089',
+                s_ebeln FOR ekko-ebeln,
+                s_bedat FOR ekko-bedat,
+                s_bednr FOR ekpo-bednr.
+PARAMETERS: r_1 TYPE ekko-frgke RADIOBUTTON GROUP r1, r_2 TYPE ekko-frgke RADIOBUTTON GROUP r1 .
+SELECTION-SCREEN END OF BLOCK b1.

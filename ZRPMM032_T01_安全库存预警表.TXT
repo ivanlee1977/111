@@ -1,0 +1,46 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM001_TOP
+*&---------------------------------------------------------------------*
+TYPE-POOLS:slis,vrm.
+
+TABLES:mard,marc,mara.
+
+
+DATA:BEGIN OF gt_item  OCCURS 0,"展示内表
+*       chk(1) TYPE c,
+*       werks LIKE marc-werks,
+       matnr LIKE marc-matnr,
+       maktx LIKE makt-maktx,
+       lgort LIKE mard-lgort,
+       lgobe LIKE t001l-lgobe,
+       labst LIKE mard-labst,
+       insme LIKE mard-insme,
+       umlme LIKE mard-umlme,
+       eisbe LIKE marc-eisbe,
+       eislo LIKE marc-eislo,
+       meins LIKE mara-meins,
+     END OF gt_item.
+
+
+DATA:ok_code   TYPE sy-ucomm,
+     save_ok   TYPE sy-ucomm,
+     gv_type   TYPE char4,
+     errorcode TYPE i.
+
+DATA: gt_fcat   TYPE slis_t_fieldcat_alv WITH HEADER LINE,
+      gs_layout TYPE slis_layout_alv.
+
+
+DATA: gs_option  TYPE ssfcompop,
+      gs_control TYPE ssfctrlop.
+
+DATA lv_name TYPE rs38l_fnam.
+DEFINE g_fieldfcat .
+  gt_fcat-fieldname = &1.
+  gt_fcat-seltext_s = &2.
+  gt_fcat-ddictxt = 'S'.
+  gt_fcat-ref_fieldname = &3.
+  gt_fcat-ref_tabname = &4.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

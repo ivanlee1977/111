@@ -1,0 +1,50 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZXQQMU07
+*&---------------------------------------------------------------------*
+
+gv_aktyp = i_aktyp.
+
+IF ( i_aktyp = 'V' OR i_aktyp = 'A' ) AND gv_flag IS INITIAL.
+  SELECT MAX( zindx ) INTO gv_zindx FROM ztcs001 WHERE qmnum = i_viqmel-qmnum.
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE gt_ztcs003_total FROM ztcs003 WHERE qmnum = i_viqmel-qmnum.
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE gt_ztcs004_total FROM ztcs004 WHERE qmnum = i_viqmel-qmnum.
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE gt_data
+    FROM ztcs001
+    WHERE qmnum = i_viqmel-qmnum.
+  SORT gt_data BY qmnum zindx.
+  LOOP AT gt_data.
+    IF gt_data-matnr IS NOT INITIAL.
+      SELECT SINGLE maktx INTO gt_data-maktx FROM makt WHERE matnr = gt_data-matnr AND spras = sy-langu.
+    ENDIF.
+    IF gt_data-lifnr IS NOT INITIAL.
+      SELECT SINGLE name1 INTO gt_data-name1 FROM lfa1 WHERE lifnr = gt_data-lifnr.
+    ENDIF.
+***快递公司代码
+    IF gt_data-vsart IS NOT INITIAL.
+      SELECT SINGLE bezei INTO gt_data-zkdgs FROM t173t WHERE spras = sy-langu AND vsart = gt_data-vsart.
+    ENDIF.
+
+    IF gt_data-kunnr IS NOT INITIAL.
+      SELECT SINGLE name1 INTO gt_data-zkhms FROM kna1 WHERE kunnr = gt_data-kunnr.
+    ENDIF.
+
+    READ TABLE gt_ztcs003_total WITH KEY zindx = gt_data-zindx.
+    IF sy-subrc = 0.
+      gt_data-fecod = gt_ztcs003_total-fecod.
+      gt_data-fegrp = gt_ztcs003_total-fegrp.
+    ENDIF.
+    READ TABLE gt_ztcs004_total WITH KEY zindx = gt_data-zindx.
+    IF sy-subrc = 0.
+      gt_data-urcod = gt_ztcs004_total-urcod.
+      gt_data-urgrp = gt_ztcs004_total-urgrp.
+    ENDIF.
+    IF gt_data-zwxzt IS NOT INITIAL.
+      SELECT SINGLE ztext INTO gt_data-ztext FROM ztcs002 WHERE zstat = gt_data-zwxzt.
+    ENDIF.
+    gt_data-lifnr_o = gt_data-lifnr.
+    gt_data-zwxzt_o = gt_data-zwxzt.
+    MODIFY gt_data.
+  ENDLOOP.
+  gv_flag = 'X'.
+ENDIF.

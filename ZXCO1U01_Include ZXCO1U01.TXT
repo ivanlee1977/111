@@ -1,0 +1,47 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZXCO1U01
+*&---------------------------------------------------------------------*
+*BREAK xul.
+* 逻辑：1.版次取HEADER_TABLE-REVLV，如果为空取HEADER_TABLE_OLD-REVLV，如果还是空，则退出，不执行下面的逻辑。
+*         物料取POSITION_TABLE-MATNR，如果为空取POSITION_TABLE_OLD-MATNR，
+*         然后从AEOI表获取AEOI –OITXT，通过AEOI-REVLV=版次，AEOI-OBJKT=物料，AEOI-AETYP=41
+*       2.工单批次取HEADER_TABLE- CHARG，如果为空取POSITION_TABLE_OLD- CHARG
+*       3.如果AEOI –OITXT<>工单批次，则发出错误提示：请修改生产订单批号为：AEOI –OITXT
+**
+*DATA: lv_revlv TYPE aeoi-revlv,
+*      lv_matnr TYPE mara-matnr,
+*      lv_charg TYPE charg_d,
+*      lv_oitxt TYPE oitxt,
+*      lv_mess  TYPE string.
+*
+*IF header_table-revlv IS NOT INITIAL .
+*  lv_revlv = header_table-revlv.
+*ELSEIF header_table_old-revlv IS NOT INITIAL.
+*  lv_revlv = header_table_old-revlv.
+*ENDIF.
+*
+*CHECK lv_revlv IS NOT INITIAL.
+*IF position_table-matnr IS NOT INITIAL .
+*  lv_matnr = position_table-matnr.
+*ELSEIF position_table_old-matnr IS NOT INITIAL.
+*  lv_matnr = position_table_old-matnr.
+*ENDIF.
+*
+*IF position_table-charg IS NOT INITIAL .
+*  lv_charg = position_table-charg.
+*ELSEIF position_table_old-charg IS NOT INITIAL.
+*  lv_charg = position_table_old-charg.
+*ENDIF.
+*
+*SELECT SINGLE oitxt INTO lv_oitxt
+*  FROM aeoi
+*  WHERE revlv = lv_revlv
+*    AND objkt = lv_matnr
+*    AND aetyp = '41'.
+*
+
+**IF lv_oitxt <> lv_charg.
+**  CONCATENATE '请修改生产订单批号为：' lv_oitxt INTO lv_mess.
+**  MESSAGE lv_mess TYPE 'I' DISPLAY LIKE 'E'.
+***  LEAVE TO TRANSACTION 'CO02'.
+**ENDIF.

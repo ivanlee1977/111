@@ -1,0 +1,28 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPSD003_S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+PARAMETERS s_vkorg TYPE vbak-vkorg OBLIGATORY.
+
+SELECT-OPTIONS:
+s_vbeln FOR vbak-vbeln,
+s_erdat FOR vbak-erdat,
+s_kvgr1 FOR vbak-kvgr1,
+s_kvgr2 FOR vbak-kvgr2,
+s_kunnr FOR vbak-kunnr.
+
+*s_ernam FOR vbak-ernam DEFAULT sy-uname.
+
+
+SELECTION-SCREEN  SKIP  2.
+PARAMETERS :p_zprint AS CHECKBOX  .
+
+SELECTION-SCREEN  SKIP  1.
+
+PARAMETERS:
+            zht  RADIOBUTTON GROUP rad1,
+            zmf  RADIOBUTTON GROUP rad1 DEFAULT 'X',
+            zth  RADIOBUTTON GROUP rad1.
+
+SELECTION-SCREEN END OF BLOCK blc.

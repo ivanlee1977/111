@@ -1,0 +1,808 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZSDRP022F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      FORM  FRM_MODIFY_SCREEN
+*&---------------------------------------------------------------------*
+*       TEXT
+*----------------------------------------------------------------------*
+*  -->  P1        TEXT
+*  <--  P2        TEXT
+*----------------------------------------------------------------------*
+FORM frm_modify_screen .
+  IF p_r1 EQ 'X' OR p_r2 EQ 'X'.
+    LOOP AT SCREEN .
+      IF screen-group1 EQ 'M1'.
+        screen-active = 0.
+        screen-invisible = 1.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  FRM_GET_AUSP
+*&---------------------------------------------------------------------*
+*       TEXT
+*----------------------------------------------------------------------*
+*  -->  P1        TEXT
+*  <--  P2        TEXT
+*----------------------------------------------------------------------*
+FORM frm_get_ausp .
+  REFRESH:gt_ausp.
+*  根据物料取出产品线和系列
+  SELECT a~objek a~atinn a~atwrt b~atnam
+   INTO CORRESPONDING FIELDS OF TABLE gt_ausp
+   FROM ausp AS a INNER JOIN cabn AS b ON a~atinn = b~atinn
+   WHERE b~atnam IN ('ZFER_XL','ZFER_CPX','ZFER_ZXL','ZFER_DYZXH','ZFER_CPXH').
+  SORT gt_ausp BY objek.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  SUB_SEARCH_HELP_ZXL
+*&---------------------------------------------------------------------*
+*       TEXT
+*----------------------------------------------------------------------*
+*  -->  P1        TEXT
+*  <--  P2        TEXT
+*----------------------------------------------------------------------*
+FORM sub_search_help_zxl USING lv_field LIKE dfies-fieldname
+                               lv_dynfield LIKE help_info-dynprofld
+                               lv_atnam LIKE cabn-atnam.
+  DATA: lv_pvalkey TYPE ddshpvkey.
+
+  DATA: lt_zxl LIKE gt_xl OCCURS 0 WITH HEADER LINE.
+
+  LOOP AT gt_ausp WHERE atnam = lv_atnam.
+    lt_zxl-atwrt = gt_ausp-atwrt.
+    APPEND lt_zxl.
+  ENDLOOP.
+
+  SORT lt_zxl BY atwrt.
+  DELETE ADJACENT DUPLICATES FROM lt_zxl.
+
+  lv_pvalkey = lv_field.
+  CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+    EXPORTING
+      retfield        = lv_field
+      pvalkey         = lv_pvalkey
+      dynpprog        = sy-repid
+      dynpnr          = sy-dynnr
+      dynprofield     = lv_dynfield
+      window_title    = '选择'
+      value           = ' '
+      value_org       = 'S'
+    TABLES
+      value_tab       = lt_zxl
+    EXCEPTIONS
+      parameter_error = 1
+      no_values_found = 2
+      OTHERS          = 3.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       TEXT
+*----------------------------------------------------------------------*
+*  -->  P1        TEXT
+*  <--  P2        TEXT
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  REFRESH:gt_lips.
+
+*  CHECK GT_KNVV[] IS NOT INITIAL.
+** 根据选择屏幕从表LIKP中取出交货单信息(实际信息)
+  SELECT a~vbeln a~posnr a~matnr a~arktx a~lfimg a~matnr AS objek
+         b~kunag b~wadat_ist b~lfart
+         a~vgbel a~vgpos
+         d~vkorg d~vtweg d~vkgrp d~vkbur d~kvgr1 d~kvgr2
+         e~bzirk
+    INTO CORRESPONDING FIELDS OF TABLE gt_lips
+    FROM lips AS a INNER JOIN likp AS b ON a~vbeln = b~vbeln
+                   INNER JOIN vbuk AS c ON a~vbeln = c~vbeln
+                   INNER JOIN vbak AS d ON a~vgbel = d~vbeln
+                   INNER JOIN vbkd AS e ON a~vgbel = e~vbeln AND e~posnr = '000000'
+   WHERE b~wadat_ist BETWEEN lv_date_low AND lv_date_high
+     AND b~vkorg IN s_vkorg
+     AND a~vtweg IN s_vtweg
+     AND b~lfart IN ('ZLF1','ZLR1','ZLF4')
+     AND c~wbstk EQ 'C'
+     AND e~bzirk IN s_bzirk
+     AND d~vkbur IN s_vkbur
+     AND d~vkgrp IN s_vkgrp
+     AND d~kvgr1 IN s_kvgr1
+     AND d~kvgr2 IN s_kvgr2.
+
+*  根据选择屏幕条件从表KNVV中取出客户相关信息
+  SELECT * INTO TABLE gt_knvv
+    FROM knvv
+   WHERE vkorg IN s_vkorg
+     AND vtweg IN s_vtweg
+     AND bzirk IN s_bzirk
+     AND vkbur IN s_vkbur
+     AND vkgrp IN s_vkgrp
+     AND kvgr1 IN s_kvgr1
+     AND kvgr2 IN s_kvgr2.
+  SORT gt_knvv BY kunnr .
+
+*  根据选择屏幕过滤出的客户从表ZTSD001A中取出月度销售计划，从表KNA1中取出客户名称
+  IF gt_knvv[] IS NOT INITIAL.
+    SELECT a~zmonth a~vkorg a~kunnr a~matnr a~zbyjh_yw
+           b~matkl b~spart b~matnr AS objek
+      INTO CORRESPONDING FIELDS OF TABLE gt_ztsd001a
+      FROM ztsd001a AS a INNER JOIN mara AS b ON a~matnr = b~matnr
+      FOR ALL ENTRIES IN gt_knvv
+      WHERE a~kunnr = gt_knvv-kunnr
+        AND a~vkorg = gt_knvv-vkorg
+        AND a~zmonth BETWEEN lv_zmonth_low AND lv_zmonth_high
+        AND b~matkl IN s_matkl
+        AND b~spart IN s_spart.
+    SELECT * INTO TABLE gt_kna1
+      FROM kna1
+      FOR ALL ENTRIES IN gt_knvv
+      WHERE kunnr = gt_knvv-kunnr.
+  ENDIF.
+
+
+***根据交货单中的客户从表KNA1中取出客户描述 从表MAKT中取出物料描述
+  IF gt_lips[] IS NOT INITIAL.
+    SELECT * APPENDING TABLE gt_kna1
+      FROM kna1
+      FOR ALL ENTRIES IN gt_lips
+      WHERE kunnr = gt_lips-kunag.
+    SELECT * INTO TABLE gt_makt
+      FROM makt
+      FOR ALL ENTRIES IN gt_lips
+      WHERE matnr = gt_lips-matnr
+        AND spras = sy-langu.
+    SELECT * INTO TABLE gt_mara
+      FROM mara
+      FOR ALL ENTRIES IN gt_lips
+      WHERE matnr = gt_lips-matnr
+        AND matkl IN s_matkl
+        AND spart IN s_spart.
+  ENDIF.
+  SORT gt_kna1 BY kunnr.
+  DELETE ADJACENT DUPLICATES FROM gt_kna1 COMPARING kunnr.
+
+* 如果勾选包含变更单，从BPM系统取数
+**连接到BPM数据库，需要从对方数据库读取数据
+  IF p_r5 EQ 'X'.
+    EXEC SQL.
+      CONNECT TO :CNS_BPM
+    ENDEXEC.
+
+***BPM相关数据
+    TRY.
+        EXEC SQL.
+          OPEN DBCURSOR FOR
+         SELECT ZLSPT_PLM_XQBG.BUSSNO,
+                ZLSPT_PLM_XQBG.HTPSDATE,
+                ZLSPT_PLM_XQBG_ITEM.MATRN,
+                ZLSPT_PLM_XQBG_ITEM.CUSPNO,
+                ZLSPT_PLM_XQBG_ITEM.CHANGENUM,
+                ZLSPT_PLM_XQBG_ITEM.CHANGEWAY
+           FROM ZLSPT_PLM_XQBG
+           INNER JOIN ZLSPT_PLM_XQBG_ITEM
+           ON ZLSPT_PLM_XQBG.BUSSNO = ZLSPT_PLM_XQBG_ITEM.BUSSNO
+*          WHERE ZLSPT_PLM_XQBG.HTPSDATE >= :LV_DATE_LOW
+*            AND ZLSPT_PLM_XQBG.HTPSDATE <= :LV_DATE_HIGH
+           WHERE ( ZLSPT_PLM_XQBG_ITEM.REQ_YJ = 'Y'
+                   AND ZLSPT_PLM_XQBG.HTPSDATE >= :LV_DATE_LOW
+                   AND ZLSPT_PLM_XQBG.HTPSDATE <= :LV_DATE_HIGH )
+              OR ( ZLSPT_PLM_XQBG_ITEM.REQ_YJ = 'N'
+                   AND ZLSPT_PLM_XQBG.REQQRDATE >= :LV_DATE_LOW
+                   AND ZLSPT_PLM_XQBG.REQQRDATE <= :LV_DATE_HIGH )
+        ENDEXEC.
+      CATCH CX_SY_NATIVE_SQL_ERROR INTO EXEC_REF.
+        G_ERRORSTR = EXEC_REF->GET_TEXT( ).
+        CONCATENATE '读取数据出错,'  G_ERRORSTR INTO G_ERRORSTR.
+    ENDTRY.
+
+    DO .
+      TRY.
+          EXEC SQL.
+            FETCH NEXT DBCURSOR INTO
+            :GT_ZBPM_ITEM-BUSSNO,
+            :GT_ZBPM_ITEM-HTPSDATE,
+            :GT_ZBPM_ITEM-MATRN,
+            :GT_ZBPM_ITEM-CUSPNO,
+            :GT_ZBPM_ITEM-CHANGENUM,
+            :GT_ZBPM_ITEM-CHANGEWAY
+          ENDEXEC.
+          IF sy-subrc EQ 0.
+            APPEND gt_zbpm_item .
+          ELSE.
+            EXIT.
+          ENDIF.
+        CATCH cx_sy_native_sql_error INTO exec_ref.
+          g_errorstr = exec_ref->get_text( ).
+          CONCATENATE '读取数据出错,'  g_errorstr INTO g_errorstr.
+      ENDTRY.
+    ENDDO.
+**关闭连接
+    EXEC SQL.
+      DISCONNECT :CNS_BPM
+    ENDEXEC.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  FRM_PROCESS_DATA
+*&---------------------------------------------------------------------*
+*       TEXT
+*----------------------------------------------------------------------*
+*  -->  P1        TEXT
+*  <--  P2        TEXT
+*----------------------------------------------------------------------*
+FORM frm_process_data .
+* 取客户
+  DATA: lt_t171t LIKE t171t OCCURS 0 WITH HEADER LINE, "销售大区描述
+        lt_tvkbt LIKE tvkbt OCCURS 0 WITH HEADER LINE, "行办描述
+        lt_tvgrt LIKE tvgrt OCCURS 0 WITH HEADER LINE, "销售组描述
+        lt_tvv1t LIKE tvv1t OCCURS 0 WITH HEADER LINE, "业务员描述
+        lt_t023t LIKE t023t OCCURS 0 WITH HEADER LINE, "物料组描述
+        lt_tspat LIKE tspat OCCURS 0 WITH HEADER LINE. "产品组描述
+
+  DATA:BEGIN OF lt_ztsd001b OCCURS 0,"月度销售计划累计
+         bzirk     LIKE knvv-bzirk, "销售大区代码
+         vkbur     LIKE knvv-vkbur, "行办代码
+         vkgrp     LIKE knvv-vkgrp, "销售组代码
+         kvgr1     LIKE knvv-kvgr1, "业务员代码
+         zmonth    LIKE ztsd001a-zmonth, "需求计划月份
+         dlymo     TYPE t5a4a-dlymo,
+         matnr     LIKE ztsd001a-matnr, "物料号
+         zbyjh_yw  LIKE ztsd001a-zbyjh_yw, "本月计划-业务
+         matkl     LIKE mara-matkl, "物料组
+         spart     LIKE mara-spart, "产品组
+         zfer_xl   LIKE ausp-atwrt, "系列
+         zfer_cpxh LIKE ausp-atwrt, "型号
+       END OF lt_ztsd001b.
+
+  DATA: lv_tabix        LIKE sy-tabix,
+        lv_dcl          TYPE char50,
+        lv_kunnr        LIKE kna1-kunnr,
+        objek           LIKE ausp-objek,
+        lv_htpsdate(10)."处理BPM日期格式
+
+*  取销售大区描述
+  SELECT * INTO TABLE lt_t171t FROM t171t WHERE spras EQ sy-langu AND bzirk IN s_bzirk.
+  SORT lt_t171t BY bzirk.
+*  取行办描述
+  SELECT * INTO TABLE lt_tvkbt FROM tvkbt WHERE spras EQ sy-langu AND vkbur IN s_vkbur.
+  SORT lt_tvkbt BY vkbur.
+*  取销售组描述
+  SELECT * INTO TABLE lt_tvgrt FROM tvgrt WHERE spras EQ sy-langu AND vkgrp IN s_vkgrp.
+  SORT lt_tvgrt BY vkgrp.
+*  取业务员描述
+  SELECT * INTO TABLE lt_tvv1t FROM tvv1t WHERE spras EQ sy-langu AND kvgr1 IN s_kvgr1.
+  SORT lt_tvv1t BY kvgr1.
+* 取物料组描述
+  SELECT * INTO TABLE lt_t023t FROM t023t WHERE spras EQ sy-langu AND matkl IN s_matkl.
+  SORT lt_t023t BY matkl.
+* 取产品组描述
+  SELECT * INTO TABLE lt_tspat FROM tspat WHERE spras EQ sy-langu AND spart IN s_spart.
+  SORT lt_tspat BY spart.
+
+***处理需求变更计划（BPM数据）
+  IF p_r5 EQ 'X'.
+******待确认从BPM系统取出来的数据无销售组织，从表KNVV中取销售大区时条件如何关联
+    LOOP AT gt_zbpm_item.
+      CLEAR:gt_ztsd001a,lv_date,lv_htpsdate.
+*  将日期转换成系统日期
+      lv_htpsdate = gt_zbpm_item-htpsdate+0(10).
+      REPLACE ALL OCCURRENCES OF '-' IN lv_htpsdate WITH '.'.
+      CALL FUNCTION 'CONVERT_DATE_TO_INTERNAL'
+        EXPORTING
+          date_external            = lv_htpsdate
+        IMPORTING
+          date_internal            = lv_date
+        EXCEPTIONS
+          date_external_is_invalid = 1.
+      gt_ztsd001a-zmonth = lv_date+0(6).
+*  处理客户
+      gt_ztsd001a-kunnr = gt_zbpm_item-cuspno.
+      mcr_add_zero:gt_ztsd001a-kunnr.
+*  处理物料
+      gt_ztsd001a-matnr = gt_zbpm_item-matrn.
+      mcr_add_zero:gt_ztsd001a-matnr.
+      gt_ztsd001a-objek = gt_ztsd001a-matnr.
+*  处理变更数量，如果CHANGEWAY为减少，数量*-1
+      gt_ztsd001a-zbyjh_yw = gt_zbpm_item-changenum.
+      IF gt_zbpm_item-changeway EQ '减少'.
+        gt_ztsd001a-zbyjh_yw = gt_ztsd001a-zbyjh_yw * ( -1 ).
+      ENDIF.
+*  处理物料组和产品组
+      SELECT SINGLE matkl spart INTO (gt_ztsd001a-matkl,gt_ztsd001a-spart)
+        FROM mara
+        WHERE matnr = gt_ztsd001a-matnr.
+*  标识默认打X，后续处理表GT_ZTSD001A时不需要把日期+1处理
+      gt_ztsd001a-flag = 'X'.
+      APPEND gt_ztsd001a .
+    ENDLOOP.
+  ENDIF.
+
+***根据月度销售计划的从表MAKT中取出物料描述
+  IF gt_ztsd001a[] IS NOT INITIAL.
+    SELECT * APPENDING TABLE gt_makt
+      FROM makt
+      FOR ALL ENTRIES IN gt_ztsd001a
+      WHERE matnr = gt_ztsd001a-matnr
+        AND spras = sy-langu.
+    SELECT * APPENDING TABLE gt_mara
+      FROM mara
+      FOR ALL ENTRIES IN gt_ztsd001a
+      WHERE matnr = gt_ztsd001a-matnr
+        AND matkl IN s_matkl
+        AND spart IN s_spart.
+  ENDIF.
+  SORT gt_makt BY matnr.
+  DELETE ADJACENT DUPLICATES FROM gt_kna1 COMPARING kunnr.
+  SORT gt_mara BY matnr.
+  DELETE ADJACENT DUPLICATES FROM gt_mara COMPARING matnr.
+
+*  处理客户的月度销售计划
+  LOOP AT gt_ztsd001a.
+    CLEAR:lv_tabix,lv_date,lt_ztsd001b..
+    lv_tabix = sy-tabix.
+*** 根据客户取客户信息
+    READ TABLE gt_knvv WITH KEY kunnr = gt_ztsd001a-kunnr.
+    CHECK sy-subrc = 0.
+    lt_ztsd001b-bzirk = gt_knvv-bzirk."销售大区
+    lt_ztsd001b-vkbur = gt_knvv-vkbur."行办代码
+    lt_ztsd001b-vkgrp = gt_knvv-vkgrp."销售组代码
+    lt_ztsd001b-kvgr1 = gt_knvv-kvgr1."销售工程师代码
+***权限字段检查
+    AUTHORITY-CHECK OBJECT 'V_VBAK_VKO'
+             ID 'VKORG' FIELD gt_knvv-vkorg
+             ID 'VTWEG' DUMMY
+             ID 'SPART' DUMMY
+             ID 'ACTVT' FIELD '03'.
+    IF sy-subrc <> 0.
+      DELETE gt_ztsd001a INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+    AUTHORITY-CHECK OBJECT 'Z_KVGR1'
+              ID 'KVGR1' FIELD gt_knvv-kvgr1.
+    IF sy-subrc <> 0.
+      DELETE gt_ztsd001a INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+    READ TABLE gt_mara WITH KEY matnr = gt_ztsd001a-matnr BINARY SEARCH.
+    CHECK sy-subrc = 0.
+    PERFORM frm_get_atwrt USING gt_ztsd001a-objek
+                       CHANGING gt_ztsd001a-zfer_cpx
+                                gt_ztsd001a-zfer_xl
+                                gt_ztsd001a-zfer_zxl
+                                gt_ztsd001a-zfer_dyzxh
+                                gt_ztsd001a-zfer_cpxh.
+***判断产品线是否为屏幕所查询
+    IF gt_ztsd001a-zfer_cpx NOT IN s_cpx.
+      DELETE gt_ztsd001a INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+***判断系列是否为屏幕所查询
+    IF gt_ztsd001a-zfer_xl NOT IN s_xl.
+      DELETE gt_ztsd001a INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+***判断子系列是否为屏幕所查询
+    IF gt_ztsd001a-zfer_zxl NOT IN s_zxl.
+      DELETE gt_ztsd001a INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+***判断主型号是否为屏幕所查询
+    IF gt_ztsd001a-zfer_dyzxh NOT IN s_zxh.
+      DELETE gt_ztsd001a INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+***判断型号是否为屏幕所查询
+    IF gt_ztsd001a-zfer_cpxh NOT IN s_xh.
+      DELETE gt_ztsd001a INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+***
+    MODIFY gt_ztsd001a INDEX lv_tabix.
+    MOVE-CORRESPONDING gt_ztsd001a TO lt_ztsd001b.
+***将计划月份变为实际月份
+    PERFORM frm_get_jh_sj_month USING gt_ztsd001a-zmonth CHANGING lt_ztsd001b-zmonth.
+    CASE 'X'.
+      WHEN p_r1.
+        CLEAR: lt_ztsd001b-zfer_xl,lt_ztsd001b-zmonth.
+      WHEN p_r2.
+        CLEAR: lt_ztsd001b-matnr,lt_ztsd001b-zfer_cpxh,lt_ztsd001b-zmonth.
+      WHEN p_r3.
+        CLEAR: lt_ztsd001b-zfer_xl.
+      WHEN p_r4.
+        CLEAR: lt_ztsd001b-matnr,lt_ztsd001b-zfer_cpxh.
+      WHEN OTHERS.
+    ENDCASE.
+    COLLECT lt_ztsd001b.
+  ENDLOOP.
+
+
+
+  REFRESH:gt_alv.
+  DATA:lv_kvgr11 LIKE knvv-kvgr1.
+  LOOP AT gt_lips.
+    CLEAR:lv_tabix,gt_alv.
+    lv_tabix = sy-tabix.
+***权限字段检查
+    AUTHORITY-CHECK OBJECT 'V_VBAK_VKO'
+             ID 'VKORG' FIELD gt_lips-vkorg
+             ID 'VTWEG' DUMMY
+             ID 'SPART' DUMMY
+             ID 'ACTVT' FIELD '03'.
+    IF sy-subrc <> 0.
+      DELETE gt_lips INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+    IF gt_lips-kunag = 'A000' OR gt_lips-kunag = 'C000'.
+      AUTHORITY-CHECK OBJECT 'Z_KVGR1'
+                ID 'KVGR1' FIELD gt_lips-kvgr1.
+    ELSE. "取客户主数据业务员，进行权限控制 20180103  YZP
+      CLEAR lv_kvgr11.
+      SELECT SINGLE kvgr1 INTO lv_kvgr11 FROM knvv WHERE kunnr = gt_lips-kunag AND vkorg = gt_lips-vkorg.
+      AUTHORITY-CHECK OBJECT 'Z_KVGR1'
+               ID 'KVGR1' FIELD lv_kvgr11.
+    ENDIF.
+    IF sy-subrc <> 0.
+      DELETE gt_lips INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+    READ TABLE gt_mara WITH KEY matnr = gt_lips-matnr BINARY SEARCH.
+    CHECK sy-subrc = 0.
+    gt_alv-matkl = gt_mara-matkl."物料组
+    gt_alv-spart = gt_mara-spart."产品组
+    gt_alv-bzirk = gt_lips-bzirk."销售大区
+    gt_alv-vkbur = gt_lips-vkbur."行办代码
+    gt_alv-vkgrp = gt_lips-vkgrp."销售组代码
+    gt_alv-kvgr1 = gt_lips-kvgr1."销售工程师代码
+
+*  取产品系列
+    PERFORM frm_get_atwrt USING gt_lips-objek
+                       CHANGING gt_lips-zfer_cpx
+                                gt_lips-zfer_xl
+                                gt_lips-zfer_zxl
+                                gt_lips-zfer_dyzxh
+                                gt_lips-zfer_cpxh.
+
+***判断产品线是否为屏幕所查询
+    IF gt_lips-zfer_cpx NOT IN s_cpx.
+      DELETE gt_lips INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+***判断系列是否为屏幕所查询
+    IF gt_lips-zfer_xl NOT IN s_xl.
+      DELETE gt_lips INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+***判断子系列是否为屏幕所查询
+    IF gt_lips-zfer_zxl NOT IN s_zxl.
+      DELETE gt_lips INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+***判断主型号是否为屏幕所查询
+    IF gt_lips-zfer_dyzxh NOT IN s_zxh.
+      DELETE gt_lips INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+***判断型号是否为屏幕所查询
+    IF gt_lips-zfer_cpxh NOT IN s_xh.
+      DELETE gt_lips INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+    gt_alv-lfimg_sj = gt_lips-lfimg."实际交货数量
+*  交货单类型为ZLR1时，乘以-1
+    IF gt_lips-lfart = 'ZLR1'.
+      gt_alv-lfimg_sj = gt_alv-lfimg_sj * ( -1 ).
+    ENDIF.
+
+* 当报表类型为R1时，显示型号、物料号码；为R2时，显示系列
+    CASE 'X'.
+      WHEN p_r1 OR p_r3.
+        gt_alv-matnr = gt_lips-matnr. "物料号码
+        gt_alv-zfer_cpxh = gt_lips-zfer_cpxh. "产品型号
+      WHEN p_r2 OR p_r4.
+        gt_alv-zfer_xl = gt_lips-zfer_xl. "产品系列
+      WHEN OTHERS.
+    ENDCASE.
+    IF p_r3 EQ 'X' OR p_r4 EQ 'X'.
+      gt_alv-zmonth = gt_lips-wadat_ist+0(6).
+    ENDIF.
+    COLLECT gt_alv.
+    CLEAR: gt_alv.
+  ENDLOOP.
+
+*   计算计划数
+  LOOP AT gt_alv.
+    LOOP AT lt_ztsd001b WHERE bzirk = gt_alv-bzirk
+                          AND vkbur = gt_alv-vkbur
+                          AND vkgrp = gt_alv-vkgrp
+                          AND kvgr1 = gt_alv-kvgr1
+                          AND matkl = gt_alv-matkl
+                          AND spart = gt_alv-spart
+                          AND matnr = gt_alv-matnr
+                          AND zfer_xl = gt_alv-zfer_xl
+                          AND zfer_cpxh = gt_alv-zfer_cpxh
+                          AND zmonth = gt_alv-zmonth.
+      gt_alv-lfimg_jh = gt_alv-lfimg_jh + lt_ztsd001b-zbyjh_yw.
+      DELETE lt_ztsd001b .
+    ENDLOOP.
+    MODIFY gt_alv TRANSPORTING lfimg_jh.
+    CLEAR: gt_alv.
+  ENDLOOP.
+
+  LOOP AT lt_ztsd001b .
+    CLEAR: gt_alv.
+    READ TABLE gt_alv WITH KEY bzirk = lt_ztsd001b-bzirk
+                               vkbur = lt_ztsd001b-vkbur
+                               vkgrp = lt_ztsd001b-vkgrp
+                               kvgr1 = lt_ztsd001b-kvgr1
+                               matkl = lt_ztsd001b-matkl
+                               spart = lt_ztsd001b-spart
+                               matnr = lt_ztsd001b-matnr
+                               zfer_xl = lt_ztsd001b-zfer_xl
+                               zfer_cpxh = lt_ztsd001b-zfer_cpxh
+                               zmonth = lt_ztsd001b-zmonth.
+    IF sy-subrc <> 0.
+      MOVE-CORRESPONDING lt_ztsd001b TO gt_alv .
+      gt_alv-lfimg_jh = lt_ztsd001b-zbyjh_yw.
+      COLLECT gt_alv.
+    ENDIF.
+  ENDLOOP.
+
+  LOOP AT gt_alv.
+*  权限检查，无业务员权限将其删除
+    AUTHORITY-CHECK OBJECT 'Z_KVGR1'
+              ID 'KVGR1' FIELD gt_alv-kvgr1.
+    IF sy-subrc <> 0.
+      DELETE gt_alv.
+      CONTINUE.
+    ENDIF.
+*   取销售大区描述
+    READ TABLE lt_t171t WITH KEY bzirk = gt_alv-bzirk BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-bztxt = lt_t171t-bztxt.
+    ENDIF.
+*   取行办描述
+    READ TABLE lt_tvkbt WITH KEY vkbur = gt_alv-vkbur BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-bezei_vkbur = lt_tvkbt-bezei.
+    ENDIF.
+*   取销售组描述
+    READ TABLE lt_tvgrt WITH KEY vkgrp = gt_alv-vkgrp BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-bezei_vkgrp = lt_tvgrt-bezei.
+    ENDIF.
+*   取业务员描述
+    READ TABLE lt_tvv1t WITH KEY kvgr1 = gt_alv-kvgr1 BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-bezei_kvgr1 = lt_tvv1t-bezei.
+    ENDIF.
+*  取物料组描述
+    READ TABLE lt_t023t WITH KEY matkl = gt_alv-matkl BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-wgbez = lt_t023t-wgbez.
+    ENDIF.
+*  取产品组描述
+    READ TABLE lt_tspat WITH KEY spart = gt_alv-spart BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-vtext = lt_tspat-vtext.
+    ENDIF.
+*  取物料描述
+    IF p_r1 EQ 'X' OR p_r3 EQ 'X'.
+      READ TABLE gt_makt WITH KEY matnr = gt_alv-matnr BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_alv-maktx = gt_makt-maktx.
+      ENDIF.
+    ENDIF.
+*  计算达成率 = 实际 / 计划
+    IF gt_alv-lfimg_jh NE 0.
+      gt_alv-zdcl = gt_alv-lfimg_sj / gt_alv-lfimg_jh * 100.
+    ENDIF.
+    CLEAR:lv_dcl.
+    lv_dcl = gt_alv-zdcl.
+    CONCATENATE lv_dcl '%' INTO lv_dcl.
+    CONDENSE lv_dcl.
+    MODIFY gt_alv .
+    CLEAR:gt_alv.
+  ENDLOOP.
+
+  SORT gt_alv BY zmonth bzirk vkbur vkgrp kvgr1 matkl spart matnr zfer_xl zfer_cpxh.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  SUB_BUILD_FIELDCAT
+*&---------------------------------------------------------------------*
+*       TEXT
+*----------------------------------------------------------------------*
+*  -->  P1        TEXT
+*  <--  P2        TEXT
+*----------------------------------------------------------------------*
+FORM sub_build_fieldcat .
+  REFRESH:lt_alv_cat.
+  IF p_r3 EQ 'X' OR p_r4 EQ 'X'.
+    mcr_build_fieldcat: 'ZMONTH'   '月份'            ''  '' '6' ''.
+  ENDIF.
+  mcr_build_fieldcat: 'BZIRK'       '销售大区代码'      'BZIRK'  'KNVV'  '10' ''.
+  mcr_build_fieldcat: 'BZTXT'       '销售大区'          ''  '' '10' ''.
+  mcr_build_fieldcat: 'VKBUR'       '行办代码'          'VKBUR'  'KNVV' '10' ''.
+  mcr_build_fieldcat: 'BEZEI_VKBUR' '行办'              ''  '' '15' ''.
+  mcr_build_fieldcat: 'VKGRP'       '销售组代码'        'VKGRP'  'KNVV' '10' ''.
+  mcr_build_fieldcat: 'BEZEI_VKGRP' '销售组'            ''  '' '15' ''.
+  mcr_build_fieldcat: 'KVGR1'       '销售工程师代码'    'KVGR1'  'KNVV' '8' ''.
+  mcr_build_fieldcat: 'BEZEI_KVGR1' '销售工程师'        ''  '' '10' ''.
+  mcr_build_fieldcat: 'MATKL'       '物料组'            'MATKL'  'MARA' '10' ''.
+  mcr_build_fieldcat: 'WGBEZ'       '物料组名称'        ''  '' '15' ''.
+  mcr_build_fieldcat: 'SPART'       '产品组'            'SPART'  'MARA' '10' ''.
+  mcr_build_fieldcat: 'VTEXT'       '产品组名称'        ''  '' '15' ''.
+  IF p_r1 EQ 'X' OR p_r3 EQ 'X'.
+    mcr_build_fieldcat: 'MATNR'       '物料号码'        'MATNR'  'MARA' '18' ''.
+    mcr_build_fieldcat: 'MAKTX'       '物料名称'        ''  '' '40' ''.
+    mcr_build_fieldcat: 'ZFER_CPXH'     '产品型号'        ''  '' '25' ''.
+  ELSE.
+    mcr_build_fieldcat: 'ZFER_XL'   '产品系列'            ''  '' '25' ''.
+  ENDIF.
+  mcr_build_fieldcat: 'LFIMG_JH'    '计划数量'            'LFIMG'  'LIPS' '15' 'X'.
+  mcr_build_fieldcat: 'LFIMG_SJ'    '实际数量'            'LFIMG'  'LIPS' '15' 'X'.
+  mcr_build_fieldcat: 'ZDCL'        '达成率(%)'          'LFIMG'  'LIPS' '15' 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  FRM_GET_LAST_DATA
+*&---------------------------------------------------------------------*
+*       TEXT
+*----------------------------------------------------------------------*
+*      -->P_LV_DATE_LOW  TEXT
+*      <--P_LV_DATE_HIGH  TEXT
+*----------------------------------------------------------------------*
+FORM frm_get_last_data  USING    pv_date_low
+                        CHANGING pv_date_high.
+  CALL FUNCTION 'BKK_GET_MONTH_LASTDAY'
+    EXPORTING
+      i_date = pv_date_low
+    IMPORTING
+      e_date = pv_date_high.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  FRM_GET_JH_DATE
+*&---------------------------------------------------------------------*
+*       TEXT
+*----------------------------------------------------------------------*
+*      -->P_LV_DATE_LOW  TEXT
+*      <--P_LV_ZMONTH_LOW  TEXT
+*----------------------------------------------------------------------*
+FORM frm_get_jh_date  USING    pv_date
+                               pv_signum LIKE t5a4a-split
+                      CHANGING lv_date.
+  CALL FUNCTION 'RP_CALC_DATE_IN_INTERVAL'
+    EXPORTING
+      date      = pv_date
+      days      = '00'
+      months    = '01'
+      signum    = pv_signum
+      years     = '00'
+    IMPORTING
+      calc_date = lv_date.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  FRM_GET_ATWRT
+*&---------------------------------------------------------------------*
+*       TEXT
+*----------------------------------------------------------------------*
+*      -->P_GT_LIPS_OBJEK  TEXT
+*      <--P_GT_LIPS_ZFER_CPX  TEXT
+*      <--P_GT_LIPS_ZFER_XL  TEXT
+*      <--P_GT_LIPS_ZFER_ZXL  TEXT
+*      <--P_GT_LIPS_ZFER_DYZXH  TEXT
+*      <--P_GT_LIPS_ZFER_CPXH  TEXT
+*----------------------------------------------------------------------*
+FORM frm_get_atwrt  USING    pv_objek
+                    CHANGING pv_zfer_cpx
+                             pv_zfer_xl
+                             pv_zfer_zxl
+                             pv_zfer_dyzxh
+                             pv_zfer_cpxh.
+*  取产品系列
+  LOOP AT gt_ausp WHERE objek = pv_objek.
+    CASE gt_ausp-atnam.
+      WHEN 'ZFER_CPX'.
+        pv_zfer_cpx = gt_ausp-atwrt.
+      WHEN 'ZFER_XL'.
+        pv_zfer_xl = gt_ausp-atwrt.
+      WHEN 'ZFER_ZXL'.
+        pv_zfer_zxl = gt_ausp-atwrt.
+      WHEN 'ZFER_DYZXH'.
+        pv_zfer_dyzxh = gt_ausp-atwrt.
+      WHEN 'ZFER_CPXH'.
+        pv_zfer_cpxh = gt_ausp-atwrt.
+      WHEN OTHERS.
+    ENDCASE.
+  ENDLOOP.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  READ_COL
+*&---------------------------------------------------------------------*
+*       TEXT
+*----------------------------------------------------------------------*
+*      -->P_INDEX  TEXT
+*      <--P_GT_ALV  TEXT
+*----------------------------------------------------------------------*
+FORM read_col USING p_monat
+                    p_value
+                    pt_alv STRUCTURE gt_alv.
+  DATA: l_text TYPE c LENGTH 10.
+  CONCATENATE 'COL' p_monat p_value INTO l_text.
+  CONDENSE l_text.
+  ASSIGN COMPONENT l_text OF STRUCTURE <dyn_wa> TO <fs_str>.
+  CASE p_value.
+    WHEN 'A'.
+      <fs_str> = pt_alv-lfimg_jh.
+    WHEN 'B'.
+      <fs_str> = pt_alv-lfimg_sj.
+    WHEN 'C'.
+      <fs_str> = pt_alv-zdcl.
+    WHEN OTHERS.
+  ENDCASE.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      FORM  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       TEXT
+*----------------------------------------------------------------------*
+*      -->P_<DYN_TABLE>  TEXT
+*----------------------------------------------------------------------*
+FORM frm_output_data TABLES p_tab.
+  i_layout_lvc-zebra       = 'X' ." 使ALV界面呈现颜色交替
+  i_layout_lvc-sel_mode      = 'A' ." 选择模式，“A”在最左端有选择按钮
+*  I_LAYOUT_LVC-CWIDTH_OPT       = 'X' ." 自动优化列宽
+  i_layout_lvc-detailinit      = 'X' ." 是否出现细节屏幕
+  i_layout_lvc-detailtitl      = '详细内容'."    细节屏幕标题
+
+
+*显示内表中的数据
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program      = sy-repid          " 当前程序
+      i_callback_user_command = 'ALV_USER_COMMAND'
+      is_layout_lvc           = i_layout_lvc      " 属性内表
+      it_fieldcat_lvc         = lt_alv_cat  " 列明内表
+      i_save                  = 'X'               " 是否保存布局
+      it_events               = gt_events[]
+    TABLES
+      t_outtab                = p_tab             " 数据内表
+    EXCEPTIONS
+      program_error           = 1
+      OTHERS                  = 2.
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+    WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+ENDFORM. " FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_JH_SJ_MONTH
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_GT_ZTSD001A_ZMONTH  text
+*      <--P_LT_ZTSD001B_ZMONTH  text
+*----------------------------------------------------------------------*
+FORM frm_get_jh_sj_month  USING    pv_zmonth LIKE ztsd001a-zmonth
+                          CHANGING pv_zmonth_b LIKE ztsd001a-zmonth.
+  DATA: lv_datum   LIKE sy-datum,
+        lv_datum_b LIKE sy-datum.
+  CONCATENATE pv_zmonth '01' INTO lv_datum.
+  CONDENSE lv_datum.
+  CALL FUNCTION 'RP_CALC_DATE_IN_INTERVAL'
+    EXPORTING
+      date      = lv_datum
+      days      = '00'
+      months    = '01'
+      signum    = '+'
+      years     = '00'
+    IMPORTING
+      calc_date = lv_datum_b.
+  pv_zmonth_b = lv_datum_b(6).
+ENDFORM.

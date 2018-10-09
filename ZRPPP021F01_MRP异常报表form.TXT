@@ -1,0 +1,222 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP021F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:BEGIN OF lt_marc OCCURS 0,
+         matnr LIKE marc-matnr, "物料号码
+         mtart LIKE mara-mtart, "物料类型
+         dismm LIKE marc-dismm, "MRP类型
+         beskz LIKE marc-beskz, "采购类型
+         sobsl LIKE marc-sobsl, "特殊采购类型
+         dispo LIKE marc-dispo, "MRP控制者
+         plifz LIKE marc-plifz, "计划交货时间
+         dzeit LIKE marc-dzeit, "自制天数
+         nfmat LIKE marc-nfmat, "后继物料
+         zmatn LIKE mara-matnr, "被取代物料
+       END OF lt_marc.
+  DATA:lt_makt LIKE makt OCCURS 0 WITH HEADER LINE.
+  DATA:lt_mdps LIKE mdps OCCURS 0 WITH HEADER LINE,
+       lt_mdez LIKE mdez OCCURS 0 WITH HEADER LINE,
+       lt_mdsu LIKE mdsu OCCURS 0 WITH HEADER LINE.
+  DATA:lt_t458b LIKE t458b OCCURS 0 WITH HEADER LINE.
+
+***抓取满足条件的数据
+  SELECT a~matnr
+         b~mtart
+         a~dismm
+         a~beskz
+         a~sobsl
+         a~dispo
+         a~plifz
+         a~dzeit
+         a~nfmat
+    INTO CORRESPONDING FIELDS OF TABLE lt_marc
+    FROM marc AS a
+    INNER JOIN mara AS b
+    ON a~matnr = b~matnr
+    WHERE a~matnr IN s_matnr
+      AND a~werks = '1000'
+      AND a~dismm IN s_dismm
+      AND a~dispo IN s_dispo
+      AND a~beskz IN s_beskz
+      AND a~sobsl IN s_sobsl.
+
+  CHECK lt_marc[] IS NOT INITIAL.
+***获取物料描述
+  SELECT matnr maktx
+    INTO CORRESPONDING FIELDS OF TABLE lt_makt
+    FROM makt
+    FOR ALL ENTRIES IN lt_marc
+    WHERE matnr = lt_marc-matnr
+      AND spras = sy-langu.
+
+***抓取列外描述
+  SELECT * INTO TABLE lt_t458b FROM t458b WHERE spras = sy-langu.
+
+  SORT lt_makt BY matnr.
+  SORT lt_t458b BY aussl.
+
+  LOOP AT lt_marc.
+***获取mrp数据
+    REFRESH:lt_mdps,lt_mdez,lt_mdsu.
+    CALL FUNCTION 'MD_STOCK_REQUIREMENTS_LIST_API'
+      EXPORTING
+        matnr                    = lt_marc-matnr
+        werks                    = '1000'
+      TABLES
+        mdpsx                    = lt_mdps
+        mdezx                    = lt_mdez
+        mdsux                    = lt_mdsu
+      EXCEPTIONS
+        material_plant_not_found = 1
+        plant_not_found          = 2
+        OTHERS                   = 3.
+    DELETE lt_mdez WHERE plaab NE '02'.
+    LOOP AT lt_mdez WHERE delb0 IN s_delb0.
+      MOVE-CORRESPONDING lt_marc TO gt_out.
+      READ TABLE lt_makt WITH KEY matnr = gt_out-matnr BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_out-maktx = lt_makt-maktx.
+      ENDIF.
+      gt_out-dat00 = lt_mdez-dat00. "日期
+      gt_out-delb0 = lt_mdez-delb0. "MRP元素
+      gt_out-extra = lt_mdez-extra. "MRP元素数据
+      gt_out-umdat = lt_mdez-umdat. "再计划日期
+      gt_out-auskt = lt_mdez-auskt. "例外
+      READ TABLE lt_t458b WITH KEY aussl = lt_mdez-aussl BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_out-auslt =  lt_t458b-auslt.
+      ENDIF.
+      gt_out-mng01 = lt_mdez-mng01. "收货/需求
+      IF gt_out-nfmat IS INITIAL.
+        SELECT SINGLE matnr INTO gt_out-zmatn FROM marc WHERE nfmat = gt_out-matnr AND werks = '1000'.
+      ENDIF.
+      APPEND gt_out.
+      CLEAR gt_out.
+    ENDLOOP.
+  ENDLOOP.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  mcr_build_fieldcat:'MATNR'   '物料号码'           'MATNR'       'MARC'    ''     '',
+                     'MAKTX'   '物料描述'           'MAKTX'       'MAKT'    ''     '',
+                     'MTART'   '物料类型'           'MTART'       'MARC'    ''     '',
+                     'DISMM'   'MRP类型'            'DISMM'       'MARC'    ''     '',
+                     'DAT00'   '日期'               'DAT00'       'MDEZ'    ''     '',
+                     'DELB0'   'MRP元素'            'DELB0'       'MDEZ'    ''     '',
+                     'EXTRA'   'MRP元素数据'        'EXTRA'       'MDEZ'    ''     '',
+                     'UMDAT'   '再计划日期'         'UMDAT'       'MDEZ'    ''     '',
+                     'AUSLT'   '例外'               'AUSLT'       'T458B'   ''     '',
+                     'MNG01'   '收货/需求'          'MNG01'       'MDEZ'    ''     '',
+                     'BESKZ'   '采购类型'           'BESKZ'       'MARC'    ''     '',
+                     'SOBSL'   '特殊采购类型'       'SOBSL'       'MARC'    ''     '',
+                     'DISPO'   'MRP控制者'          'DISPO'       'MARC'    ''     '',
+                     'PLIFZ'   '计划交货时间'       'PLIFZ'       'MARC'    ''     '',
+                     'DZEIT'   '自制天数'           'DZEIT'       'MARC'    ''     '',
+                     'NFMAT'   '后继物料'           'NFMAT'       'MARC'    ''     '',
+                     'ZMATN'   '被取代物料'         'ZMATN'       'MARC'    ''     ''.
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK       = ' '
+*     I_BYPASSING_BUFFER      =
+*     I_BUFFER_ACTIVE         =
+      i_callback_program      = sy-repid
+*     I_CALLBACK_PF_STATUS_SET          = ' '
+      i_callback_user_command = 'FRM_USER_COMMAND'
+*     I_CALLBACK_TOP_OF_PAGE  = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME        =
+*     I_BACKGROUND_ID         = ' '
+*     I_GRID_TITLE            =
+*     I_GRID_SETTINGS         =
+      is_layout_lvc           = gs_layout
+      it_fieldcat_lvc         = gt_fcat[]
+*     IT_EXCLUDING            =
+*     IT_SPECIAL_GROUPS_LVC   =
+*     IT_SORT_LVC             =
+*     IT_FILTER_LVC           =
+*     IT_HYPERLINK            =
+*     IS_SEL_HIDE             =
+      i_default               = 'X'
+      i_save                  = 'A'
+*     IS_VARIANT              =
+*     IT_EVENTS               =
+*     IT_EVENT_EXIT           =
+*     IS_PRINT_LVC            =
+*     IS_REPREP_ID_LVC        =
+*     I_SCREEN_START_COLUMN   = 0
+*     I_SCREEN_START_LINE     = 0
+*     I_SCREEN_END_COLUMN     = 0
+*     I_SCREEN_END_LINE       = 0
+*     I_HTML_HEIGHT_TOP       =
+*     I_HTML_HEIGHT_END       =
+*     IT_ALV_GRAPHICS         =
+*     IT_EXCEPT_QINFO_LVC     =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER =
+*     ES_EXIT_CAUSED_BY_USER  =
+    TABLES
+      t_outtab                = gt_out[]
+    EXCEPTIONS
+      program_error           = 1
+      OTHERS                  = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_USER_COMMAND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_user_command USING r_ucomm LIKE sy-ucomm
+                            rs_selfield TYPE slis_selfield..
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CASE r_ucomm.
+    WHEN '&IC1'.
+      READ TABLE gt_out INDEX rs_selfield-tabindex.
+      SET PARAMETER ID 'MAT' FIELD gt_out-matnr.
+      SET PARAMETER ID 'WRK' FIELD '1000'.
+      CALL TRANSACTION 'MD04' AND SKIP FIRST SCREEN.
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.

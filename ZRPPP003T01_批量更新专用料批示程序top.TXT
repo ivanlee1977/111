@@ -1,0 +1,33 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPPP003T01
+*&---------------------------------------------------------------------*
+TABLES:marc.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       zicon(10) TYPE c,
+       matnr     LIKE marc-matnr,
+       werks     LIKE marc-werks,
+       mtart     LIKE mara-mtart,
+       dispo     LIKE marc-dispo,
+       maabc     LIKE marc-maabc,
+       maabc_n   LIKE marc-maabc,
+       zmsg      TYPE bapi_msg,
+     END OF gt_out.
+
+***alv data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  gt_fcat-inttype = &5.
+  gt_fcat-intlen = &6.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

@@ -1,0 +1,18 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZXF04U01
+*&---------------------------------------------------------------------*
+
+IF I_KNA1-KTOKD = 'ZAG1' AND I_KNVV-KVGR1 IS INITIAL AND I_KNVV-VKORG IS NOT INITIAL.
+    MESSAGE E398(00)
+             WITH '当前客户未维护业务员！'.
+ENDIF.
+
+IF I_KNA1-KTOKD = 'ZAG1' AND I_KNVV-KKBER  IS INITIAL AND I_KNVV-VKORG IS NOT INITIAL.
+    MESSAGE E398(00)
+             WITH '当前客户未维护贷方控制范围！'.
+ENDIF.
+
+IF I_KNA1-KTOKD = 'ZAG1' AND I_KNVV-KVGR4  IS INITIAL AND I_KNVV-VKORG = 1100.
+    MESSAGE E398(00)
+             WITH '当前客户未维护开票类型！'.
+ENDIF.

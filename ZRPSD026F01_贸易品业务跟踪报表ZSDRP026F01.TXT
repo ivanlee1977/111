@@ -1,0 +1,703 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZSDRP022F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_AUSP
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_ausp .
+  REFRESH:gt_ausp.
+*  根据物料取出产品线和系列
+  SELECT a~objek a~atinn a~atwrt b~atnam
+   INTO CORRESPONDING FIELDS OF TABLE gt_ausp
+   FROM ausp AS a INNER JOIN cabn AS b ON a~atinn = b~atinn
+   WHERE b~atnam IN ('ZFER_XL','ZFER_CPX','ZFER_ZXL','ZFER_DYZXH','ZFER_CPXH','ZFER_PP').
+  SORT gt_ausp BY objek.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SUB_SEARCH_HELP_ZXL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM sub_search_help_zxl USING lv_field LIKE dfies-fieldname
+                               lv_dynfield LIKE help_info-dynprofld
+                               lv_atnam LIKE cabn-atnam.
+  DATA: lv_pvalkey TYPE ddshpvkey.
+
+  DATA: lt_zxl LIKE gt_xl OCCURS 0 WITH HEADER LINE.
+
+  LOOP AT gt_ausp WHERE atnam = lv_atnam.
+    lt_zxl-atwrt = gt_ausp-atwrt.
+    APPEND lt_zxl.
+  ENDLOOP.
+
+  SORT lt_zxl BY atwrt.
+  DELETE ADJACENT DUPLICATES FROM lt_zxl.
+
+  lv_pvalkey = lv_field.
+  CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+    EXPORTING
+      retfield        = lv_field
+      pvalkey         = lv_pvalkey
+      dynpprog        = sy-repid
+      dynpnr          = sy-dynnr
+      dynprofield     = lv_dynfield
+      window_title    = '选择'
+      value           = ' '
+      value_org       = 'S'
+    TABLES
+      value_tab       = lt_zxl
+    EXCEPTIONS
+      parameter_error = 1
+      no_values_found = 2
+      OTHERS          = 3.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  frm_get_data
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+
+*  根据选择屏幕条件从表KNVV中取出客户相关信息
+  SELECT * INTO TABLE gt_knvv
+    FROM knvv
+   WHERE vkorg EQ '1200'
+     AND vtweg IN s_vtweg
+     AND bzirk IN s_bzirk
+     AND vkbur IN s_vkbur
+     AND vkgrp IN s_vkgrp
+     AND kvgr1 IN s_kvgr1
+     AND kvgr2 IN s_kvgr2
+     AND kunnr IN s_kunnr.
+*  权限检查，无业务员权限将其删除
+  LOOP AT gt_knvv .
+    AUTHORITY-CHECK OBJECT 'Z_KVGR1'
+         ID 'KVGR1' FIELD gt_knvv-kvgr1.
+    IF sy-subrc <> 0.
+      DELETE gt_knvv.
+      CONTINUE.
+    ENDIF.
+  ENDLOOP.
+  SORT gt_knvv BY kunnr vkorg vtweg.
+
+* 从表VBAK和VBAP、VBKD中取出销售订单相关信息
+  CHECK gt_knvv[] IS NOT INITIAL.
+  IF p_r1 EQ 'X'.
+    SELECT a~vbeln a~posnr a~matnr a~arktx a~kwmeng a~kzwi1 a~abgru
+           b~vkorg b~auart b~kunnr b~erdat b~lifsk b~augru b~kvgr3 b~kvgr4 b~bname
+           c~bstkd c~zterm c~inco1 c~inco2 c~ktgrd c~ihrez_e c~bstkd_e c~posex_e
+           d~gbsta
+      INTO CORRESPONDING FIELDS OF TABLE gt_alv
+      FROM vbap AS a INNER JOIN vbak AS b ON a~vbeln = b~vbeln
+                     INNER JOIN vbkd AS c ON a~vbeln = c~vbeln AND a~posnr = c~posnr
+                     INNER JOIN vbup AS d ON a~vbeln = d~vbeln AND a~posnr = d~posnr
+       FOR ALL ENTRIES IN gt_knvv
+      WHERE a~vbeln IN s_vbeln
+        AND a~abgru IN s_abgru
+        AND a~matnr IN s_matnr
+        AND b~erdat IN s_erdat
+        AND b~auart EQ 'ZOR1'
+        AND b~augru IN s_augru
+        AND b~kunnr EQ gt_knvv-kunnr
+        AND b~vkorg EQ '1200'
+        AND c~bstkd_e NE space
+        AND d~gbsta NE 'C'.
+  ELSEIF p_r2 EQ 'X'.
+    SELECT a~vbeln a~posnr a~matnr a~arktx a~kwmeng a~kzwi1 a~abgru
+           b~vkorg b~auart b~kunnr b~erdat b~lifsk b~augru b~kvgr3 b~kvgr4 b~bname
+           c~bstkd c~zterm c~inco1 c~inco2 c~ktgrd c~ihrez_e c~bstkd_e c~posex_e
+           d~gbsta
+      INTO CORRESPONDING FIELDS OF TABLE gt_alv
+      FROM vbap AS a INNER JOIN vbak AS b ON a~vbeln = b~vbeln
+                     INNER JOIN vbkd AS c ON a~vbeln = c~vbeln AND a~posnr = c~posnr
+                     INNER JOIN vbup AS d ON a~vbeln = d~vbeln AND a~posnr = d~posnr
+       FOR ALL ENTRIES IN gt_knvv
+      WHERE a~vbeln IN s_vbeln
+        AND a~abgru IN s_abgru
+        AND a~matnr IN s_matnr
+        AND b~erdat IN s_erdat
+        AND b~auart EQ 'ZOR1'
+        AND b~augru IN s_augru
+        AND b~kunnr EQ gt_knvv-kunnr
+        AND b~vkorg EQ '1200'
+        AND c~bstkd_e NE space
+        AND d~gbsta EQ 'C'.
+  ENDIF.
+
+***表KNA1中取出客户描述
+  SELECT * INTO TABLE gt_kna1
+    FROM kna1
+    FOR ALL ENTRIES IN gt_knvv
+    WHERE kunnr = gt_knvv-kunnr.
+  SORT gt_kna1 BY kunnr.
+
+
+  IF gt_alv[] IS NOT INITIAL.
+*** 根据取出的so取出dn
+    SELECT a~vbeln a~posnr a~lfimg a~vgbel a~vgpos b~wadat_ist
+      INTO CORRESPONDING FIELDS OF TABLE gt_lips
+      FROM lips AS a INNER JOIN likp AS b ON a~vbeln = b~vbeln
+      FOR ALL ENTRIES IN gt_alv
+      WHERE a~vgbel = gt_alv-vbeln
+        AND a~vgpos = gt_alv-posnr.
+    SORT gt_lips BY vgbel vgpos wadat_ist DESCENDING.
+
+***取出物料信息
+    SELECT * INTO TABLE gt_mara
+      FROM mara
+      FOR ALL ENTRIES IN gt_alv
+      WHERE matnr = gt_alv-matnr
+        AND spart IN s_spart
+        AND matkl IN s_matkl.
+    SORT gt_mara BY matnr.
+
+    SELECT * INTO TABLE gt_makt
+      FROM makt
+      FOR ALL ENTRIES IN gt_alv
+      WHERE matnr = gt_alv-matnr
+        AND spras = sy-langu.
+    SORT gt_makt BY matnr.
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PROCESS_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_process_data .
+* 取客户
+  DATA: lt_t171t LIKE t171t OCCURS 0 WITH HEADER LINE, "销售大区描述
+        lt_tvkbt LIKE tvkbt OCCURS 0 WITH HEADER LINE, "行办描述
+        lt_tvgrt LIKE tvgrt OCCURS 0 WITH HEADER LINE, "销售组描述
+        lt_tvv1t LIKE tvv1t OCCURS 0 WITH HEADER LINE, "业务员描述
+        lt_tvv2t LIKE tvv2t OCCURS 0 WITH HEADER LINE, "商务描述
+        lt_tvv3t LIKE tvv3t OCCURS 0 WITH HEADER LINE, "运输方式描述
+        lt_tvv4t LIKE tvv4t OCCURS 0 WITH HEADER LINE, "发票类型描述
+        lt_t023t LIKE t023t OCCURS 0 WITH HEADER LINE, "物料组描述
+        lt_tspat LIKE tspat OCCURS 0 WITH HEADER LINE, "产品组描述
+        lt_tvkot LIKE tvkot OCCURS 0 WITH HEADER LINE, "销售组织描述
+        lt_tvtwt LIKE tvtwt OCCURS 0 WITH HEADER LINE, "分销渠道描述
+        lt_tvakt LIKE tvakt OCCURS 0 WITH HEADER LINE, "订单类型描述
+        lt_tvlst LIKE tvlst OCCURS 0 WITH HEADER LINE, "审批状态描述
+        lt_tvzbt LIKE tvzbt OCCURS 0 WITH HEADER LINE, "付款条件描述
+        lt_tvaut LIKE tvaut OCCURS 0 WITH HEADER LINE, "订单原因描述
+        lt_tvagt LIKE tvagt OCCURS 0 WITH HEADER LINE. "拒绝原因描述
+
+
+  DATA: lv_tabix LIKE sy-tabix,
+        lv_objek LIKE ausp-objek,
+        lv_lfimg TYPE c LENGTH 20. "处理BPM日期格式
+
+*  取销售大区描述
+  SELECT * INTO TABLE lt_t171t FROM t171t WHERE spras EQ sy-langu AND bzirk IN s_bzirk.
+  SORT lt_t171t BY bzirk.
+*  取行办描述
+  SELECT * INTO TABLE lt_tvkbt FROM tvkbt WHERE spras EQ sy-langu AND vkbur IN s_vkbur.
+  SORT lt_tvkbt BY vkbur.
+*  取销售组描述
+  SELECT * INTO TABLE lt_tvgrt FROM tvgrt WHERE spras EQ sy-langu AND vkgrp IN s_vkgrp.
+  SORT lt_tvgrt BY vkgrp.
+*  取业务员描述
+  SELECT * INTO TABLE lt_tvv1t FROM tvv1t WHERE spras EQ sy-langu AND kvgr1 IN s_kvgr1.
+  SORT lt_tvv1t BY kvgr1.
+*  取商务描述
+  SELECT * INTO TABLE lt_tvv2t FROM tvv2t WHERE spras EQ sy-langu AND kvgr2 IN s_kvgr2.
+  SORT lt_tvv2t BY kvgr2.
+*  取运输方式描述
+  SELECT * INTO TABLE lt_tvv3t FROM tvv3t WHERE spras EQ sy-langu.
+  SORT lt_tvv3t BY kvgr3.
+*  取发票类型描述
+  SELECT * INTO TABLE lt_tvv4t FROM tvv4t WHERE spras EQ sy-langu.
+  SORT lt_tvv4t BY kvgr4.
+* 取物料组描述
+  SELECT * INTO TABLE lt_t023t FROM t023t WHERE spras EQ sy-langu AND matkl IN s_matkl.
+  SORT lt_t023t BY matkl.
+* 取产品组描述
+  SELECT * INTO TABLE lt_tspat FROM tspat WHERE spras EQ sy-langu AND spart IN s_spart.
+  SORT lt_tspat BY spart.
+* 取销售组织描述
+  SELECT * INTO TABLE lt_tvkot FROM tvkot WHERE spras EQ sy-langu.
+  SORT lt_tvkot BY vkorg.
+* 取分销渠道描述
+  SELECT * INTO TABLE lt_tvtwt FROM tvtwt WHERE spras EQ sy-langu.
+  SORT lt_tvtwt BY vtweg.
+* 取订单类型描述
+  SELECT * INTO TABLE lt_tvakt FROM tvakt WHERE spras EQ sy-langu.
+  SORT lt_tvakt BY auart.
+* 取审批状态描述
+  SELECT * INTO TABLE lt_tvlst FROM tvlst WHERE spras EQ sy-langu.
+  SORT lt_tvlst BY lifsp.
+* 付款条件描述
+  SELECT * INTO TABLE lt_tvzbt FROM tvzbt WHERE spras EQ sy-langu.
+  SORT lt_tvzbt BY zterm.
+* 订单原因描述
+  SELECT * INTO TABLE lt_tvaut FROM tvaut WHERE spras EQ sy-langu.
+  SORT lt_tvaut BY augru.
+* 拒绝原因描述
+  SELECT * INTO TABLE lt_tvagt FROM tvagt WHERE spras EQ sy-langu.
+  SORT lt_tvagt BY abgru.
+
+
+  LOOP AT gt_alv.
+    CLEAR:lv_tabix.
+    lv_tabix = sy-tabix.
+*  取出物料组和产品组(不在屏幕范围内的删掉)
+    READ TABLE gt_mara WITH KEY matnr = gt_alv-matnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-matkl = gt_mara-matkl.
+      gt_alv-spart = gt_mara-spart.
+    ELSE.
+      DELETE gt_alv INDEX lv_tabix .
+      CONTINUE.
+    ENDIF.
+*  取产品系列
+    lv_objek = gt_alv-matnr.
+    PERFORM frm_get_atwrt USING lv_objek
+                       CHANGING gt_alv-zdyzxh
+                                gt_alv-zxl
+                                gt_alv-zzxl
+                                gt_alv-zcpx
+                                gt_alv-zpp.
+
+***判断产品线是否为屏幕所查询
+    IF gt_alv-zcpx NOT IN s_cpx.
+      DELETE gt_alv INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+***判断系列是否为屏幕所查询
+    IF gt_alv-zxl NOT IN s_xl.
+      DELETE gt_alv INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+***判断子系列是否为屏幕所查询
+    IF gt_alv-zpp NOT IN s_pp.
+      DELETE gt_alv INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+*  取销售大区、行办、销售组、业务员
+    CLEAR: gt_knvv.
+    READ TABLE gt_knvv WITH KEY kunnr = gt_alv-kunnr vkorg = gt_alv-vkorg BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-vtweg = gt_knvv-vtweg."分销渠道
+      gt_alv-vkbur = gt_knvv-vkbur."行办
+      gt_alv-vkgrp = gt_knvv-vkgrp."销售组
+      gt_alv-kvgr1 = gt_knvv-kvgr1."业务员
+      gt_alv-kvgr2 = gt_knvv-kvgr2."商务
+      gt_alv-bzirk = gt_knvv-bzirk."销售大区
+    ENDIF.
+*** 计算交货数量
+    LOOP AT gt_lips WHERE vgbel = gt_alv-vbeln AND vgpos = gt_alv-posnr .
+      gt_alv-lfimg_col = gt_alv-lfimg_col + gt_lips-lfimg.
+      IF gt_alv-wadat_ist IS INITIAL.
+        gt_alv-wadat_ist = gt_lips-wadat_ist.
+      ENDIF.
+    ENDLOOP.
+*** 计算单价= vbap-kzwi1 / vbap-kwmeng.
+*** 计算交货金额= 交货数量 * 单价
+    IF gt_alv-kwmeng NE 0.
+      gt_alv-price = gt_alv-kzwi1 / gt_alv-kwmeng.
+      gt_alv-zje_jh = gt_alv-lfimg_col * ( gt_alv-kzwi1 / gt_alv-kwmeng ).
+    ENDIF.
+*** 处理采购申请号和申请行项目号
+    gt_alv-banfn = gt_alv-bstkd_e.
+    gt_alv-bnfpo = gt_alv-posex_e.
+    MODIFY gt_alv.
+  ENDLOOP.
+
+***根据采购申请取相关的PO
+  PERFORM frm_get_ekko .
+
+
+  LOOP AT gt_alv.
+***根据采购申请号和行项目号找出PO号
+    READ TABLE gt_ekko WITH KEY banfn = gt_alv-bstkd_e bnfpo = gt_alv-posex_e BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-ebeln = gt_ekko-ebeln.
+      gt_alv-ebelp = gt_ekko-ebelp.
+      gt_alv-menge = gt_ekko-menge.
+      gt_alv-lifnr = gt_ekko-lifnr.
+    ENDIF.
+***根据PO号从表EKET中取出采购计划交货日期
+    READ TABLE gt_eket WITH KEY ebeln = gt_alv-ebeln ebelp = gt_alv-ebelp .
+    IF sy-subrc = 0.
+      gt_alv-eindt = gt_eket-eindt.
+    ENDIF.
+***取收货凭证和收货数量
+    LOOP AT gt_mseg WHERE ebeln = gt_alv-ebeln AND ebelp = gt_alv-ebelp .
+      IF gt_alv-budat IS INITIAL.
+        gt_alv-budat = gt_mseg-budat_mkpf.
+      ENDIF.
+      CASE gt_mseg-bwart.
+        WHEN '101'.
+          gt_alv-menge_ys = gt_alv-menge_ys + gt_mseg-menge.
+        WHEN '102'.
+          gt_alv-menge_ys = gt_alv-menge_ys - gt_mseg-menge.
+        WHEN OTHERS.
+      ENDCASE.
+      CLEAR: lv_lfimg.
+      lv_lfimg = gt_mseg-menge.
+      IF gt_alv-vbeln_shdh IS INITIAL.
+        gt_alv-vbeln_shdh = gt_mseg-mblnr.
+        gt_alv-lfimg_shsl = lv_lfimg.
+      ELSE.
+        CONCATENATE gt_alv-vbeln_shdh gt_mseg-mblnr INTO gt_alv-vbeln_shdh SEPARATED BY '/'.
+        CONDENSE gt_alv-vbeln_shdh.
+        CONCATENATE gt_alv-lfimg_shsl lv_lfimg INTO gt_alv-lfimg_shsl SEPARATED BY '/'.
+        CONDENSE gt_alv-lfimg_shsl.
+      ENDIF.
+    ENDLOOP.
+***取采购未收货数量 = 采购订单数量-采购交货数量
+    gt_alv-menge_ws = gt_alv-menge - gt_alv-menge_ys.
+***取销售未收货数量 = 销售订单数量-销售交货数量
+    gt_alv-lfimg_wjh = gt_alv-kwmeng - gt_alv-lfimg_col.
+***取销售未交货金额= 销售未交货数量*单价
+    IF gt_alv-kwmeng NE 0.
+      gt_alv-zje_wjh = gt_alv-lfimg_wjh * ( gt_alv-kzwi1 / gt_alv-kwmeng ).
+    ENDIF.
+*   取销售组织描述
+    READ TABLE lt_tvkot WITH KEY vkorg = gt_alv-vkorg BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-vkorg_vtext = lt_tvkot-vtext.
+    ENDIF.
+*   取分销渠道描述
+    READ TABLE lt_tvtwt WITH KEY vtweg = gt_alv-vtweg BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-vtweg_vtext = lt_tvtwt-vtext.
+    ENDIF.
+*  取产品组描述
+    READ TABLE lt_tspat WITH KEY spart = gt_alv-spart BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-spart_vtext = lt_tspat-vtext.
+    ENDIF.
+*  取订单类型描述
+    READ TABLE lt_tvakt WITH KEY auart = gt_alv-auart BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-auart_vtext = lt_tvakt-bezei.
+    ENDIF.
+*  取客户名称
+    READ TABLE gt_kna1 WITH KEY kunnr = gt_alv-kunnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      CONCATENATE gt_kna1-name1 gt_kna1-name2 INTO gt_alv-name1.
+      gt_alv-sortl = gt_kna1-sortl.
+    ENDIF.
+*  取审批状态描述
+    READ TABLE lt_tvlst WITH KEY lifsp = gt_alv-lifsk BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-lifsk_vtext = lt_tvlst-vtext.
+    ENDIF.
+*  付款条件描述
+    READ TABLE lt_tvzbt WITH KEY zterm = gt_alv-zterm BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-zterm_vtext = lt_tvzbt-vtext.
+    ENDIF.
+*  订单原因描述
+    READ TABLE lt_tvaut WITH KEY augru = gt_alv-augru BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-augru_vtext = lt_tvaut-bezei.
+    ENDIF.
+*  拒绝原因描述
+    READ TABLE lt_tvagt WITH KEY abgru = gt_alv-abgru BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-abgru_vtext = lt_tvagt-bezei.
+    ENDIF.
+*   取销售大区描述
+    READ TABLE lt_t171t WITH KEY bzirk = gt_alv-bzirk BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-bzirk_vtext = lt_t171t-bztxt.
+    ENDIF.
+*   取行办描述
+    READ TABLE lt_tvkbt WITH KEY vkbur = gt_alv-vkbur BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-vkbur_vtext = lt_tvkbt-bezei.
+    ENDIF.
+*   取销售组描述
+    READ TABLE lt_tvgrt WITH KEY vkgrp = gt_alv-vkgrp BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-vkgrp_vtext = lt_tvgrt-bezei.
+    ENDIF.
+*   取业务员描述
+    READ TABLE lt_tvv1t WITH KEY kvgr1 = gt_alv-kvgr1 BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-kvgr1_vtext = lt_tvv1t-bezei.
+    ENDIF.
+*   取商务描述
+    READ TABLE lt_tvv2t WITH KEY kvgr2 = gt_alv-kvgr2 BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-kvgr2_vtext = lt_tvv2t-bezei.
+    ENDIF.
+*  取物料组描述
+    READ TABLE lt_t023t WITH KEY matkl = gt_alv-matkl BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-wgbez = lt_t023t-wgbez.
+    ENDIF.
+*  取运输方式描述
+    READ TABLE lt_tvv3t WITH KEY kvgr3 = gt_alv-kvgr3 BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-kvgr3_vtext = lt_tvv3t-bezei.
+    ENDIF.
+*  取发票类型描述
+    READ TABLE lt_tvv4t WITH KEY kvgr4 = gt_alv-kvgr4 BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-kvgr4_vtext = lt_tvv4t-bezei.
+    ENDIF.
+*  取帐户组描述
+    SELECT SINGLE vtext INTO gt_alv-ktgrd_vtext FROM tvktt WHERE ktgrd = gt_alv-ktgrd AND spras = sy-langu.
+*  取总览状态描述
+    CASE gt_alv-gbsta.
+      WHEN 'A'.
+        gt_alv-gbsta_vtext = '没有处理'.
+      WHEN 'B'.
+        gt_alv-gbsta_vtext = '部分处理'.
+      WHEN 'C'.
+        gt_alv-gbsta_vtext = '完全地处理'.
+      WHEN OTHERS.
+        gt_alv-gbsta_vtext = '无关'.
+    ENDCASE.
+* 取供应商描述
+    READ TABLE gt_lfa1 WITH KEY lifnr = gt_alv-lifnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-name_lifnr = gt_lfa1-name1.
+    ENDIF.
+* 处理国际贸易条件
+    CONCATENATE gt_alv-inco1 gt_alv-inco2 INTO gt_alv-inco SEPARATED BY space.
+    MODIFY gt_alv .
+    CLEAR:gt_alv.
+  ENDLOOP.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SUB_BUILD_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM sub_build_fieldcat .
+  mcr_build_fieldcat: 'VKORG'       '销售组织'          'VKORG'  'VBAK'   '10' '',
+                      'VKORG_VTEXT' '销售组织名称'      'VTEXT'  'TVKOT'  '15' '',
+                      'VTWEG'       '分销渠道'          'VTWEG'  'KNVV'   '10' '',
+                      'VTWEG_VTEXT' '分销渠道名称'      'VTEXT'  'TVTWT'  '15' '',
+                      'SPART'       '产品组'            'SPART'  'MARA'   '10' '',
+                      'SPART_VTEXT' '产品组名称'        'VTEXT'  'TSPAT'  '15' '',
+                      'AUART'       '订单类型'          'AUART'  'VBAK'   '10' '',
+                      'AUART_VTEXT' '订单类型名称'      'BEZEI'  'TVAKT'  '15' '',
+                      'KUNNR'       '客户编码'          'KUNNR'  'KNVV'   '10' '',
+                      'NAME1'       '客户名称'          ''       ''       '20' '',
+                      'SORTL'       '客户简称'          'SORTL'  'KNA1'   '10' '',
+                      'VBELN'       '销售订单号'        'VBELN'  'VBAK'   '10' '',
+                      'POSNR'       '销售订单行项目'    'POSNR'  'VBAK'   '12' '',
+                      'ERDAT'       '创建日期'          'ERDAT'  'VBAK'   '10' '',
+                      'MATNR'       '物料号码'          'MATNR'  'MARA'   '15' '',
+                      'ARKTX'       '物料名称'          ''  '' '25' '',
+                      'KWMENG'      '订单数量'          ''  '' '15' 'X',
+                      'PRICE'       '单价'              ''  '' '15' 'X',
+                      'KZWI1'       '金额'              ''  '' '15' 'X',
+                      'BSTKD'       '客户采购订单号'    'BSTKD'  'VBKD' '15' '',
+                      'LIFSK'       '审批状态代码'      'LIFSK'  'VBAK' '10' '',
+                      'LIFSK_VTEXT' '审批状态'          'VTEXT'  'TVLST' '15' '',
+                      'ZTERM'       '付款条件'          'ZTERM'  'VBKD' '10' '',
+                      'ZTERM_VTEXT' '付款条件描述'      'VTEXT'  'TVZBT' '20' '',
+                      'INCO'        '国际贸易条件'      ''  '' '15' '',
+                      'AUGRU'       '订单原因代码'      'AUGRU'  'VBAK' '10' '',
+                      'AUGRU_VTEXT' '订单原因描述'      'BEZEI'  'TVAUT' '15' '',
+                      'ABGRU'       '拒绝原因代码'      'ABGRU'  'VBAP' '10' '',
+                      'ABGRU_VTEXT' '拒绝原因描述'      'BEZEI'  'TVAGT' '15' '',
+                      'BZIRK'       '销售大区代码'      'BZIRK'  'KNVV' '10' '',
+                      'BZIRK_VTEXT' '销售大区描述'      'BZTXT'  'T171T' '10' '',
+                      'VKBUR'       '行办代码'          'VKBUR'  'KNVV' '10' '',
+                      'VKBUR_VTEXT' '行办描述'          'BEZEI'  'TVKBT' '10' '',
+                      'VKGRP'       '销售组代码'        'VKGRP'  'KNVV' '10' '',
+                      'VKGRP_VTEXT' '销售组描述'        'BEZEI'  'TVGRT' '10' '',
+                      'KVGR1'       '销售工程师/代表代码'  'KVGR1'  'KNVV' '15' '',
+                      'KVGR1_VTEXT' '销售工程师/代表'   'BEZEI'  'TVV1T' '10' '',
+                      'KVGR2'       '商务代码'          'KVGR2'  'KNVV' '10' '',
+                      'KVGR2_VTEXT' '商务'              'BEZEI'  'TVV2T' '10' '',
+                      'ZDYZXH'      '对应主型号'        ''  '' '15' '',
+                      'ZXL'         '系列'              ''  '' '15' '',
+                      'ZZXL'        '子系列'            ''  '' '15' '',
+                      'ZCPX'        '产品线'            ''  '' '15' '',
+                      'ZPP'         '品牌/厂家'         ''  '' '15' '',
+                      'KVGR3'       '运输方式代码'      'KVGR3'  'VBAK' '10' '',
+                      'KVGR3_VTEXT' '运输方式'          'BEZEI'  'TVV3T' '10' '',
+                      'KVGR4'       '发票类型代码'      'KVGR4'  'VBAK' '10' '',
+                      'KVGR4_VTEXT' '发票类型'          'BEZEI'  'TVV4T' '10' '',
+                      'KTGRD'       '账户组'            'KTGRD'  'VBKD' '10' '',
+                      'KTGRD_VTEXT' '账户组描述'        'VTEXT'  'TVKTT' '10' '',
+                      'IHREZ_E'     '订单平台号'        'IHREZ_E'  'VBKD' '10' '',
+                      'BNAME'       '交货地点'          'BNAME'  'VBAK' '10' '',
+                      'GBSTA'       '总览状态代码'      'GBSTA'  'VBUP' '10' '',
+                      'GBSTA_VTEXT' '总览状态'          ''  '' '10' '',
+                      'LFIMG_COL'   '交货数量'          'LFIMG'  'LIPS' '15' 'X',
+                      'ZJE_JH'      '交货金额'          'KZWI1'  'VBAP' '15' 'X',
+                      'BSTKD_E'     '采购申请号'        'BANFN'  'EBAN' '15' '',
+                      'POSEX_E'     '采购申请行项目'    'BNFPO'  'EBAN' '15' '',
+                      'LIFNR'       '供应商'            'LIFNR'  'EKKO' '15' '',
+                      'NAME_LIFNR'  '供应商名称'        'NAME1'  'LFA1' '15' '',
+                      'EBELN'       '采购订单号'        'EBELN'  'EKPO' '10' '',
+                      'EBELP'       '采购订单行项目'    'EBELP'  'EKPO' '10' '',
+                      'EINDT'       '采购计划交货日期'  ''  '' '15' '',
+                      'MENGE'       '采购订单数量'      'MENGE'  'EKPO' '15' 'X',
+                      'MENGE_YS'    '采购收货数量'      'MENGE'  'EKPO' '15' 'X',
+                      'BUDAT'       '采购收货日期'      'BUDAT'  'EKBE' '10' 'X',
+                      'MENGE_WS'    '采购未收货数量'    'MENGE'  'EKBE' '15' 'X',
+                      'WADAT_IST'   '销售交货日期'      ''  '' '10' '',
+                      'LFIMG_WJH'   '销售未交货数量'    ''  '' '15' 'X',
+                      'ZJE_WJH'     '销售未交货金额'    ''  '' '15' 'X',
+                      'VBELN_SHDH'  '收货凭证'          ''  '' '40' '',
+                      'LFIMG_SHSL'  '收货数量'          ''  '' '40' ''.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_ATWRT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_GT_LIPS_OBJEK  text
+*      <--P_GT_LIPS_ZFER_CPX  text
+*      <--P_GT_LIPS_ZFER_XL  text
+*      <--P_GT_LIPS_ZFER_ZXL  text
+*      <--P_GT_LIPS_ZFER_DYZXH  text
+*      <--P_GT_LIPS_ZFER_CPXH  text
+*----------------------------------------------------------------------*
+FORM frm_get_atwrt  USING    pv_objek
+                    CHANGING pv_zdyzxh
+                             pv_zxl
+                             pz_zzxl
+                             pv_zcpx
+                             pv_zpp.
+
+*  取产品系列
+  LOOP AT gt_ausp WHERE objek = pv_objek.
+    CASE gt_ausp-atnam.
+      WHEN 'ZFER_DYZXH'.
+        pv_zdyzxh = gt_ausp-atwrt.
+      WHEN 'ZFER_XL'.
+        pv_zxl = gt_ausp-atwrt.
+      WHEN 'ZFER_ZXL'.
+        pz_zzxl = gt_ausp-atwrt.
+      WHEN 'ZFER_CPX'.
+        pv_zcpx = gt_ausp-atwrt.
+      WHEN 'ZFER_PP'.
+        pv_zpp = gt_ausp-atwrt.
+      WHEN OTHERS.
+    ENDCASE.
+  ENDLOOP.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_<DYN_TABLE>  text
+*----------------------------------------------------------------------*
+FORM frm_output_data TABLES p_tab.
+  i_layout_lvc-zebra       = 'X' ." 使ALV界面呈现颜色交替
+  i_layout_lvc-sel_mode      = 'A' ." 选择模式，“A”在最左端有选择按钮
+*  i_layout_lvc-cwidth_opt       = 'X' ." 自动优化列宽
+  i_layout_lvc-detailinit      = 'X' ." 是否出现细节屏幕
+  i_layout_lvc-detailtitl      = '详细内容'."    细节屏幕标题
+
+
+*显示内表中的数据
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program = sy-repid          " 当前程序
+*     i_callback_user_command = 'ALV_USER_COMMAND'
+      is_layout_lvc      = i_layout_lvc      " 属性内表
+      it_fieldcat_lvc    = lt_alv_cat  " 列明内表
+      i_save             = 'X'               " 是否保存布局
+      it_events          = gt_events[]
+    TABLES
+      t_outtab           = p_tab             " 数据内表
+    EXCEPTIONS
+      program_error      = 1
+      OTHERS             = 2.
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+    WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+ENDFORM. " FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_EKKO
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_ekko .
+  DATA: lt_mseg LIKE gt_mseg OCCURS 0 WITH HEADER LINE.
+
+  IF gt_alv[] IS NOT INITIAL.
+*** 根据取出的采购申请号取出PO相关信息
+    SELECT a~ebeln a~ebelp a~banfn a~bnfpo a~menge b~lifnr
+      INTO CORRESPONDING FIELDS OF TABLE gt_ekko
+      FROM ekpo AS a INNER JOIN ekko AS b ON a~ebeln = b~ebeln
+      FOR ALL ENTRIES IN gt_alv
+      WHERE a~banfn = gt_alv-banfn
+        AND a~bnfpo = gt_alv-bnfpo.
+    SORT gt_ekko BY banfn bnfpo.
+  ENDIF.
+
+  IF gt_ekko[] IS NOT INITIAL.
+*** 根据po号取出采购订单计划交货信息
+    SELECT * INTO TABLE gt_eket
+      FROM eket
+      FOR ALL ENTRIES IN gt_ekko
+      WHERE ebeln = gt_ekko-ebeln
+        AND ebelp = gt_ekko-ebelp.
+    SORT gt_eket BY ebeln ebelp eindt DESCENDING.
+
+*** 根据PO号取出采购订单历史信息
+*    SELECT * INTO TABLE gt_ekbe
+*      FROM ekbe
+*      FOR ALL ENTRIES IN gt_ekko
+*      WHERE ebeln = gt_ekko-ebeln
+*        AND ebelp = gt_ekko-ebelp
+*        AND bwart IN ('101','102').
+*    SORT gt_ekbe BY ebeln ebelp bwart ASCENDING budat DESCENDING.
+
+    SELECT mblnr mjahr zeile smbln lfbja smblp bwart menge ebeln ebelp budat_mkpf
+      INTO CORRESPONDING FIELDS OF TABLE gt_mseg
+      FROM mseg
+      FOR ALL ENTRIES IN gt_ekko
+      WHERE ebeln = gt_ekko-ebeln
+        AND ebelp = gt_ekko-ebelp
+        AND bwart IN ('101','102').
+  ENDIF.
+
+  lt_mseg[] = gt_mseg[].
+  DELETE gt_mseg WHERE lfbja IS NOT INITIAL AND smbln IS NOT INITIAL AND smblp IS NOT INITIAL.
+  LOOP AT lt_mseg WHERE lfbja IS NOT INITIAL AND smbln IS NOT INITIAL AND smblp IS NOT INITIAL.
+    DELETE gt_mseg WHERE mblnr = lt_mseg-smbln AND mjahr = lt_mseg-lfbja AND zeile = lt_mseg-smblp.
+  ENDLOOP.
+  SORT gt_mseg BY ebeln ebelp bwart ASCENDING budat_mkpf DESCENDING .
+
+* 取供应商描述
+  IF gt_ekko[] IS NOT INITIAL.
+    SELECT * INTO TABLE gt_lfa1 FROM lfa1
+      FOR ALL ENTRIES IN gt_ekko
+      WHERE lifnr = gt_ekko-lifnr.
+    SORT gt_lfa1 BY lifnr.
+  ENDIF.
+ENDFORM.

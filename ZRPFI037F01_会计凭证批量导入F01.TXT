@@ -1,0 +1,1175 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM034F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FILENAME_FIND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      <--P_P_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_filename_find  CHANGING xc_file.
+  CALL FUNCTION 'WS_FILENAME_GET'
+    EXPORTING
+      def_filename     = xc_file
+      def_path         = 'C:\'
+      mask             = ',*.XLS.'
+      mode             = 'O'
+      title            = '文件名'
+    IMPORTING
+      filename         = xc_file
+    EXCEPTIONS
+      inv_winsys       = 1
+      no_batch         = 2
+      selection_cancel = 3
+      selection_error  = 4
+      OTHERS           = 5.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_INITIAL_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_initial_data .
+*******数据定义*******
+  INCLUDE <icon>.
+  DATA ls_functxt TYPE smp_dyntxt.
+  DATA:gt_exbut TYPE TABLE OF sy-ucomm.
+*******初始化*******
+*******程序主体*******
+  "屏幕工具栏中按饼
+  "启用自定义工具
+  CLEAR ls_functxt.
+  ls_functxt-icon_text = '模板下载'."'Download Template'.
+  ls_functxt-icon_id   = '@49@'.
+  ls_functxt-quickinfo =  '模板下载'.
+  sscrfields-functxt_01 = ls_functxt.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DOWNLOAD_TEMPLATE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0040   text
+*      <--P_P_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_download_template  USING u_objid LIKE wwwdatatab-objid CHANGING ic_file.
+  DATA:l_path   TYPE string.
+
+  CALL METHOD zcl_ole_excel=>download_templet
+    EXPORTING
+      iv_objid        = u_objid
+      iv_win_title    = '请指定下载路径'
+      iv_df_extension = 'XLS'
+    IMPORTING
+      ev_fullpath     = l_path.
+
+  CALL METHOD cl_gui_frontend_services=>execute
+    EXPORTING
+      document = l_path
+    EXCEPTIONS
+      OTHERS   = 10.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  frm_upload_data
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0006   text
+*----------------------------------------------------------------------*
+FORM frm_upload_data .
+  DATA:ls_header LIKE LINE OF gt_header.
+  DATA:ls_table_field LIKE  tabfield,
+       lv_string      TYPE string.
+  FIELD-SYMBOLS:<fs_field>    TYPE any..
+
+  CALL FUNCTION 'ZALSM_EXCEL_TO_INTERNAL_TABLE'
+    EXPORTING
+      filename                = p_file
+      i_begin_col             = 1
+      i_begin_row             = 2
+      i_end_col               = 100
+      i_end_row               = 9999
+    TABLES
+      intern                  = gt_upload
+    EXCEPTIONS
+      inconsistent_parameters = 1
+      upload_ole              = 2
+      OTHERS                  = 3.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+  gv_structure = 'ZSFI_BKPF'.
+  ASSIGN gt_alv TO <fs_tab_line>.
+  ASSIGN gt_alv[] TO <fs_tab>.
+
+
+***将数据整理到内表中
+  LOOP AT gt_upload ASSIGNING <fs_data>.
+    IF <fs_data>-row EQ 1.
+      MOVE-CORRESPONDING <fs_data> TO gt_header.
+      APPEND gt_header.
+      CONTINUE.
+    ENDIF.
+    CLEAR ls_header.
+    READ TABLE gt_header INTO ls_header WITH KEY col = <fs_data>-col.
+    IF <fs_data>-value NE '/' AND ls_header-value IS NOT INITIAL.
+      ls_table_field-tabname = gv_structure.
+      ls_table_field-fieldname  = ls_header-value.
+*& 字段校验
+      IF ls_table_field-fieldname NE 'ZUONR' AND ls_table_field-fieldname NE 'SGTXT'.
+        CALL FUNCTION 'RS_CHECK_CONV_EX_2_IN'
+          EXPORTING
+            input_external               = <fs_data>-value
+            table_field                  = ls_table_field
+          EXCEPTIONS
+            input_not_numerical          = 1
+            too_many_decimals            = 2
+            more_than_one_sign           = 3
+            ill_thousand_separator_dist  = 4
+            too_many_digits              = 5
+            sign_for_unsigned            = 6
+            too_large                    = 7
+            too_small                    = 8
+            invalid_date_format          = 9
+            invalid_date                 = 10
+            invalid_time_format          = 11
+            invalid_time                 = 12
+            invalid_hex_digit            = 13
+            unexpected_error             = 14
+            invalid_fieldname            = 15
+            field_and_descr_incompatible = 16
+            input_too_long               = 17
+            no_decimals                  = 18
+            invalid_float                = 19
+            conversion_exit_error        = 20
+            OTHERS                       = 21.
+        IF sy-subrc <> 0.
+          MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+          WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4 INTO lv_string.
+          MESSAGE e001(00) WITH |ROW,COL{ <fs_data>-row } { <fs_data>-col }{ lv_string } |.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+    CONDENSE <fs_data>-value.
+    ASSIGN COMPONENT ls_header-value OF STRUCTURE <fs_tab_line> TO <fs_field>.
+    IF sy-subrc = 0.
+      <fs_field> = <fs_data>-value.
+    ENDIF.
+    AT END OF row.              "新的一行EXCEL数据_结束
+      PERFORM frm_check_data.
+      mcr_add_zero:gt_alv-hkont,gt_alv-kostl,gt_alv-aufnr,gt_alv-prctr,
+                   gt_alv-kndnr,gt_alv-artnr,gt_alv-ktgrd.
+      mcr_convert_unit_input:gt_alv-meins.
+      APPEND <fs_tab_line> TO <fs_tab>.     "收集一行EXCEL数据
+      CLEAR <fs_tab_line>.
+    ENDAT.
+  ENDLOOP.
+  BREAK xul.
+
+*  从表TBSL中取出记帐码对应的借贷标识
+  SELECT * INTO TABLE gt_tbsl FROM tbsl.
+  SORT gt_tbsl BY bschl.
+
+  IF p_r0 IS INITIAL.
+    PERFORM frm_check_document."检查凭证
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  frm_check_data
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_data .
+  DATA: lv_blart LIKE t003t-blart."凭证类型
+* 检查抬头是否必填
+  IF gt_alv-bldat IS INITIAL OR
+     gt_alv-blart IS INITIAL OR
+     gt_alv-bukrs IS INITIAL OR
+     gt_alv-budat IS INITIAL OR
+*     gt_alv-monat IS INITIAL OR
+     gt_alv-waers IS INITIAL .
+    mcr_add_msg:gt_alv  '请输入必输字段'.
+  ENDIF.
+*  检查凭证类型是否存在
+  IF gt_alv-blart IS NOT INITIAL.
+    SELECT SINGLE blart INTO lv_blart FROM t003t WHERE spras = sy-langu AND blart = gt_alv-blart.
+    IF sy-subrc <> 0.
+      mcr_add_msg:gt_alv  '凭证类型不存在'.
+    ENDIF.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SUB_BUILD_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
+    EXPORTING
+*     I_BUFFER_ACTIVE        =
+      i_structure_name       = gv_structure
+*     I_CLIENT_NEVER_DISPLAY = 'X'
+*     I_BYPASSING_BUFFER     =
+*     I_INTERNAL_TABNAME     =
+    CHANGING
+      ct_fieldcat            = gt_fcat[]
+    EXCEPTIONS
+      inconsistent_interface = 1
+      program_error          = 2
+      OTHERS                 = 3.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+  gt_fcat-fieldname = 'ZICON'.
+  gt_fcat-coltext  = '状态'.
+  gt_fcat-scrtext_l = '状态'.
+  gt_fcat-scrtext_m = '状态'.
+  gt_fcat-scrtext_s = '状态'.
+  gt_fcat-inttype = 'C'.
+  gt_fcat-intlen = '30'.
+  INSERT gt_fcat INDEX 1.
+  CLEAR gt_fcat.
+
+  gt_fcat-fieldname = 'ZMSG'.
+  gt_fcat-coltext  = '消息'.
+  gt_fcat-scrtext_l = '消息'.
+  gt_fcat-scrtext_m = '消息'.
+  gt_fcat-scrtext_s = '消息'.
+  gt_fcat-inttype = 'C'.
+  gt_fcat-intlen = '200'.
+  APPEND gt_fcat..
+  CLEAR gt_fcat.
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+  gs_layout-no_toolbar = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'FRM_SET_PF_STATUS'
+      i_callback_user_command  = 'FRM_USER_COMMAND'
+      is_layout_lvc            = gs_layout
+      it_fieldcat_lvc          = gt_fcat[]
+      i_default                = 'X'
+      i_save                   = 'A'
+    TABLES
+      t_outtab                 = <fs_tab>
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PF_STATUS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_set_pf_status USING rt_extab TYPE slis_t_extab. "定义ALV结果界面的GUI状态
+  SET PF-STATUS 'ZSTANDARD' .
+ENDFORM. "ST
+*&---------------------------------------------------------------------*
+*&      FORM  FRM_USER_COMMAND
+*&---------------------------------------------------------------------*
+*       TEXT
+*----------------------------------------------------------------------*
+*      -->R_UCOMM      TEXT
+*      -->RS_SELFIELD  TEXT
+*----------------------------------------------------------------------*
+FORM frm_user_command USING r_ucomm LIKE sy-ucomm
+      rs_selfield TYPE slis_selfield..
+
+  DATA:lv_grid TYPE REF TO cl_gui_alv_grid.
+
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = lv_grid.
+
+  CASE r_ucomm.
+    WHEN 'ZUPLOAD'.  "导入数据
+      BREAK xul.
+*      检查如果已经点击导入，不允许再次点击
+      IF lv_exit IS INITIAL.
+        IF p_r0 IS INITIAL.
+          PERFORM frm_update_data.
+          lv_exit = 'X'.
+        ELSE.
+          PERFORM frm_update_data_umskz.
+          lv_exit = 'X'.
+        ENDIF.
+      ELSE.
+        MESSAGE e398(00) WITH '凭证已导入，不允许再次导入' DISPLAY LIKE 'E'.
+      ENDIF.
+      CALL METHOD lv_grid->set_frontend_layout
+        EXPORTING
+          is_layout = gs_layout.
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM. "AN_UCOMM
+*&---------------------------------------------------------------------*
+*&      Form  frm_check_document
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*---------------------------------------------------------------------*
+FORM frm_check_document .
+
+  READ TABLE gt_alv WITH KEY msgty = 'E'.
+  IF sy-subrc = 0.
+    MESSAGE '导入数据有错误，请先修正' TYPE 'E'.
+  ENDIF.
+
+  LOOP AT gt_alv ASSIGNING <gt_alv>.
+    AT NEW zdcno.
+      CLEAR:gs_dcheader,gv_no,lv_dmbtr,lv_wrbtr.
+      REFRESH:gt_accountgl,gt_accountreceivable,gt_accountpayable,
+      gt_currencyamount,gt_criteria,gt_return,gt_extension2 .
+
+      gs_dcheader-doc_date = <gt_alv>-bldat. "凭证日期
+      gs_dcheader-doc_type = <gt_alv>-blart. "凭证类型
+      gs_dcheader-comp_code = <gt_alv>-bukrs. "公司代码
+      gs_dcheader-pstng_date = <gt_alv>-budat. "过账日期
+      gs_dcheader-fis_period = <gt_alv>-monat. "过帐期间
+      gs_dcheader-header_txt = <gt_alv>-bktxt. "凭证抬头文本
+      gs_dcheader-username = sy-uname.
+    ENDAT.
+
+    gv_no = gv_no + 1.
+    CASE <gt_alv>-koart.
+      WHEN 'K'. "供应商
+        PERFORM frm_fill_vendor_data.
+      WHEN 'D'. "客户
+        PERFORM frm_fill_customer_data.
+      WHEN ''.
+        PERFORM frm_fill_acc_data.
+      WHEN OTHERS.
+    ENDCASE  .
+
+    PERFORM frm_build_amount_data.
+    PERFORM frm_build_copa_data.
+
+    AT END OF zdcno.
+      gv_no = gv_no + 1.
+      IF lv_wrbtr NE 0.
+        PERFORM frm_build_amount_data2.
+      ENDIF.
+      PERFORM frm_check_document_data.
+    ENDAT.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FILL_VENDOR_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_fill_vendor_data .
+  gt_accountpayable-itemno_acc = gv_no. "凭证行项目号
+  gt_accountpayable-vendor_no = <gt_alv>-hkont. "供应商
+  gt_accountpayable-comp_code = <gt_alv>-bukrs. "公司代码
+*  gt_accountpayable-sp_gl_ind = <gt_alv>-umskz. "特殊总帐标识
+  gt_accountpayable-pmnttrms = <gt_alv>-zterm. "付款条件
+  gt_accountpayable-bline_date = <gt_alv>-zfbdt. "汇票到期日
+  gt_accountpayable-alloc_nmbr = <gt_alv>-zuonr. "分配编号
+  gt_accountpayable-item_text  = <gt_alv>-sgtxt. "项目文本
+  gt_accountpayable-profit_ctr = <gt_alv>-prctr."利润中心
+  APPEND gt_accountpayable.
+  CLEAR:gt_accountpayable.
+ENDFORM. " FRM_FILL_VENDOR_DATA
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FILL_CUSTOMER_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_fill_customer_data .
+  gt_accountreceivable-itemno_acc = gv_no. "会计凭证行项目号
+  gt_accountreceivable-customer   = <gt_alv>-hkont. "客户
+  gt_accountreceivable-comp_code  = <gt_alv>-bukrs. "公司代码
+*  gt_accountreceivable-sp_gl_ind  = <gt_alv>-umskz. "特殊总分类帐标志
+  gt_accountreceivable-pmnttrms   = <gt_alv>-zterm. "付款条件
+  gt_accountreceivable-bline_date = <gt_alv>-zfbdt. "汇票到期日
+  gt_accountreceivable-alloc_nmbr = <gt_alv>-zuonr. "分配编号
+  gt_accountreceivable-item_text  = <gt_alv>-sgtxt. "项目文本
+  gt_accountreceivable-profit_ctr = <gt_alv>-prctr."利润中心
+  gt_accountreceivable-c_ctr_area = <gt_alv>-kkber."信用控制范围
+  APPEND gt_accountreceivable.
+  CLEAR gt_accountreceivable.
+ENDFORM. " FRM_FILL_CUSTOMER_DATA
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FILL_ACC_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_fill_acc_data .
+
+  gt_accountgl-itemno_acc = gv_no. "会计凭证行项目号
+  gt_accountgl-gl_account = <gt_alv>-hkont. "科目
+  gt_accountgl-costcenter = <gt_alv>-kostl."成本中心
+  gt_accountgl-orderid    = <gt_alv>-aufnr. "内部订单号
+  gt_accountgl-alloc_nmbr = <gt_alv>-zuonr."分配编号
+  gt_accountgl-item_text  = <gt_alv>-sgtxt."项目文本
+  gt_accountgl-profit_ctr = <gt_alv>-prctr."利润中心
+  gt_accountgl-quantity = <gt_alv>-menge."数量
+  gt_accountgl-base_uom = <gt_alv>-meins."单位
+  APPEND gt_accountgl.
+  CLEAR gt_accountgl.
+
+ENDFORM. " FRM_FILL_ACC_DATA
+*&---------------------------------------------------------------------*
+*&      Form  FRM_BUILD_EXTENSION2
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_build_extension2 .
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_DOCUMENT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_document_data .
+  DATA:lv_msg_all TYPE string.
+
+  CALL FUNCTION 'BAPI_ACC_DOCUMENT_CHECK'
+    EXPORTING
+      documentheader    = gs_dcheader
+    TABLES
+      accountgl         = gt_accountgl[]
+      accountreceivable = gt_accountreceivable[]
+      accountpayable    = gt_accountpayable[]
+      currencyamount    = gt_currencyamount[]
+      criteria          = gt_criteria[]
+      return            = gt_return[]
+      extension2        = gt_extension2[].
+
+  READ TABLE gt_return WITH KEY type = 'E'.
+  IF sy-subrc = 0.
+    PERFORM frm_get_message CHANGING lv_msg_all.
+    LOOP AT gt_alv WHERE zdcno = <gt_alv>-zdcno.
+      gt_alv-zicon = icon_red_light.
+      gt_alv-msgty = 'E'.
+      gt_alv-zmsg = lv_msg_all.
+      MODIFY gt_alv INDEX sy-tabix.
+    ENDLOOP.
+  ELSE.
+    LOOP AT gt_alv WHERE zdcno = <gt_alv>-zdcno.
+      gt_alv-zicon = icon_green_light.
+      gt_alv-msgty = 'S'.
+      MODIFY gt_alv INDEX sy-tabix.
+    ENDLOOP.
+  ENDIF.
+ENDFORM. " FRM_CHECK_DOCUMENT_DATA
+*&---------------------------------------------------------------------*
+*&      Form  FRM_BUILD_COPA_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_build_copa_data .
+*** 客户
+  IF <gt_alv>-kndnr IS NOT INITIAL.
+    gt_criteria-itemno_acc = gv_no.
+    gt_criteria-fieldname = 'KNDNR'.
+    gt_criteria-character = <gt_alv>-kndnr.
+    APPEND gt_criteria.
+  ENDIF.
+*** 产品编号
+  IF <gt_alv>-artnr IS NOT INITIAL.
+    gt_criteria-itemno_acc = gv_no.
+    gt_criteria-fieldname = 'ARTNR'.
+    gt_criteria-character = <gt_alv>-artnr.
+    APPEND gt_criteria.
+  ENDIF.
+*** 销售组织
+  IF <gt_alv>-vkorg IS NOT INITIAL.
+    gt_criteria-itemno_acc = gv_no.
+    gt_criteria-fieldname = 'VKORG'.
+    gt_criteria-character = <gt_alv>-vkorg.
+    APPEND gt_criteria.
+  ENDIF.
+*** 分销渠道
+  IF <gt_alv>-vtweg IS NOT INITIAL.
+    gt_criteria-itemno_acc = gv_no.
+    gt_criteria-fieldname = 'VTWEG'.
+    gt_criteria-character = <gt_alv>-vtweg.
+    APPEND gt_criteria.
+  ENDIF.
+*** 销售大区
+  IF <gt_alv>-bzirk IS NOT INITIAL.
+    gt_criteria-itemno_acc = gv_no.
+    gt_criteria-fieldname = 'BZIRK'.
+    gt_criteria-character = <gt_alv>-bzirk.
+    APPEND gt_criteria.
+  ENDIF.
+*** 合伙人
+  IF <gt_alv>-partner IS NOT INITIAL.
+    gt_criteria-itemno_acc = gv_no.
+    gt_criteria-fieldname = 'PARTNER'.
+    gt_criteria-character = <gt_alv>-partner.
+    APPEND gt_criteria.
+  ENDIF.
+*** 销售行办
+  IF <gt_alv>-vkbur IS NOT INITIAL.
+    gt_criteria-itemno_acc = gv_no.
+    gt_criteria-fieldname = 'VKBUR'.
+    gt_criteria-character = <gt_alv>-vkbur.
+    APPEND gt_criteria.
+  ENDIF.
+*** 销售组
+  IF <gt_alv>-vkgrp IS NOT INITIAL.
+    gt_criteria-itemno_acc = gv_no.
+    gt_criteria-fieldname = 'VKGRP'.
+    gt_criteria-character = <gt_alv>-vkgrp.
+    APPEND gt_criteria.
+  ENDIF.
+*** 物料组
+  IF <gt_alv>-matkl IS NOT INITIAL.
+    gt_criteria-itemno_acc = gv_no.
+    gt_criteria-fieldname = 'MATKL'.
+    gt_criteria-character = <gt_alv>-matkl.
+    APPEND gt_criteria.
+  ENDIF.
+*** 行业
+  IF <gt_alv>-kmkdgr IS NOT INITIAL.
+    gt_criteria-itemno_acc = gv_no.
+    gt_criteria-fieldname = 'KMKDGR'.
+    gt_criteria-character = <gt_alv>-kmkdgr.
+    APPEND gt_criteria.
+  ENDIF.
+*** 销售工程师/销售代表
+  IF <gt_alv>-kvgr1 IS NOT INITIAL.
+    gt_criteria-itemno_acc = gv_no.
+    gt_criteria-fieldname = 'KVGR1'.
+    gt_criteria-character = <gt_alv>-kvgr1.
+    APPEND gt_criteria.
+  ENDIF.
+*** 商务
+  IF <gt_alv>-kvgr2 IS NOT INITIAL.
+    gt_criteria-itemno_acc = gv_no.
+    gt_criteria-fieldname = 'KVGR2'.
+    gt_criteria-character = <gt_alv>-kvgr2.
+    APPEND gt_criteria.
+  ENDIF.
+*** 国家/地区
+  IF <gt_alv>-land1 IS NOT INITIAL.
+    gt_criteria-itemno_acc = gv_no.
+    gt_criteria-fieldname = 'LAND1'.
+    gt_criteria-character = <gt_alv>-land1.
+    APPEND gt_criteria.
+  ENDIF.
+*** 新客户开始计算日期
+  IF <gt_alv>-ww002 IS NOT INITIAL.
+    gt_criteria-itemno_acc = gv_no.
+    gt_criteria-fieldname = 'WW002'.
+    gt_criteria-character = <gt_alv>-ww002.
+    APPEND gt_criteria.
+  ENDIF.
+*** 账户组
+  IF <gt_alv>-ktgrd IS NOT INITIAL.
+    gt_criteria-itemno_acc = gv_no.
+    gt_criteria-fieldname = 'KTGRD'.
+    gt_criteria-character = <gt_alv>-ktgrd.
+    APPEND gt_criteria.
+  ENDIF.
+*** 产品分类
+  IF <gt_alv>-ww001 IS NOT INITIAL.
+    gt_criteria-itemno_acc = gv_no.
+    gt_criteria-fieldname = 'WW001'.
+    gt_criteria-character = <gt_alv>-ww001.
+    APPEND gt_criteria.
+  ENDIF.
+*** 产品线
+  IF <gt_alv>-ww003 IS NOT INITIAL.
+    gt_criteria-itemno_acc = gv_no.
+    gt_criteria-fieldname = 'WW003'.
+    gt_criteria-character = <gt_alv>-ww003.
+    APPEND gt_criteria.
+  ENDIF.
+*** 新产品类型
+  IF <gt_alv>-ww004 IS NOT INITIAL.
+    gt_criteria-itemno_acc = gv_no.
+    gt_criteria-fieldname = 'WW004'.
+    gt_criteria-character = <gt_alv>-ww004.
+    APPEND gt_criteria.
+  ENDIF.
+*** 产品型号
+  IF <gt_alv>-ww005 IS NOT INITIAL.
+    gt_criteria-itemno_acc = gv_no.
+    gt_criteria-fieldname = 'WW005'.
+    gt_criteria-character = <gt_alv>-ww005.
+    APPEND gt_criteria.
+  ENDIF.
+*** 对应主型号
+  IF <gt_alv>-ww006 IS NOT INITIAL.
+    gt_criteria-itemno_acc = gv_no.
+    gt_criteria-fieldname = 'WW006'.
+    gt_criteria-character = <gt_alv>-ww006.
+    APPEND gt_criteria.
+  ENDIF.
+*** 系列
+  IF <gt_alv>-ww007 IS NOT INITIAL.
+    gt_criteria-itemno_acc = gv_no.
+    gt_criteria-fieldname = 'WW007'.
+    gt_criteria-character = <gt_alv>-ww007.
+    APPEND gt_criteria.
+  ENDIF.
+*** 子系列
+  IF <gt_alv>-ww008 IS NOT INITIAL.
+    gt_criteria-itemno_acc = gv_no.
+    gt_criteria-fieldname = 'WW008'.
+    gt_criteria-character = <gt_alv>-ww008.
+    APPEND gt_criteria.
+  ENDIF.
+*** 品牌/厂家
+  IF <gt_alv>-ww009 IS NOT INITIAL.
+    gt_criteria-itemno_acc = gv_no.
+    gt_criteria-fieldname = 'WW009'.
+    gt_criteria-character = <gt_alv>-ww009.
+    APPEND gt_criteria.
+  ENDIF.
+*** 新品开始时间
+  IF <gt_alv>-ww012 IS NOT INITIAL.
+    gt_criteria-itemno_acc = gv_no.
+    gt_criteria-fieldname = 'WW012'.
+    gt_criteria-character = <gt_alv>-ww012.
+    APPEND gt_criteria.
+  ENDIF.
+*** 新品结束时间
+  IF <gt_alv>-ww013 IS NOT INITIAL.
+    gt_criteria-itemno_acc = gv_no.
+    gt_criteria-fieldname = 'WW013'.
+    gt_criteria-character = <gt_alv>-ww013.
+    APPEND gt_criteria.
+  ENDIF.
+ENDFORM. " FRM_BUILD_COPA_DATA
+*&---------------------------------------------------------------------*
+*&      Form  FRM_BUILD_AMOUNT_DATA2
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_build_amount_data2 .
+*& extension2 扩展字段增强部分
+  IF <gt_alv>-numpg <> ''."记账码
+    CLEAR gt_extension2.
+    gt_extension2-structure = 'NUMPG'.
+    gt_extension2-valuepart2 = <gt_alv>-numpg.
+    APPEND gt_extension2.
+  ENDIF.
+
+  lv_dmbtr = 0 - lv_dmbtr.
+  lv_wrbtr = 0 - lv_wrbtr.
+  gt_currencyamount-itemno_acc   = gv_no.
+  IF <gt_alv>-waers <> 'CNY' AND lv_dmbtr IS NOT INITIAL.
+    gt_currencyamount-currency = 'CNY'.
+    gt_currencyamount-amt_doccur =  lv_dmbtr . "本位币金额
+    gt_currencyamount-curr_type = '10'. "货币和评估视图
+    APPEND gt_currencyamount.
+    gt_currencyamount-currency = <gt_alv>-waers.
+    gt_currencyamount-amt_doccur = lv_wrbtr. "原币金额
+    gt_currencyamount-curr_type = '00'.
+    APPEND gt_currencyamount.
+  ELSE.
+    gt_currencyamount-currency = <gt_alv>-waers.
+    gt_currencyamount-amt_doccur = lv_wrbtr. "原币金额
+    gt_currencyamount-curr_type = '00'.
+    APPEND gt_currencyamount.
+  ENDIF.
+
+  gt_accountgl-itemno_acc = gv_no. "会计凭证行项目号
+  gt_accountgl-gl_account = '9999999999'. "科目
+  gt_accountgl-costcenter = <gt_alv>-kostl."成本中心
+  gt_accountgl-orderid    = <gt_alv>-aufnr. "内部订单号
+  gt_accountgl-alloc_nmbr = <gt_alv>-zuonr."分配编号
+  gt_accountgl-item_text  = <gt_alv>-sgtxt."项目文本
+  gt_accountgl-profit_ctr = <gt_alv>-prctr."利润中心
+  APPEND gt_accountgl.
+  CLEAR gt_accountgl.
+
+*& EXTENSION2 扩展字段增强部分
+  CLEAR gt_extension2.
+  gt_extension2-structure = 'BSCHL'.
+  gt_extension2-valuepart1 = gv_no.
+  IF lv_wrbtr < 0.
+    gt_extension2-valuepart2 = '50'.
+  ELSE.
+    gt_extension2-valuepart2 = '40'.
+  ENDIF.
+  APPEND gt_extension2.
+
+*  IF <gt_alv>-xnegp <> ''."反记帐标识
+*    CLEAR gt_extension2.
+*    gt_extension2-structure = 'XNEGP'.
+*    gt_extension2-valuepart1 = gv_no.
+*    gt_extension2-valuepart2 = <gt_alv>-xnegp.
+*    APPEND gt_extension2.
+*  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_BUILD_AMOUNT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_build_amount_data .
+  CLEAR:lv_dmbtr_tem,lv_wrbtr_tem.
+  lv_dmbtr_tem =  <gt_alv>-dmbtr.
+  lv_wrbtr_tem =  <gt_alv>-wrbtr.
+  READ TABLE gt_tbsl WITH KEY bschl = <gt_alv>-bschl BINARY SEARCH.
+  IF sy-subrc = 0 AND gt_tbsl-shkzg = 'H'.
+    lv_dmbtr_tem = 0 - <gt_alv>-dmbtr.
+    lv_wrbtr_tem = 0 - <gt_alv>-wrbtr.
+  ENDIF.
+
+  gt_currencyamount-itemno_acc   = gv_no.
+  IF <gt_alv>-waers <> 'CNY'.
+    gt_currencyamount-currency = 'CNY'.
+    gt_currencyamount-amt_doccur = lv_dmbtr_tem. "本位币金额
+    gt_currencyamount-curr_type = '10'. "公司代码货币
+    APPEND gt_currencyamount.
+    gt_currencyamount-currency = <gt_alv>-waers.
+    gt_currencyamount-amt_doccur = lv_wrbtr_tem. "原币金额
+    gt_currencyamount-curr_type = '00'. "凭证货币
+    APPEND gt_currencyamount.
+  ELSE.
+    gt_currencyamount-currency = <gt_alv>-waers.
+    gt_currencyamount-amt_doccur = lv_wrbtr_tem . "原币金额
+    gt_currencyamount-curr_type = '00'.
+    APPEND gt_currencyamount.
+  ENDIF.
+
+  lv_wrbtr = lv_wrbtr + lv_wrbtr_tem.
+  lv_dmbtr = lv_dmbtr + lv_dmbtr_tem.
+
+
+*& EXTENSION2 扩展字段增强部分
+  IF <gt_alv>-bschl <> ''."记账码
+    CLEAR gt_extension2.
+    gt_extension2-structure = 'BSCHL'.
+    gt_extension2-valuepart1 = gv_no.
+    gt_extension2-valuepart2 = <gt_alv>-bschl.
+    APPEND gt_extension2.
+  ENDIF.
+
+  IF <gt_alv>-umskz <> ''."特殊总帐标识
+    CLEAR gt_extension2.
+    gt_extension2-structure = 'UMSKZ'.
+    gt_extension2-valuepart1 = gv_no.
+    gt_extension2-valuepart2 = <gt_alv>-umskz.
+    APPEND gt_extension2.
+  ENDIF.
+
+  IF <gt_alv>-anbwa <> ''."资产业务类型
+    CLEAR gt_extension2.
+    gt_extension2-structure = 'ANBWA'.
+    gt_extension2-valuepart1 = gv_no.
+    gt_extension2-valuepart2 = <gt_alv>-anbwa.
+    APPEND gt_extension2.
+  ENDIF.
+
+  IF <gt_alv>-rstgr <> ''."付款原因代码
+    CLEAR gt_extension2.
+    gt_extension2-structure = 'RSTGR'.
+    gt_extension2-valuepart1 = gv_no.
+    gt_extension2-valuepart2 = <gt_alv>-rstgr.
+    APPEND gt_extension2.
+  ENDIF.
+
+  IF <gt_alv>-xnegp <> ''."反记帐标识
+    CLEAR gt_extension2.
+    gt_extension2-structure = 'XNEGP'.
+    gt_extension2-valuepart1 = gv_no.
+    gt_extension2-valuepart2 = <gt_alv>-xnegp.
+    APPEND gt_extension2.
+  ENDIF.
+
+ENDFORM. " FRM_BUILD_AMOUNT_DATA
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_MESSAGE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*---------------------------------------------------------------------*
+FORM frm_get_message CHANGING c_msg_all TYPE string.
+  DATA:lv_msg TYPE string.
+
+  CLEAR  c_msg_all.
+  LOOP AT gt_return WHERE type  = 'E' OR type = 'A'.
+    CALL FUNCTION 'MESSAGE_TEXT_BUILD'
+      EXPORTING
+        msgid               = gt_return-id
+        msgnr               = gt_return-number
+        msgv1               = gt_return-message_v1
+        msgv2               = gt_return-message_v1
+        msgv3               = gt_return-message_v1
+        msgv4               = gt_return-message_v1
+      IMPORTING
+        message_text_output = lv_msg.
+    IF c_msg_all IS INITIAL.
+      c_msg_all = lv_msg.
+    ELSE.
+      CONCATENATE c_msg_all lv_msg INTO c_msg_all SEPARATED BY ','.
+    ENDIF.
+  ENDLOOP.
+ENDFORM. " FRM_GET_MESSAGE
+*&---------------------------------------------------------------------*
+*&      Form  FRM_UPDATE_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*---------------------------------------------------------------------*
+FORM frm_update_data .
+
+  READ TABLE gt_alv WITH KEY msgty = 'E'.
+  IF sy-subrc = 0.
+    MESSAGE '导入数据有错误，请先修正' TYPE 'E'.
+  ENDIF.
+
+  LOOP AT gt_alv ASSIGNING <gt_alv>.
+    AT NEW zdcno.
+      CLEAR:gs_dcheader,gv_no,lv_dmbtr,lv_wrbtr.
+      REFRESH:gt_accountgl,gt_accountreceivable,gt_accountpayable,
+      gt_currencyamount,gt_criteria,gt_return,gt_extension2 .
+
+      gs_dcheader-doc_date = <gt_alv>-bldat. "凭证日期
+      gs_dcheader-doc_type = <gt_alv>-blart. "凭证类型
+      gs_dcheader-comp_code = <gt_alv>-bukrs. "公司代码
+      gs_dcheader-pstng_date = <gt_alv>-budat. "过账日期
+      gs_dcheader-fis_period = <gt_alv>-monat. "过帐期间
+      gs_dcheader-header_txt = <gt_alv>-bktxt. "凭证抬头文本
+      gs_dcheader-username = sy-uname.
+    ENDAT.
+
+    gv_no = gv_no + 1.
+    CASE <gt_alv>-koart.
+      WHEN 'K'. "供应商
+        PERFORM frm_fill_vendor_data.
+      WHEN 'D'. "客户
+        PERFORM frm_fill_customer_data.
+      WHEN ''.
+        PERFORM frm_fill_acc_data.
+      WHEN OTHERS.
+    ENDCASE  .
+
+    PERFORM frm_build_amount_data.
+    PERFORM frm_build_copa_data.
+
+    AT END OF zdcno.
+      gv_no = gv_no + 1.
+      IF lv_wrbtr NE 0.
+        PERFORM frm_build_amount_data2.
+      ENDIF.
+      PERFORM frm_create_document_data.
+    ENDAT.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CREATE_DOCUMENT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_create_document_data .
+  DATA:lv_msg_all TYPE string,
+       lv_obj_key TYPE bapiache09-obj_key.
+  DATA:lv_flag TYPE c.
+
+  CLEAR lv_obj_key.
+  CALL FUNCTION 'BAPI_ACC_DOCUMENT_POST'
+    EXPORTING
+      documentheader    = gs_dcheader
+    IMPORTING
+      obj_key           = lv_obj_key
+    TABLES
+      accountgl         = gt_accountgl[]
+      accountreceivable = gt_accountreceivable[]
+      accountpayable    = gt_accountpayable[]
+      currencyamount    = gt_currencyamount[]
+      criteria          = gt_criteria[]
+      return            = gt_return[]
+      extension2        = gt_extension2[].
+
+  CLEAR lv_flag.
+  LOOP AT gt_return WHERE type = 'E' AND type = 'A'.
+    lv_flag = 'X'.
+    EXIT.
+  ENDLOOP.
+  IF lv_flag = 'X'..
+    CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK' .
+    PERFORM frm_get_message CHANGING lv_msg_all.
+    LOOP AT gt_alv WHERE zdcno = <gt_alv>-zdcno.
+      gt_alv-zicon = icon_red_light.
+      gt_alv-msgty = 'E'.
+      gt_alv-zmsg = lv_msg_all.
+      MODIFY gt_alv INDEX sy-tabix.
+    ENDLOOP.
+  ELSE.
+    CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+      EXPORTING
+        wait = 'X'.
+    LOOP AT gt_alv WHERE zdcno = <gt_alv>-zdcno.
+      gt_alv-zicon = icon_green_light.
+      gt_alv-msgty = 'S'.
+      CONCATENATE '创建成功,凭证号:' lv_obj_key(10) INTO gt_alv-zmsg.
+      MODIFY gt_alv INDEX sy-tabix.
+    ENDLOOP.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_UPDATE_DATA_UMSKZ
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_update_data_umskz .
+  DATA: lv_hkont TYPE hkont,
+        lv_bschl LIKE bseg-bschl,
+        lv_prctr LIKE bseg-prctr.
+  READ TABLE gt_alv WITH KEY msgty = 'E'.
+  IF sy-subrc = 0.
+    MESSAGE '导入数据有错误，请先修正' TYPE 'E'.
+  ENDIF.
+
+  LOOP AT gt_alv ASSIGNING <gt_alv>.
+    AT NEW zdcno.
+      REFRESH: gt_ftpost,gt_blntab,gt_fttax.
+      CLEAR:gv_no,lv_wrbtr,lv_dmbtr,lv_prctr.
+      t_ftpost: 'K' 1 'BKPF-BUKRS'  <gt_alv>-bukrs ,"公司代码
+                'K' 1 'BKPF-BLART'  <gt_alv>-blart, "凭证类型
+                'K' 1 'BKPF-BLDAT'  <gt_alv>-bldat, "凭证日期
+                'K' 1 'BKPF-BUDAT'  <gt_alv>-budat, "过账日期
+                'K' 1 'BKPF-MONAT'  <gt_alv>-monat, "期间
+                'K' 1 'BKPF-WAERS'  <gt_alv>-waers, "币别
+                'K' 1 'BKPF-BKTXT'  <gt_alv>-bktxt, "凭证抬头文本
+                'K' 1 'BKPF-NUMPG'  <gt_alv>-numpg, "附件张数
+                'K' 1 'BKPF-AWTYP'  'BKPFF'.
+    ENDAT.
+
+    gv_no = gv_no + 1.
+
+    t_ftpost:  'P' gv_no  'BSEG-BSCHL' <gt_alv>-bschl,"记账码
+               'P' gv_no  'RF05A-NEWKO' <gt_alv>-hkont, "科目
+               'P' gv_no  'RF05A-NEWUM' <gt_alv>-umskz,"特别总帐标识
+               'P' gv_no  'BSEG-WRBTR' <gt_alv>-wrbtr, "原币金额
+               'P' gv_no  'BSEG-ZFBDT' <gt_alv>-zfbdt, "到期日期
+               'P' gv_no  'BSEG-ZUONR' <gt_alv>-zuonr, "分配
+               'P' gv_no  'BSEG-SGTXT' <gt_alv>-sgtxt. "文本
+
+    IF <gt_alv>-waers NE 'CNY'.
+      t_ftpost:'P' gv_no  'BSEG-DMBTR' <gt_alv>-dmbtr. "本币金额
+    ENDIF.
+
+    CASE <gt_alv>-umskz.
+      WHEN 'K'.
+        t_ftpost:  'P' gv_no  'BSEG-PRCTR' <gt_alv>-prctr."利润中心
+      WHEN OTHERS.
+    ENDCASE.
+
+    IF <gt_alv>-xnegp = 'X'.
+      t_ftpost:  'P' gv_no  'BSEG-XNEGP' <gt_alv>-xnegp."反记帐标识
+    ENDIF.
+
+    CLEAR:lv_dmbtr_tem,lv_wrbtr_tem.
+    lv_dmbtr_tem =  <gt_alv>-dmbtr.
+    lv_wrbtr_tem =  <gt_alv>-wrbtr.
+    READ TABLE gt_tbsl WITH KEY bschl = <gt_alv>-bschl BINARY SEARCH.
+    IF sy-subrc = 0 AND gt_tbsl-shkzg = 'H'.
+      lv_dmbtr_tem = 0 - <gt_alv>-dmbtr.
+      lv_wrbtr_tem = 0 - <gt_alv>-wrbtr.
+    ENDIF.
+    lv_wrbtr = lv_wrbtr + lv_wrbtr_tem.
+    lv_dmbtr = lv_dmbtr + lv_dmbtr_tem.
+
+*执行过账。
+    AT END OF zdcno.
+      IF lv_wrbtr NE 0.
+        CLEAR:lv_prctr.
+        lv_prctr = <gt_alv>-prctr.
+
+        lv_wrbtr = 0 - lv_wrbtr.
+        lv_dmbtr = 0 - lv_dmbtr.
+        gv_no = gv_no + 1.
+        CLEAR:lv_hkont,lv_bschl.
+        lv_hkont = '9999999999'.
+        mcr_add_zero:lv_hkont.
+        IF lv_wrbtr < 0.
+          lv_bschl = '50'.
+        ELSE.
+          lv_bschl = '40'.
+        ENDIF.
+        lv_wrbtr = abs( lv_wrbtr ).
+        lv_dmbtr = abs( lv_dmbtr ).
+        t_ftpost:  'P' gv_no  'BSEG-BSCHL' lv_bschl,"记账码
+                   'P' gv_no  'RF05A-NEWKO' lv_hkont, "科目
+                   'P' gv_no  'BSEG-WRBTR' lv_wrbtr, "原币金额
+                   'P' gv_no  'BSEG-ZUONR' <gt_alv>-zuonr, "分配
+                   'P' gv_no  'BSEG-SGTXT' <gt_alv>-sgtxt. "文本
+
+        IF <gt_alv>-waers NE 'CNY'.
+          t_ftpost:'P' gv_no  'BSEG-DMBTR' lv_dmbtr. "本币金额
+        ENDIF.
+
+*  利润中心取本次最后一行的利润中心
+        IF lv_prctr IS NOT INITIAL.
+          t_ftpost:  'P' gv_no  'COBL-PRCTR' lv_prctr."利润中心
+        ENDIF.
+**  反记帐标识取本次最后一行的记帐标识
+*        IF <gt_alv>-xnegp = 'X'.
+*          t_ftpost:  'P' gv_no  'BSEG-XNEGP' <gt_alv>-xnegp."反记帐标识
+*        ENDIF.
+      ENDIF.
+      SORT gt_ftpost BY stype count.
+
+      CALL FUNCTION 'POSTING_INTERFACE_START'
+        EXPORTING
+          i_function         = 'C'
+          i_keep             = 'X' "I_KEEP
+          i_mode             = 'E' "I_MODE
+        EXCEPTIONS
+          client_incorrect   = 1
+          function_invalid   = 2
+          group_name_missing = 3
+          mode_invalid       = 4
+          update_invalid     = 5
+          OTHERS             = 6.
+
+      CALL FUNCTION 'POSTING_INTERFACE_DOCUMENT'
+        EXPORTING
+          i_tcode                  = 'FB01'
+        IMPORTING
+          e_msgid                  = gv_msgid
+          e_msgno                  = gv_msgno
+          e_msgty                  = gv_msgty
+          e_msgv1                  = gv_msgv1
+          e_msgv2                  = gv_msgv2
+          e_msgv3                  = gv_msgv3
+          e_msgv4                  = gv_msgv4
+          e_subrc                  = gv_subrc
+        TABLES
+          t_blntab                 = gt_blntab
+          t_ftpost                 = gt_ftpost
+          t_fttax                  = gt_fttax
+        EXCEPTIONS
+          account_missing          = 1
+          company_code_missing     = 2
+          posting_key_invalid      = 3
+          posting_key_missing      = 4
+          record_type_invalid      = 5
+          transaction_code_invalid = 6
+          amount_format_error      = 7
+          too_many_line_items      = 8
+          company_code_invalid     = 9
+          screen_not_found         = 10
+          no_authorization         = 11
+          OTHERS                   = 12.
+
+      CLEAR:lv_belnr.
+      IF gv_msgty = 'S' ."成功
+        CLEAR ls_bkpf.
+        lv_belnr = gv_msgv1.
+        mcr_add_zero:lv_belnr.
+        SELECT SINGLE * INTO ls_bkpf
+          FROM bkpf
+         WHERE bukrs = <gt_alv>-bukrs
+           AND belnr = lv_belnr
+           AND gjahr = <gt_alv>-bldat+0(4).
+        IF sy-subrc = 0.
+          CONCATENATE ls_bkpf-belnr ls_bkpf-bukrs ls_bkpf-gjahr INTO lv_msg.
+          CONDENSE lv_msg.
+          LOOP AT gt_alv WHERE zdcno = <gt_alv>-zdcno.
+            gt_alv-zicon = icon_green_light.
+            gt_alv-msgty = 'S'.
+            gt_alv-zmsg = lv_msg.
+            MODIFY gt_alv INDEX sy-tabix.
+          ENDLOOP.
+        ENDIF.
+      ELSE.
+        CONCATENATE  '过账失败!原因：' gv_msgty gv_msgid gv_msgno
+                                       gv_msgv1 gv_msgv2 gv_msgv3 gv_msgv4 INTO lv_msg.
+
+        LOOP AT gt_alv WHERE zdcno = <gt_alv>-zdcno.
+          gt_alv-zicon = icon_red_light.
+          gt_alv-msgty = 'E'.
+          gt_alv-zmsg = lv_msg.
+          MODIFY gt_alv INDEX sy-tabix.
+        ENDLOOP.
+      ENDIF.
+
+      CALL FUNCTION 'POSTING_INTERFACE_END'.
+    ENDAT.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PROCESS_BDC_BSEG
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_process_bdc_bseg .
+
+
+ENDFORM.

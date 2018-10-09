@@ -1,0 +1,158 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM031_F01
+*&---------------------------------------------------------------------*
+FORM get_data."取数据
+  CLEAR:gt_item[].
+  SELECT
+         a~ebeln
+         a~ebelp
+         a~matnr
+         a~menge
+         a~ebelp
+         a~txz01
+         a~meins AS lmein
+
+*         a~brtwr
+         a~mwskz
+         a~werks
+         a~umrez
+         a~umren
+         a~netpr
+         a~peinh
+         a~infnr
+
+         b~bukrs
+         b~lifnr
+         b~ekorg
+         b~ekgrp
+         b~aedat
+         b~zterm
+         b~adrnr
+         b~waers
+         b~ernam
+
+         c~eindt
+         c~wemng
+        INTO CORRESPONDING FIELDS OF TABLE gt_item
+        FROM ekpo AS a
+        INNER JOIN ekko AS b ON a~ebeln EQ b~ebeln
+        INNER JOIN eket AS c ON a~ebeln EQ c~ebeln AND a~ebelp EQ c~ebelp
+        INNER JOIN mara AS d ON a~matnr EQ d~matnr
+        WHERE b~ekgrp IN s_ekgrp
+*          AND c~eindt LT p_aedat
+          AND b~lifnr IN s_lifnr
+          AND d~matkl IN s_matkl
+          AND a~loekz EQ ''
+          AND a~elikz NE 'X'.
+ENDFORM.
+
+FORM process_data."处理数据
+
+  DATA:BEGIN OF wa_lfa1,
+         lifnr LIKE lfa1-lifnr,
+         name1 LIKE lfa1-name1,
+       END OF wa_lfa1,
+       it_lfa1 LIKE wa_lfa1 OCCURS 0.
+
+  IF gt_item[] IS NOT INITIAL .
+    "供应商名称
+    SELECT lifnr name1 INTO TABLE it_lfa1 FROM lfa1
+      FOR ALL ENTRIES IN gt_item
+      WHERE lifnr EQ gt_item-lifnr.
+    SORT it_lfa1 BY lifnr.
+  ENDIF.
+
+
+  LOOP AT gt_item INTO gw_item.
+    "取供应商名称
+    READ TABLE it_lfa1 INTO wa_lfa1 WITH KEY lifnr = gw_item-lifnr BINARY SEARCH.
+    IF sy-subrc EQ 0.
+      gw_item-name1 = wa_lfa1-name1."供应商描述
+    ENDIF.
+    "未交数量”取值逻辑：订单数量（EKPO-MENGE） - 已交数量（EKET-WEMNG）
+    gw_item-ddwjsl = gw_item-menge - gw_item-wemng.
+
+    gw_item-ddgqts = p_aedat - gw_item-eindt.
+
+    MODIFY gt_item FROM gw_item.
+  ENDLOOP.
+
+
+ENDFORM.
+
+
+FORM get_alv."显示数据
+  DATA : col_pos TYPE i VALUE 1.
+
+  CLEAR:it_fieldcat,wa_fieldcat.
+
+  gs_layout-zebra = 'X'.
+  gs_layout-cwidth_opt = 'X'."
+  gs_layout-stylefname = 'FIELD_STYLE'. " 将内表中的字段名存入显示格式
+  gs_layout-box_fname        = 'SEL'.
+  i_grid_settings-edt_cll_cb = 'X'.
+*  wa_events-name = 'CALLER_EXIT'.
+*  wa_events-form = 'CALLER_EXIT'.
+*  APPEND wa_events TO it_events.
+  PERFORM fieldcat_int USING col_pos  'LIFNR'   ' '   '供应商'   ''  'LIFNR' 'LFA1' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'NAME1'   ' '   '供应商描述'   ''  '' '' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'EKGRP'   ' '   '采购组'   ''  '' '' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'EBELN'   ' '   '采购订单'          ''  'EBELN' 'EKPO' '' ''.
+  PERFORM fieldcat_int USING col_pos  'EBELP'   ' '   '采购订单项次'          ''  'EBELP' 'EKPO' '' ''.
+*  PERFORM FIELDCAT_INT USING COL_POS  'BUKRS'   ' '   '公司代码'   ''  'BUKRS' 'T001' '' ''.
+  PERFORM fieldcat_int USING col_pos  'MATNR'   ' '   '物料号'   ''  'MATNR' 'MARA' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'TXZ01'   ' '   '物料描述'   ''  '' '' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'MENGE'   ' '   '订单数量'   ''  'MENGE' 'MSEG' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'AEDAT'   ' '   '凭证日期'   ''  'AEDAT' 'EKKO' ''   ''.
+
+  PERFORM fieldcat_int USING col_pos  'EINDT'   ' '   '交货日期'   ''  'AEDAT' 'EKKO' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'WEMNG'   ' '   '已交数量'   ''  'MENGE' 'MSEG' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'DDWJSL'   ' '   '未交数量'   ''  'MENGE' 'MSEG' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'DDGQTS'   ' '   '过期天数'   ''  '' '' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'ERNAM'   ' '   '采购员'   ''  '' '' ''   ''.
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program = sy-repid
+      is_layout_lvc      = gs_layout
+      it_fieldcat_lvc    = it_fieldcat
+      it_events          = it_events
+      i_save             = 'A'
+*     I_CALLBACK_PF_STATUS_SET = 'SET_PF_STATUS'
+*     I_CALLBACK_USER_COMMAND  = 'ALV_USER_COMMAND'
+      i_grid_settings    = i_grid_settings
+    TABLES
+      t_outtab           = gt_item[]
+    EXCEPTIONS
+      program_error      = 1
+      OTHERS             = 2.
+
+  IF sy-subrc <> 0.
+* MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+*         WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+  ENDIF.
+ENDFORM.
+
+FORM fieldcat_int  USING   p_col_pos         " 1
+                            p_fieldname       " 2
+                            p_key             " 3
+                            p_seltext_l       " 4
+                            p_zero
+                            p_filename
+                            p_talbename
+                            p_outputlen
+                            p_edit .
+
+  wa_fieldcat-col_pos       = p_col_pos.
+  wa_fieldcat-fieldname     = p_fieldname.
+  wa_fieldcat-key           = p_key.
+  wa_fieldcat-coltext     = p_seltext_l.
+  wa_fieldcat-no_zero        = p_zero.
+  wa_fieldcat-ref_field   = p_filename.
+  wa_fieldcat-ref_table    = p_talbename.
+  wa_fieldcat-tipddictxt       = 'L'.
+  wa_fieldcat-edit           = p_edit  .
+  APPEND wa_fieldcat TO it_fieldcat.
+  p_col_pos = p_col_pos + 1.
+  CLEAR: wa_fieldcat.
+ENDFORM.                    " FIELDCAT_INT

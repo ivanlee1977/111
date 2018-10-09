@@ -1,0 +1,185 @@
+*&---------------------------------------------------------------------*
+*& 程序名：ZRPMM015.
+*& 创建者(公司)/日期： PFT/20170825
+*& 程序描述:订单实际下单提前期统计分析报表
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    PFT           20170825        创建程序
+*&---------------------------------------------------------------------*
+
+REPORT zrpmm015.
+INCLUDE zalv.
+
+* 定义内表
+TABLES:ekko,ekpo,mara.
+
+DATA:BEGIN OF gt_alv OCCURS 0,
+       box(1),
+       lifnr  LIKE ekko-lifnr, "供应商
+       name1  LIKE lfa1-name1, "供应商名称
+       ekgrp  LIKE ekko-ekgrp, "采购组
+       eknam  LIKE t024-eknam, "采购组描述
+       matkl  LIKE mara-matkl, "物料组
+       ebeln  LIKE ekpo-ebeln, "采购订单号
+       ebelp  LIKE ekpo-ebelp, "采购订单行项目
+       matnr  LIKE ekpo-matnr, "物料号
+       txz01  LIKE ekpo-txz01, "物料描述
+       menge  LIKE ekpo-menge, "数量
+       aedat  LIKE ekko-aedat, "凭证日期
+       eindt  LIKE eket-eindt, "要求到货日期
+       sjtqq  TYPE int4, "实际提前期
+       plifz  LIKE ekpo-plifz, "标准提前期
+       tqqce  TYPE int4, "差额
+       tqqysb TYPE c LENGTH 20, "压缩比例
+       ernam  LIKE ekko-ernam, "采购员
+       zcgy   TYPE c LENGTH 20, "采购员
+     END OF gt_alv.
+
+DATA: gt_eket LIKE eket OCCURS 0 WITH HEADER LINE, "采购计划行
+      gt_mara LIKE mara OCCURS 0 WITH HEADER LINE, "物料主数据
+      gt_lfa1 LIKE lfa1 OCCURS 0 WITH HEADER LINE, "供应商主数据
+      gt_t024 LIKE t024 OCCURS 0 WITH HEADER LINE. "采购组主数据
+
+****选择屏幕
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_aedat FOR ekko-aedat,"创建日期
+               s_lifnr FOR ekko-lifnr,"供应商
+               s_ekgrp FOR ekko-ekgrp,"采购组
+               s_matkl FOR mara-matkl."物料组
+SELECTION-SCREEN END OF BLOCK b1.
+
+START-OF-SELECTION.
+  PERFORM get_data."取数
+  PERFORM process_data."对取出的数据进行处理
+  PERFORM sub_build_fieldcat.
+  PERFORM sub_build_layout.
+  PERFORM sub_display_alv TABLES gt_alv USING 'ALV_USER_COMMAND' ''.
+*&---------------------------------------------------------------------*
+*&      Form  GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM get_data .
+  REFRESH:gt_alv.
+  SELECT a~ebeln a~ebelp a~matnr a~txz01 a~menge  a~plifz
+         b~lifnr b~ekgrp b~aedat b~ernam
+    INTO CORRESPONDING FIELDS OF TABLE gt_alv
+    FROM ekpo AS a INNER JOIN ekko AS b ON a~ebeln = b~ebeln
+    WHERE b~aedat IN s_aedat
+      AND b~lifnr IN s_lifnr
+      AND b~ekgrp IN s_ekgrp.
+
+  IF gt_alv[] IS NOT INITIAL.
+    SELECT * INTO TABLE gt_eket
+      FROM eket
+      FOR ALL ENTRIES IN gt_alv
+      WHERE ebeln = gt_alv-ebeln
+        AND ebelp = gt_alv-ebelp.
+    SORT gt_eket BY ebeln ebelp.
+
+    SELECT * INTO TABLE gt_lfa1
+      FROM lfa1
+      FOR ALL ENTRIES IN gt_alv
+      WHERE lifnr = gt_alv-lifnr.
+    SORT gt_lfa1 BY lifnr.
+
+    SELECT * INTO TABLE gt_mara
+      FROM mara
+      FOR ALL ENTRIES IN gt_alv
+      WHERE matnr = gt_alv-matnr.
+    SORT gt_mara BY matnr.
+  ENDIF.
+  SELECT * INTO TABLE gt_t024 FROM t024 .
+  SORT gt_t024 BY ekgrp.
+ENDFORM. " GET_DATA
+*&---------------------------------------------------------------------*
+*&      Form  process_data
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM process_data .
+  DATA:lv_pernr     LIKE usr21-persnumber,
+       lv_namelast  LIKE adrp-name_last,
+       lv_namefirst LIKE adrp-name_first,
+       lv_tqqbl     TYPE p DECIMALS 2. "计算提前期比例
+
+  LOOP AT gt_alv.
+*   取物料组
+    READ TABLE gt_mara WITH KEY matnr = gt_alv-matnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-matkl = gt_mara-matkl.
+    ENDIF.
+*   取供应商名称
+    READ TABLE gt_lfa1 WITH KEY lifnr = gt_alv-lifnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-name1 = gt_lfa1-name1.
+    ENDIF.
+*   取采购组描述
+    READ TABLE gt_t024 WITH KEY ekgrp = gt_alv-ekgrp BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-eknam = gt_t024-eknam.
+    ENDIF.
+*   取要求到货日期
+    READ TABLE gt_eket WITH KEY ebeln = gt_alv-ebeln ebelp = gt_alv-ebelp BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-eindt = gt_eket-eindt.
+    ENDIF.
+*   计算实际提前期 = 要求到货日期-凭证日期
+    gt_alv-sjtqq = gt_alv-eindt - gt_alv-aedat.
+*   差额 = 标准提前期-实际提前期
+    gt_alv-tqqce = gt_alv-plifz - gt_alv-sjtqq.
+*   压缩比例 = （差额/标准提前期）取百分比
+    CLEAR:lv_tqqbl.
+    IF gt_alv-plifz NE 0.
+      lv_tqqbl = ( gt_alv-tqqce / gt_alv-plifz ) * 100.
+    ENDIF.
+    IF lv_tqqbl NE 0.
+      gt_alv-tqqysb = lv_tqqbl. CONDENSE gt_alv-tqqysb.
+    ENDIF.
+*  取采购员名称
+    CLEAR:lv_pernr,lv_namelast,lv_namefirst.
+    SELECT SINGLE persnumber INTO lv_pernr FROM usr21 WHERE bname = gt_alv-ernam .
+    IF sy-subrc = 0.
+      SELECT SINGLE name_first name_last INTO (lv_namefirst,lv_namelast) FROM adrp WHERE persnumber = lv_pernr.
+      CONCATENATE lv_namelast lv_namefirst INTO gt_alv-zcgy.
+    ENDIF.
+    MODIFY gt_alv.
+    CLEAR: gt_alv.
+  ENDLOOP.
+
+  DELETE gt_alv WHERE matkl NOT IN s_matkl.
+ENDFORM. " PROCESS_DATA
+*&---------------------------------------------------------------------*
+*&      Form  SUB_BUILD_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM sub_build_fieldcat .
+  REFRESH:g_it_fieldcat.
+
+  PERFORM sub_set_fieldcat USING ''  'LIFNR'    '供应商'            'X'    ''  ''  ''  '10'   'LIFNR'    'LFA1' ''.
+  PERFORM sub_set_fieldcat USING ''  'NAME1'    '供应商描述'        ''    ''  ''  ''  '35'  ''    '' ''.
+  PERFORM sub_set_fieldcat USING ''  'EKGRP'    '采购组'            ''    ''  ''  ''  '3'   ''    '' ''.
+  PERFORM sub_set_fieldcat USING ''  'EKNAM'    '采购组描述'        ''    ''  ''  ''  ''   ''    '' ''.
+  PERFORM sub_set_fieldcat USING ''  'EBELN'    '采购订单号'        ''    ''  ''  ''  '10'  'EBELN'    'EKPO' ''.
+  PERFORM sub_set_fieldcat USING ''  'EBELP'    '采购订单行项目'    ''    ''  ''  ''  '5'  'EBELP'    'EKPO' ''.
+  PERFORM sub_set_fieldcat USING ''  'MATNR'    '物料'              'X'    ''  ''  ''  '18'  'MATNR'    'MARA' ''.
+  PERFORM sub_set_fieldcat USING ''  'TXZ01'    '物料描述'          ''    ''  ''  ''  '40'  ''    '' ''.
+  PERFORM sub_set_fieldcat USING ''  'MENGE'    '数量'              'X'    ''  ''  ''  '20'  ''    '' ''.
+  PERFORM sub_set_fieldcat USING ''  'AEDAT'    '凭证日期'          ''    ''  ''  ''  '8'   ''    '' ''.
+  PERFORM sub_set_fieldcat USING ''  'EINDT'    '要求到货日期'      ''    ''  ''  ''  '8'   ''    '' ''.
+  PERFORM sub_set_fieldcat USING ''  'SJTQQ'    '实际提前期'        'X'    ''  ''  ''  '8'   ''    '' ''.
+  PERFORM sub_set_fieldcat USING ''  'PLIFZ'    '标准提前期'        'X'    ''  ''  ''  '8'   ''    '' ''.
+  PERFORM sub_set_fieldcat USING ''  'TQQCE'    '差额'              'X'    ''  ''  ''  '8'   ''    '' ''.
+  PERFORM sub_set_fieldcat USING ''  'TQQYSB'   '压缩比例(%)'       ''    ''  ''  ''  '8'   ''    '' ''.
+  PERFORM sub_set_fieldcat USING ''  'ZCGY'     '采购员'            ''    ''  ''  ''  '20'   ''    '' ''.
+ENDFORM.

@@ -1,0 +1,371 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPSD011F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:lt_ztsd003cpys LIKE ztsd003cpys OCCURS 0 WITH HEADER LINE.
+  DATA:BEGIN OF lt_vbap OCCURS 0,
+         vbeln  LIKE vbap-vbeln,
+         posnr  LIKE vbap-posnr,
+         kzwi1  LIKE vbap-kzwi1,
+         kwmeng LIKE vbap-kwmeng,
+         waerk  LIKE vbak-waerk,
+         ernam  TYPE vbak-ernam,
+         zterm  LIKE vbkd-zterm,
+       END OF lt_vbap.
+  DATA:BEGIN OF lt_out OCCURS 0,
+         zzxno   TYPE ztsd003jhdy-zzxno,
+         netpr_t TYPE p DECIMALS 2,      "汇总金额
+       END OF lt_out.
+
+  DATA:BEGIN OF lt_vbpa OCCURS 0,
+         vbeln      LIKE vbpa-vbeln,
+         posnr      LIKE vbpa-posnr,
+         parvw      LIKE vbpa-parvw,
+         kunnr      LIKE vbpa-kunnr,
+         adrnr      LIKE vbpa-adrnr,
+         country    LIKE adrc-country,
+         name1      LIKE adrc-name1,
+         name2      LIKE adrc-name2,
+         name_co    LIKE adrc-name_co,
+         str_suppl1 LIKE adrc-str_suppl1,
+         str_suppl2 LIKE adrc-str_suppl2,
+         str_suppl3 LIKE adrc-str_suppl3,
+         street     LIKE adrc-street,
+         location   LIKE adrc-location,
+         house_num1 LIKE adrc-house_num1,
+         post_code1 LIKE adrc-post_code1,
+         tel_number LIKE adrc-tel_number,
+       END OF lt_vbpa.
+
+  DATA:lt_kna1 LIKE kna1 OCCURS 0 WITH HEADER LINE.
+
+  SELECT a~vbeln
+         a~posnr
+         b~kunag AS kunnr
+         a~zzxno
+         b~zfhrq
+          b~vsart
+          b~zysdh
+          b~zbgdh
+         c~matnr
+         c~lfimg
+         c~vgbel
+         c~vgpos
+    INTO CORRESPONDING FIELDS OF TABLE gt_out
+    FROM ztsd003jhdy AS a    INNER JOIN ztsd003zxdb AS b    ON a~zzxno = b~zzxno
+    INNER JOIN lips AS c    ON a~vbeln = c~vbeln    AND a~posnr = c~posnr
+    WHERE a~zzxno IN s_zzxno
+      AND b~kunag IN s_kunnr
+      AND c~vgbel IN s_vgbel
+      AND a~vbeln IN s_vbeln
+      AND b~zysdh IN s_zysdh
+      AND b~zbgdh IN s_zbgdh
+    .
+
+  CHECK gt_out[] IS NOT INITIAL.
+
+  SORT gt_out BY vbeln posnr.
+***抓取产品要素数据
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE lt_ztsd003cpys
+    FROM ztsd003cpys
+    FOR ALL ENTRIES IN gt_out
+    WHERE matnr = gt_out-matnr.
+
+***抓取销售订单数据
+  SELECT  a~vbeln
+          a~posnr
+          a~kzwi1
+          a~kwmeng
+          b~waerk
+          b~ernam
+          c~zterm
+    INTO CORRESPONDING FIELDS OF TABLE lt_vbap
+    FROM vbap AS a
+    INNER JOIN vbak AS b    ON a~vbeln = b~vbeln
+    INNER JOIN vbkd AS c ON a~vbeln = c~vbeln AND c~posnr = '000000'
+    FOR ALL ENTRIES IN gt_out
+    WHERE a~vbeln = gt_out-vgbel
+      AND a~posnr = gt_out-vgpos.
+
+***抓取伙伴数据
+  SELECT a~vbeln
+         a~posnr
+         a~parvw
+         a~kunnr
+         a~adrnr
+         b~country
+         b~name1
+         b~name2
+         b~name_co
+         b~str_suppl1
+         b~str_suppl2
+         b~str_suppl3
+         b~location
+         b~street
+         b~house_num1
+         b~post_code1
+         b~tel_number
+    INTO CORRESPONDING FIELDS OF TABLE lt_vbpa
+    FROM vbpa AS a
+    LEFT JOIN adrc AS b
+    ON a~adrnr = b~addrnumber
+    FOR ALL ENTRIES IN gt_out
+    WHERE a~vbeln = gt_out-vbeln
+      AND a~posnr = '000000'
+      AND a~parvw IN ('AG','WE').
+
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_kna1 FROM kna1 FOR ALL ENTRIES IN gt_out WHERE kunnr = gt_out-kunnr.
+
+***整理数据到输出表
+  SORT lt_ztsd003cpys BY matnr.
+  SORT lt_vbpa BY vbeln parvw.
+  SORT lt_vbap BY vbeln posnr.
+  SORT lt_kna1 BY kunnr.
+  DATA: ls_rate LIKE bapi1093_0,lv_date TYPE sy-datum.
+  LOOP AT gt_out.
+    READ TABLE lt_kna1 WITH KEY kunnr = gt_out-kunnr.
+    IF sy-subrc = 0.
+      CONCATENATE lt_kna1-name1 lt_kna1-name2 INTO gt_out-zname.
+    ENDIF.
+***产品要素相关信息
+    READ TABLE lt_ztsd003cpys WITH KEY matnr = gt_out-matnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      MOVE-CORRESPONDING lt_ztsd003cpys TO gt_out.
+    ENDIF.
+***贸易国地区
+    READ TABLE lt_vbpa WITH KEY vbeln = gt_out-vbeln parvw = 'AG' BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-country = lt_vbpa-country.
+      SELECT SINGLE landx INTO gt_out-landx FROM t005t WHERE spras = sy-langu AND land1 = gt_out-country .
+    ENDIF.
+
+***运抵国（地区）
+    READ TABLE lt_vbpa WITH KEY vbeln = gt_out-vbeln parvw = 'WE' BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-country_t = lt_vbpa-country.
+      SELECT SINGLE landx INTO gt_out-landx_t FROM t005t WHERE spras = sy-langu AND land1 = gt_out-country_t .
+    ENDIF.
+***单价
+    READ TABLE lt_vbap WITH KEY vbeln = gt_out-vgbel posnr = gt_out-vgpos BINARY SEARCH.
+    IF sy-subrc = 0.
+      IF lt_vbap-kwmeng NE 0.
+        gt_out-netpr = lt_vbap-kzwi1 / lt_vbap-kwmeng.
+      ENDIF.
+***总价
+*      gt_out-kzwi1 = lt_vbap-kzwi1.
+      gt_out-netpr_t = gt_out-lfimg * gt_out-netpr.
+      MOVE-CORRESPONDING gt_out TO lt_out.
+      COLLECT lt_out.
+***币别
+      gt_out-waerk = lt_vbap-waerk.
+      gt_out-ernam = lt_vbap-ernam.
+      gt_out-zterm = lt_vbap-zterm.
+      IF gt_out-waerk <> 'CNY'.
+        lv_date = gt_out-zfhrq.
+        lv_date+6(2) = '01'.
+        CALL FUNCTION 'BAPI_EXCHANGERATE_GETDETAIL'
+          EXPORTING
+            rate_type  = 'M'
+            from_curr  = gt_out-waerk
+            to_currncy = 'CNY'
+            date       = lv_date
+          IMPORTING
+            exch_rate  = ls_rate
+*           return     =
+          .
+        IF sy-subrc = 0.
+          gt_out-rate = ls_rate-exch_rate.
+        ENDIF.
+      ELSE.
+        gt_out-rate = 1.
+      ENDIF.
+      IF  s_ernam[] IS NOT INITIAL AND gt_out-ernam NOT IN s_ernam.
+        DELETE gt_out.
+        CONTINUE.
+      ENDIF.
+      CALL FUNCTION 'Z_FMMM_001'
+        EXPORTING
+          i_ernam  = gt_out-ernam
+*         I_USNAM  =
+        IMPORTING
+*         EX_USRNAME       =
+          ex_ernam = gt_out-zname1.
+    ENDIF.
+    IF gt_out-zfhrq > '20180501'.
+      gt_out-zts = '0.16'.
+    ELSE.
+      gt_out-zts = '0.17'.
+    ENDIF.
+
+    SELECT SINGLE vtext INTO gt_out-zterm_txt FROM tvzbt WHERE spras = sy-langu AND  zterm = gt_out-zterm .
+    SELECT SINGLE bezei INTO gt_out-bezei_vsart FROM t173t WHERE spras = sy-langu AND  vsart = gt_out-vsart .
+    CONCATENATE 'EX-' gt_out-zname(1) gt_out-zzxno INTO gt_out-zbght.
+    MODIFY gt_out.
+    CLEAR lv_date.
+  ENDLOOP.
+  SORT lt_out BY zzxno.
+  SORT gt_out by zzxno vbeln posnr.
+  DATA lv_index type sy-tabix.
+  LOOP AT gt_out.
+    lv_index = sy-tabix.
+    gt_out-zdw = '台'.
+    gt_out-zwx = '外销'.
+    gt_out-zmy = '一般贸易'.
+    gt_out-ztk = 'FOB SHENZHEN'.
+    READ TABLE lt_out WITH KEY zzxno = gt_out-zzxno BINARY SEARCH.
+    gt_out-netpr1 = lt_out-netpr_t.
+    gt_out-netpr2 = gt_out-netpr1 * gt_out-rate.
+    gt_out-netpr3 = gt_out-netpr2 * gt_out-zts.
+    MODIFY gt_out INDEX lv_index..
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  mcr_build_fieldcat:
+                     'ZZXNO'     '装箱单号'           'ZZXNO'    'ZTSD003ZXDB'  ''  '',
+                     'VBELN'     '交货单号'           'VBELN'    'LIPS'   ''  '',
+                     'POSNR'     '交货项目'         'POSNR'    'LIPS'   ''  '',
+                     'VGBEL'     '销售订单号'           'VBELN'    'LIPS'   ''  '',
+                     'ZNAME1'     '业务员'               ''    ''         ''   '',
+                     'KUNNR'     '客户号'           'KUNAG'    'LIKP'   ''  '',
+                     'ZNAME'     '客户名称'           ''    ''   ''  '',
+                     'MATNR'     '物料号'           'MATNR'    'LIPS'   ''  '',
+                     'ZZWPM'     '中文品名'           'ZZWPM'    'ZTSD003CPYS'   ''  '',
+                     'ZDESC'     'DESCRIPTION'           'ZDESC'    'ZTSD003CPYS'   ''  '',
+                     'ZXH'       '型号'           'ZXH'    'ZTSD003CPYS'   ''  '',
+                     'LFIMG'     '数量'               'LFIMG'    'LIPS'         ''  '',
+                     'ZDW'     '单位'               ''    ''         ''  '',
+                     'NETPR'     '单价'               ''         ''             'P'  '15',
+                     'NETPR_T'     '金额'               ''         ''             'P'  '15',
+                     'NETPR1'     '报关总金额'               ''         ''             'P'  '15',
+
+                     'WAERK'     '币别'               'WAERK'    'VBAK'         ''   '',
+                     'RATE'     '汇率'               ''    ''         ''   '',
+                     'NETPR2'     '折合本位币'               'WAERK'    'VBAK'         ''   '',
+                     'ZWX'     '内外销'               ''    ''         ''   '',
+                     'ZTS'     '退税率'               ''    ''         ''   '',
+                     'NETPR3'     '可退税金额'               ''    ''         ''   '',
+                     'ZMY'     '贸易方式'               ''    ''         ''   '',
+                     'ZTERM_TXT'   '结算方式'               ''         ''             'P'  '15',
+*                     'COUNTRY'   '贸易国地区'         'COUNTRY'  'ADRC'   ''  '',
+*                     'COUNTRY_T' '运抵国（地区）'     'COUNTRY'  'ADRC'   ''  '',
+                     'ZFHRQ'     '发货日期'           'ZFHRQ'    'ZTSD003ZXDB'  ''  '',
+                     'BEZEI_VSART'     '运输方式'           ''    ''  ''  '',
+                     'ZYSDH'     '运输单号'           'ZYSDH'    'ZTSD003ZXDB'  ''  '',
+                     'ZBGHT'     '报关合同号'           ''    ''  ''  '',
+                     'ZTK'     '贸易条款'           ''    ''  ''  '',
+                     'LANDX'     '贸易国'     'LANDX'    'T005T'  ''  '',
+                     'LANDX_T'   '运抵国' 'LANDX'    'T005T'  ''  '',
+                     'ZBGDH'     '报关单号'           'ZBGDH'    'ZTSD003ZXDB'  ''  ''.
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK        = ' '
+*     I_BYPASSING_BUFFER       =
+*     I_BUFFER_ACTIVE          =
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'FRM_SET_PF_STATUS'
+      i_callback_user_command  = 'FRM_USER_COMMAND'
+*     I_CALLBACK_TOP_OF_PAGE   = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME         =
+*     I_BACKGROUND_ID          = ' '
+*     I_GRID_TITLE             =
+*     I_GRID_SETTINGS          =
+      is_layout_lvc            = gs_layout
+      it_fieldcat_lvc          = gt_fcat[]
+*     IT_EXCLUDING             =
+*     IT_SPECIAL_GROUPS_LVC    =
+*     IT_SORT_LVC              =
+*     IT_FILTER_LVC            =
+*     IT_HYPERLINK             =
+*     IS_SEL_HIDE              =
+      i_default                = 'X'
+      i_save                   = 'A'
+*     IS_VARIANT               =
+*     IT_EVENTS                =
+*     IT_EVENT_EXIT            =
+*     IS_PRINT_LVC             =
+*     IS_REPREP_ID_LVC         =
+*     I_SCREEN_START_COLUMN    = 0
+*     I_SCREEN_START_LINE      = 0
+*     I_SCREEN_END_COLUMN      = 0
+*     I_SCREEN_END_LINE        = 0
+*     I_HTML_HEIGHT_TOP        =
+*     I_HTML_HEIGHT_END        =
+*     IT_ALV_GRAPHICS          =
+*     IT_EXCEPT_QINFO_LVC      =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER  =
+*     ES_EXIT_CAUSED_BY_USER   =
+    TABLES
+      t_outtab                 = gt_out[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SET_PF_STATUS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_set_pf_status USING rt_extab TYPE slis_t_extab.
+  SET PF-STATUS 'PF_1000'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_USER_COMMAND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_user_command USING r_ucomm LIKE sy-ucomm
+                            rs_selfield TYPE slis_selfield..
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CASE r_ucomm.
+    WHEN 'ZDOWNLOAD'.
+*      PERFORM frm_download_data.
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.

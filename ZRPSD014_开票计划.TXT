@@ -1,0 +1,56 @@
+*&---------------------------------------------------------------------*
+*& Report ZRPSD014
+*& 创建者(公司)/日期： PFT/20170821
+*& 程序描述:开票计划
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    PFT           20170821     创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpsd014 MESSAGE-ID z001.
+
+INCLUDE zalv.
+
+INCLUDE zrpsd014t01.
+INCLUDE zrpsd014s01.
+INCLUDE zrpsd014f01.
+
+************************************************************************
+*INITIALIZATION.
+************************************************************************
+INITIALIZATION.
+************************************************************************
+* AT SELECTION-SCREEN OUTPUT
+************************************************************************
+AT SELECTION-SCREEN OUTPUT.
+  IF p_wjh EQ 'X'.
+    LOOP AT SCREEN.
+      IF screen-group1 = 'P2'.
+        screen-active = 0.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+  ELSEIF p_yjh EQ 'X'.
+    LOOP AT SCREEN.
+      IF screen-group1 = 'P1'.
+        screen-active = 0.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+
+************************************************************************
+* AT SELECTION-SCREEN
+************************************************************************
+AT SELECTION-SCREEN.
+************************************************************************
+* START-OF-SELECTION
+************************************************************************
+START-OF-SELECTION.
+
+  PERFORM frm_get_data."取数
+  PERFORM frm_process_data."对取出的数据进行处理
+  PERFORM sub_build_fieldcat.
+  PERFORM sub_build_layout1.
+  PERFORM sub_build_events.
+  PERFORM frm_hotspot.    "add by leimt 20180319 增加交货单号热点 增加字段
+  PERFORM sub_display_alv3 TABLES gt_alv USING 'ALV_USER_COMMAND' 'PF_STATUS_SET'.

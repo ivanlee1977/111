@@ -1,0 +1,1099 @@
+*&---------------------------------------------------------------------*
+*& Report ZRPCO028
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT zrpco028.
+
+TABLES:mara,mard,marc,mbew,t001k.
+
+
+**marc
+DATA:BEGIN OF gt_marc OCCURS 0 ,
+       werks  LIKE marc-werks,
+       matnr  LIKE marc-matnr,
+       mtart  LIKE mara-mtart,
+       matkl  LIKE mara-matkl,
+       meins  LIKE mara-meins,
+       fmatnr LIKE marc-matnr, "父类
+     END OF gt_marc.
+
+
+DATA:gs_marc LIKE gt_marc.
+DATA:lt_marc LIKE gt_marc OCCURS 0 WITH HEADER LINE.
+DATA:gt_makt LIKE makt OCCURS 0 WITH HEADER LINE.
+DATA:gt_t001l LIKE t001l OCCURS 0 WITH HEADER LINE.
+
+DATA:lt_t001k LIKE t001k OCCURS 0 WITH HEADER LINE."取工厂
+
+RANGES:r_werks FOR marc-werks.
+RANGES:r_matnr FOR marc-matnr.
+
+
+
+***历史库存
+DATA:gt_mardh LIKE mardh OCCURS 0 WITH HEADER LINE.
+DATA:gt_mskuh LIKE mskuh OCCURS 0 WITH HEADER LINE.
+DATA:gt_mslbh LIKE mslbh OCCURS 0 WITH HEADER LINE.
+
+
+TYPES:BEGIN OF ty_mard,
+        matnr TYPE mard-matnr,
+        werks TYPE mard-werks,
+        lgort TYPE mard-lgort,
+        lfgja TYPE mard-lfgja,
+        lfmon TYPE mard-lfmon,
+        labst TYPE mard-labst,
+        umlme TYPE mard-umlme,
+        insme TYPE mard-insme,
+        einme TYPE mard-einme,
+        speme TYPE mard-speme,
+        retme TYPE mard-retme,
+        vmlab TYPE mard-vmlab,
+        vmuml TYPE mard-vmuml,
+        vmins TYPE mard-vmins,
+        vmein TYPE mard-vmein,
+        vmspe TYPE mard-vmspe,
+        vmret TYPE mard-vmret,
+        qj(6) TYPE n,
+
+      END OF ty_mard.
+DATA:gs_mard TYPE ty_mard,
+     gt_mard TYPE TABLE OF ty_mard.
+
+
+
+TYPES:BEGIN OF ty_msku,
+        matnr TYPE msku-matnr,
+        werks TYPE msku-werks,
+        sobkz TYPE msku-sobkz,
+        lfgja TYPE mard-lfgja,
+        lfmon TYPE mard-lfmon,
+        kunnr TYPE kunnr,
+        charg TYPE charg_d,
+        kulab TYPE msku-kulab,
+        kuins TYPE msku-kuins,
+        kuvla TYPE msku-kuvla,
+        kuvin TYPE msku-kuvin,
+        kuill TYPE msku-kuill,
+        kuilq TYPE msku-kuilq,
+        qj(6) TYPE n,
+      END OF ty_msku.
+DATA:gs_msku TYPE ty_msku,
+     gt_msku TYPE TABLE OF ty_msku.
+
+
+
+TYPES:BEGIN OF ty_mssl,
+        matnr TYPE mssl-matnr,
+        werks TYPE mssl-werks,
+        sobkz TYPE mssl-sobkz,
+        lfgja TYPE mard-lfgja,
+        lfmon TYPE mard-lfmon,
+        lifnr TYPE lifnr,
+        charg TYPE charg_d,
+        sllab TYPE mssl-sllab,
+        slins TYPE mssl-slins,
+        slein TYPE mssl-slein,
+
+        qj(6) TYPE n,
+      END OF ty_mssl.
+DATA:gs_mssl TYPE ty_mssl,
+     gt_mssl TYPE TABLE OF ty_mssl.
+
+
+
+
+DATA:BEGIN OF gt_ckmlcr OCCURS 0,
+       bwkey  LIKE ckmlhd-bwkey,
+       matnr  LIKE ckmlhd-matnr,
+       kalnr  LIKE ckmlcr-kalnr,
+       bdatj  LIKE ckmlcr-bdatj,
+       poper  LIKE ckmlcr-poper,
+       untper LIKE ckmlcr-untper,
+       curtp  LIKE ckmlcr-curtp,
+       peinh  LIKE ckmlcr-peinh,
+       vprsv  LIKE ckmlcr-vprsv,
+       stprs  LIKE ckmlcr-stprs,
+       pvprs  LIKE ckmlcr-pvprs,
+       waers  LIKE ckmlcr-waers,
+
+       qj(7)  TYPE n,
+       price  TYPE zamount_curr_pd,
+
+     END OF gt_ckmlcr.
+
+
+TYPES:BEGIN OF ty_data,
+        werks LIKE mard-werks,
+        matnr TYPE mard-matnr,
+        lgort TYPE mard-lgort,
+        sobkz TYPE msku-sobkz,
+        kunnr LIKE msku-kunnr,
+        lifnr LIKE mssl-lifnr,
+        kcs   TYPE labst,
+        "  bklas TYPE mbew-bklas,
+        " flag,
+        "   rate  TYPE ZAMOUNT_CURR_PD,
+        "  labst TYPE mard-labst,
+      END OF ty_data.
+DATA:gs_data TYPE ty_data,
+     ls_data TYPE ty_data,
+     gt_data TYPE TABLE OF ty_data, "按库位
+     lt_data TYPE TABLE OF ty_data. "总数量
+
+
+TYPES:BEGIN OF ty_mbew,
+        matnr TYPE mbew-matnr,
+        bwkey TYPE mbew-bwkey,
+        stprs TYPE mbew-stprs,
+        peinh TYPE mbew-peinh,
+        bklas TYPE mbew-bklas,
+        hrkft TYPE mbew-hrkft,
+      END OF ty_mbew.
+DATA:gs_mbew TYPE ty_mbew,
+     gt_mbew TYPE TABLE OF ty_mbew.
+
+FIELD-SYMBOLS <fs> TYPE any.
+FIELD-SYMBOLS <fs1> TYPE any.
+DATA:gl_int(2) TYPE n.
+DATA: w_loop TYPE sy-tabix.
+DATA: w_loop1 TYPE i.
+
+***展BOM
+DATA: gt_stb    TYPE stpox OCCURS 0 WITH HEADER LINE,
+      gt_matcat TYPE cscmat OCCURS 0 WITH HEADER LINE.
+DATA: wa_cstmat LIKE cstmat.
+
+DATA:gt_kna1 LIKE kna1 OCCURS 0 WITH HEADER LINE."客户
+DATA:gt_tkkh2 LIKE tkkh2 OCCURS 0 WITH HEADER LINE."物料类别
+DATA:gt_t025t LIKE t025t OCCURS 0 WITH HEADER LINE."评估类
+
+
+DATA:BEGIN OF gt_show OCCURS 0 ,
+       qj        TYPE char6, "会计期间
+       lgobe     LIKE t001l-lgobe, "仓库
+       matnr     TYPE mard-matnr, "物料代码
+       maktx     LIKE makt-maktx, "物料名称
+       kunnr     LIKE msku-kunnr, "客户代码
+       name1     LIKE kna1-name1, "客户名称
+       matnr_sf  TYPE mard-matnr, "软件代码
+       maktx_sf  LIKE makt-maktx, "软件名称
+       bkbez     LIKE t025t-bkbez, "库存类别
+       hrktx     LIKE tkkh2-hrktx, "物料类别
+       meins     LIKE mara-meins, "计量单位
+       menge     TYPE mard-labst, "期末结存数量
+       price_all TYPE zamount_curr_pd, "期末结存单价
+       stprs_all TYPE zamount_curr_pd, "期末结存金额
+       price_sf  TYPE zamount_curr_pd, "软件单价
+       price     TYPE zamount_curr_pd, "不含软件单价
+       stprs_sf  TYPE zamount_curr_pd, "软件金额
+       stprs     TYPE zamount_curr_pd, "不含软件金额
+       lgort     TYPE mard-lgort,
+       sobkz     TYPE msku-sobkz,
+       lfgja     TYPE mard-lfgja,
+       lfmon     TYPE mard-lfmon,
+       bklas     LIKE t025t-bklas, "库存类别
+       hrkft     LIKE tkkh2-hrkft, "物料类别
+
+       werks     LIKE mard-werks,
+       sel,
+     END OF gt_show.
+
+
+DATA: gt_fieldcat TYPE slis_t_fieldcat_alv WITH HEADER LINE,
+      gs_layout   TYPE slis_layout_alv,
+      gs_print    TYPE slis_print_alv,
+      gt_sort     TYPE slis_t_sortinfo_alv,
+      gs_sort     TYPE slis_sortinfo_alv,
+      gt_sp_group TYPE slis_t_sp_group_alv,
+      gt_events   TYPE slis_t_event.
+
+DEFINE m_fieldcat.
+  gt_fieldcat-fieldname = &1.
+  gt_fieldcat-seltext_l = &2.
+  gt_fieldcat-ddictxt = 'L'.
+*  GT_FIELDCAT-NO_ZERO = 'X'.
+  gt_fieldcat-outputlen = &3.
+  gt_fieldcat-key = &4.
+  gt_fieldcat-col_pos = &5.
+  APPEND gt_fieldcat.
+  CLEAR gt_fieldcat.
+END-OF-DEFINITION.
+*&---------------------------------------------------------------------*
+*&  包含               ZFIR023_SCR
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+PARAMETER:
+           p_lfgja LIKE mard-lfgja  OBLIGATORY MEMORY ID gja,"年度
+           p_lfmon LIKE mard-lfmon  OBLIGATORY MEMORY ID lfm."期间
+" p_bukrs LIKE t001k-bukrs OBLIGATORY MEMORY ID buk .
+SELECT-OPTIONS: s_werks FOR mard-werks MEMORY ID wrk NO INTERVALS NO-EXTENSION,
+                s_matnr FOR mara-matnr MEMORY ID mat,   "物料
+
+                s_lgort FOR mard-lgort.   "库存地点
+
+*PARAMETER:r1 RADIOBUTTON GROUP g1 DEFAULT 'X',
+*          r2 RADIOBUTTON GROUP g1.
+PARAMETERS p_chx AS CHECKBOX DEFAULT 'X'.
+
+SELECTION-SCREEN END OF BLOCK b1.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+AT SELECTION-SCREEN.
+
+START-OF-SELECTION.
+
+  PERFORM get_data.
+  PERFORM pro_data.
+  PERFORM alv_data.
+
+*&---------------------------------------------------------------------*
+*&      Form  GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM get_data .
+
+
+*  SELECT * FROM t001k INTO TABLE lt_t001k WHERE bukrs = p_bukrs.
+*  IF sy-subrc <> 0.
+*    MESSAGE '没有找到对应的工厂' TYPE 'S' DISPLAY LIKE 'E'.
+*    STOP.
+*  ELSE.
+*    REFRESH r_werks."工厂赋值
+*    LOOP AT lt_t001k.
+*      CLEAR r_werks.
+*      r_werks-sign = 'I'.
+*      r_werks-option = 'EQ'.
+*      r_werks-low = lt_t001k-bwkey.
+*      APPEND r_werks.
+
+  gt_t001l-lgobe = '寄售物料（W）'.
+  gt_t001l-lgort = 'CUSM'.
+  gt_t001l-werks = s_werks-low.
+
+  APPEND gt_t001l.
+  gt_t001l-lgobe = '供应商O库存'.
+  gt_t001l-lgort = 'SUPE'.
+  gt_t001l-werks = s_werks-low.
+
+  APPEND gt_t001l.
+*
+*    ENDLOOP.
+*  ENDIF.
+
+  r_matnr[] = s_matnr[].
+
+**获取物料工厂信息
+  SELECT marc~werks marc~matnr mara~mtart mara~matkl mara~meins
+       INTO TABLE gt_marc
+       FROM mara
+       INNER JOIN marc
+       ON mara~matnr = marc~matnr
+       WHERE werks IN r_werks
+         AND mara~matnr IN r_matnr
+        " AND mara~mtart IN s_mtart
+        " AND mara~matkl IN s_matkl.
+    .
+  IF sy-subrc <> 0.
+    MESSAGE '没有找到任何数据' TYPE 'S' DISPLAY LIKE 'E'.
+    STOP.
+  ENDIF.
+
+  SORT gt_marc BY werks matnr.
+  DELETE ADJACENT DUPLICATES FROM gt_marc COMPARING werks matnr.
+  CHECK gt_marc[] IS NOT INITIAL.
+
+  CLEAR lt_marc.
+  REFRESH lt_marc.
+
+*********展BOM
+  LOOP AT gt_marc WHERE mtart = 'Z003'.
+    REFRESH:gt_stb[],gt_matcat[].
+    CLEAR: lt_marc.
+    CALL FUNCTION 'CS_BOM_EXPL_MAT_V2'
+      EXPORTING
+        capid                 = 'PP01'
+        datuv                 = sy-datum
+        stlal                 = '1'
+        mehrs                 = 'X'
+        mtnrv                 = gt_marc-matnr
+        werks                 = gt_marc-werks
+      IMPORTING
+        topmat                = wa_cstmat
+      TABLES
+        stb                   = gt_stb
+        matcat                = gt_matcat
+      EXCEPTIONS
+        alt_not_found         = 1
+        call_invalid          = 2
+        material_not_found    = 3
+        missing_authorization = 4
+        no_bom_found          = 5
+        no_plant_data         = 6
+        no_suitable_bom_found = 7
+        conversion_error      = 8
+        OTHERS                = 9.
+
+    IF sy-subrc = 0.
+      READ TABLE gt_stb WITH KEY idnrk+0(12) = '000000000075'.
+      IF sy-subrc = 0.
+        lt_marc = gt_marc.
+        lt_marc-matnr = gt_stb-idnrk.
+        lt_marc-fmatnr = gt_marc-matnr.
+        APPEND lt_marc.
+        CLEAR: lt_marc , gt_stb.
+      ENDIF.
+    ENDIF.
+
+  ENDLOOP.
+
+  APPEND LINES OF lt_marc[] TO gt_marc[].
+*******展BOM end
+
+
+
+
+
+***抓库存mard
+  SELECT *
+   INTO CORRESPONDING FIELDS OF  TABLE gt_mard
+     FROM mard
+     WHERE matnr IN r_matnr
+     AND werks IN r_werks
+     AND ( ( lfgja = p_lfgja AND lfmon =< p_lfmon )
+      OR lfgja < p_lfgja ) .
+
+
+
+**抓历史库存 MARDH
+  SELECT
+         MIN( lfgja )
+         MIN( lfmon )
+        matnr
+        werks
+        lgort
+        lfgja
+        lfmon
+        labst AS  labst
+        umlme AS  umlme
+        insme AS  insme
+        einme AS  einme
+        speme AS  speme
+        retme AS  retme
+        vklab AS  vmlab
+        vkuml AS  vmuml
+
+      APPENDING CORRESPONDING FIELDS OF TABLE gt_mard
+      FROM mardh
+      WHERE matnr IN r_matnr
+        AND werks IN r_werks
+*        AND ( ( lfgja = p_lfgja AND
+*            lfmon >= p_lfmon ) OR lfgja > p_lfgja )
+        AND ( ( lfgja = p_lfgja AND lfmon =< p_lfmon )
+        OR lfgja < p_lfgja )
+        GROUP BY  matnr
+                  werks
+                  lgort
+                  lfgja
+                  lfmon
+                  labst
+                  umlme
+                  insme
+                  einme
+                  speme
+                  retme
+                  vklab
+                  vkuml
+                  .
+
+
+
+  "抓客户特殊库存 MSKU
+  SELECT *
+      INTO CORRESPONDING FIELDS OF  TABLE gt_msku
+       FROM msku
+       WHERE matnr IN r_matnr
+       AND werks IN r_werks
+       AND ( ( lfgja = p_lfgja AND lfmon =< p_lfmon )
+            OR lfgja < p_lfgja )
+       AND sobkz = 'W'.
+
+
+  "抓客户特殊库存 历史 MAKUH
+  SELECT
+        MIN( lfgja )
+        MIN( lfmon )
+          matnr
+          werks
+          charg
+          sobkz
+          kunnr
+          lfgja
+          lfmon
+          kulab  AS  kulab
+          kuins  AS  kuins
+          kuein  AS  kuvla
+          kuuml  AS  kuvin
+
+       APPENDING CORRESPONDING FIELDS OF TABLE gt_msku
+       FROM mskuh
+       WHERE matnr IN r_matnr
+        AND werks IN r_werks
+*        AND ( ( lfgja = p_lfgja AND
+*            lfmon >= p_lfmon ) OR lfgja > p_lfgja )
+        AND ( ( lfgja = p_lfgja AND lfmon =< p_lfmon )
+          OR lfgja < p_lfgja )
+        AND sobkz = 'W'
+        GROUP BY  matnr
+                  werks
+                  charg
+                  sobkz
+                  kunnr
+                  lfgja
+                  lfmon
+                  kulab
+                  kuins
+                  kuein
+                  kuuml.
+
+
+
+  "抓供应商的全部的特殊库存 MSSL
+  SELECT *
+      INTO CORRESPONDING FIELDS OF  TABLE gt_mssl
+       FROM mssl
+       WHERE matnr IN r_matnr
+       AND werks IN r_werks
+       AND ( ( lfgja = p_lfgja AND lfmon =< p_lfmon )
+            OR lfgja < p_lfgja )
+       AND sobkz = 'O'.
+
+
+  "抓供应商的全部的特殊库存 历史 MSLBH
+  SELECT
+         MIN( lfgja )
+         MIN( lfmon )
+          matnr
+          werks
+          charg
+          sobkz
+          lifnr
+          lfgja
+          lfmon
+          lblab   AS  sllab " 非限制使用的库存
+          lbins   AS  slins " 在质量检测中
+          lbein   AS  slein " 限制使用的库存
+          lbuml   AS  sluml " 中转外协加工（工厂）
+
+
+        APPENDING CORRESPONDING FIELDS OF TABLE gt_mssl
+        FROM mslbh
+        WHERE matnr IN r_matnr
+         AND werks IN r_werks
+*         AND ( ( lfgja = p_lfgja AND
+*             lfmon >= p_lfmon ) OR lfgja > p_lfgja )
+         AND ( ( lfgja = p_lfgja AND lfmon =< p_lfmon )
+          OR lfgja < p_lfgja )
+         AND sobkz = 'O'
+         GROUP BY  matnr
+                   werks
+                   charg
+                   sobkz
+                   lifnr
+                   lfgja
+                   lfmon
+                   lblab
+                   lbins
+                   lbein
+                   lbuml
+                   .
+
+
+
+******软件物料赋值到r_matnr begin
+*  IF r_matnr[] IS NOT INITIAL.
+*    SORT lt_marc BY matnr.
+*    DELETE ADJACENT DUPLICATES FROM lt_marc COMPARING matnr.
+*    LOOP AT lt_marc.
+*      CLEAR r_matnr.
+*      r_matnr-sign = 'I'.
+*      r_matnr-option = 'EQ'.
+*      r_matnr-low = lt_marc-matnr.
+*      APPEND r_matnr.
+*
+*
+*    ENDLOOP.
+*
+*    CLEAR:gt_marc, lt_marc.
+*    REFRESH lt_marc.
+*
+*    lt_marc[] = gt_marc[].
+*
+*    DELETE lt_marc WHERE fmatnr IS INITIAL. "含软件料号
+*
+*
+*  ENDIF.
+*****软件物料赋值到r_matnr end
+
+
+
+
+***获取价格
+
+  SELECT
+    ckmlhd~bwkey
+    ckmlhd~matnr
+    ckmlcr~kalnr
+    ckmlcr~bdatj
+    ckmlcr~poper
+    ckmlcr~untper
+    ckmlcr~curtp
+    ckmlcr~peinh
+    ckmlcr~vprsv
+    ckmlcr~stprs
+    ckmlcr~pvprs
+    ckmlcr~waers
+    INTO CORRESPONDING FIELDS OF TABLE gt_ckmlcr
+    FROM ckmlhd INNER JOIN ckmlcr
+    ON ckmlhd~kalnr = ckmlcr~kalnr
+      FOR ALL ENTRIES IN gt_marc
+    WHERE matnr = gt_marc-matnr
+      AND bwkey IN r_werks
+      AND bdatj = p_lfgja
+      AND poper = p_lfmon
+      AND curtp = '10'.
+
+
+  .
+  LOOP AT gt_ckmlcr.
+    CONCATENATE gt_ckmlcr-bdatj gt_ckmlcr-poper INTO  gt_ckmlcr-qj.
+
+    IF gt_ckmlcr-peinh <> 0.
+      CASE gt_ckmlcr-vprsv.
+
+        WHEN 'S'.
+          " gt_ckmlcr-price = gt_ckmlcr-stprs / gt_ckmlcr-peinh.
+          gt_ckmlcr-price = 0. "只取V价格
+        WHEN 'V'.
+          gt_ckmlcr-price = gt_ckmlcr-pvprs / gt_ckmlcr-peinh.
+
+      ENDCASE.
+
+    ELSE.
+      gt_ckmlcr-price = 0.
+    ENDIF.
+
+    MODIFY gt_ckmlcr.
+    CLEAR gt_ckmlcr.
+  ENDLOOP.
+
+
+
+  SORT gt_ckmlcr  DESCENDING BY bwkey matnr qj.
+  DELETE ADJACENT DUPLICATES FROM gt_ckmlcr  COMPARING bwkey matnr.
+
+
+***库存地点描述
+  SELECT werks lgort lgobe
+     FROM t001l
+    APPENDING CORRESPONDING FIELDS OF TABLE gt_t001l
+  WHERE  werks IN r_werks.
+
+
+
+**物料描述
+
+  SELECT *
+    FROM makt
+    INTO TABLE gt_makt
+    FOR ALL ENTRIES IN gt_marc
+     WHERE matnr = gt_marc-matnr
+      AND  spras = sy-langu.
+
+
+***评估类型
+  SELECT matnr
+         bwkey
+         stprs
+         peinh
+         bklas
+         hrkft
+    INTO CORRESPONDING FIELDS OF TABLE gt_mbew
+    FROM mbew
+    FOR ALL ENTRIES IN gt_marc
+    WHERE matnr = gt_marc-matnr
+      AND bwkey IN r_werks.
+
+**客户名称
+  IF gt_msku[] IS NOT INITIAL.
+    SELECT *
+      FROM kna1
+      INTO TABLE gt_kna1
+      FOR ALL ENTRIES IN gt_msku
+      WHERE kunnr = gt_msku-kunnr.
+
+  ENDIF.
+
+
+***物料类别
+  SELECT * FROM tkkh2 INTO TABLE gt_tkkh2 WHERE spras = sy-langu.
+
+********评估类别
+  SELECT * FROM t025t INTO TABLE gt_t025t WHERE spras = sy-langu.
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  PRO_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM pro_data .
+  PERFORM pro_data_stock."计算物料所有库存数量
+
+  IF gt_data[] IS NOT INITIAL.
+
+    SORT gt_kna1 BY kunnr.
+    SORT gt_mbew BY bwkey matnr.
+    SORT gt_t025t BY bklas.
+    SORT gt_tkkh2 BY hrkft.
+    SORT gt_makt BY matnr.
+    SORT gt_t001l BY lgort.
+    SORT gt_ckmlcr BY bwkey matnr vprsv.
+    SORT gt_marc BY werks matnr.
+    SORT lt_marc BY werks matnr.
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+      EXPORTING
+        input  = p_lfmon
+      IMPORTING
+        output = p_lfmon.
+    CLEAR gt_show.
+    REFRESH gt_show.
+    LOOP AT gt_data INTO gs_data.
+      CLEAR gt_show.
+
+      CONCATENATE p_lfgja p_lfmon INTO gt_show-qj."会计期间
+
+      gt_show-matnr       = gs_data-matnr.   "物料代码
+      gt_show-kunnr       = gs_data-kunnr.   "客户代码
+      gt_show-menge       = gs_data-kcs.   "期末结存数量
+
+      gt_show-lgort       = gs_data-lgort.  "库位
+      gt_show-sobkz       = gs_data-sobkz.  "特别标示
+      gt_show-lfgja       = p_lfgja .  "年度
+      gt_show-lfmon       = p_lfmon .  "月份
+
+      gt_show-werks       = gs_data-werks.  "工厂
+
+
+***物料描述
+      CLEAR gt_makt.
+      READ TABLE gt_makt WITH KEY matnr = gt_show-matnr
+                                  .."BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_show-maktx = gt_makt-maktx.  "物料名称
+      ENDIF.
+
+***单位 & 软件代码 & 软件描述
+      CLEAR gt_marc.
+      READ TABLE gt_marc WITH KEY werks = gt_show-werks
+                                  matnr = gt_show-matnr
+                                  ."BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_show-meins       = gt_marc-meins.   "计量单位
+        IF gt_marc-mtart = 'Z003'.
+          CLEAR lt_marc.
+          READ TABLE lt_marc WITH KEY werks = gt_show-werks
+                                 fmatnr = gt_show-matnr.
+          " ."BINARY SEARCH.
+
+          IF sy-subrc = 0.
+            gt_show-matnr_sf  = lt_marc-matnr.   "软件代码
+
+            CLEAR gt_makt.
+            READ TABLE gt_makt WITH KEY matnr = gt_show-matnr_sf
+                                        ."BINARY SEARCH. "软件描述
+            IF sy-subrc = 0.
+              gt_show-maktx_sf    = gt_makt-maktx.   "软件名称
+            ENDIF.
+          ENDIF.
+
+
+        ENDIF.
+      ENDIF.
+
+
+***库存地点
+      CLEAR gt_t001l.
+      READ TABLE gt_t001l WITH KEY lgort = gt_show-lgort ."BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_show-lgobe       = gt_t001l-lgobe.   "仓库
+      ENDIF.
+
+
+***客户名称
+      CLEAR gt_kna1.
+      READ TABLE gt_kna1 WITH KEY kunnr = gt_show-kunnr ."BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_show-name1       = gt_kna1-name1.   "客户名称
+      ENDIF.
+
+***评估类别及原始组
+      CLEAR gs_mbew.
+      READ TABLE gt_mbew INTO gs_mbew
+                    WITH KEY bwkey = gt_show-werks
+                             matnr = gt_show-matnr
+                             ."BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_show-bklas       = gs_mbew-bklas.   "库存类别
+        gt_show-hrkft       = gs_mbew-hrkft .   "物料类别
+        "抓描述
+        CLEAR gt_t025t.
+        READ TABLE gt_t025t WITH KEY bklas = gs_mbew-bklas ."BINARY SEARCH.
+        IF sy-subrc = 0.
+          gt_show-bkbez       = gt_t025t-bkbez .   "库存类别
+        ENDIF.
+
+        CLEAR gt_tkkh2.
+        READ TABLE gt_tkkh2 WITH KEY hrkft = gs_mbew-hrkft BINARY SEARCH .   "物料类别
+        IF sy-subrc = 0.
+          gt_show-hrktx       = gt_tkkh2-hrktx .   "物料类别
+        ENDIF.
+
+
+      ENDIF.
+
+****抓单价 金额
+      CLEAR gt_ckmlcr.
+      READ TABLE gt_ckmlcr WITH KEY bwkey = gt_show-werks
+                                   matnr = gt_show-matnr
+                                   vprsv = 'V'
+                                   ."BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_show-price_all = gt_ckmlcr-price.   "期末结存单价
+        gt_show-stprs_all = gt_show-price_all * gt_show-menge.   "期末结存金额
+
+        IF gt_show-matnr_sf IS NOT INITIAL ."软件
+          CLEAR gt_ckmlcr.
+          READ TABLE gt_ckmlcr WITH KEY bwkey = gt_show-werks
+                                        matnr = gt_show-matnr_sf
+                                        vprsv = 'V'
+                                        ."BINARY SEARCH.
+          IF sy-subrc = 0.
+            gt_show-price_sf = gt_ckmlcr-price.   ""软件单价
+            gt_show-stprs_sf = gt_show-price_sf * gt_show-menge.   ""软件金额
+          ENDIF.
+        ENDIF.
+
+        gt_show-price       = gt_show-price_all - gt_show-price_sf.   "不含软件单价
+
+        gt_show-stprs       = gt_show-stprs_all - gt_show-stprs_sf.   "不含软件金额
+
+
+
+      ENDIF.
+
+      CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+        EXPORTING
+          input        = gt_show-matnr
+        IMPORTING
+          output       = gt_show-matnr
+        EXCEPTIONS
+          length_error = 1
+          OTHERS       = 2.
+
+      CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+        EXPORTING
+          input        = gt_show-matnr_sf
+        IMPORTING
+          output       = gt_show-matnr_sf
+        EXCEPTIONS
+          length_error = 1
+          OTHERS       = 2.
+
+
+      CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+        EXPORTING
+          input        = gt_show-kunnr
+        IMPORTING
+          output       = gt_show-kunnr
+        EXCEPTIONS
+          length_error = 1
+          OTHERS       = 2.
+
+
+      CALL FUNCTION 'CONVERSION_EXIT_CUNIT_OUTPUT'
+        EXPORTING
+          input  = gt_show-meins
+        IMPORTING
+          output = gt_show-meins.
+
+      IF gt_show-sobkz IS NOT INITIAL.
+        CLEAR gt_show-lgort.
+      ENDIF.
+
+      APPEND gt_show.
+      CLEAR:lt_marc,gt_show.
+    ENDLOOP.
+
+  ENDIF.
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  PRO_DATA_STOCK
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM pro_data_stock .
+
+
+
+  CLEAR lt_marc.
+
+
+
+  "获取历史库存的最近一次记录
+  LOOP AT gt_mard INTO gs_mard.
+    CONCATENATE gs_mard-lfgja gs_mard-lfmon INTO  gs_mard-qj.
+    MODIFY gt_mard FROM gs_mard TRANSPORTING qj.
+  ENDLOOP.
+
+  LOOP AT gt_msku INTO gs_msku.
+    CONCATENATE gs_msku-lfgja gs_msku-lfmon INTO  gs_msku-qj.
+    MODIFY gt_msku FROM gs_msku TRANSPORTING qj.
+  ENDLOOP.
+
+  LOOP AT gt_mssl INTO gs_mssl.
+    CONCATENATE gs_mssl-lfgja gs_mssl-lfmon INTO  gs_mssl-qj.
+    MODIFY gt_mssl FROM gs_mssl TRANSPORTING qj.
+  ENDLOOP.
+
+
+
+  SORT gt_mard DESCENDING BY werks matnr lgort qj .
+  DELETE ADJACENT DUPLICATES FROM gt_mard COMPARING werks matnr lgort .
+
+  SORT gt_msku DESCENDING BY werks matnr sobkz kunnr qj .
+  DELETE ADJACENT DUPLICATES FROM gt_msku COMPARING  werks matnr sobkz kunnr .
+
+
+  SORT gt_mssl DESCENDING BY werks matnr sobkz lifnr qj .
+  DELETE ADJACENT DUPLICATES FROM gt_mssl COMPARING  werks matnr sobkz lifnr.
+
+
+
+  CLEAR:gt_data, gs_data,lt_data.
+  SORT gt_marc BY werks matnr.
+  DELETE ADJACENT DUPLICATES FROM gt_marc COMPARING werks matnr.
+  DATA:l_kcs LIKE gs_data-kcs.
+
+
+
+  SORT gt_marc BY werks matnr.
+  SORT gt_mard BY werks matnr .
+  SORT gt_mardh BY werks matnr .
+  SORT gt_msku BY werks matnr .
+  SORT gt_mskuh BY werks matnr .
+  SORT gt_mssl BY werks matnr .
+  SORT gt_mslbh BY werks matnr.
+
+  LOOP AT gt_marc WHERE fmatnr IS INITIAL.
+    CLEAR:l_kcs, w_loop,gs_data.
+    gs_data-werks = gt_marc-werks.
+    gs_data-matnr = gt_marc-matnr.
+    READ TABLE gt_mard INTO gs_mard WITH KEY werks = gt_marc-werks
+                                             matnr = gt_marc-matnr
+                                             BINARY SEARCH.
+    IF sy-subrc = 0.
+      w_loop = sy-tabix.
+      CLEAR gs_mard.
+      LOOP AT gt_mard  INTO gs_mard FROM w_loop.
+        IF gs_mard-werks <> gt_marc-werks OR gs_mard-matnr <> gt_marc-matnr.
+          EXIT.
+        ENDIF.
+        gs_data-lgort = gs_mard-lgort.
+        gs_data-kcs = gs_mard-labst
+                    + gs_mard-umlme
+                    + gs_mard-insme
+                    + gs_mard-einme
+                    + gs_mard-speme
+                    + gs_mard-retme
+                    + gs_mard-vmlab
+                    + gs_mard-vmuml
+                    + gs_mard-vmins
+                    + gs_mard-vmein
+                    + gs_mard-vmspe
+                    + gs_mard-vmret.
+        l_kcs = l_kcs + gs_data-kcs.
+        COLLECT gs_data INTO gt_data.
+        CLEAR: gs_data-sobkz,gs_data-lgort,gs_data-kcs.
+        "  COLLECT gs_data INTO lt_data.
+        "   CLEAR gs_data.
+      ENDLOOP.
+    ENDIF.
+
+
+    READ TABLE gt_msku INTO gs_msku WITH KEY werks = gt_marc-werks
+                                             matnr = gt_marc-matnr
+                                             BINARY SEARCH .
+    IF sy-subrc = 0.
+      w_loop = sy-tabix.
+      CLEAR gs_msku.
+      LOOP AT gt_msku  INTO gs_msku FROM w_loop.
+        IF gs_msku-werks <> gt_marc-werks OR gs_msku-matnr <> gt_marc-matnr.
+          EXIT.
+        ENDIF.
+        gs_data-sobkz = gs_msku-sobkz.
+        gs_data-lgort = 'CUSM'.
+        gs_data-kunnr = gs_msku-kunnr.
+        gs_data-kcs = gs_msku-kulab
+                    + gs_msku-kuins
+                    + gs_msku-kuvla
+                    + gs_msku-kuvin
+                    + gs_msku-kuill
+                    + gs_msku-kuilq.
+        l_kcs = l_kcs + gs_data-kcs.
+        COLLECT gs_data INTO gt_data.
+        CLEAR: gs_data-sobkz,gs_data-lgort,gs_data-kcs,gs_data-kunnr.
+        "  COLLECT gs_data INTO lt_data.
+        " CLEAR gs_data.
+      ENDLOOP.
+    ENDIF.
+
+
+    READ TABLE gt_mssl INTO gs_mssl WITH KEY werks = gt_marc-werks
+                                             matnr = gt_marc-matnr
+                                             BINARY SEARCH.
+    IF sy-subrc = 0.
+      w_loop = sy-tabix.
+      CLEAR gs_mssl.
+      LOOP AT gt_mssl  INTO gs_mssl FROM w_loop.
+        IF gs_mssl-werks <> gt_marc-werks OR gs_mssl-matnr <> gt_marc-matnr.
+          EXIT.
+        ENDIF.
+        gs_data-sobkz = gs_mssl-sobkz.
+        gs_data-lgort = 'SUPE'.
+        gs_data-lifnr = ''.
+        gs_data-kcs = gs_mssl-sllab
+                    + gs_mssl-slins
+                    + gs_mssl-slein.
+        l_kcs = l_kcs + gs_data-kcs.
+        COLLECT gs_data INTO gt_data.
+        CLEAR: gs_data-sobkz,gs_data-lgort,gs_data-lifnr,gs_data-kcs.
+        "  COLLECT gs_data INTO lt_data.
+        "   CLEAR gs_data.
+      ENDLOOP.
+    ENDIF.
+
+    IF l_kcs <> 0.
+      gs_data-kcs = l_kcs.
+      COLLECT gs_data INTO lt_data.
+      CLEAR gs_data.
+    ENDIF.
+  ENDLOOP.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  ALV_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM alv_data .
+
+  IF p_chx = 'X'.
+    DELETE gt_show WHERE menge = 0.
+  ENDIF.
+
+  PERFORM get_fieldcat.
+
+  gs_layout-colwidth_optimize    = 'X'.
+  gs_layout-get_selinfos         = 'X'.
+  gs_layout-detail_popup         = 'X'.
+  gs_layout-no_keyfix            = 'X'.
+  gs_layout-zebra            = 'X'.
+  gs_layout-box_fieldname           = 'SEL'.
+
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+      i_callback_program = sy-repid
+      is_layout          = gs_layout
+      it_fieldcat        = gt_fieldcat[]
+      it_sort            = gt_sort[]
+      i_save             = 'A'
+    TABLES
+      t_outtab           = gt_show[]
+    EXCEPTIONS
+      program_error      = 1
+      OTHERS             = 2.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM get_fieldcat .
+  m_fieldcat: 'QJ' '期间' '10' ''	1.
+  m_fieldcat: 'LGOBE' '仓库' '10' ''  2.
+  m_fieldcat: 'MATNR' '物料代码' '10' ''  3.
+  m_fieldcat: 'MAKTX' '物料名称' '10' ''  4.
+  m_fieldcat: 'KUNNR' '客户代码' '10' ''  5.
+  m_fieldcat: 'NAME1' '客户名称' '10' ''  6.
+  m_fieldcat: 'MATNR_SF' '软件代码' '10' ''	7.
+  m_fieldcat: 'MAKTX_SF' '软件名称' '10' ''	8.
+  m_fieldcat: 'BKBEZ' '库存类别' '10' ''  9.
+  m_fieldcat: 'HRKTX' '物料类别' '10' ''  10.
+  m_fieldcat: 'MEINS' '计量单位' '10' ''  11.
+  m_fieldcat: 'MENGE' '期末结存数量' '10' ''  12.
+  m_fieldcat: 'PRICE_ALL' '期末结存单价' '10' ''  13.
+  m_fieldcat: 'STPRS_ALL' '期末结存金额' '10' ''  14.
+  m_fieldcat: 'PRICE_SF' '软件单价' '10' ''	15.
+  m_fieldcat: 'PRICE' '不含软件单价' '10' ''  16.
+  m_fieldcat: 'STPRS_SF ' '软件金额' '10' ''  17.
+  m_fieldcat: 'STPRS' '不含软件金额' '10' ''  18.
+  m_fieldcat: 'LGORT' '库位' '10' ''  19.
+  m_fieldcat: 'SOBKZ' '特别标示' '10' ''  20.
+  m_fieldcat: 'LFGJA' '年度' '10' ''  21.
+  m_fieldcat: 'LFMON' '月份' '10' ''  22.
+  m_fieldcat: 'BKLAS' '库存类别' '10' ''  23.
+  m_fieldcat: 'HRKFT' '物料类别' '10' ''  24.
+  m_fieldcat: 'WERKS' '工厂' '10' ''  25.
+
+
+  LOOP AT gt_fieldcat WHERE col_pos >= 19.
+
+    gt_fieldcat-no_out = 'X'.
+    MODIFY gt_fieldcat.
+  ENDLOOP.
+ENDFORM.

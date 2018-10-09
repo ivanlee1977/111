@@ -1,0 +1,37 @@
+*& 程序名： ZRPMM023
+*& 创建者(公司)/日期： LIJS/20170913
+*& 程序描述：库龄报表
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    LIJS           20170913      创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpmm023.
+
+INCLUDE zrpmm023_top.      "全局数据定义
+INCLUDE zrpmm023_s01.      "选择界面定义
+INCLUDE zrpmm023_f01.      "子程序定义
+
+INITIALIZATION.
+
+AT SELECTION-SCREEN.
+
+START-OF-SELECTION.
+  PERFORM check_enter.
+
+  PERFORM get_data."取数据
+
+  PERFORM process_data."处理数据
+  IF gt_mard[] IS INITIAL.
+    MESSAGE '查不到符合的条件数据，请检查！' TYPE 'I'.
+    RETURN.
+  ENDIF.
+  PERFORM sub_dny_field_create.
+  "赋值到表里
+  PERFORM sub_dny_table_create.
+  "字段赋值
+  PERFORM sub_dny_field_update.
+
+
+END-OF-SELECTION.
+  "显示字段
+  PERFORM sub_write_data.

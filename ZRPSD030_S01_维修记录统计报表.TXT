@@ -1,0 +1,17 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM031_S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+DATA aedat(6) TYPE c.
+SELECT-OPTIONS:
+               s_aedat FOR aedat OBLIGATORY DEFAULT sy-datum+0(6),
+               s_spart FOR mara-spart,"产品组
+               s_matkl FOR mara-matkl,"物料组
+               s_dyzxh FOR ausp-atwrt,"品牌/厂家
+               s_lb FOR ztsd011-zmatnr,
+               s_cpx FOR ausp-atwrt,"产品线
+               s_zwxzt FOR ztcs001-zwxzt,
+               s_zwxy FOR ztcs001-zwxy
+.
+PARAMETERS: p_chk1 RADIOBUTTON GROUP r1, p_chk2 RADIOBUTTON GROUP r1.
+SELECTION-SCREEN END OF BLOCK b1.

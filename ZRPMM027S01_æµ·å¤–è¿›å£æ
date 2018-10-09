@@ -1,0 +1,9 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPMM027S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+PARAMETERS:p_lifnr LIKE ekko-lifnr OBLIGATORY.
+SELECT-OPTIONS:s_ebeln FOR ekko-ebeln,
+               s_aedat FOR ekko-aedat.
+SELECTION-SCREEN END OF BLOCK blc.

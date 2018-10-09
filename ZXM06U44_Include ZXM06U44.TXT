@@ -1,0 +1,19 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZXM06U44
+*&---------------------------------------------------------------------*
+***调用函数将PO信息发送到WMS系统
+* 只推送有物料号的
+BREAK XUL.
+DATA: lt_ekpo TYPE uekpo OCCURS 0 WITH HEADER LINE.
+
+lt_ekpo[] = xekpo[].
+DELETE lt_ekpo WHERE matnr IS INITIAL.
+
+IF lt_ekpo[] IS NOT INITIAL.
+  CALL FUNCTION 'ZF_WMS_PO_SEND'
+    EXPORTING
+      i_header      = i_ekko
+    TABLES
+      t_po_item     = xekpo
+      t_po_schedule = xeket.
+ENDIF.

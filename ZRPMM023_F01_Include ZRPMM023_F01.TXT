@@ -1,0 +1,559 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM023_F01
+*&---------------------------------------------------------------------*
+FORM get_data."取数据
+  SELECT
+         a~matnr
+         a~werks
+         a~lgort
+         a~labst
+    INTO CORRESPONDING FIELDS OF TABLE gt_mard
+    FROM mard AS a
+    JOIN mara AS b ON a~matnr EQ b~matnr
+    WHERE a~werks IN s_werks
+     AND  a~matnr IN s_matnr
+     AND  a~lgort IN s_lgort
+     AND  a~lvorm EQ ''
+     AND  a~labst NE 0
+     AND  b~matkl IN s_matkl
+     AND  b~spart IN s_spart.
+  SORT gt_mard BY matnr werks lgort.
+  DELETE ADJACENT DUPLICATES FROM gt_mard COMPARING matnr werks lgort.
+
+  IF gt_mard[] IS NOT INITIAL.
+    SELECT
+         mblnr
+         mjahr
+         zeile
+         matnr      "物料编码
+         werks
+         lgort      "库存地点
+         bwart
+         menge      "数量
+         budat_mkpf
+      INTO CORRESPONDING FIELDS OF TABLE gt_mseg
+      FROM mseg
+      FOR ALL ENTRIES IN gt_mard
+      WHERE matnr EQ gt_mard-matnr
+       AND  werks EQ gt_mard-werks
+       AND  lgort EQ gt_mard-lgort
+       AND  bwart IN ('101','202','561','Z02','311','701','602','634','653','262','632').
+
+    SORT gt_mseg BY matnr werks lgort.
+
+    SELECT *
+      INTO CORRESPONDING FIELDS OF TABLE gt_mchb
+      FROM mchb
+      FOR ALL ENTRIES IN gt_mard
+      WHERE matnr EQ gt_mard-matnr
+       AND  werks EQ gt_mard-werks
+       AND  lgort EQ gt_mard-lgort.
+  ENDIF.
+ENDFORM.
+
+
+FORM process_data.
+  DATA: lf_days   TYPE int4.
+  DATA:lv_labst LIKE mard-labst.
+  DATA:lv_date(20)   TYPE c.
+  DATA:lv_num(2) TYPE c VALUE 1.
+  DATA:lv_das(5) TYPE c,
+       lv_now(5) TYPE c.
+
+  DATA:it_makt LIKE makt OCCURS 0 WITH HEADER LINE .
+
+  IF gt_mard[] IS NOT INITIAL .
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE it_makt
+      FROM makt
+      FOR ALL ENTRIES IN gt_mard
+      WHERE matnr EQ gt_mard-matnr
+      AND   spras EQ sy-langu.
+  ENDIF.
+
+  SORT it_makt BY matnr.
+
+  LOOP AT gt_mard .
+    CLEAR lv_bs.
+
+*加上p_in的前导零
+
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+      EXPORTING
+        input  = gt_mard-matnr
+      IMPORTING
+        output = gt_mard-matnr.
+
+    "获取工厂
+    READ TABLE it_makt WITH KEY matnr = gt_mard-matnr.
+    IF sy-subrc EQ 0.
+      gt_mard-maktx = it_makt-maktx.
+    ENDIF.
+
+***  CHANGE BY PFT 20171107
+    "判断分配的类是否存在：
+*    PERFORM check_objcl USING gt_mard-matnr CHANGING lv_bs.
+    SELECT SINGLE kzkri INTO lv_bs FROM marc WHERE matnr = gt_mard-matnr AND werks = gt_mard-werks.
+***  END BY PFT 20171107
+
+*4.	非批次管理（物料主数据没有分配类Z_BATCH_ROH或Z_BATCH_FER）的物料的入库日期反算逻辑：
+*	a)根据物料编码+工厂，在MSEG表中取出移动类型为101、202的所有凭证行及数量（MSEG-MENGE）
+*	b)将凭证按过帐日期降序排序
+*	c)将结存数量按凭证行减去凭证数量，如果结果不为0，将当前凭证日期和区间日期比较，汇总到对应的区间，循环减去下一条，直至为0，取为0的当条凭证的过帐日期作也汇总到响应的区间,如果减去仍有余数，则将其数量放到最后一项。
+
+    "计算物料 工厂 库位中的各区间的数量
+    IF lv_bs NE 'X'.
+      LOOP AT gt_mseg WHERE matnr EQ gt_mard-matnr AND werks EQ gt_mard-werks AND lgort EQ gt_mard-lgort.
+
+        CLEAR:lf_days,lv_num,lv_now.
+        lv_num = 1."循环次数
+        "账龄计算
+        lf_days = sy-datum - gt_mseg-budat_mkpf.
+        "循环界面输入的账龄有多少个，此次循环是确定账龄在输入框哪个期间
+        DO 13 TIMES.
+          "将账龄描述拼接起来
+          CONDENSE lv_num.
+          CONCATENATE 'P_DATE'lv_num  INTO lv_date.
+          IF lv_date IS NOT INITIAL .
+            "读取对应的账龄天数
+            READ TABLE it_pdate WITH KEY lv_date = lv_date.
+            IF sy-subrc EQ 0.
+              lv_now = it_pdate-date.
+            ENDIF.
+            "如果报表日期 - 过账日期  小于账龄，则输出
+            IF lf_days LE lv_now."小于等于
+              gt_pdate-lv_date  = lv_date.
+              EXIT.
+            ELSE.
+              "考虑最后一个值，将超过最后一个值的全部放进最后一个值里
+              IF lv_num = 13.
+                IF lf_days > lv_now.
+                  gt_pdate-lv_date  = lv_date.
+                  EXIT.
+                ENDIF.
+              ENDIF.
+            ENDIF.
+
+          ENDIF.
+          lv_num = lv_num + 1.
+        ENDDO.
+
+        "赋值到内表 GT_PDATE
+        gt_pdate-matnr = gt_mard-matnr.
+        gt_pdate-werks = gt_mard-werks.
+        gt_pdate-lgort = gt_mard-lgort.
+        gt_pdate-menge = gt_mseg-menge.
+        gt_mard-lvorm     = ''.
+        COLLECT gt_pdate.
+      ENDLOOP.
+    ELSE.
+*批次管理（物料主数据有分配类Z_BATCH_ROH或Z_BATCH_FER）的物料，取数逻辑：
+* 根据物料、工厂、库存地点取批次及数量，根据MCHB~ERSDA将MCHB~CLABS汇总到不同的区间
+      LOOP AT gt_mchb WHERE matnr EQ gt_mard-matnr AND werks EQ gt_mard-werks AND lgort EQ gt_mard-lgort.
+        "账龄计算
+        CLEAR:lf_days,lv_num,lv_now.
+        lv_num = 1.
+        lf_days = sy-datum - gt_mchb-ersda.
+        "循环界面输入的账龄有多少个，此次循环是确定账龄在输入框哪个期间
+        DO 13 TIMES.
+          "将账龄描述拼接起来
+          CONDENSE lv_num.
+          CONCATENATE 'P_DATE'lv_num  INTO lv_date.
+          IF lv_date IS NOT INITIAL .
+            "读取对应的账龄天数
+            READ TABLE it_pdate WITH KEY lv_date = lv_date.
+            IF sy-subrc EQ 0.
+              lv_now = it_pdate-date.
+            ENDIF.
+            "如果报表日期 - 过账日期  小于账龄，则输出
+            IF lf_days LE lv_now."小于等于
+              gt_pdate-lv_date  = lv_date.
+              EXIT.
+            ELSE.
+              "考虑最后一个值，将超过最后一个值的全部放进最后一个值里
+              IF lv_num = 13.
+                IF lf_days > lv_now.
+                  gt_pdate-lv_date  = lv_date.
+                  EXIT.
+                ENDIF.
+              ENDIF.
+            ENDIF.
+          ENDIF.
+          lv_num = lv_num + 1.
+        ENDDO.
+
+        "赋值到内表 GT_PDATE
+        gt_pdate-matnr = gt_mard-matnr.
+        gt_pdate-werks = gt_mard-werks.
+        gt_pdate-lgort = gt_mard-lgort.
+        gt_pdate-menge = gt_mchb-clabs.
+        gt_mard-lvorm     = 'X'.
+        COLLECT gt_pdate.
+      ENDLOOP.
+    ENDIF.
+    MODIFY gt_mard.
+  ENDLOOP.
+
+  SORT gt_pdate BY matnr werks lgort lv_date.
+  "处理非批次管理的数据，将没有批次管理，且无货物移动记录的数据放到最后一行，或按各区间货物移动记录扣减苦存
+  LOOP AT gt_mard.
+    lv_labst = gt_mard-labst.
+    IF gt_mard-lvorm EQ ''.
+      "采用DO方式 将数值分配到各个区间中去
+      "账龄计算
+      CLEAR:lf_days,lv_num,lv_now.
+      lv_num = 1.
+      "循环界面输入的账龄有多少个，此次循环是确定账龄在输入框哪个期间
+      DO 13 TIMES.
+        "将账龄描述拼接起来
+        CONDENSE lv_num.
+        CONCATENATE 'P_DATE'lv_num  INTO lv_date.
+        IF lv_date IS NOT INITIAL .
+          IF lv_num NE 13.
+            "读取对应的区间
+            LOOP AT gt_pdate WHERE matnr = gt_mard-matnr AND werks = gt_mard-werks AND  lgort = gt_mard-lgort AND lv_date = lv_date.
+              IF gt_pdate-menge NE 0.
+                "判断库存与各区间货物移动数量
+                IF lv_labst GT gt_pdate-menge.
+                  lv_labst = lv_labst - gt_pdate-menge.
+                ELSE.
+                  gt_pdate-menge = lv_labst.
+                  CLEAR lv_labst.
+                ENDIF.
+              ENDIF.
+              MODIFY gt_pdate.
+            ENDLOOP.
+          ELSE.
+            "考虑最后一个值，将超过最后一个值的全部放进最后一个值里
+            READ TABLE gt_pdate WITH KEY matnr = gt_mard-matnr werks = gt_mard-werks lgort = gt_mard-lgort.
+            IF sy-subrc EQ 0.
+              gt_pdate-lv_date  = 'P_DATE13'.
+              gt_pdate-matnr = gt_mard-matnr.
+              gt_pdate-werks = gt_mard-werks.
+              gt_pdate-lgort = gt_mard-lgort.
+              gt_pdate-menge = lv_labst.
+              gt_mard-lvorm     = ''.
+              APPEND gt_pdate.
+            ENDIF.
+          ENDIF.
+        ENDIF.
+        lv_num = lv_num + 1.
+      ENDDO.
+
+      "将没有批次管理，且无货物移动记录的数据放到最后一行
+      READ TABLE gt_pdate WITH KEY matnr = gt_mard-matnr werks = gt_mard-werks lgort = gt_mard-lgort.
+      IF sy-subrc NE 0.
+        gt_pdate-lv_date  = 'P_DATE13'.
+        gt_pdate-matnr = gt_mard-matnr.
+        gt_pdate-werks = gt_mard-werks.
+        gt_pdate-lgort = gt_mard-lgort.
+        gt_pdate-menge = gt_mard-labst.
+        gt_mard-lvorm     = ''.
+        APPEND gt_pdate.
+      ENDIF.
+    ENDIF.
+  ENDLOOP.
+
+ENDFORM.
+
+
+FORM sub_dny_field_create .
+
+  CLEAR compdesc.
+  compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'MSEG-MATNR' ).
+  compdesc-name = 'MATNR'.
+  APPEND compdesc TO components.
+  compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'MAKT-MAKTX' ).
+  compdesc-name = 'MAKTX'.
+  APPEND compdesc TO components.
+  compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'MSEG-WERKS' ).
+  compdesc-name = 'WERKS'.
+  APPEND compdesc TO components.
+  compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'MSEG-LGORT' ).
+  compdesc-name = 'LGORT'.
+  APPEND compdesc TO components.
+  compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'MARD-LABST' ).
+  compdesc-name = 'LABST'.
+  APPEND compdesc TO components.
+
+  compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'MARD-LVORM' ).
+  compdesc-name = 'LVORM'.
+  APPEND compdesc TO components.
+
+  LOOP AT it_pdate  .
+    CONCATENATE ''it_pdate-lv_date INTO wa_flname.
+    compdesc-type ?= cl_abap_datadescr=>describe_by_name( 'MSEG-MENGE' ).
+    compdesc-name  = wa_flname.
+    APPEND compdesc TO components.
+  ENDLOOP.
+
+ENDFORM.                    " SUB_DNY_FIELD_CREATE
+
+FORM sub_dny_table_create .
+  cl_stru = cl_abap_structdescr=>create( components ).
+  cl_tabl = cl_abap_tabledescr=>create( cl_stru ).
+  CREATE DATA cl_handle TYPE HANDLE cl_tabl.
+  ASSIGN cl_handle->* TO <dynitab>.
+  CREATE DATA cl_strue TYPE HANDLE cl_stru.
+  ASSIGN cl_strue->* TO <dynwa>.
+ENDFORM.                    " SUB_DNY_TABLE_CREATE
+
+
+FORM sub_dny_field_update .
+************************按汇总条件取数*************************
+  LOOP AT gt_mard .
+    ASSIGN COMPONENT 'MATNR' OF STRUCTURE <dynwa> TO <field>.
+    <field> =  gt_mard-matnr.
+    ASSIGN COMPONENT 'MAKTX' OF STRUCTURE <dynwa> TO <field>.
+    <field> =  gt_mard-maktx.
+    ASSIGN COMPONENT 'WERKS' OF STRUCTURE <dynwa> TO <field>.
+    <field> =  gt_mard-werks.
+    ASSIGN COMPONENT 'LGORT' OF STRUCTURE <dynwa> TO <field>.
+    <field> =  gt_mard-lgort.
+    ASSIGN COMPONENT 'LABST' OF STRUCTURE <dynwa> TO <field>.
+    <field> =  gt_mard-labst.
+    ASSIGN COMPONENT 'LVORM' OF STRUCTURE <dynwa> TO <field>.
+    <field> =  gt_mard-lvorm.
+    LOOP AT it_pdate.
+      CONCATENATE '' it_pdate-lv_date  INTO  wa_flname.
+      ASSIGN COMPONENT wa_flname OF STRUCTURE <dynwa> TO <field>.
+      READ TABLE gt_pdate WITH KEY matnr = gt_mard-matnr lgort = gt_mard-lgort werks = gt_mard-werks  lv_date = it_pdate-lv_date.
+      IF sy-subrc EQ 0.
+        <field> = gt_pdate-menge.
+      ENDIF.
+    ENDLOOP.
+    APPEND <dynwa> TO <dynitab>.
+    CLEAR <dynwa>.
+
+  ENDLOOP.
+
+ENDFORM.
+FORM sub_write_data .
+  CLEAR fieldcat.
+  REFRESH fieldcat.
+*  PERFORM alv_top_of_page.
+  PERFORM frm_get_event.           "设置自定义事件处理程序
+  PERFORM build_fieldcat.
+  PERFORM display_alv.
+ENDFORM.                    " SUB_WRITE_DATA
+*&---------------------------------------------------------------------*
+*&      Form  frm_get_event
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+FORM frm_get_event .
+  DATA l_events TYPE LINE OF slis_t_event.
+  CLEAR l_events.
+  l_events-name = 'CALLER_EXIT'.
+  l_events-form = 'FM_BUTTON'.
+  APPEND l_events TO git_events.
+ENDFORM.                    " FRM_GET_EVENT
+*&---------------------------------------------------------------------*
+*&      Form  build_fieldcat
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+FORM build_fieldcat .
+  DATA : col_pos TYPE i VALUE 1.
+  ps_layout-zebra             = 'X'.
+  ps_layout-cwidth_opt        = 'X'.
+  DATA:l_date        TYPE idcn_segm.
+*----------------------------------------------------------------------*
+*& Rerference
+*&  _fieldname scrtext_l  _no_zero  _edit _decimals_out
+*----------------------------------------------------------------------*
+
+  PERFORM field USING 'MATNR' '物料编码' 'X' '' '' '' '' '' ''.
+  PERFORM field USING 'MAKTX' '物料描述' 'X' '' '' '' '' '' ''.
+  PERFORM field USING 'WERKS' '工厂代码' 'X' '' '' '' '' '' ''.
+  PERFORM field USING 'LGORT' '库存地点' 'X' '' '' '' '' '' ''.
+  PERFORM field USING 'LABST' '当前库存' 'X' '' '' '' '' '' ''.
+  PERFORM field USING 'LVORM' '批次管理' '' '' '' '' '' '' ''.
+  LOOP AT it_pdate .
+    CONDENSE l_date.
+    CONDENSE it_pdate-date.
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+      EXPORTING
+        input  = it_pdate-date
+      IMPORTING
+        output = it_pdate-date.
+
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+      EXPORTING
+        input  = l_date
+      IMPORTING
+        output = l_date.
+    IF it_pdate-lv_date EQ 'P_DATE13'.
+      CONCATENATE '>' it_pdate-date'天' INTO wa_field.
+      CONCATENATE '' it_pdate-lv_date INTO wa_flname.
+    ELSE.
+      CONCATENATE l_date'~' it_pdate-date'天' INTO wa_field.
+      CONCATENATE '' it_pdate-lv_date INTO wa_flname.
+    ENDIF.
+    PERFORM field USING wa_flname wa_field 'X' '' '' '' '' '' 'X'.
+    l_date = it_pdate-date + 1.
+  ENDLOOP.
+ENDFORM.                    " BUILD_FIELDCAT
+
+*&---------------------------------------------------------------------*
+*&      Form  display_alv
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+FORM field  USING   p_fieldname       "
+                     p_seltext_l       "
+                     p_no_zero         "
+                     p_edit            "
+                     p_check
+                     p_deci
+                     p_field
+                     p_table
+                     p_sum.
+  fieldcat_ln-fieldname     = p_fieldname.
+  fieldcat_ln-reptext     = p_seltext_l.
+  fieldcat_ln-no_zero       = p_no_zero.
+  fieldcat_ln-edit          = p_edit.
+  fieldcat_ln-checkbox          = p_check.
+  fieldcat_ln-decimals_o  = p_deci.
+  fieldcat_ln-ref_field  = p_field.
+  fieldcat_ln-ref_table  = p_table.
+  fieldcat_ln-do_sum  = p_sum.
+
+  APPEND fieldcat_ln TO fieldcat.
+  CLEAR: fieldcat_ln.
+ENDFORM.                    " field
+
+*&---------------------------------------------------------------------*
+*&      Form  display_alv
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+FORM display_alv .
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program = sy-cprog
+      is_layout_lvc      = ps_layout
+      it_fieldcat_lvc    = fieldcat
+      i_save             = 'A'
+*     i_callback_user_command  = 'USER_COMMAND'
+*     it_events          = git_events
+*     i_callback_pf_status_set = 'SET_PFSTATUS'
+*     i_grid_title       = ztitle
+      i_html_height_top  = 22     "HTML框的高度
+    TABLES
+      t_outtab           = <dynitab>
+    EXCEPTIONS
+      program_error      = 1
+      OTHERS             = 2.
+
+ENDFORM.                    " DISPLAY_ALV
+*&---------------------------------------------------------------------*
+*&      设置状态条
+*&---------------------------------------------------------------------*
+FORM set_pfstatus USING extab TYPE slis_t_extab.
+
+  SET PF-STATUS 'ZRPFI009'." 标准ALV功能
+
+ENDFORM.                    "set_pf_status_1000
+
+FORM check_enter.
+  "将十个区间的值赋值进内表
+  it_pdate-lv_date = 'P_DATE1'.
+  it_pdate-date    = p_date1.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE2'.
+  it_pdate-date    = p_date1 * 2.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE3'.
+  it_pdate-date    = p_date1 * 3.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE4'.
+  it_pdate-date    = p_date1 * 4.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE5'.
+  it_pdate-date    = p_date1 * 5.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE6'.
+  it_pdate-date    = p_date1 * 6.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE7'.
+  it_pdate-date    = p_date1 * 7.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE8'.
+  it_pdate-date    = p_date1 * 8.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE9'.
+  it_pdate-date    = p_date1 * 9.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE10'.
+  it_pdate-date    = p_date1 * 10.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE11'.
+  it_pdate-date    = p_date1 * 11.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE12'.
+  it_pdate-date    = p_date1 * 12.
+  APPEND it_pdate.
+  it_pdate-lv_date = 'P_DATE13'.
+  it_pdate-date    = p_date1 * 12.
+  APPEND it_pdate.
+ENDFORM.
+
+FORM check_objcl USING gt_mard-matnr CHANGING lv_bs.
+  DATA:lv_object          LIKE bapi1003_key-object,
+       lv_allocvaluesnum  LIKE  bapi1003_alloc_values_num OCCURS 0 WITH HEADER LINE,
+       lv_allocvalueschar LIKE  bapi1003_alloc_values_char OCCURS 0 WITH HEADER LINE,
+       lv_allocvaluescurr LIKE  bapi1003_alloc_values_curr OCCURS 0 WITH HEADER LINE.
+
+  CLEAR lv_object.
+  lv_object  = gt_mard-matnr.
+  CALL FUNCTION 'BAPI_OBJCL_GETDETAIL'
+    EXPORTING
+      objectkey       = lv_object
+      objecttable     = 'MARA'
+      classnum        = 'Z_BATCH_ROH'
+      classtype       = '023'
+      keydate         = sy-datum
+*     UNVALUATED_CHARS       = ' '
+      language        = sy-langu
+*     OBJECTKEY_LONG  =
+* IMPORTING
+*     STATUS          =
+*     STANDARDCLASS   =
+    TABLES
+      allocvaluesnum  = lv_allocvaluesnum
+      allocvalueschar = lv_allocvalueschar
+      allocvaluescurr = lv_allocvaluescurr
+      return          = lt_return.
+
+  IF lt_return[] IS NOT INITIAL.
+    IF lt_return-type = 'S' AND  lt_return-id EQ 'CL' AND lt_return-number EQ '731'.
+      lv_bs = 'X'.
+    ENDIF.
+  ELSE.
+    "判断分配的类是否存在：
+    CALL FUNCTION 'BAPI_OBJCL_GETDETAIL'
+      EXPORTING
+        objectkey       = lv_object
+        objecttable     = 'MARA'
+        classnum        = 'Z_BATCH_RER'
+        classtype       = '023'
+        keydate         = sy-datum
+*       UNVALUATED_CHARS       = ' '
+        language        = sy-langu
+*       OBJECTKEY_LONG  =
+* IMPORTING
+*       STATUS          =
+*       STANDARDCLASS   =
+      TABLES
+        allocvaluesnum  = lv_allocvaluesnum
+        allocvalueschar = lv_allocvalueschar
+        allocvaluescurr = lv_allocvaluescurr
+        return          = lt_return.
+    IF lt_return[] IS NOT INITIAL.
+      IF lt_return-type = 'S' AND  lt_return-id EQ 'CL' AND lt_return-number EQ '731'.
+        lv_bs = 'X'.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+ENDFORM.

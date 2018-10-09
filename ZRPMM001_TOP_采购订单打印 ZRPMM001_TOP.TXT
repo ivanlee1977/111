@@ -1,0 +1,111 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM001_TOP
+*&---------------------------------------------------------------------*
+TYPE-POOLS:truxs,slis.
+DATA:xlstab TYPE truxs_t_text_data.
+TABLES:ekpo,ekko,mara,zprintnum.
+********************ALV 事件****************
+DATA:
+  it_fieldcat TYPE lvc_t_fcat,
+  wa_fieldcat LIKE LINE OF it_fieldcat,
+  gs_layout   TYPE lvc_s_layo,
+  it_events   TYPE slis_t_event, ""事件属性
+  wa_events   TYPE slis_alv_event.
+
+
+DATA:BEGIN OF gw_item,"展示内表
+       sel(1)      TYPE c,
+       ebeln       LIKE ekpo-ebeln, "采购订单号
+       bukrs       LIKE ekpo-bukrs, "公司
+       ekorg       LIKE ekko-ekorg, "采购组织
+       ekgrp       LIKE ekko-ekgrp, "采购组
+       lifnr       LIKE ekko-lifnr, "供应商
+       name1       LIKE lfa1-name1, "供应商名称
+       bedat       LIKE ekko-bedat, "凭证日期
+       aedat       LIKE ekko-aedat, "创建日期
+       street      LIKE adrc-street, "供应商地址
+       telf1       LIKE lfa1-telf1, "电话（供应商）
+       telfx       LIKE lfa1-telfx, "传真（供应商）
+       name2       LIKE knvk-name1, "联系人（供应商）
+       eknam       LIKE t024-eknam, "采购员
+       zterm       LIKE ekko-zterm, "付款方式
+       werks       LIKE ekpo-werks, "工厂
+       ztext       LIKE t052u-text1, "付款方式描述
+       text1       LIKE t007s-text1, "票据类型
+       adrn2       LIKE ekpo-adrn2, "送货地址
+       shdz        LIKE adrc-name1, "送货地址描述
+       butxt       LIKE t001-butxt, "公司名称
+       ebelp       LIKE ekpo-ebelp, "项次
+       matnr       LIKE ekpo-matnr, "物料编码
+*       txz01       LIKE ekpo-txz01, "物料描述
+       txz01(500)  TYPE c,           "物料描述
+       maktx_en    LIKE makt-maktx, "物料描述
+       menge       LIKE ekpo-menge, "数量
+       lmein       LIKE ekpo-meins, "单位
+*      NETPR       LIKE EKPO-NETPR, "含税单价
+       netpr       TYPE p DECIMALS 4, "含税单价
+       brtwr       LIKE ekpo-brtwr, "总金额
+       eindt       LIKE eket-eindt, "交货期
+       beizhu      LIKE ekpo-txz01, "备注-行项目文本
+       zsum        LIKE mseg-menge, "合计
+       adrnr       LIKE ekko-adrnr, "地址
+       mwskz       LIKE ekpo-mwskz, "票据类型
+       bpumz       LIKE ekpo-bpumz, "有关订货价格单位转换为基本单位的分子
+       bpumn       LIKE ekpo-bpumn, "分母
+       g_street    LIKE adrc-street,  "公司地址
+       g_tel       LIKE adrc-tel_number, "公司电话
+       g_fax       LIKE adrc-fax_number, "公司传真
+       zxuhao(4)   TYPE i, "序号
+       field_style TYPE lvc_t_styl, " 为内表添加设置编辑状态所需的字段
+       zuser(80)   TYPE c,
+       peinh       LIKE ekpo-peinh,
+       waers       LIKE ekko-waers,
+       sortl       LIKE lfa1-sortl, "品牌
+       ematn       LIKE ekpo-ematn, "物料编码
+       zzcav       LIKE ekpo-zzcav,                 "CAV
+       zcpcl       LIKE ekpo-zcpcl,  "产品材料
+       zmrcl       LIKE ekpo-zmrcl,  "模仁材料
+       zds         LIKE ekpo-zds, "吨数
+       zgate       LIKE ekpo-zgate,  "GATE
+       zmjcp       LIKE ekpo-zmjcp,   "模具厂牌型
+       zyjsm       LIKE ekpo-zyjsm,  "预计寿命
+       zkmzq       LIKE ekpo-zkmzq,   "开模周期
+       zsl         LIKE ekpo-zsl, "数量  ADD BY PFT 20171225
+       eindt_first LIKE ekes-eindt, "首批交货日期
+       eindt_end   LIKE ekes-eindt, "尾数交完日期
+       infnr       LIKE ekpo-infnr, "采购信息记录号
+       menge_e     LIKE ekpo-menge, "采购数量
+       umrez_e     LIKE eina-umrez, "有关订货价格单位转换为基本单位的分子
+       umren_e     LIKE eina-umren, "订单单位到基本单位转换的分母
+       meins_e     LIKE eina-meins, "采购单位
+       frgsx       LIKE ekko-frgsx, "审批策略 add by quyantao
+       frgrl       LIKE ekko-frgrl, "是否最终审批
+       zoldno(100) TYPE c,          "旧订单号
+       zsum1       TYPE zprintnum-zsum,
+     END OF gw_item.
+DATA:gt_item LIKE gw_item OCCURS 0.
+
+DATA:gt_main LIKE gw_item OCCURS 0,
+     gw_main LIKE gw_item.
+
+DATA: i_grid_settings TYPE lvc_s_glay.
+
+DATA:ok_code   TYPE sy-ucomm,
+     save_ok   TYPE sy-ucomm,
+     errorcode TYPE i.
+DATA: l_grid TYPE REF TO cl_gui_alv_grid,
+      stbl   TYPE lvc_s_stbl. ""稳定刷新
+
+
+DATA:l_wa_ssfcompop    TYPE  ssfcompop,  "Smart Forms: 智能写作器 (传输) 选项
+     l_wa_ssfctrlop    TYPE  ssfctrlop,  "Smart Forms: 控制结构
+     w_job_output_info TYPE ssfcrescl . "取值预览打印还是打印
+DATA:funname           TYPE rs38l_fnam,        "Smart Forms: 函数
+     ls_composer_param TYPE ssfcompop.
+DATA:xssfctrlop LIKE ssfctrlop.
+
+DATA: lv_date LIKE ekko-bedat. "当前日期往前推7天
+
+* ADD BY PFT 20171204
+DATA:gt_t024 LIKE t024 OCCURS 0 WITH HEADER LINE.
+*  END BY PFT 20171204

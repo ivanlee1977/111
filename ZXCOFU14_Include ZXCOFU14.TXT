@@ -1,0 +1,10 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZXCOFU14
+*&---------------------------------------------------------------------*
+
+MOVE-CORRESPONDING afrud_imp TO afrud_exp.
+
+afrud_exp-ism02 = afrud_exp-ism01.
+afrud_exp-ism03 = afrud_exp-ism01.
+afrud_exp-ism04 = afrud_exp-ism01.
+afrud_exp-ism05 = afrud_exp-ism01.

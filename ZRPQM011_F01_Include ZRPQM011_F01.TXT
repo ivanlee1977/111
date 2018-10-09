@@ -1,0 +1,374 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM001_F01
+*&---------------------------------------------------------------------*
+
+
+FORM frm_show."ALV显示界面
+
+
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'SET_PF_STATUS'
+      i_callback_user_command  = 'ALV_USER_COMMAND'
+      is_layout                = gs_layout
+      it_fieldcat              = gt_fcat[]
+    TABLES
+      t_outtab                 = gt_item3[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+           WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+ENDFORM.
+
+FORM set_pf_status USING rt_extab TYPE slis_t_extab.
+
+  DATA: wa_extab TYPE slis_extab.
+
+  SET PF-STATUS '0100' EXCLUDING rt_extab.
+
+ENDFORM.                    "set_pf_status1
+
+FORM alv_user_command USING r_ucomm LIKE sy-ucomm  rs_selfield TYPE slis_selfield.
+*   获取ALV中的鼠标勾选记录
+  DATA: l_grid TYPE REF TO cl_gui_alv_grid.
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = l_grid.
+  CALL METHOD l_grid->check_changed_data.
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  r_ucomm = sy-ucomm.
+  save_ok =  r_ucomm .
+  CASE r_ucomm.
+    WHEN 'SELECT'.
+      LOOP AT gt_item3 .
+        gt_item3-chk = 'X'.
+        MODIFY gt_item3.
+      ENDLOOP.
+      rs_selfield-refresh = 'X'.
+    WHEN 'DESELECT'.
+      LOOP AT gt_item3.
+        gt_item3-chk = ' '.
+        MODIFY gt_item3.
+      ENDLOOP.
+      rs_selfield-refresh = 'X'.
+      "打印
+    WHEN 'ZPRINT'.
+      LOOP AT gt_item3 WHERE chk EQ 'X'.
+        LOOP AT gt_item1 WHERE mblnr = gt_item3-mblnr.
+          gt_item1-chk = 'X'.
+          MODIFY gt_item1.
+        ENDLOOP.
+
+      ENDLOOP.
+      PERFORM frm_print.
+  ENDCASE.
+
+
+ENDFORM.                    "alv_user_command
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GETDATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_getdata .
+  CLEAR:gt_item[].
+  SELECT
+       b~budat
+       a~mblnr
+        a~mjahr
+        a~sgtxt
+       a~matnr
+       a~charg
+       a~lgort
+       a~menge
+       a~meins
+       a~werks
+       b~usnam
+       INTO CORRESPONDING FIELDS OF TABLE gt_item
+        FROM mseg AS a INNER JOIN mkpf AS b ON   a~mblnr = b~mblnr AND a~mjahr = b~mjahr
+        WHERE b~budat  IN s_budat
+        AND a~mblnr  IN s_mblnr
+        AND a~matnr IN s_matnr
+        AND a~lgort IN s_lgort
+        AND a~werks IN s_werks
+        AND a~bwart = 344
+        AND a~shkzg = 'S'
+
+.
+  DATA lt_item3 LIKE TABLE OF gt_item3 WITH HEADER LINE.
+  LOOP AT gt_item.
+
+    SELECT SINGLE maktx INTO gt_item-maktx FROM makt WHERE matnr = gt_item-matnr AND spras = 1.
+    MODIFY gt_item.
+    COLLECT gt_item INTO gt_item1.
+    MOVE-CORRESPONDING gt_item TO lt_item3.
+    APPEND lt_item3.
+  ENDLOOP.
+
+
+  LOOP AT lt_item3.
+    COLLECT lt_item3 INTO gt_item3.
+  ENDLOOP.
+  LOOP AT gt_item3.
+    SELECT SINGLE zsum INTO gt_item3-zsum FROM zprintnum WHERE zprgname = 'ZQM011' AND zpo = gt_item3-mblnr.
+    IF p2 = 'X'.
+      IF gt_item3-zsum NE 0 .
+        DELETE gt_item3.
+        CONTINUE.
+      ENDIF.
+    ENDIF.
+    IF p3 = 'X'.
+      IF gt_item3-zsum EQ 0 .
+        DELETE gt_item3.
+        CONTINUE.
+      ENDIF.
+    ENDIF.
+    MODIFY gt_item3.
+  ENDLOOP.
+
+ENDFORM.
+
+FORM frm_getfact .
+  gt_fcat-fieldname   = 'CHK'.
+  gt_fcat-seltext_l = '选择'.
+  gt_fcat-checkbox = 'X'.
+  gt_fcat-edit = 'X'.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+  g_fieldfcat:
+
+    'WERKS' '工厂' 'MATNR' 'MSEG' '',
+    'MBLNR' '物料凭证' 'MBLNR' 'MSEG' '',
+    'MATNR' '物料编码' 'MATNR' 'MSEG' '',
+     'MAKTX' '物料描述' 'MAKTX' 'MAKT' '',
+*     'CHARG' '冻结批次' 'CHARG' 'MSEG' '',
+*     'LGORT' '冻结仓库' 'LGORT' 'MSEG' '',
+     'MENGE' '冻结数量' 'MENGE' 'MSEG' '',
+     'MEINS' '单位' 'MEINS' 'MSEG' '',
+     'ZSUM' '打印次数' '' '' ''
+  .
+
+  gs_layout-colwidth_optimize = 'X'.
+*  gs_layout-box_fieldname = 'CHK'.
+*  gs_layout-box_tabname = 'gt_item'.
+  gs_layout-zebra = 'X'.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PRINT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_print .
+  PERFORM frm_chkprint.
+  PERFORM frm_open_print.
+  PERFORM frm_loopprint .
+  PERFORM frm_ssf_close.
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHKPRINT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_chkprint .
+  READ TABLE gt_item1 WITH KEY chk = 'X' TRANSPORTING NO FIELDS.
+  IF sy-subrc NE 0.
+    MESSAGE '请至少选择一行进行打印' TYPE 'E'.
+    EXIT.
+  ENDIF.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OPEN_PRINT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_open_print .
+  gs_control-no_open = 'X'.
+  gs_control-no_close = 'X'.
+  gs_option-tdimmed  = 'X'.
+  gs_option-tddelete = 'X'.
+
+  CALL FUNCTION 'SSF_OPEN'
+    EXPORTING
+      control_parameters = gs_control
+    IMPORTING
+      job_output_options = job_output_options
+    EXCEPTIONS
+      formatting_error   = 1
+      internal_error     = 2
+      send_error         = 3
+      user_canceled      = 4
+      OTHERS             = 5.
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+   WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+* Implement suitable error handling here
+  ENDIF.
+
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_LOOPPRINT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_loopprint .
+
+
+
+  LOOP AT gt_item1 WHERE chk EQ 'X'.
+    AT NEW mblnr.
+      CLEAR gt_item2.
+      REFRESH gt_item2.
+    ENDAT.
+*    SELECT SINGLE sgtxt INTO gt_item1-sgtxt FROM mseg WHERE mblnr = gt_item1-mblnr AND mjahr = gt_item1-mjahr and zeile = gt_item1-zeile AND shkzg = 'S'.
+*    MODIFY gt_item1.
+    MOVE-CORRESPONDING gt_item1 TO gt_item2.
+    APPEND gt_item2.
+
+    AT END OF mblnr.
+      CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
+        EXPORTING
+          formname           = 'ZSFQM_011'
+        IMPORTING
+          fm_name            = lv_name
+        EXCEPTIONS
+          no_form            = 1
+          no_function_module = 2
+          OTHERS             = 3.
+      IF sy-subrc <> 0.
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+           WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      ENDIF.
+      DATA: lv_mblnr LIKE mseg-mblnr, lv_budat LIKE mkpf-budat,lv_usnam  LIKE  mkpf-usnam.
+      lv_mblnr = gt_item2-mblnr.
+      lv_budat  = gt_item2-budat.
+      lv_usnam = gt_item2-usnam.
+*      PERFORM frm_addline.
+
+      CALL FUNCTION lv_name
+        EXPORTING
+          control_parameters = gs_control
+          mblnr              = lv_mblnr
+          budat              = lv_budat
+          usnam              = lv_usnam
+        EXCEPTIONS
+          formatting_error   = 1
+          internal_error     = 2
+          send_error         = 3
+          user_canceled      = 4
+          OTHERS             = 5.
+
+      IF sy-subrc <> 0.
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+           WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      ELSE.
+        IF  job_output_options-tdpreview IS INITIAL. "是否输出到打印机
+          PERFORM frm_addprintsum  USING lv_mblnr.
+        ENDIF.
+      ENDIF.
+
+    ENDAT.
+*    PERFORM frm_addprintsum.
+
+  ENDLOOP.
+  CLEAR: gt_item2,lv_mblnr,lv_budat,lv_usnam.
+  REFRESH gt_item2.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SSF_CLOSE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_ssf_close .
+  CALL FUNCTION 'SSF_CLOSE'
+*    IMPORTING
+*      job_output_info  =
+    EXCEPTIONS
+      formatting_error = 1
+      internal_error   = 2
+      send_error       = 3
+      OTHERS           = 4.
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+   WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.
+
+FORM frm_addline .
+  DATA lv_n  TYPE i .
+  lv_n = lines( gt_item2 ).
+  IF lv_n MOD 6 NE 0 .
+    lv_n = 6 - lv_n MOD 6.
+    DO  lv_n TIMES.
+      CLEAR gt_item2.
+*      gt_item-matnr = ' '.
+*      gt_item-kwmeng = ' '.
+      APPEND gt_item2.
+    ENDDO.
+
+  ENDIF.
+
+ENDFORM.
+
+FORM frm_addprintsum  USING mblnr  LIKE   mseg-mblnr     .
+  DATA wa LIKE TABLE OF zprintnum WITH HEADER LINE.
+  wa-zpo  = mblnr .
+  wa-mandt = sy-mandt.
+  wa-zprgname = 'ZQM011'.
+  wa-zernam = sy-uname.
+  wa-zdate = sy-datum.
+  wa-ztime = sy-uzeit.
+
+  SELECT SINGLE * FROM zprintnum WHERE zpo = wa-zpo AND zprgname = 'ZQM011' .
+  IF sy-subrc EQ 0.
+
+    UPDATE zprintnum SET
+     zernam = @sy-uname,
+     zdate = @sy-datum,
+     ztime = @sy-uzeit,
+     zsum = zsum + 1
+     WHERE zpo = @wa-zpo AND zprgname = 'ZQM011'
+  .
+  ELSE.
+    wa-zsum = 1.
+
+    INSERT INTO zprintnum VALUES @wa.
+  ENDIF.
+
+ENDFORM.

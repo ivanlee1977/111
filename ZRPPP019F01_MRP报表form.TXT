@@ -1,0 +1,307 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP019F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:lt_makt LIKE makt OCCURS 0 WITH HEADER LINE.
+  DATA:lt_mdps LIKE mdps OCCURS 0 WITH HEADER LINE,
+       lt_mdez LIKE mdez OCCURS 0 WITH HEADER LINE,
+       lt_mdsu LIKE mdsu OCCURS 0 WITH HEADER LINE.
+  DATA:lt_mssl LIKE mssl OCCURS 0 WITH HEADER LINE.
+  DATA:BEGIN OF lt_wxxq_data OCCURS 0,
+         rsnum LIKE resb-rsnum,
+         rspos LIKE resb-rspos,
+         ebeln LIKE resb-ebeln,
+         ebelp LIKE resb-ebelp,
+         matnr LIKE ekpo-matnr,
+         idnrk LIKE resb-matnr,
+         bdmng LIKE resb-bdmng,   "需求数量
+         enmng LIKE resb-enmng,   "已发数量
+       END OF lt_wxxq_data.
+
+
+***抓取满足条件的数据
+  SELECT a~matnr
+         a~werks
+         a~beskz
+         a~sobsl
+         a~dispo
+         a~eisbe
+         a~plifz
+         a~bstrf
+         a~maabc
+         a~nfmat
+    INTO CORRESPONDING FIELDS OF TABLE gt_out
+    FROM marc AS a
+    INNER JOIN mara AS b
+    ON a~matnr = b~matnr
+    WHERE a~werks IN s_werks
+      AND a~matnr IN s_matnr
+      AND a~beskz IN s_beskz
+      AND a~sobsl IN s_sobsl
+      AND b~mtart IN s_mtart
+      AND a~dispo IN s_dispo.
+
+  CHECK gt_out[] IS NOT INITIAL.
+***物料描述
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE lt_makt
+    FROM makt
+    FOR ALL ENTRIES IN gt_out
+    WHERE matnr = gt_out-matnr
+      AND spras = sy-langu.
+****供应商库存
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE lt_mssl
+    FROM mssl
+    FOR ALL ENTRIES IN gt_out
+    WHERE matnr = gt_out-matnr
+      AND werks = '1000'
+      AND sobkz = 'O'.
+
+***已开单外协需求数
+  SELECT  a~rsnum
+          a~rspos
+          a~ebeln
+          a~ebelp
+          c~matnr
+          a~matnr AS idnrk
+          a~bdmng    "需求数量
+          a~enmng    "已发数量
+    INTO CORRESPONDING FIELDS OF TABLE lt_wxxq_data
+    FROM resb AS a
+    INNER JOIN eket AS b
+    ON a~rsnum = b~rsnum
+    INNER JOIN ekpo AS c
+    ON b~ebeln = c~ebeln
+    AND b~ebelp = c~ebelp
+    FOR ALL ENTRIES IN gt_out
+    WHERE a~matnr = gt_out-matnr
+      AND a~bdart = 'BB'
+      AND a~xloek EQ space
+      AND a~kzear EQ space.
+
+
+  SORT lt_makt BY matnr.
+
+  LOOP AT gt_out.
+***获取MRP数据
+    REFRESH:lt_mdps,lt_mdez,lt_mdsu.
+    CALL FUNCTION 'MD_STOCK_REQUIREMENTS_LIST_API'
+      EXPORTING
+        matnr                    = gt_out-matnr
+        werks                    = gt_out-werks
+      TABLES
+        mdpsx                    = lt_mdps
+        mdezx                    = lt_mdez
+        mdsux                    = lt_mdsu
+      EXCEPTIONS
+        material_plant_not_found = 1
+        plant_not_found          = 2
+        OTHERS                   = 3.
+    DELETE lt_mdez WHERE plaab NE '02'.
+    LOOP AT lt_mdez.
+      CASE lt_mdez-delkz.
+        WHEN 'WB'.   "非限制库存
+          gt_out-menge_kc = gt_out-menge_kc + lt_mdez-mng01.
+        WHEN 'QM'.  "质检数量
+          gt_out-menge_qm = gt_out-menge_qm + lt_mdez-mng01.
+        WHEN 'LA'. "在途内向交货单数量
+          gt_out-menge_dn = gt_out-menge_dn + lt_mdez-mng01.
+        WHEN 'BE'. "在途采购订单数量
+          gt_out-menge_po = gt_out-menge_po + lt_mdez-mng01.
+        WHEN 'BA'. "采购申请数量
+          gt_out-menge_pr = gt_out-menge_pr + lt_mdez-mng01.
+        WHEN 'FE'. "在制数量
+          gt_out-menge_pp = gt_out-menge_pp + lt_mdez-mng01.
+        WHEN OTHERS.
+      ENDCASE.
+***期间需求1
+      IF lt_mdez-sort0 IN s_date1 AND  (  lt_mdez-delkz = 'BB'  OR
+                                          lt_mdez-delkz = 'PP' OR
+                                          lt_mdez-delkz = 'SB' OR
+                                          lt_mdez-delkz = 'AR' ) .  "ADD BY PFT 20171108
+        gt_out-menge_1 = gt_out-menge_1 + lt_mdez-mng01.
+      ENDIF.
+***期间需求2
+      IF lt_mdez-sort0 IN s_date2 AND  (  lt_mdez-delkz = 'BB'  OR
+                                          lt_mdez-delkz = 'PP' OR
+                                          lt_mdez-delkz = 'SB' OR
+                                          lt_mdez-delkz = 'AR' ) .  "ADD BY PFT 20171108
+        gt_out-menge_2 = gt_out-menge_2 + lt_mdez-mng01.
+      ENDIF.
+***期间需求3
+      IF lt_mdez-sort0 IN s_date3 AND  (  lt_mdez-delkz = 'BB'  OR
+                                          lt_mdez-delkz = 'PP' OR
+                                          lt_mdez-delkz = 'SB' OR
+                                          lt_mdez-delkz = 'AR' ) .  "ADD BY PFT 20171108
+        gt_out-menge_3 = gt_out-menge_3 + lt_mdez-mng01.
+      ENDIF.
+    ENDLOOP.
+***总需求
+    gt_out-menge_total = gt_out-menge_1 + gt_out-menge_2 + gt_out-menge_3.
+***物料描述
+    READ TABLE lt_makt WITH KEY matnr = gt_out-matnr BINARY SEARCH.
+    IF sy-subrc = 0 .
+      gt_out-maktx = lt_makt-maktx.
+    ENDIF.
+***被取代的旧料
+    IF gt_out-nfmat IS INITIAL.
+      SELECT SINGLE matnr INTO gt_out-ztdl FROM marc WHERE nfmat = gt_out-matnr AND werks = gt_out-werks.
+    ENDIF.
+***ADD BY QUYANTAO 2017.12.06
+***库存增加供应商O库存
+***change by chenhg 20171206,去掉委外库存 要求BY王荣庚
+*    LOOP AT lt_mssl WHERE matnr = gt_out-matnr.
+*      gt_out-menge_kc = gt_out-menge_kc + lt_mssl-sllab.
+*    ENDLOOP.
+***已开单外协需求数
+    LOOP AT lt_wxxq_data WHERE idnrk = gt_out-matnr.
+      gt_out-menge_wx = gt_out-menge_wx + lt_wxxq_data-bdmng - lt_wxxq_data-enmng.
+    ENDLOOP.
+
+    MODIFY gt_out.
+  ENDLOOP.
+
+*** ADD BY PFT 20171108
+  DATA: lt_out   LIKE gt_out OCCURS 0 WITH HEADER LINE,
+        gw_out   LIKE gt_out,
+        lv_tabix LIKE sy-tabix.
+  lt_out[] = gt_out[].
+  LOOP AT gt_out WHERE nfmat IS NOT INITIAL.
+    DELETE gt_out WHERE matnr = gt_out-nfmat.
+  ENDLOOP.
+  LOOP AT gt_out WHERE nfmat IS NOT INITIAL.
+    lv_tabix = sy-tabix.
+    READ TABLE lt_out WITH KEY matnr = gt_out-nfmat.
+    IF sy-subrc = 0.
+      lv_tabix = lv_tabix + 1.
+      MOVE-CORRESPONDING lt_out TO gw_out.
+      INSERT gw_out INTO gt_out INDEX lv_tabix.
+    ENDIF.
+  ENDLOOP.
+*** END BY PFT 20171108
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  DATA:lv_fieldname(30) TYPE c.
+
+  mcr_build_fieldcat:'MATNR'       '物料号码'           'MATNR'       'MARC'      ''       '',
+                     'MAKTX'       '物料描述'           'MAKTX'       'MAKT'      ''       '',
+                     'WERKS'       '工厂'               'WERKS'       'MARC'      ''       '',
+                     'BESKZ'       '采购类型'           'BESKZ'       'MARC'      ''       '',
+                     'SOBSL'       '特殊采购类型'       'SOBSL'       'MARC'      ''       '',
+                     'DISPO'       'MRP控制者'          'DISPO'       'MARC'      ''       '',
+                     'EISBE'       '安全库存'           'EISBE'       'MARC'      ''       '',
+                     'PLIFZ'       '采购周期'           'PLIFZ'       'MARC'      ''       '',
+                     'BSTRF'       '最小包装量'         'BSTRF'       'MARC'      ''       '',
+                     'MENGE_KC'    '库存'               ''            ''          'P'      '15',
+                     'MENGE_QM'    '质检数量'           ''            ''          'P'      '15',
+                     'MENGE_DN'    '在途内向交货单数量' ''            ''          'P'      '15',
+                     'MENGE_PO'    '在途采购订单数量'   ''            ''          'P'      '15',
+                     'MENGE_PR'    '采购申请数量'       ''            ''          'P'      '15',
+                     'MENGE_PP'    '在制数量'           ''            ''          'P'      '15',
+                     'MENGE_WX'    '已开单外协需求数量' ''            ''          'P'      '15'.
+
+  IF s_date1-high IS INITIAL.
+    s_date1-high = s_date1-low.
+  ENDIF.
+  CONCATENATE:s_date1-low '~' s_date1-high '需求' INTO lv_fieldname.
+  mcr_build_fieldcat:  'MENGE_1'     lv_fieldname         ''            ''          'P'      '15'.
+
+  IF s_date2-high IS INITIAL.
+    s_date2-high = s_date2-low.
+  ENDIF.
+  CONCATENATE:s_date2-low '~' s_date2-high '需求' INTO lv_fieldname.
+  mcr_build_fieldcat:  'MENGE_2'     lv_fieldname         ''            ''          'P'      '15'.
+
+  IF s_date3-high IS INITIAL.
+    s_date3-high = s_date3-low.
+  ENDIF.
+  CONCATENATE:s_date3-low '~' s_date3-high '需求' INTO lv_fieldname.
+  mcr_build_fieldcat:  'MENGE_3'     lv_fieldname         ''            ''          'P'      '15'.
+
+  mcr_build_fieldcat:'MENGE_TOTAL' '总需求'             ''            ''          'P'      '15',
+                     'MAABC'       '专用料标识'         'MAABC'       'MARC'      ''      '',
+                     'ZTDL'        '被取代的旧料'       'MATNR'       'MARA'      ''      '',
+                     'NFMAT'       '后继物料'           'NFMAT'       'MARC'      ''      ''.
+
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK  = ' '
+*     I_BYPASSING_BUFFER =
+*     I_BUFFER_ACTIVE    =
+      i_callback_program = sy-repid
+*     I_CALLBACK_PF_STATUS_SET          = ' '
+*     I_CALLBACK_USER_COMMAND           = ' '
+*     I_CALLBACK_TOP_OF_PAGE            = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME   =
+*     I_BACKGROUND_ID    = ' '
+*     I_GRID_TITLE       =
+*     I_GRID_SETTINGS    =
+      is_layout_lvc      = gs_layout
+      it_fieldcat_lvc    = gt_fcat[]
+*     IT_EXCLUDING       =
+*     IT_SPECIAL_GROUPS_LVC             =
+*     IT_SORT_LVC        =
+*     IT_FILTER_LVC      =
+*     IT_HYPERLINK       =
+*     IS_SEL_HIDE        =
+      i_default          = 'X'
+      i_save             = 'A'
+*     IS_VARIANT         =
+*     IT_EVENTS          =
+*     IT_EVENT_EXIT      =
+*     IS_PRINT_LVC       =
+*     IS_REPREP_ID_LVC   =
+*     I_SCREEN_START_COLUMN             = 0
+*     I_SCREEN_START_LINE               = 0
+*     I_SCREEN_END_COLUMN               = 0
+*     I_SCREEN_END_LINE  = 0
+*     I_HTML_HEIGHT_TOP  =
+*     I_HTML_HEIGHT_END  =
+*     IT_ALV_GRAPHICS    =
+*     IT_EXCEPT_QINFO_LVC               =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER           =
+*     ES_EXIT_CAUSED_BY_USER            =
+    TABLES
+      t_outtab           = gt_out[]
+    EXCEPTIONS
+      program_error      = 1
+      OTHERS             = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.

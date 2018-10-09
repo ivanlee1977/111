@@ -1,0 +1,28 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPSD013T01
+*&---------------------------------------------------------------------*
+TABLES:knvv,kna1.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       box(1).
+    INCLUDE STRUCTURE  zssd_crm_customer_info.
+DATA:erdat LIKE kna1-erdat.
+DATA:aufsd LIKE kna1-aufsd.
+DATA:status type c LENGTH 3.
+DATA:name(70),
+END OF gt_out.
+
+***alv data define
+DATA:gs_layout TYPE slis_layout_alv,
+     gt_fcat   TYPE slis_t_fieldcat_alv WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-reptext_ddic   = &2.
+  gt_fcat-ref_fieldname = &3.
+  gt_fcat-ref_tabname = &4.
+  gt_fcat-edit = &5.
+  gt_fcat-outputlen = &6.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

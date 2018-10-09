@@ -1,0 +1,312 @@
+*&---------------------------------------------------------------------*
+*& Report ZRPMM040
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT zrpmm040.
+TABLES:ekko,eban.
+
+DATA:gt_resb LIKE resb OCCURS 0 WITH HEADER LINE.
+
+***alv data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.
+***SELECTION SCREEN DEFINE
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_date FOR sy-datum OBLIGATORY,
+               s_ebeln FOR ekko-ebeln,
+               s_banfn FOR eban-banfn.
+PARAMETERS:p_chk1 AS CHECKBOX DEFAULT 'X',
+           p_chk2 AS CHECKBOX DEFAULT 'X'.
+SELECTION-SCREEN END OF BLOCK blc.
+
+START-OF-SELECTION.
+
+  PERFORM frm_get_data.
+  PERFORM frm_update_quantity.
+  PERFORM frm_get_fieldcat.
+  PERFORM frm_output_data.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:BEGIN OF lt_po_data OCCURS 0,
+         ebeln LIKE eket-ebeln,
+         ebelp LIKE eket-ebelp,
+         etenr LIKE eket-etenr,
+         wemng LIKE eket-wemng,
+         banfn LIKE eket-banfn,
+         bnfpo LIKE eket-bnfpo,
+         rsnum LIKE eket-rsnum,
+         elikz LIKE ekpo-elikz,
+         loekz LIKE ekpo-loekz,
+         menge LIKE ekpo-menge,
+       END OF lt_po_data.
+  DATA:lt_resb LIKE resb OCCURS 0 WITH HEADER LINE.
+  DATA:lv_menge TYPE p DECIMALS 3,
+       lv_decan LIKE t006-decan.
+
+  DATA:lt_pr_data LIKE eban OCCURS 0 WITH HEADER LINE.
+
+***抓取满足条件的采购订单信息
+  SELECT a~ebeln
+         a~ebelp
+         a~etenr
+         a~wemng
+         a~banfn
+         a~bnfpo
+         a~rsnum
+         b~elikz
+         b~loekz
+         b~menge
+    INTO CORRESPONDING FIELDS OF TABLE lt_po_data
+    FROM eket AS a
+    INNER JOIN ekpo AS b
+    ON a~ebeln = b~ebeln
+    AND a~ebelp = b~ebelp
+    INNER JOIN ekko AS c
+    ON a~ebeln = c~ebeln
+    WHERE ( c~aedat IN s_date
+       OR b~aedat IN s_date )
+      AND a~ebeln IN s_ebeln.
+
+  SELECT a~ebeln
+         a~ebelp
+         a~etenr
+         a~wemng
+         a~banfn
+         a~bnfpo
+         a~rsnum
+         b~elikz
+         b~loekz
+         b~menge
+    APPENDING CORRESPONDING FIELDS OF TABLE lt_po_data
+    FROM eket AS a
+    INNER JOIN ekpo AS b
+    ON a~ebeln = b~ebeln
+    AND a~ebelp = b~ebelp
+    INNER JOIN ekbe AS c
+    ON b~ebeln = c~ebeln
+    AND b~ebelp = c~ebelp
+    WHERE c~budat IN s_date
+      AND a~ebeln IN s_ebeln
+      AND a~rsnum NE space.
+
+  SORT lt_po_data.
+  DELETE ADJACENT DUPLICATES FROM lt_po_data COMPARING ALL FIELDS.
+
+***抓取PO对应的预留信息
+  IF lt_po_data[] IS NOT INITIAL.
+    SELECT *
+      INTO CORRESPONDING FIELDS OF TABLE lt_resb
+      FROM resb
+      FOR ALL ENTRIES IN lt_po_data
+      WHERE rsnum = lt_po_data-rsnum
+        AND rsart EQ '1'.
+  ENDIF.
+
+***计算PO应该更新的提货数信息
+  LOOP AT lt_resb.
+    READ TABLE lt_po_data WITH KEY rsnum = lt_resb-rsnum.
+    IF sy-subrc = 0.
+      IF lt_po_data-loekz IS NOT INITIAL OR lt_po_data-elikz EQ 'X'.
+        lt_resb-kzear = 'X'.
+      ELSE.
+        lt_resb-kzear = ''. "增加此行，以便去掉删除标识时重新打开需求
+        CLEAR:lv_menge,lv_decan.
+        lv_menge = lt_po_data-wemng / lt_po_data-menge * lt_resb-bdmng.
+        SELECT SINGLE decan INTO lv_decan FROM t006 WHERE msehi = lt_resb-meins.
+        IF lv_decan IS INITIAL.
+          lv_menge = ceil( lv_menge ).
+        ENDIF.
+        IF lv_menge > lt_resb-bdmng.
+          lv_menge = lt_resb-bdmng.
+        ENDIF.
+        lt_resb-enmng = lv_menge.
+      ENDIF.
+      MOVE-CORRESPONDING lt_resb TO gt_resb.
+      APPEND gt_resb.
+      CLEAR gt_resb.
+    ENDIF.
+  ENDLOOP.
+
+***抓取采购申请信息
+  REFRESH lt_resb.
+  IF lt_po_data[] IS NOT INITIAL.
+    SELECT *
+      INTO CORRESPONDING FIELDS OF TABLE lt_pr_data
+      FROM eban
+      FOR ALL ENTRIES IN lt_po_data
+      WHERE banfn = lt_po_data-banfn
+        AND bnfpo = lt_po_data-bnfpo
+        AND banfn IN s_banfn.
+  ENDIF.
+***抓取日期范围内的采购申请
+  SELECT *
+  APPENDING CORRESPONDING FIELDS OF TABLE lt_pr_data
+  FROM eban
+  WHERE erdat IN s_date
+    AND banfn IN s_banfn.
+  SORT lt_pr_data.
+  DELETE ADJACENT DUPLICATES FROM lt_pr_data COMPARING ALL FIELDS.
+
+***抓取Pr对应的预留信息
+  IF lt_pr_data[] IS NOT INITIAL.
+    SELECT *
+      INTO CORRESPONDING FIELDS OF TABLE lt_resb
+      FROM resb
+      FOR ALL ENTRIES IN lt_pr_data
+      WHERE rsnum = lt_pr_data-rsnum
+        AND rsart EQ '1'.
+  ENDIF.
+
+***计算PO应该更新的提货数信息
+  LOOP AT lt_resb.
+    READ TABLE lt_pr_data WITH KEY rsnum = lt_resb-rsnum.
+    IF sy-subrc = 0.
+      IF lt_pr_data-loekz IS NOT INITIAL OR lt_pr_data-ebakz IS NOT INITIAL.
+        lt_resb-kzear = 'X'.
+      ELSE.
+        lt_resb-kzear = ''. "增加此行，以便去掉删除标识时重新打开需求
+        CLEAR:lv_menge,lv_decan.
+        lv_menge = lt_pr_data-bsmng / lt_pr_data-menge * lt_resb-bdmng.
+        SELECT SINGLE decan INTO lv_decan FROM t006 WHERE msehi = lt_resb-meins.
+        IF lv_decan IS INITIAL.
+          lv_menge = ceil( lv_menge ).
+        ENDIF.
+        IF lv_menge > lt_resb-bdmng.
+          lv_menge = lt_resb-bdmng.
+        ENDIF.
+        lt_resb-enmng = lv_menge.
+      ENDIF.
+      MOVE-CORRESPONDING lt_resb TO gt_resb.
+      APPEND gt_resb.
+      CLEAR gt_resb.
+    ENDIF.
+  ENDLOOP.
+
+  SORT gt_resb .
+  DELETE ADJACENT DUPLICATES FROM gt_resb COMPARING ALL FIELDS.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_UPDATE_QUANTITY
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_update_quantity .
+  IF p_chk1 IS INITIAL.
+    DELETE gt_resb WHERE banfn IS NOT INITIAL.
+  ENDIF.
+  IF p_chk2 IS INITIAL.
+    DELETE gt_resb WHERE ebeln IS NOT INITIAL.
+  ENDIF.
+  CHECK gt_resb[] IS NOT INITIAL.
+  MODIFY resb FROM TABLE gt_resb.
+  IF sy-subrc = 0.
+    COMMIT WORK AND WAIT.
+    MESSAGE '更新预留成功' TYPE 'S'.
+  ELSE.
+    ROLLBACK WORK.
+    MESSAGE '更新预留成功' TYPE 'E'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  mcr_build_fieldcat:'RSNUM'   '预留编号'           'RSNUM'    'RESB',
+                     'RSPOS'   '预留项次'           'RSPOS'    'RESB',
+                     'RSART'   '记录类型'           'RSART'    'RESB',
+                     'KZEAR'   '该预定的最后发货'   'KZEAR'    'RESB',
+                     'BDMNG'   '需求量'             'BDMNG'    'RESB',
+                     'MEINS'   '基本单位'           'MEINS'    'RESB',
+                     'ENMNG'   '提货数'             'ENMNG'    'RESB'.
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK  = ' '
+*     I_BYPASSING_BUFFER =
+*     I_BUFFER_ACTIVE    =
+      i_callback_program = sy-repid
+*     I_CALLBACK_PF_STATUS_SET          = ' '
+*     I_CALLBACK_USER_COMMAND           = ' '
+*     I_CALLBACK_TOP_OF_PAGE            = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME   =
+*     I_BACKGROUND_ID    = ' '
+*     I_GRID_TITLE       =
+*     I_GRID_SETTINGS    =
+      is_layout_lvc      = gs_layout
+      it_fieldcat_lvc    = gt_fcat[]
+*     IT_EXCLUDING       =
+*     IT_SPECIAL_GROUPS_LVC             =
+*     IT_SORT_LVC        =
+*     IT_FILTER_LVC      =
+*     IT_HYPERLINK       =
+*     IS_SEL_HIDE        =
+      i_default          = 'X'
+      i_save             = 'A'
+*     IS_VARIANT         =
+*     IT_EVENTS          =
+*     IT_EVENT_EXIT      =
+*     IS_PRINT_LVC       =
+*     IS_REPREP_ID_LVC   =
+*     I_SCREEN_START_COLUMN             = 0
+*     I_SCREEN_START_LINE               = 0
+*     I_SCREEN_END_COLUMN               = 0
+*     I_SCREEN_END_LINE  = 0
+*     I_HTML_HEIGHT_TOP  =
+*     I_HTML_HEIGHT_END  =
+*     IT_ALV_GRAPHICS    =
+*     IT_EXCEPT_QINFO_LVC               =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER           =
+*     ES_EXIT_CAUSED_BY_USER            =
+    TABLES
+      t_outtab           = gt_resb[]
+    EXCEPTIONS
+      program_error      = 1
+      OTHERS             = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.

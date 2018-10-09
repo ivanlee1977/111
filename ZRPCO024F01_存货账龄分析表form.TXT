@@ -1,0 +1,147 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPCO024F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:lv_date LIKE sy-datum.
+  DATA:lt_bsis      LIKE bsis OCCURS 0 WITH HEADER LINE,
+       lt_bsis_temp LIKE bsis OCCURS 0 WITH HEADER LINE.
+
+  DATA:BEGIN OF lt_t001k OCCURS 0,
+         bwkey LIKE t001k-bwkey,
+         bukrs LIKE t001k-bukrs,
+       END OF lt_t001k.
+
+  DATA:ls_data LIKE LINE OF gt_out.
+
+  DATA:lv_no TYPE i.
+
+***获取期间的最后一天
+  CONCATENATE p_gjahr p_monat '01' INTO lv_date.
+  CALL FUNCTION 'FKK_LAST_DAY_OF_MONTH'
+    EXPORTING
+      day_in            = lv_date
+    IMPORTING
+      last_day_of_month = gv_date
+    EXCEPTIONS
+      day_in_no_date    = 1
+      OTHERS            = 2.
+
+***抓取满足条件的数据
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE lt_bsis
+    FROM bsis
+   WHERE bukrs = p_bukrs
+     AND budat <= gv_date
+     AND ( hkont IN ('1401000000','1403000000','1402000000')
+        OR hkont BETWEEN '1499010000' AND '1499050000' ).
+
+***获取公司对应的工厂数据
+  SELECT bwkey bukrs INTO CORRESPONDING FIELDS OF TABLE lt_t001k FROM t001k WHERE bukrs = p_bukrs.
+  LOOP AT lt_t001k.
+    r_bwkey = 'IEQ'.
+    r_bwkey-low = lt_t001k-bwkey.
+    APPEND r_bwkey.
+    CLEAR r_bwkey.
+  ENDLOOP.
+
+  IF lt_t001k[] IS NOT INITIAL AND lt_bsis[] IS NOT INITIAL.
+    SELECT   bukrs
+             belnr
+             gjahr
+             buzei
+             menge
+             dmbtr
+             shkzg
+             matnr
+             werks
+             hkont
+             hrkft
+      INTO CORRESPONDING FIELDS OF TABLE gt_bseg
+      FROM bseg
+      FOR ALL ENTRIES IN lt_bsis
+      WHERE  werks IN r_bwkey
+        AND  bukrs = lt_bsis-bukrs
+        AND  belnr = lt_bsis-belnr
+        AND  gjahr = lt_bsis-gjahr
+        AND  buzei = lt_bsis-buzei.
+  ENDIF.
+
+  SORT gt_bseg BY bukrs belnr gjahr buzei.
+***原材料
+  LOOP AT lt_bsis.
+    CLEAR gt_bseg.
+    READ TABLE gt_bseg WITH KEY bukrs = lt_bsis-bukrs belnr = lt_bsis-belnr gjahr = lt_bsis-gjahr buzei = lt_bsis-buzei BINARY SEARCH.
+    CASE gt_bseg-hrkft.
+      WHEN '40'.   "IC
+        ls_data-zexno = '06'.
+      WHEN '30'.   "端子插座类
+        ls_data-zexno = '07'.
+      WHEN '60'.   "五金结构件
+        ls_data-zexno = '08'.
+      WHEN '10'.   "电阻和电容
+        ls_data-zexno = '09'.
+      WHEN '50'.   "PCB板
+        ls_data-zexno = '10'.
+      WHEN '99' OR '20'. "其他
+        ls_data-zexno = '11'.
+      WHEN '1000' OR '1001' OR '1002' OR '1003'."驱动器
+        ls_data-zexno = '13'.
+      WHEN '1004' OR '1005' OR '1006' OR '1007' OR '1008'."电机
+        ls_data-zexno = '14'.
+      WHEN '1009'. "控制卡
+        ls_data-zexno = '15'.
+      WHEN '1010'. "专用控制器
+        ls_data-zexno = '16'.
+      WHEN '1099' OR '1011'OR '1012' OR '1013'. "其他
+        ls_data-zexno = '17'.
+      WHEN '1098'. "半成品
+        ls_data-zexno = '19'.
+      WHEN OTHERS.
+        CONTINUE.
+    ENDCASE.
+    IF gt_bseg-shkzg = 'H'.
+      gt_bseg-menge = -1 * gt_bseg-menge.
+      gt_bseg-dmbtr = -1 * gt_bseg-dmbtr.
+    ENDIF.
+    IF ls_data-zexno BETWEEN '06' AND '11'. "原材料
+      IF lt_bsis-hkont = '1401000000'.
+        ls_data-zmenge = gt_bseg-menge.
+      ENDIF.
+    ELSEIF ls_data-zexno BETWEEN '13' AND '17'."库存商品
+      IF lt_bsis-hkont = '1403000000'.
+        ls_data-zmenge = gt_bseg-menge.
+      ENDIF.
+    ENDIF.
+    ls_data-zamount = gt_bseg-dmbtr.
+***计算期间段的数量
+    lv_no = ( p_gjahr - lt_bsis-gjahr ) * 12 + p_monat - lt_bsis-monat .
+    IF lv_no BETWEEN 1 AND 3.
+      ls_data-zmenge1 = ls_data-zmenge.
+      ls_data-zamount1 = gt_bseg-dmbtr.
+    ELSEIF lv_no BETWEEN 4 AND 6.
+      ls_data-zmenge2 = ls_data-zmenge.
+      ls_data-zamount2 = gt_bseg-dmbtr.
+    ELSEIF lv_no BETWEEN 7 AND 9.
+      ls_data-zmenge3 = ls_data-zmenge.
+      ls_data-zamount3 = gt_bseg-dmbtr.
+    ELSEIF lv_no BETWEEN 10 AND 12.
+      ls_data-zmenge4 = ls_data-zmenge.
+      ls_data-zamount4 = gt_bseg-dmbtr.
+    ELSEIF lv_no > 12.
+      ls_data-zmenge5 = ls_data-zmenge.
+      ls_data-zamount5 = gt_bseg-dmbtr.
+    ENDIF.
+    COLLECT ls_data INTO gt_out.
+    CLEAR ls_data.
+  ENDLOOP.
+
+
+ENDFORM.

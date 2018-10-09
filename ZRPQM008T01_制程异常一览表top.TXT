@@ -1,0 +1,58 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPQM008T01
+*&---------------------------------------------------------------------*
+
+TABLES:qmel,afpo.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       erdat                LIKE qmel-erdat,     "日期
+       qmnum                LIKE qmel-qmnum,     "单据编号 、
+       prueflos             LIKE qmel-prueflos,  "检验批
+       status(10)           TYPE c,              "审批状态
+       fertaufnr            LIKE qmel-fertaufnr, "生产订单号
+       dauat                LIKE afpo-dauat,     "订单类型
+       vtext                LIKE tspat-vtext,    "产品组
+       zline(30)            TYPE c,              "产品线
+       zcpxl(30)            TYPE c,              "产品系列
+       zcpxl_sub(30)        TYPE c,              "产品子系列
+       zcpxh_m(30)          TYPE c,              "产品主型号
+       zcpmc(30)            TYPE c,              "产品名称
+       zcpxh(30)            TYPE c,              "产品型号
+       matnr                LIKE qmel-matnr,     "物料编码
+       maktx                LIKE makt-maktx,     "物料描述
+       revlv                LIKE qmel-revlv,     "SAP版本
+       vornr                LIKE qapo-vornr,     "工序
+       vorktxt              LIKE qapo-vorktxt,   "工序描述
+       zbls                 TYPE i,              "不良数
+       LOSMENGE             LIKE qals-LOSMENGE,  "检验批数量
+       rkmng                LIKE qmel-rkmng,     "已生产总数
+       zblv                 TYPE p DECIMALS 2,   "不良率
+       zycwt(500)           TYPE c,              "异常问题
+       expaccept_apr(600)   TYPE c,              "异常受理分析
+       expaccept_judge(10)  TYPE c,              "问题判定
+       expaccept_inpro(600) TYPE c,              "在制品处理
+       exphand_correct(600) TYPE c,              "纠正措施
+       exphand_prevent(600) TYPE c,              "预防措施
+       qaimprov_chk(600)    TYPE c,              "效果跟进
+       OBJNR                LIKE qmel-OBJNR,
+     END OF gt_out.
+
+CONSTANTS: cns_bpm TYPE c LENGTH 10 VALUE 'BMP'.
+
+***ALV data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  gt_fcat-inttype = &5.
+  gt_fcat-intlen = &6.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

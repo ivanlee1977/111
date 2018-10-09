@@ -1,0 +1,68 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM019T01
+*&---------------------------------------------------------------------*
+TABLES:mara,mard,bkpf.
+
+DATA:BEGIN OF gt_detail OCCURS 0,
+       werks LIKE mard-werks,     "工厂
+       matnr LIKE mard-matnr,     "物料号码
+       maktx LIKE makt-maktx,     "物料描述
+       matkl LIKE mara-matkl,     "物料组
+       wgbez LIKE t023t-wgbez,    "物料组描述
+       spart LIKE mara-spart,     "产品组
+       vtext LIKE tspat-vtext,    "产品组描述
+       lgort LIKE mard-lgort,     "库位
+       lgobe LIKE t001l-lgobe,    "库位描述
+       zsqjc TYPE p DECIMALS 3,  "上期结存
+       zbqsr TYPE p DECIMALS 3,  "本期收入
+       zbqfc TYPE p DECIMALS 3,  "本期发出
+       zbqjc TYPE p DECIMALS 3,  "本期结存
+     END OF gt_detail.
+
+DATA:BEGIN OF gt_mseg OCCURS 0,
+       mblnr LIKE mseg-mblnr,
+       mjahr LIKE mseg-mjahr,
+       budat LIKE mseg-budat_mkpf,
+       zeile LIKE mseg-zeile,
+       bwart LIKE mseg-bwart,
+       matnr LIKE mseg-matnr,
+       maktx LIKE makt-maktx,
+       werks LIKE mseg-werks,
+       lgort LIKE mseg-lgort,
+       menge LIKE mseg-menge,
+       shkzg LIKE mseg-shkzg,
+       zsqjc TYPE p DECIMALS 3,  "上期结存
+       zbqjc TYPE p DECIMALS 3,  "本期结存
+     END OF gt_mseg.
+
+DATA:BEGIN OF gt_sum OCCURS 0,
+       werks LIKE mard-werks,
+       matkl LIKE mara-matkl,
+       wgbez LIKE t023t-wgbez,
+       spart LIKE mara-spart,
+       vtext LIKE tspat-vtext,
+       lgort LIKE mard-lgort,
+       lgobe LIKE t001l-lgobe,
+       zsqjc TYPE p DECIMALS 3,  "上期结存
+       zbqsr TYPE p DECIMALS 3,  "本期收入
+       zbqfc TYPE p DECIMALS 3,  "本期发出
+       zbqjc TYPE p DECIMALS 3,  "本期结存
+     END OF gt_sum.
+
+***alv data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  gt_fcat-inttype = &5.
+  gt_fcat-intlen = &6.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

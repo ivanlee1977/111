@@ -1,0 +1,410 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZSDRP022F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_MODIFY_SCREEN
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_modify_screen .
+  IF p_r1 EQ 'X' OR p_r2 EQ 'X'.
+    LOOP AT SCREEN .
+      IF screen-group1 EQ 'M1'.
+        screen-active = 0.
+        screen-invisible = 1.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_AUSP
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_ausp .
+  REFRESH:gt_ausp.
+*  根据物料取出产品线和系列
+  SELECT a~objek a~atinn a~atwrt b~atnam
+   INTO CORRESPONDING FIELDS OF TABLE gt_ausp
+   FROM ausp AS a INNER JOIN cabn AS b ON a~atinn = b~atinn
+   WHERE b~atnam IN ('ZFER_XL','ZFER_CPX','ZFER_ZXL','ZFER_DYZXH').
+  SORT gt_ausp BY objek.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SUB_SEARCH_HELP_ZXL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM sub_search_help_zxl USING lv_field LIKE dfies-fieldname
+                               lv_dynfield LIKE help_info-dynprofld
+                               lv_atnam LIKE cabn-atnam.
+  DATA: lv_pvalkey TYPE ddshpvkey.
+
+  DATA: lt_zxl LIKE gt_xl OCCURS 0 WITH HEADER LINE.
+
+  LOOP AT gt_ausp WHERE atnam = lv_atnam.
+    lt_zxl-atwrt = gt_ausp-atwrt.
+    APPEND lt_zxl.
+  ENDLOOP.
+
+  SORT lt_zxl BY atwrt.
+  DELETE ADJACENT DUPLICATES FROM lt_zxl.
+
+  lv_pvalkey = lv_field.
+  CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+    EXPORTING
+      retfield        = lv_field
+      pvalkey         = lv_pvalkey
+      dynpprog        = sy-repid
+      dynpnr          = sy-dynnr
+      dynprofield     = lv_dynfield
+      window_title    = '选择'
+      value           = ' '
+      value_org       = 'S'
+    TABLES
+      value_tab       = lt_zxl
+    EXCEPTIONS
+      parameter_error = 1
+      no_values_found = 2
+      OTHERS          = 3.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  frm_get_data
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  REFRESH:gt_vbrp.
+
+* 根据选择屏幕从表vbrp中取出交货单信息
+  SELECT a~vbeln a~posnr b~vkorg b~vtweg a~matnr AS objek a~arktx a~fkimg a~vrkme a~kzwi1 AS zpric_yb a~vgbel a~vgpos
+         b~waerk a~aubel b~kunag AS kunnr b~vkorg b~fkdat c~spart b~fkart b~bukrs
+         e~bzirk d~vkbur d~vkgrp d~kvgr1 b~kurrf AS kursk
+    INTO CORRESPONDING FIELDS OF TABLE gt_vbrp
+    FROM vbrp AS a INNER JOIN vbrk AS b ON a~vbeln = b~vbeln
+                   INNER JOIN mara AS c ON a~matnr = c~matnr
+                   INNER JOIN vbak AS d ON a~aubel = d~vbeln
+                   INNER JOIN vbkd AS e ON a~aubel = e~vbeln
+   WHERE b~fkdat IN s_wadat
+     AND b~bukrs IN s_bukrs
+     AND b~vkorg IN s_vkorg
+     AND b~vtweg IN s_vtweg
+     AND b~kunag IN s_kunnr
+     AND c~matkl IN s_matkl
+     AND c~spart IN s_spart
+     AND b~fkart LIKE 'Z%' "( 'ZF1','ZF2','ZF3','ZF4','ZF1S','ZF2S','ZF3S','ZF4S','ZG' )
+     AND e~posnr EQ space
+     AND d~kvgr1 IN  s_kvgr1
+     AND d~kvgr2 IN s_kvgr2 "add by wusk 20170118
+     AND e~bzirk  IN s_bzirk
+     AND d~vkbur IN s_vkbur  "add by wusk 20170118
+     AND d~vkgrp IN s_vkgrp . "add by wusk 20170118
+
+  CHECK gt_vbrp[] IS NOT INITIAL.
+  SORT gt_vbrp BY vbeln posnr.
+
+* 根据价格条件号从表KONV中取汇率，计算本币金额
+*  SELECT * INTO TABLE gt_vbkd
+*    FROM vbkd
+*    FOR ALL ENTRIES IN gt_vbrp
+*    WHERE vbeln = gt_vbrp-AUBEL .
+*  SORT gt_vbkd BY vbeln.
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PROCESS_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_process_data .
+* 取客户
+  DATA: lt_knvv  LIKE knvv OCCURS 0 WITH HEADER LINE,
+        lt_kna1  LIKE kna1 OCCURS 0 WITH HEADER LINE,
+        lt_t171t LIKE t171t OCCURS 0 WITH HEADER LINE, "销售大区描述
+        lt_tvkbt LIKE tvkbt OCCURS 0 WITH HEADER LINE, "行办描述
+        lt_tvgrt LIKE tvgrt OCCURS 0 WITH HEADER LINE, "销售组描述
+        lt_tvv1t LIKE tvv1t OCCURS 0 WITH HEADER LINE. "业务员描述
+
+  DATA: lv_knumv LIKE konv-knumv,
+        lv_kposn LIKE konv-kposn,
+        lv_tabix LIKE sy-tabix,
+        lv_zmeng LIKE vbap-zmeng.
+*  根据选择屏幕条件从表KNVV中取出客户相关信息
+*  SELECT * INTO TABLE lt_knvv
+*    FROM knvv
+*   WHERE kunnr IN s_kunnr
+*     AND vkorg IN s_vkorg
+*     AND vtweg IN s_vtweg
+*     AND bzirk IN s_bzirk
+*     AND vkbur IN s_vkbur
+*     AND vkgrp IN s_vkgrp
+*     AND kvgr1 IN s_kvgr1
+*     AND kvgr2 IN s_kvgr2.
+*  SORT lt_knvv BY kunnr vkorg vtweg.
+*  根据客户取出客户主数据
+  SELECT * INTO TABLE lt_kna1 FROM kna1 WHERE kunnr IN s_kunnr.
+  SORT lt_kna1 BY kunnr.
+*  取销售大区描述
+  SELECT * INTO TABLE lt_t171t FROM t171t WHERE spras EQ sy-langu AND bzirk IN s_bzirk.
+  SORT lt_t171t BY bzirk.
+*  取行办描述
+  SELECT * INTO TABLE lt_tvkbt FROM tvkbt WHERE spras EQ sy-langu AND vkbur IN s_vkbur.
+  SORT lt_tvkbt BY vkbur.
+*  取销售组描述
+  SELECT * INTO TABLE lt_tvgrt FROM tvgrt WHERE spras EQ sy-langu AND vkgrp IN s_vkgrp.
+  SORT lt_tvgrt BY vkgrp.
+*  取业务员描述
+  SELECT * INTO TABLE lt_tvv1t FROM tvv1t WHERE spras EQ sy-langu AND kvgr1 IN s_kvgr1.
+  SORT lt_tvv1t BY kvgr1.
+
+  DATA:lv_kvgr11 LIKE knvv-kvgr1.
+  REFRESH:gt_alv.
+  LOOP AT gt_vbrp.
+    CLEAR:lv_tabix,gt_alv.
+    lv_tabix = sy-tabix.
+***权限字段检查
+    AUTHORITY-CHECK OBJECT 'V_VBAK_VKO'
+             ID 'VKORG' FIELD gt_vbrp-vkorg
+             ID 'VTWEG' DUMMY
+             ID 'SPART' DUMMY
+             ID 'ACTVT' FIELD '03'.
+    IF sy-subrc <> 0.
+      DELETE gt_vbrp INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+
+*  取产品系列
+    LOOP AT gt_ausp WHERE objek = gt_vbrp-objek.
+      CASE gt_ausp-atnam.
+        WHEN 'ZFER_CPX'.
+          gt_vbrp-zfer_cpx = gt_ausp-atwrt.
+        WHEN 'ZFER_XL'.
+          gt_vbrp-zfer_xl = gt_ausp-atwrt.
+        WHEN 'ZFER_ZXL'.
+          gt_vbrp-zfer_zxl = gt_ausp-atwrt.
+        WHEN 'ZFER_DYZXH'.
+          gt_vbrp-zfer_zxh = gt_ausp-atwrt.
+        WHEN OTHERS.
+      ENDCASE.
+    ENDLOOP.
+
+    IF gt_vbrp-zfer_cpx NOT IN s_cpx.
+      DELETE gt_vbrp INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+
+    IF gt_vbrp-zfer_xl NOT IN s_xl.
+      DELETE gt_vbrp INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+
+*  取销售大区、行办、销售组、业务员
+*    CLEAR: lt_knvv.
+*    READ TABLE lt_knvv WITH KEY kunnr = gt_vbrp-kunag vkorg = gt_vbrp-vkorg vtweg = gt_vbrp-vtweg BINARY SEARCH.
+*    CHECK sy-subrc = 0.
+    IF gt_vbrp-kunnr = 'A000' OR gt_vbrp-kunnr = 'C000'.
+      AUTHORITY-CHECK OBJECT 'Z_KVGR1'
+               ID 'KVGR1' FIELD gt_vbrp-kvgr1.
+    ELSE.  "取客户主数据业务员，进行权限控制 20180103 YZP
+      CLEAR lv_kvgr11.
+      SELECT SINGLE kvgr1 INTO lv_kvgr11 FROM knvv WHERE kunnr = gt_vbrp-kunnr AND vkorg = gt_vbrp-vkorg .
+      AUTHORITY-CHECK OBJECT 'Z_KVGR1'
+               ID 'KVGR1' FIELD lv_kvgr11.
+    ENDIF.
+    IF sy-subrc <> 0.
+      DELETE gt_vbrp INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+    gt_alv-bzirk = gt_vbrp-bzirk."销售大区
+    gt_alv-vkbur = gt_vbrp-vkbur."行办
+    gt_alv-vkgrp = gt_vbrp-vkgrp."销售组
+    gt_alv-kvgr1 = gt_vbrp-kvgr1."业务员
+    gt_alv-zxsyf = gt_vbrp-fkdat+0(6)."销售月份
+
+    IF p_r3 EQ 'X'.
+      gt_alv-kunnr = gt_vbrp-kunnr."客户
+    ENDIF.
+    IF gt_vbrp-fkart EQ 'ZG8' OR gt_vbrp-fkart EQ 'ZG8S' OR gt_vbrp-fkart EQ 'ZF8' OR gt_vbrp-fkart EQ 'ZF8S'.
+      gt_alv-fkimg = 0.
+    ELSE.
+      gt_alv-fkimg = gt_vbrp-fkimg."销售量
+    ENDIF.
+
+*  根据销售订单和订单行项目计算订单单价= KZWI1 / ZMENG
+*   计算金额=单价* 发货数量 = KZWI1 / ZMENG * lfimg
+*    CLEAR: gt_vbap,lv_knumv,lv_zmeng.
+*    READ TABLE gt_vbap WITH KEY vbeln = gt_vbrp-vgbel posnr = gt_vbrp-vgpos BINARY SEARCH.
+*    IF gt_vbap-zmeng NE 0.
+*      lv_zmeng = gt_vbap-zmeng.
+*    ELSEIF gt_vbap-kwmeng NE 0.
+*      lv_zmeng = gt_vbap-kwmeng.
+*    ENDIF.
+
+    "原币金额，本币金额
+    gt_alv-zxse_yb = gt_vbrp-zpric_yb.
+    gt_alv-zxse_bb = gt_alv-zxse_yb * gt_vbrp-kursk .
+*  贷项凭证，乘以-1
+    IF gt_vbrp-fkart EQ 'ZF1S' OR gt_vbrp-fkart EQ 'ZF4S' OR gt_vbrp-fkart EQ 'ZF8S' OR gt_vbrp-fkart EQ 'ZG1'  OR gt_vbrp-fkart EQ 'ZG4' OR gt_vbrp-fkart EQ 'ZG8'.
+      gt_alv-fkimg = gt_alv-fkimg * ( -1 ).
+      gt_alv-zxse_yb = gt_alv-zxse_yb * ( -1 ).
+      gt_alv-zxse_bb = gt_alv-zxse_bb * ( -1 ).
+    ENDIF.
+
+    IF p_r3 EQ 'X'.
+      gt_alv-waerk = gt_alv-waerk.
+    ENDIF.
+*    lv_knumv = gt_vbap-knumv.
+*    lv_knumv = gt_vbap-knumv.
+*    lv_kposn = gt_vbap-posnr.
+*  计算本币：根据价格条件号和行项目号从表KONV中取出汇率
+*    CLEAR: gt_vbkd.
+*    READ TABLE gt_vbkd WITH KEY vbeln = gt_vbrp-vgbel BINARY SEARCH.
+*    gt_alv-zxse_bb = gt_alv-zxse_yb * gt_vbkd-kursk .
+
+
+* 当选中业务员+系列或者业务员+客户+系列时，才填值
+    IF p_r2 EQ 'X' OR p_r3 EQ 'X'.
+      gt_alv-zfer_xl = gt_vbrp-zfer_xl.
+    ENDIF.
+    IF p_r4 EQ 'X'.
+      gt_alv-zfer_zxh = gt_vbrp-zfer_zxh.
+    ENDIF.
+
+    IF p_r3 EQ 'X'.
+      CLEAR: lt_kna1.
+      READ TABLE lt_kna1 WITH KEY kunnr = gt_alv-kunnr BINARY SEARCH.
+      CONCATENATE lt_kna1-name1 lt_kna1-name2 INTO gt_alv-name.
+      IF gt_alv-kunnr = 'A000' OR gt_alv-kunnr = 'C000'.
+        gt_alv-name = '零散客户'.
+      ENDIF.
+    ENDIF.
+
+    MOVE-CORRESPONDING gt_alv TO gt_alv_total.
+    gt_alv_total-vbeln = gt_vbrp-vbeln.
+    gt_alv_total-posnr = gt_vbrp-posnr.
+    gt_alv_total-waerk = gt_vbrp-waerk.
+    gt_alv_total-aubel = gt_vbrp-aubel.
+    gt_alv_total-vgbel = gt_vbrp-vgbel.
+    gt_alv_total-vgpos = gt_vbrp-vgpos.
+    gt_alv_total-bzirk = gt_vbrp-bzirk."销售大区
+    gt_alv_total-vkbur = gt_vbrp-vkbur."行办
+    gt_alv_total-vkgrp = gt_vbrp-vkgrp."销售组
+    gt_alv_total-kvgr1 = gt_vbrp-kvgr1."业务员
+    gt_alv_total-BUKRS = gt_vbrp-BUKRS."公司代码
+
+    APPEND gt_alv_total.
+    COLLECT gt_alv.
+    CLEAR:gt_alv_total.
+  ENDLOOP.
+
+  LOOP AT gt_alv.
+*   取销售大区描述
+    READ TABLE lt_t171t WITH KEY bzirk = gt_alv-bzirk BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-bztxt = lt_t171t-bztxt.
+    ENDIF.
+*   取行办描述
+    READ TABLE lt_tvkbt WITH KEY vkbur = gt_alv-vkbur BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-bezei_vkbur = lt_tvkbt-bezei.
+    ENDIF.
+*   取销售组描述
+    READ TABLE lt_tvgrt WITH KEY vkgrp = gt_alv-vkgrp BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-bezei_vkgrp = lt_tvgrt-bezei.
+    ENDIF.
+*   取业务员描述
+    READ TABLE lt_tvv1t WITH KEY kvgr1 = gt_alv-kvgr1 BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-bezei_kvgr1 = lt_tvv1t-bezei.
+    ENDIF.
+    MODIFY gt_alv.
+    CLEAR:gt_alv.
+  ENDLOOP.
+
+  LOOP AT gt_alv_total.
+*   取销售大区描述
+    READ TABLE lt_t171t WITH KEY bzirk = gt_alv_total-bzirk BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv_total-bztxt = lt_t171t-bztxt.
+    ENDIF.
+*   取行办描述
+    READ TABLE lt_tvkbt WITH KEY vkbur = gt_alv_total-vkbur BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv_total-bezei_vkbur = lt_tvkbt-bezei.
+    ENDIF.
+*   取销售组描述
+    READ TABLE lt_tvgrt WITH KEY vkgrp = gt_alv_total-vkgrp BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv_total-bezei_vkgrp = lt_tvgrt-bezei.
+    ENDIF.
+*   取业务员描述
+    READ TABLE lt_tvv1t WITH KEY kvgr1 = gt_alv_total-kvgr1 BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv_total-bezei_kvgr1 = lt_tvv1t-bezei.
+    ENDIF.
+    MODIFY gt_alv_total.
+    CLEAR:gt_alv_total.
+  ENDLOOP.
+
+
+  SORT gt_alv BY bzirk vkbur vkgrp kvgr1 kunnr zfer_xl.
+  SORT gt_alv_total BY bzirk vkbur vkgrp kvgr1 kunnr zfer_xl.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SUB_BUILD_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM sub_build_fieldcat .
+  REFRESH:g_it_fieldcat.
+  PERFORM sub_set_fieldcat USING 'X' 'BZIRK'       '销售大区代码'      ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING 'X' 'BZTXT'       '销售大区'          ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING 'X' 'VKBUR'       '行办代码'          ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING 'X' 'BEZEI_VKBUR' '行办'              ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING 'X' 'VKGRP'       '销售组代码'        ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING 'X' 'BEZEI_VKGRP' '销售组'            ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING 'X' 'KVGR1'       '业务员代码'        ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING 'X' 'BEZEI_KVGR1' '业务员'            ''  ''  ''  ''  ''  ''  '' ''.
+  IF p_r3 EQ 'X'.
+    PERFORM sub_set_fieldcat USING 'X'  'KUNNR'       '客户'              'X'  ''  ''  ''  ''  'KUNNR'  'KNVV' ''.
+    PERFORM sub_set_fieldcat USING 'X'  'NAME'        '客户名称'          ''  ''  ''  ''  ''  ''  '' ''.
+  ENDIF.
+  IF p_r4 EQ 'X'.
+    PERFORM sub_set_fieldcat USING 'X'  'ZFER_ZXH'     '主型号'          ''  ''  ''  ''  ''  ''  '' ''.
+  ENDIF.
+  IF p_r2 EQ 'X' OR p_r3 EQ 'X'.
+    PERFORM sub_set_fieldcat USING 'X'  'ZFER_XL'     '产品系列'          ''  ''  ''  ''  ''  ''  '' ''.
+  ENDIF.
+  PERFORM sub_set_fieldcat USING 'X'  'ZXSYF'       '销售月份'          ''  ''  ''  ''  ''  ''  '' ''.
+  PERFORM sub_set_fieldcat USING ''  'FKIMG'       '销售数量'          'X'  ''  ''  ''  ''  ''  '' ''.
+  IF p_r3 EQ 'X'.
+    PERFORM sub_set_fieldcat USING ''  'WAERK'       '币别'              ''  ''  ''  ''  ''  ''  '' ''.
+    PERFORM sub_set_fieldcat USING ''  'ZXSE_YB'     '原币销售额'        'X'  ''  ''  ''  ''  ''  '' ''.
+    PERFORM sub_set_fieldcat USING ''  'ZXSE_BB'     '本币销售额'        'X'  ''  ''  ''  ''  ''  '' ''.
+  ELSE.
+    PERFORM sub_set_fieldcat USING ''  'ZXSE_BB'     '销售额'        'X'  ''  ''  ''  ''  ''  '' ''.
+  ENDIF.
+
+ENDFORM.

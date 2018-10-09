@@ -1,0 +1,158 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZXVBZU02
+*&---------------------------------------------------------------------*
+*BREAK xul.
+IF sy-tcode = 'MIGO'.
+  TABLES: mch1 .
+  DATA: v_newbatch  TYPE charg_d,
+        v_reccnt    TYPE i,
+        v_newnum(3) TYPE n,
+        v_xchpf     LIKE mara-xchpf.
+  DATA: ls_mara  TYPE mara,
+        lv_kzkri TYPE marc-kzkri,
+        lv_ematn TYPE ekpo-ematn,
+        lv_aufnr TYPE afko-aufnr,
+        lv_ebeln TYPE ekpo-ebeln.
+  DATA: lv_objectkeyimp TYPE bapi1003_key-object,
+        ls_alloclist    TYPE bapi1003_alloc_list,
+        lt_alloclist    TYPE TABLE OF bapi1003_alloc_list,
+        ls_return       TYPE bapiret2,
+        lt_return       TYPE TABLE OF bapiret2.
+  DATA: ls_godynpro  TYPE godynpro,
+        lv_campo     TYPE string,
+        lv_campo1    TYPE string,
+        ls_godefault TYPE godefault_tv.
+  FIELD-SYMBOLS:<fs>  TYPE godynpro,
+                <fs1> TYPE godefault_tv.
+*  获取A01 R01
+  lv_campo = '(SAPLMIGO)GODYNPRO'.
+  ASSIGN (lv_campo) TO <fs>.
+  ls_godynpro = <fs>.
+
+*  获取移动类型
+  lv_campo1 = '(SAPLMIGO)GODEFAULT_TV'.
+  ASSIGN (lv_campo1) TO <fs1>.
+  ls_godefault = <fs1>.
+
+  IF ls_godynpro-action = 'A01' AND ls_godynpro-refdoc = 'R01' AND ls_godefault-bwart = '101'.
+*  获取物料是否为关键部件
+    SELECT SINGLE kzkri INTO lv_kzkri FROM marc WHERE matnr = x_bncom-matnr AND werks = x_bncom-werks.
+    lv_objectkeyimp = x_bncom-matnr.
+    CALL FUNCTION 'BAPI_OBJCL_GETCLASSES'
+      EXPORTING
+        objectkey_imp   = lv_objectkeyimp
+        objecttable_imp = 'MARA'
+        classtype_imp   = '023'
+        language        = sy-langu
+      TABLES
+        alloclist       = lt_alloclist
+        return          = lt_return.
+*    READ TABLE lt_alloclist INTO ls_alloclist WITH KEY classnum = 'Z_BATCH_ROH'.
+*    IF sy-subrc = 0.
+    IF lv_kzkri = 'X'.
+      SELECT SINGLE xchpf INTO v_xchpf FROM mara WHERE matnr EQ x_bncom-matnr.
+      IF v_xchpf <> space.
+        CLEAR: v_newbatch, v_reccnt.
+        v_newbatch+0(8) = sy-datum.
+        v_newbatch+8(2) = '01'.
+        SELECT COUNT( * ) INTO v_reccnt FROM mch1 WHERE matnr EQ x_bncom-matnr AND ersda EQ sy-datum.
+
+        WHILE sy-subrc EQ 0.
+          ADD 101 TO v_reccnt.
+          v_newnum = v_reccnt.
+          v_newbatch+8(2) = v_newnum+1(2).
+          SELECT SINGLE * FROM mch1 WHERE matnr EQ x_bncom-matnr AND ersda EQ sy-datum AND charg EQ v_newbatch.
+        ENDWHILE.
+        new_charg = v_newbatch.
+
+      ELSE.
+        new_charg = ' '.
+      ENDIF.
+    ENDIF.
+
+*    READ TABLE lt_alloclist INTO ls_alloclist WITH KEY classnum = 'Z_BATCH_ROH1'.
+*    IF sy-subrc = 0.
+    IF lv_kzkri <> 'X'.
+      SELECT SINGLE * INTO ls_mara FROM mara WHERE matnr = x_bncom-matnr.
+      IF ls_mara-mprof IS NOT INITIAL.
+        SELECT SINGLE ematn INTO lv_ematn FROM ekpo WHERE ebeln =  x_bncom-ebeln AND ebelp = x_bncom-ebelp.
+        SELECT SINGLE mfrnr INTO new_charg FROM mara WHERE matnr = lv_ematn.
+      ELSE.
+        new_charg = '1'.
+*        SELECT SINGLE lifnr INTO new_charg FROM ekko WHERE ebeln = x_bncom-ebeln.
+      ENDIF.
+    ENDIF.
+
+    READ TABLE lt_alloclist INTO ls_alloclist WITH KEY classnum = 'Z_BATCH_FER'.
+    IF sy-subrc = 0.
+*      CLEAR:lv_ebeln.
+*      lv_ebeln = x_bncom-ebeln.
+*      CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+*        EXPORTING
+*          input  = lv_ebeln
+*        IMPORTING
+*          output = lv_ebeln.
+*      new_charg = lv_ebeln.
+      new_charg = '1'.
+    ENDIF.
+
+  ELSEIF ls_godynpro-action = 'A01' AND ls_godynpro-refdoc = 'R08' AND ls_godefault-bwart = '101'.
+    lv_aufnr = x_bncom-aufnr.
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+      EXPORTING
+        input  = lv_aufnr
+      IMPORTING
+        output = lv_aufnr.
+    new_charg = lv_aufnr.
+  ENDIF.
+
+* 取消前导0
+  CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+    EXPORTING
+      input  = new_charg
+    IMPORTING
+      output = new_charg.
+
+ELSEIF x_bncom-autyp = '10'." sy-tcode = 'CO01' OR sy-tcode = 'CO02' OR sy-tcode = 'CO05'.
+  BREAK xul.
+  DATA: lv_revlv TYPE afko-revlv,
+        lv_oitxt TYPE aeoi-oitxt.
+
+  FIELD-SYMBOLS:<fs_caufvd> TYPE caufvd.
+  DATA:lv_str TYPE string VALUE  '(SAPLCOKO1)CAUFVD'.
+
+  CLEAR: lv_revlv,lv_oitxt,lv_aufnr.
+* 根据订单号从表afko中取版次revlv
+  ASSIGN (lv_str) TO <fs_caufvd>.
+  IF <fs_caufvd> IS ASSIGNED.
+    lv_revlv = <fs_caufvd>-revlv.
+  ENDIF.
+  IF lv_revlv IS INITIAL.
+    SELECT SINGLE revlv INTO lv_revlv FROM afko WHERE aufnr = x_bncom-aufnr.
+  ENDIF.
+* 判断LV_REVLV是否为空，如果不为空，根据料号、AETYP = 41 从AEOI里取OITXT作为批次号
+*                       如果为空，则直接取工单号
+  IF lv_revlv IS NOT INITIAL.
+    SELECT SINGLE oitxt
+      INTO lv_oitxt
+      FROM aeoi
+      WHERE objkt = x_bncom-matnr
+        AND aetyp = '41'
+        AND revlv = lv_revlv.
+    IF sy-subrc = 0.
+      new_charg = lv_oitxt.
+    ENDIF.
+  ELSE.
+*    lv_aufnr = x_bncom-aufnr.
+*    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+*      EXPORTING
+*        input  = lv_aufnr
+*      IMPORTING
+*        output = lv_aufnr.
+    new_charg = '1'.
+  ENDIF.
+
+  FREE MEMORY ID 'CO05N_CHARG'.
+  EXPORT a = new_charg TO MEMORY ID 'CO05N_CHARG'.
+ENDIF.
+allow_existing_batch = 'X'.

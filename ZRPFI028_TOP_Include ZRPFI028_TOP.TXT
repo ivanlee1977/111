@@ -1,0 +1,133 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI028_TOP
+*&---------------------------------------------------------------------*
+TYPE-POOLS:truxs,slis.
+DATA:xlstab TYPE truxs_t_text_data.
+TABLES:bsid,knvv,t001.
+DATA: it_fieldcat TYPE slis_t_fieldcat_alv,
+      wa_fieldcat LIKE LINE OF it_fieldcat,
+      gs_layout   TYPE slis_layout_alv.
+DATA: dyn    TYPE smp_dyntxt,
+      g_file LIKE rlgrap-filename.
+
+DATA: BEGIN OF gt_alv OCCURS 0,
+        kunnr       LIKE kna1-kunnr, "客户
+        name1       LIKE kna1-name1, "客户名称
+        kkber       LIKE bsid-kkber, "信用控制范围
+        kvgr1       LIKE knvv-kvgr1, "业务员
+        bezei       LIKE tvv1t-bezei, "描述
+        zterm       LIKE knb1-zterm, ""付款条件
+        text1       LIKE t052u-text1, "支付条件描述
+        zdmbtr      LIKE bsid-dmbtr, "金额
+        col00       LIKE bsid-dmbtr,
+        col01       LIKE bsid-dmbtr,
+        col02       LIKE bsid-dmbtr,
+        col03       LIKE bsid-dmbtr,
+        col04       LIKE bsid-dmbtr,
+        col05       LIKE bsid-dmbtr,
+        col06       LIKE bsid-dmbtr,
+        col07       LIKE bsid-dmbtr,
+        col08       LIKE bsid-dmbtr,
+        col09       LIKE bsid-dmbtr,
+        col10       LIKE bsid-dmbtr,
+        col11       LIKE bsid-dmbtr,
+        col12       LIKE bsid-dmbtr,
+        col13       LIKE bsid-dmbtr,
+        col14       LIKE bsid-dmbtr,
+        col15       LIKE bsid-dmbtr,
+        col16       LIKE bsid-dmbtr,
+        col17       LIKE bsid-dmbtr,
+        col18       LIKE bsid-dmbtr,
+        col19       LIKE bsid-dmbtr,
+        col20       LIKE bsid-dmbtr,
+        col21       LIKE bsid-dmbtr,
+        col22       LIKE bsid-dmbtr,
+        col23       LIKE bsid-dmbtr,
+        zdmbtr2     LIKE bsid-dmbtr, "两年前
+        zkkje       LIKE bsid-dmbtr, "扣款金额
+* ADD BY PFT 20171208
+        bzirk       LIKE knvv-bzirk, "销售大区
+        bzirk_vtext LIKE t171t-bztxt, "销售大区描述
+        kvgr2       LIKE knvv-kvgr2, "商务
+        kvgr2_vtext LIKE tvv2t-bezei, "商务描述
+        kvgr1_vtext LIKE tvv1t-bezei, "销售业务员描述
+        vkbur       LIKE knvv-vkbur, "行办代码
+        vkbur_vtext LIKE tvkbt-bezei, "行办描述
+* END BY PFT 20171208
+        waers       LIKE bsid-waers, "币别 ADD BY PFT 20171225
+      END OF gt_alv .
+
+DATA: BEGIN OF gt_bsid OCCURS 0,
+        bukrs LIKE bsid-bukrs, "公司代码
+        kunnr LIKE bsid-kunnr, "客户
+        gjahr LIKE bsid-gjahr, "会计年度
+        belnr LIKE bsid-belnr, "会计凭证号
+        buzei LIKE bsid-buzei, "行项目
+        kkber LIKE bsid-kkber, "信用控制范围
+        prctr LIKE bsid-prctr, "利润中心
+        budat LIKE bsid-budat, "凭证日期
+        hkont LIKE bsid-hkont, "总帐科目
+        waers LIKE bsid-waers, "币别 ADD BY PFT 20171225
+        dmbtr LIKE bsid-dmbtr, "本币金额
+        wrbtr LIKE bsid-wrbtr, "原币金额 ADD BY PFT 20171225
+        shkzg LIKE bsid-shkzg, "借贷标识
+        rebzg LIKE bsid-rebzg, "发票参考号
+        bzirk LIKE knvv-bzirk, "销售大区
+        kvgr2 LIKE knvv-kvgr2, "商务
+        kvgr1 LIKE knvv-kvgr1, "销售业务员描述
+        vkbur LIKE knvv-vkbur, "行办代码
+      END OF gt_bsid,
+      gt_bsad LIKE gt_bsid OCCURS 0 WITH HEADER LINE.
+
+
+*  取客户相关信息
+DATA:gt_knvv  LIKE knvv OCCURS 0 WITH HEADER LINE.
+
+DATA:BEGIN OF it_pdate OCCURS 0,
+       lv_date(20) TYPE c,
+       date        TYPE c LENGTH 6,
+     END OF it_pdate.
+DATA:BEGIN OF gt_pdate OCCURS 0,
+       kunnr       LIKE bsid-kunnr, "客户编码
+       kkber       LIKE bsid-kkber, "信用控制范围
+       lv_date(20) TYPE c,
+       dmbtr       LIKE bsid-dmbtr, " 值
+       waers       LIKE bsid-waers, "币别 ADD BY PFT 20171225
+     END OF gt_pdate.
+
+DATA:lg_num(2) TYPE c.
+
+DATA: i_grid_settings TYPE lvc_s_glay.
+
+
+**********动态内表定义**************************
+FIELD-SYMBOLS:<dynitab> TYPE STANDARD TABLE, "Dynamic internal table
+              <dynwa>   TYPE any,            "Dynamic work area
+              <field> .           "Field
+DATA: fieldcat        TYPE lvc_t_fcat,
+      fieldcat_ln     TYPE lvc_s_fcat,
+      g_user_command  TYPE slis_formname VALUE 'USER_COMMAND',
+      git_events      TYPE slis_t_event,   "ALV 事件
+      i_list_comments TYPE slis_t_listheader, "用来填充表单标题区域的数据类型
+      ps_layout       TYPE lvc_s_layo.
+
+DATA: cl_stru    TYPE REF TO cl_abap_structdescr,
+      cl_tabl    TYPE REF TO cl_abap_tabledescr,
+      cl_handle  TYPE REF TO data,
+      cl_strue   TYPE REF TO data,
+      compdesc   TYPE abap_componentdescr,
+      components TYPE abap_component_tab.
+
+DATA:
+  wa_flname(30) TYPE c,
+  wa_field(30),
+  t_quan        TYPE p DECIMALS 0,
+  c_quan        TYPE p DECIMALS 2,
+  zmng          TYPE string,
+  box(30)       TYPE c,
+*     hkl TYPE char20,
+  t_style       TYPE lvc_t_styl,
+  t_color       TYPE lvc_t_scol,
+  w_color       TYPE lvc_s_scol,
+  tline(4),
+  stylelin      TYPE lvc_s_styl.

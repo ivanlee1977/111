@@ -1,0 +1,24 @@
+*&---------------------------------------------------------------------*
+*& Report ZRPFI008
+*&---------------------------------------------------------------------*
+*&营业外收支明细表
+*制作人：雷鸣涛
+*制作日期：2017-7-12
+**&---------------------------------------------------------------------*
+REPORT ZRPFI008.
+
+INCLUDE zrpfi008_t01.
+
+INCLUDE zrpfi008_f01.
+
+at SELECTION-SCREEN OUTPUT.
+
+at SELECTION-SCREEN.
+
+  PERFORM frm_check_auth.
+
+  START-OF-SELECTION.
+
+  PERFORM frm_getdata.
+
+  PERFORM frm_toexcel.

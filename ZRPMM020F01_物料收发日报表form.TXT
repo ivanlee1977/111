@@ -1,0 +1,572 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM013F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+
+  DATA:BEGIN OF lt_makt OCCURS 0,
+         matnr LIKE makt-matnr,
+         maktx LIKE makt-maktx,
+       END OF lt_makt.
+
+  DATA:lt_mard_sq LIKE mard OCCURS 0 WITH HEADER LINE.
+  DATA:lv_period   LIKE sy-datum(6).
+  DATA:lv_date LIKE sy-datum.
+  DATA:lv_date_from LIKE sy-datum,
+       lv_date_to   LIKE sy-datum.
+
+*  ADD BY pft 20180123
+  DATA:BEGIN OF lt_t001l OCCURS 0,
+         werks LIKE t001l-werks,
+         lgort LIKE t001l-lgort,
+         lgobe LIKE t001l-lgobe,
+       END OF lt_t001l.
+*  END BY pft 20180123
+
+  REFRESH: gt_mseg,gt_alv,gt_detail.
+
+* 根据选择条件从表MSEG中取出相关数据
+  SELECT a~matnr a~werks b~matkl b~spart a~lgort
+    INTO CORRESPONDING FIELDS OF TABLE gt_detail
+    FROM mard AS a INNER JOIN mara AS b ON a~matnr = b~matnr
+    WHERE a~matnr IN s_matnr
+      AND a~werks IN s_werks
+      AND a~lgort IN s_lgort
+      AND b~matkl IN s_matkl
+      AND b~spart IN s_spart.
+*  SORT gt_detail BY matnr.
+*  DELETE ADJACENT DUPLICATES FROM gt_detail COMPARING matnr.
+  CHECK gt_detail[] IS NOT INITIAL.
+***抓取物料描述
+  SELECT matnr maktx
+    INTO CORRESPONDING FIELDS OF TABLE lt_makt
+    FROM makt
+    FOR ALL ENTRIES IN gt_detail
+    WHERE matnr = gt_detail-matnr
+      AND spras = sy-langu.
+  SORT lt_makt BY matnr.
+
+  CONCATENATE s_budat-low(6) '01' INTO lv_date_from.
+  IF s_budat-high IS INITIAL.
+    lv_date_to = lv_date_from..
+  ELSE.
+    lv_date_to = s_budat-high.
+  ENDIF.
+
+  SELECT mblnr mjahr zeile bwart matnr werks lgort menge shkzg ebeln aufnr budat_mkpf AS budat
+    INTO CORRESPONDING FIELDS OF TABLE gt_mseg
+    FROM mseg
+    FOR ALL ENTRIES IN gt_detail
+    WHERE matnr = gt_detail-matnr
+      AND werks = gt_detail-werks
+      AND lgort = gt_detail-lgort  "ADD BY PFT 20180123  新增
+*      AND budat_mkpf IN s_budat.  "CHANGE BY PFT 20180123  取消
+      AND budat_mkpf BETWEEN lv_date_from AND lv_date_to. "ADD BY PFT 20180123  新增
+
+*  ADD BY PFT 20180123
+***根据从MSEG中取出的信息从表EKKO中取出采购订单类型
+  IF gt_mseg[] IS NOT INITIAL.
+    SELECT ebeln bsart
+      INTO CORRESPONDING FIELDS OF TABLE gt_ekko
+      FROM ekko
+      FOR ALL ENTRIES IN gt_mseg
+      WHERE ebeln = gt_mseg-ebeln.
+    SORT gt_ekko BY ebeln.
+  ENDIF.
+***库位描述
+  SELECT werks lgort lgobe INTO TABLE lt_t001l FROM t001l FOR ALL ENTRIES IN gt_detail WHERE werks = gt_detail-werks AND lgort = gt_detail-lgort.
+*  END BY PFT 20180123
+
+***抓取上期结存
+  CALL FUNCTION 'BKK_ADD_MONTH_TO_DATE'
+    EXPORTING
+      months  = '-1'
+      olddate = s_budat-low
+    IMPORTING
+      newdate = lv_date.
+
+  lv_period = lv_date(6).
+
+  PERFORM frm_get_jcsl TABLES lt_mard_sq USING lv_period.
+
+*  ADD BY PFT 20180123
+  SORT lt_mard_sq BY matnr werks lgort.
+  SORT lt_t001l BY werks lgort.
+*  END BY PFT 20180123
+
+*  整理输出数据
+  LOOP AT gt_detail.
+    CLEAR: gt_alv.
+    gt_alv-werks = gt_detail-werks.
+    gt_alv-matnr = gt_detail-matnr.
+*   ADD BY PFT 20180123  新增
+    gt_alv-lgort = gt_detail-lgort.
+***库位描述
+    READ TABLE lt_t001l WITH KEY werks = gt_detail-werks lgort = gt_detail-lgort BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-lgobe = lt_t001l-lgobe.
+    ENDIF.
+*    END BY PFT 20180123
+
+*  取物料描述
+    READ TABLE lt_makt WITH KEY matnr = gt_detail-matnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-maktx = lt_makt-maktx.
+    ENDIF.
+
+    READ TABLE lt_mard_sq WITH KEY matnr = gt_detail-matnr werks = gt_detail-werks  lgort = gt_detail-lgort BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-zsqjc = lt_mard_sq-labst + lt_mard_sq-umlme + lt_mard_sq-insme + lt_mard_sq-speme.
+    ENDIF.
+
+    LOOP AT gt_mseg  WHERE matnr = gt_detail-matnr AND werks = gt_detail-werks AND lgort = gt_detail-lgort. "ADD BY PFT 20180123  新增库存地点
+      IF gt_mseg-budat < s_budat-low.
+        IF gt_mseg-shkzg = 'S'.
+          gt_alv-zsqjc = gt_alv-zsqjc + gt_mseg-menge.
+        ELSE.
+          gt_alv-zsqjc = gt_alv-zsqjc - gt_mseg-menge.
+        ENDIF.
+      ENDIF.
+      LOOP AT gt_ztmm003 WHERE bwart_l = gt_mseg-bwart OR ( bwart_l <= gt_mseg-bwart AND bwart_h >= gt_mseg-bwart ).
+*        IF gt_mseg-budat < s_budat-low.
+*          CASE gt_ztmm003-zywlx.
+*            WHEN 'A'. "采购收货
+*              IF gt_mseg-ebeln IS NOT INITIAL.
+*                IF gt_mseg-shkzg = 'S'.
+*                  IF gt_ztmm003-zjxfh EQ '+'.
+*                    gt_alv-zsqjc = gt_alv-zsqjc + gt_mseg-menge.
+*                  ELSEIF gt_ztmm003-zjxfh EQ '-'.
+*                    gt_alv-zsqjc = gt_alv-zsqjc - gt_mseg-menge.
+*                  ENDIF.
+*                ELSEIF gt_mseg-shkzg = 'H'.
+*                  IF gt_ztmm003-zdxfh EQ '+'.
+*                    gt_alv-zsqjc = gt_alv-zsqjc + gt_mseg-menge.
+*                  ELSEIF gt_ztmm003-zdxfh EQ '-'.
+*                    gt_alv-zsqjc = gt_alv-zsqjc - gt_mseg-menge.
+*                  ENDIF.
+*                ENDIF.
+*              ENDIF.
+*            WHEN 'B'. "生产收货
+*              IF gt_mseg-aufnr IS NOT INITIAL.
+*                IF gt_mseg-shkzg = 'S'.
+*                  IF gt_ztmm003-zjxfh EQ '+'.
+*                    gt_alv-zsqjc = gt_alv-zsqjc + gt_mseg-menge.
+*                  ELSEIF gt_ztmm003-zjxfh EQ '-'.
+*                    gt_alv-zsqjc = gt_alv-zsqjc - gt_mseg-menge.
+*                  ENDIF.
+*                ELSEIF gt_mseg-shkzg = 'H'.
+*                  IF gt_ztmm003-zdxfh EQ '+'.
+*                    gt_alv-zsqjc = gt_alv-zsqjc + gt_mseg-menge.
+*                  ELSEIF gt_ztmm003-zdxfh EQ '-'.
+*                    gt_alv-zsqjc = gt_alv-zsqjc - gt_mseg-menge.
+*                  ENDIF.
+*                ENDIF.
+*              ENDIF.
+*            WHEN 'C'. "其他收货
+*              IF gt_mseg-shkzg = 'S'.
+*                IF gt_ztmm003-zjxfh EQ '+'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc + gt_mseg-menge.
+*                ELSEIF gt_ztmm003-zjxfh EQ '-'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc - gt_mseg-menge.
+*                ENDIF.
+*              ELSEIF gt_mseg-shkzg = 'H'.
+*                IF gt_ztmm003-zdxfh EQ '+'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc + gt_mseg-menge.
+*                ELSEIF gt_ztmm003-zdxfh EQ '-'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc - gt_mseg-menge.
+*                ENDIF.
+*              ENDIF.
+*            WHEN 'D'. "盘点
+*              IF gt_mseg-shkzg = 'S'.
+*                IF gt_ztmm003-zjxfh EQ '+'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc + gt_mseg-menge.
+*                ELSEIF gt_ztmm003-zjxfh EQ '-'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc - gt_mseg-menge.
+*                ENDIF.
+*              ELSEIF gt_mseg-shkzg = 'H'.
+*                IF gt_ztmm003-zdxfh EQ '+'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc + gt_mseg-menge.
+*                ELSEIF gt_ztmm003-zdxfh EQ '-'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc - gt_mseg-menge.
+*                ENDIF.
+*              ENDIF.
+*            WHEN 'E'. "委外发货
+*              IF gt_mseg-shkzg = 'S'.
+*                IF gt_ztmm003-zjxfh EQ '+'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc + gt_mseg-menge.
+*                ELSEIF gt_ztmm003-zjxfh EQ '-'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc - gt_mseg-menge.
+*                ENDIF.
+*              ELSEIF gt_mseg-shkzg = 'H'.
+*                IF gt_ztmm003-zdxfh EQ '+'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc + gt_mseg-menge.
+*                ELSEIF gt_ztmm003-zdxfh EQ '-'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc - gt_mseg-menge.
+*                ENDIF.
+*              ENDIF.
+*            WHEN 'F'. "生产发货
+*              IF gt_mseg-shkzg = 'S'.
+*                IF gt_ztmm003-zjxfh EQ '+'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc + gt_mseg-menge.
+*                ELSEIF gt_ztmm003-zjxfh EQ '-'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc - gt_mseg-menge.
+*                ENDIF.
+*              ELSEIF gt_mseg-shkzg = 'H'.
+*                IF gt_ztmm003-zdxfh EQ '+'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc + gt_mseg-menge.
+*                ELSEIF gt_ztmm003-zdxfh EQ '-'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc - gt_mseg-menge.
+*                ENDIF.
+*              ENDIF.
+*            WHEN 'G'. "销售发货
+*              IF gt_mseg-shkzg = 'S'.
+*                IF gt_ztmm003-zjxfh EQ '+'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc + gt_mseg-menge.
+*                ELSEIF gt_ztmm003-zjxfh EQ '-'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc - gt_mseg-menge.
+*                ENDIF.
+*              ELSEIF gt_mseg-shkzg = 'H'.
+*                IF gt_ztmm003-zdxfh EQ '+'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc + gt_mseg-menge.
+*                ELSEIF gt_ztmm003-zdxfh EQ '-'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc - gt_mseg-menge.
+*                ENDIF.
+*              ENDIF.
+*            WHEN 'H'. "报废
+*              IF gt_mseg-shkzg = 'S'.
+*                IF gt_ztmm003-zjxfh EQ '+'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc + gt_mseg-menge.
+*                ELSEIF gt_ztmm003-zjxfh EQ '-'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc - gt_mseg-menge.
+*                ENDIF.
+*              ELSEIF gt_mseg-shkzg = 'H'.
+*                IF gt_ztmm003-zdxfh EQ '+'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc + gt_mseg-menge.
+*                ELSEIF gt_ztmm003-zdxfh EQ '-'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc - gt_mseg-menge.
+*                ENDIF.
+*              ENDIF.
+*            WHEN 'I'."调入
+*              IF gt_mseg-shkzg = 'S'.
+*                IF gt_ztmm003-zjxfh EQ '+'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc + gt_mseg-menge.
+*                ELSEIF gt_ztmm003-zjxfh EQ '-'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc - gt_mseg-menge.
+*                ENDIF.
+*              ELSEIF gt_mseg-shkzg = 'H'.
+*                IF gt_ztmm003-zdxfh EQ '+'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc + gt_mseg-menge.
+*                ELSEIF gt_ztmm003-zdxfh EQ '-'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc - gt_mseg-menge.
+*                ENDIF.
+*              ENDIF.
+*            WHEN 'J'."调出
+*              IF gt_mseg-shkzg = 'S'.
+*                IF gt_ztmm003-zjxfh EQ '+'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc + gt_mseg-menge.
+*                ELSEIF gt_ztmm003-zjxfh EQ '-'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc - gt_mseg-menge.
+*                ENDIF.
+*              ELSEIF gt_mseg-shkzg = 'H'.
+*                IF gt_ztmm003-zdxfh EQ '+'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc + gt_mseg-menge.
+*                ELSEIF gt_ztmm003-zdxfh EQ '-'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc - gt_mseg-menge.
+*                ENDIF.
+*              ENDIF.
+*            WHEN 'K'."其它收货
+*              IF gt_mseg-shkzg = 'S'.
+*                IF gt_ztmm003-zjxfh EQ '+'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc + gt_mseg-menge.
+*                ELSEIF gt_ztmm003-zjxfh EQ '-'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc - gt_mseg-menge.
+*                ENDIF.
+*              ELSEIF gt_mseg-shkzg = 'H'.
+*                IF gt_ztmm003-zdxfh EQ '+'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc + gt_mseg-menge.
+*                ELSEIF gt_ztmm003-zdxfh EQ '-'.
+*                  gt_alv-zsqjc = gt_alv-zsqjc - gt_mseg-menge.
+*                ENDIF.
+*              ENDIF.
+*            WHEN OTHERS.
+*          ENDCASE.
+*        ELSE.
+        IF gt_mseg-budat >= s_budat-low.
+          CASE gt_ztmm003-zywlx.
+            WHEN 'A'. "采购收货
+              IF gt_mseg-ebeln IS NOT INITIAL.
+                IF gt_mseg-shkzg = 'S'.
+                  IF gt_ztmm003-zjxfh EQ '+'.
+                    gt_alv-cgsh = gt_alv-cgsh + gt_mseg-menge.
+                  ELSEIF gt_ztmm003-zjxfh EQ '-'.
+                    gt_alv-cgsh = gt_alv-cgsh - gt_mseg-menge.
+                  ENDIF.
+                ELSEIF gt_mseg-shkzg = 'H'.
+                  IF gt_ztmm003-zdxfh EQ '+'.
+                    gt_alv-cgsh = gt_alv-cgsh + gt_mseg-menge.
+                  ELSEIF gt_ztmm003-zdxfh EQ '-'.
+                    gt_alv-cgsh = gt_alv-cgsh - gt_mseg-menge.
+                  ENDIF.
+                ENDIF.
+              ENDIF.
+            WHEN 'B'. "生产收货
+              IF gt_mseg-aufnr IS NOT INITIAL.
+                IF gt_mseg-shkzg = 'S'.
+                  IF gt_ztmm003-zjxfh EQ '+'.
+                    gt_alv-scsh = gt_alv-scsh + gt_mseg-menge.
+                  ELSEIF gt_ztmm003-zjxfh EQ '-'.
+                    gt_alv-scsh = gt_alv-scsh - gt_mseg-menge.
+                  ENDIF.
+                ELSEIF gt_mseg-shkzg = 'H'.
+                  IF gt_ztmm003-zdxfh EQ '+'.
+                    gt_alv-scsh = gt_alv-scsh + gt_mseg-menge.
+                  ELSEIF gt_ztmm003-zdxfh EQ '-'.
+                    gt_alv-scsh = gt_alv-scsh - gt_mseg-menge.
+                  ENDIF.
+                ENDIF.
+              ENDIF.
+            WHEN 'C'. "其他收货
+              IF gt_mseg-shkzg = 'S'.
+                IF gt_ztmm003-zjxfh EQ '+'.
+                  gt_alv-qtsh = gt_alv-qtsh + gt_mseg-menge.
+                ELSEIF gt_ztmm003-zjxfh EQ '-'.
+                  gt_alv-qtsh = gt_alv-qtsh - gt_mseg-menge.
+                ENDIF.
+              ELSEIF gt_mseg-shkzg = 'H'.
+                IF gt_ztmm003-zdxfh EQ '+'.
+                  gt_alv-qtsh = gt_alv-qtsh + gt_mseg-menge.
+                ELSEIF gt_ztmm003-zdxfh EQ '-'.
+                  gt_alv-qtsh = gt_alv-qtsh - gt_mseg-menge.
+                ENDIF.
+              ENDIF.
+            WHEN 'D'. "盘点
+              IF gt_mseg-shkzg = 'S'.
+                IF gt_ztmm003-zjxfh EQ '+'.
+                  gt_alv-pdtz = gt_alv-pdtz + gt_mseg-menge.
+                ELSEIF gt_ztmm003-zjxfh EQ '-'.
+                  gt_alv-pdtz = gt_alv-pdtz - gt_mseg-menge.
+                ENDIF.
+              ELSEIF gt_mseg-shkzg = 'H'.
+                IF gt_ztmm003-zdxfh EQ '+'.
+                  gt_alv-pdtz = gt_alv-pdtz + gt_mseg-menge.
+                ELSEIF gt_ztmm003-zdxfh EQ '-'.
+                  gt_alv-pdtz = gt_alv-pdtz - gt_mseg-menge.
+                ENDIF.
+              ENDIF.
+            WHEN 'E'. "委外发货
+              IF gt_mseg-shkzg = 'S'.
+                IF gt_ztmm003-zjxfh EQ '+'.
+                  gt_alv-wwfh = gt_alv-wwfh + gt_mseg-menge.
+                ELSEIF gt_ztmm003-zjxfh EQ '-'.
+                  gt_alv-wwfh = gt_alv-wwfh - gt_mseg-menge.
+                ENDIF.
+              ELSEIF gt_mseg-shkzg = 'H'.
+                IF gt_ztmm003-zdxfh EQ '+'.
+                  gt_alv-wwfh = gt_alv-wwfh + gt_mseg-menge.
+                ELSEIF gt_ztmm003-zdxfh EQ '-'.
+                  gt_alv-wwfh = gt_alv-wwfh - gt_mseg-menge.
+                ENDIF.
+              ENDIF.
+            WHEN 'F'. "生产发货
+              IF gt_mseg-shkzg = 'S'.
+                IF gt_ztmm003-zjxfh EQ '+'.
+                  gt_alv-scfh = gt_alv-scfh + gt_mseg-menge.
+                ELSEIF gt_ztmm003-zjxfh EQ '-'.
+                  gt_alv-scfh = gt_alv-scfh - gt_mseg-menge.
+                ENDIF.
+              ELSEIF gt_mseg-shkzg = 'H'.
+                IF gt_ztmm003-zdxfh EQ '+'.
+                  gt_alv-scfh = gt_alv-scfh + gt_mseg-menge.
+                ELSEIF gt_ztmm003-zdxfh EQ '-'.
+                  gt_alv-scfh = gt_alv-scfh - gt_mseg-menge.
+                ENDIF.
+              ENDIF.
+            WHEN 'G'. "销售发货
+              IF gt_mseg-shkzg = 'S'.
+                IF gt_ztmm003-zjxfh EQ '+'.
+                  gt_alv-xsfh = gt_alv-xsfh + gt_mseg-menge.
+                ELSEIF gt_ztmm003-zjxfh EQ '-'.
+                  gt_alv-xsfh = gt_alv-xsfh - gt_mseg-menge.
+                ENDIF.
+              ELSEIF gt_mseg-shkzg = 'H'.
+                IF gt_ztmm003-zdxfh EQ '+'.
+                  gt_alv-xsfh = gt_alv-xsfh + gt_mseg-menge.
+                ELSEIF gt_ztmm003-zdxfh EQ '-'.
+                  gt_alv-xsfh = gt_alv-xsfh - gt_mseg-menge.
+                ENDIF.
+              ENDIF.
+            WHEN 'H'. "报废
+              IF gt_mseg-shkzg = 'S'.
+                IF gt_ztmm003-zjxfh EQ '+'.
+                  gt_alv-bf = gt_alv-bf + gt_mseg-menge.
+                ELSEIF gt_ztmm003-zjxfh EQ '-'.
+                  gt_alv-bf = gt_alv-bf - gt_mseg-menge.
+                ENDIF.
+              ELSEIF gt_mseg-shkzg = 'H'.
+                IF gt_ztmm003-zdxfh EQ '+'.
+                  gt_alv-bf = gt_alv-bf + gt_mseg-menge.
+                ELSEIF gt_ztmm003-zdxfh EQ '-'.
+                  gt_alv-bf = gt_alv-bf - gt_mseg-menge.
+                ENDIF.
+              ENDIF.
+            WHEN 'I'."调入
+              IF gt_mseg-ebeln IS NOT INITIAL.
+                READ TABLE gt_ekko WITH KEY ebeln = gt_mseg-ebeln BINARY SEARCH.
+                IF sy-subrc = 0 AND gt_ekko-bsart = 'UB'.
+                  IF gt_mseg-shkzg = 'S'.
+                    IF gt_ztmm003-zjxfh EQ '+'.
+                      gt_alv-zdr = gt_alv-zdr + gt_mseg-menge.
+                    ELSEIF gt_ztmm003-zjxfh EQ '-'.
+                      gt_alv-zdr = gt_alv-zdr - gt_mseg-menge.
+                    ENDIF.
+                  ELSEIF gt_mseg-shkzg = 'H'.
+                    IF gt_ztmm003-zdxfh EQ '+'.
+                      gt_alv-zdr = gt_alv-zdr + gt_mseg-menge.
+                    ELSEIF gt_ztmm003-zdxfh EQ '-'.
+                      gt_alv-zdr = gt_alv-zdr - gt_mseg-menge.
+                    ENDIF.
+                  ENDIF.
+                ENDIF.
+              ENDIF.
+            WHEN 'J'."调出
+              IF gt_mseg-shkzg = 'S'.
+                IF gt_ztmm003-zjxfh EQ '+'.
+                  gt_alv-zdc = gt_alv-zdc + gt_mseg-menge.
+                ELSEIF gt_ztmm003-zjxfh EQ '-'.
+                  gt_alv-zdc = gt_alv-zdc - gt_mseg-menge.
+                ENDIF.
+              ELSEIF gt_mseg-shkzg = 'H'.
+                IF gt_ztmm003-zdxfh EQ '+'.
+                  gt_alv-zdc = gt_alv-zdc + gt_mseg-menge.
+                ELSEIF gt_ztmm003-zdxfh EQ '-'.
+                  gt_alv-zdc = gt_alv-zdc - gt_mseg-menge.
+                ENDIF.
+              ENDIF.
+            WHEN 'K'."其它收货
+              IF gt_mseg-shkzg = 'S'.
+                IF gt_ztmm003-zjxfh EQ '+'.
+                  gt_alv-qtsh = gt_alv-qtsh + gt_mseg-menge.
+                ELSEIF gt_ztmm003-zjxfh EQ '-'.
+                  gt_alv-qtsh = gt_alv-qtsh - gt_mseg-menge.
+                ENDIF.
+              ELSEIF gt_mseg-shkzg = 'H'.
+                IF gt_ztmm003-zdxfh EQ '+'.
+                  gt_alv-qtsh = gt_alv-qtsh + gt_mseg-menge.
+                ELSEIF gt_ztmm003-zdxfh EQ '-'.
+                  gt_alv-qtsh = gt_alv-qtsh - gt_mseg-menge.
+                ENDIF.
+              ENDIF.
+            WHEN OTHERS.
+          ENDCASE.
+        ENDIF.
+      ENDLOOP.
+    ENDLOOP.
+***期末结存
+    gt_alv-zbqjc = gt_alv-zsqjc + gt_alv-cgsh + gt_alv-scsh - gt_alv-scfh - gt_alv-xsfh - gt_alv-wwfh - gt_alv-qtfh
+                 + gt_alv-qtsh - gt_alv-bf + gt_alv-pdtz    + gt_alv-zdr  - gt_alv-zdc .
+    APPEND gt_alv.
+  ENDLOOP.
+
+*  ADD BY PFT 20180125
+  IF p_chk = 'X'.
+    DELETE gt_alv WHERE zsqjc EQ 0 AND cgsh EQ 0 AND scsh EQ 0 AND scfh EQ 0
+                       AND xsfh EQ 0 AND wwfh EQ 0 AND qtfh EQ 0 AND qtsh EQ 0
+                       AND bf EQ 0 AND pdtz EQ 0 AND zdr EQ 0 AND zdc EQ 0 AND zbqjc EQ 0.
+  ENDIF.
+*  END BY PFT 20180125
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SUB_BUILD_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM sub_build_fieldcat .
+  REFRESH:g_it_fieldcat.
+  PERFORM sub_set_fieldcat USING 'X'  'WERKS'   '工厂'            'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING 'X'  'MATNR'   '物料号'          'X' '' ''  ''  ''  'MATNR'  'MARA' '' .
+  PERFORM sub_set_fieldcat USING ''   'MAKTX'   '物料描述'        '' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''   'LGORT'   '库存地点'        'X' '' ''  ''  ''  'LGORT'  'MARD' '' .
+  PERFORM sub_set_fieldcat USING ''   'LGOBE'   '库存地点描述'    'X' '' ''  ''  ''  'LGOBE'  'T001L' '' .
+  PERFORM sub_set_fieldcat USING ''   'ZSQJC'   '期初数量'        'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''   'CGSH'    '采购收货'        'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''   'SCSH'    '生产收货'        'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''   'SCFH'    '生产发货'        'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''   'XSFH'    '销售发货'        'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''   'WWFH'    '委外发货'        'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''   'QTFH'    '其他发货'        'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''   'QTSH'    '其他收货'        'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''   'BF'      '报废'            'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''   'PDTZ'    '盘点调整'        'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''   'ZDR'     '调入'            'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''   'ZDC'     '调出'            'X' '' ''  ''  ''  ''  '' '' .
+  PERFORM sub_set_fieldcat USING ''   'ZBQJC'   '期末数量'        'X' '' ''  ''  ''  ''  '' '' .
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_JCSL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LT_MARD_SQ  text
+*      -->P_LV_PERIOD  text
+*----------------------------------------------------------------------*
+FORM frm_get_jcsl  TABLES   lt_mard STRUCTURE mard
+                    USING   u_period LIKE sy-datum(6).
+  DATA:lt_mard_temp LIKE lt_mard OCCURS 0 WITH HEADER LINE,
+       lt_mardh     LIKE lt_mard OCCURS 0 WITH HEADER LINE.
+
+  REFRESH lt_mard.
+
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE lt_mard
+    FROM mard
+     FOR ALL ENTRIES IN gt_detail
+   WHERE werks = gt_detail-werks
+     AND matnr = gt_detail-matnr
+     AND lgort = gt_detail-lgort.
+
+  APPEND LINES OF lt_mard TO lt_mard_temp.
+  DELETE lt_mard WHERE ( lfgja = u_period(4)  AND lfmon > u_period+4(2) ) OR lfgja > u_period(4).
+  DELETE lt_mard_temp WHERE ( lfgja = u_period(4)  AND lfmon <= u_period+4(2) ) OR lfgja < u_period(4).
+
+  SELECT *
+ APPENDING CORRESPONDING FIELDS OF TABLE lt_mard
+    FROM mardh
+     FOR ALL ENTRIES IN gt_detail
+   WHERE werks = gt_detail-werks
+     AND matnr = gt_detail-matnr
+     AND lgort = gt_detail-lgort
+     AND lfgja = u_period(4) AND lfmon = u_period+4(2).
+
+  LOOP AT lt_mard_temp.
+    READ TABLE lt_mard WITH KEY matnr = lt_mard_temp-matnr werks = lt_mard_temp-werks lgort = lt_mard_temp-lgort
+                                lfgja = u_period(4)        lfmon = u_period+4(2).
+    IF sy-subrc = 0.
+      DELETE lt_mard_temp.
+    ENDIF.
+  ENDLOOP.
+
+  IF lt_mard_temp[] IS NOT INITIAL.
+    SELECT *
+      INTO CORRESPONDING FIELDS OF TABLE lt_mardh
+      FROM mardh
+       FOR ALL ENTRIES IN lt_mard_temp
+     WHERE werks = lt_mard_temp-werks
+       AND matnr = lt_mard_temp-matnr
+       AND lgort = lt_mard_temp-lgort
+       AND ( ( lfgja = u_period(4)  AND lfmon > u_period+4(2) ) OR lfgja > u_period(4) ).
+    SORT lt_mardh BY matnr werks lgort lfgja lfmon.
+    DELETE ADJACENT DUPLICATES FROM lt_mardh COMPARING matnr werks lgort.
+    APPEND LINES OF lt_mardh TO lt_mard.
+  ENDIF.
+ENDFORM.

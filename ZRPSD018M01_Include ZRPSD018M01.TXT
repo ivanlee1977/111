@@ -1,0 +1,76 @@
+*----------------------------------------------------------------------*
+***INCLUDE ZRPSD018M01.
+*----------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Module  STATUS_0100  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE status_0100 OUTPUT.
+  SET PF-STATUS '0100'.
+  SET TITLEBAR '0100'.
+*  加两条记录
+  REFRESH:list.
+  CLEAR value.
+  value-key = '1'.
+  value-text = '深圳'.
+  APPEND value TO list.
+
+  CLEAR value.
+  value-key = '2'.
+  value-text = '上海'.
+  APPEND value TO list.
+
+  CALL FUNCTION 'VRM_SET_VALUES'
+    EXPORTING
+      id              = 'LV_FIELD'
+      values          = list
+    EXCEPTIONS
+      id_illegal_name = 1.
+
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0100  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_0100 INPUT.
+  DATA: se_code TYPE sy-ucomm.
+  DATA: ok_code TYPE sy-ucomm.
+  DATA: lt_wxdz1 LIKE lt_wxdz OCCURS 0 WITH HEADER LINE.
+  CLEAR: se_code.
+  se_code = ok_code.
+  CASE se_code.
+    WHEN 'ENTER'."调用打印
+      IF lv_field IS INITIAL.
+        MESSAGE w398(00) WITH '请先维护外箱地址格式' DISPLAY LIKE 'E'.
+      ENDIF.
+
+      IF lv_dyts IS INITIAL.
+        MESSAGE w398(00) WITH '请先维护打印条目数' DISPLAY LIKE 'E'.
+      ENDIF.
+
+      REFRESH: lt_wxdz1,lt_wxdz.
+      LOOP AT gt_alv WHERE box = 'X'.
+        MOVE-CORRESPONDING gt_alv TO lt_wxdz1.
+        COLLECT lt_wxdz1.
+      ENDLOOP.
+
+      LOOP AT lt_wxdz1.
+        CLEAR: lt_wxdz.
+        MOVE-CORRESPONDING lt_wxdz1 TO lt_wxdz.
+        DO lv_dyts TIMES.
+          APPEND lt_wxdz.
+        ENDDO.
+        CLEAR:lt_wxdz1.
+      ENDLOOP.
+
+      SORT lt_wxdz BY kunag.
+
+      PERFORM frm_get_wxdz USING lv_field.
+
+    WHEN 'CANCEL' OR 'BACK' OR 'EXIT'.
+      LEAVE TO SCREEN 0.
+    WHEN OTHERS.
+  ENDCASE.
+ENDMODULE.

@@ -1,0 +1,31 @@
+*& 程序名： ZRPMM032
+*& 创建者(公司)/日期： 雷鸣涛/20170929
+*& 程序描述：安全库存预警表
+*&---------------------------------------------------------------------*
+
+*&---------------------------------------------------------------------*
+REPORT zrpmm032.
+
+INCLUDE ZRPMM032_T01.
+
+INCLUDE ZRPMM032_S01.
+
+INCLUDE ZRPMM032_F01.
+
+
+INITIALIZATION.
+
+
+AT SELECTION-SCREEN .
+
+START-OF-SELECTION.
+
+  IF  s_werks[] IS INITIAL AND s_matnr[] IS INITIAL  AND s_matkl[] IS INITIAL
+  AND   s_lgort[] IS INITIAL AND s_mtart[] IS INITIAL .
+    MESSAGE '请输入相应查找条件！' TYPE 'E'.
+    RETURN.
+  ENDIF.
+
+  PERFORM frm_getdata.
+  PERFORM frm_getfact.
+  PERFORM frm_show.

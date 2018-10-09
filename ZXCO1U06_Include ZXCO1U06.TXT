@@ -1,0 +1,78 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZXCO1U06
+*&---------------------------------------------------------------------*
+BREAK xul.
+DATA: lv_charg TYPE charg_d,
+      lv_oitxt TYPE aeoi-oitxt,
+      lv_mess  TYPE string,
+      lv_revlv TYPE aeoi-revlv.
+DATA: lv_afpod TYPE string,
+      lv_line  TYPE bsvx-sttxt.
+CLEAR: lv_charg,lv_oitxt,lv_mess,lv_revlv.
+
+IF sy-tcode = 'COHVOMRELEASE'.
+  IMPORT a = lv_charg FROM MEMORY ID 'CO05N_CHARG'.
+*  SELECT SINGLE charg INTO lv_charg
+*    FROM afpo
+*    WHERE aufnr = header_imp-aufnr.
+ELSE.
+  FIELD-SYMBOLS:<fs> TYPE afpod.
+  lv_afpod = '(SAPLCOKO1)AFPOD'.
+  ASSIGN (lv_afpod) TO <fs>.
+  lv_charg = <fs>-charg.
+ENDIF.
+
+* ADD BY PFT 20171109
+* 如果CO01 CO48 CO40，批次栏位填值，提示不要填
+CLEAR:lv_line.
+CALL FUNCTION 'STATUS_TEXT_EDIT'
+  EXPORTING
+    client           = sy-mandt
+    objnr            = header_imp-objnr
+    only_active      = 'X'
+    spras            = sy-langu
+  IMPORTING
+    line             = lv_line
+  EXCEPTIONS
+    object_not_found = 1.
+
+IF sy-tcode = 'CO01' OR sy-tcode = 'CO48' OR sy-tcode = 'CO40'.
+  IF lv_line CS 'REL' AND lv_line NS 'RELR'.
+    lv_mess = 'CO01、CO48、CO40不允许下达生产订单'.
+    MESSAGE lv_mess TYPE 'E' DISPLAY LIKE 'E'.
+  ENDIF.
+  IF lv_charg IS NOT INITIAL AND lv_line cs 'CRTD'.
+    CONCATENATE '请不要输入批次' lv_oitxt INTO lv_mess.
+    MESSAGE lv_mess TYPE 'E' DISPLAY LIKE 'E'.
+  ENDIF.
+ENDIF.
+* END BY PFT 20171109
+
+*  逻辑： （1）取屏幕当前的批次作为A
+*        （2）根据生产订单当前的版次和物料从表AEOI中取出正确的批次作为B
+*        （3）判断A是否等于B，不相等，报错
+*        （4）判断如果订单不是下达状态并且批次有值，提示不要填批次
+
+IF sy-tcode = 'CO02' OR sy-tcode = 'COHVOMRELEASE'.
+  IF ( lv_line  CS 'CRTD' ) AND lv_charg IS NOT INITIAL.
+    CONCATENATE '订单是未下达状态，请不要输入批次' lv_oitxt INTO lv_mess.
+    MESSAGE lv_mess TYPE 'E' DISPLAY LIKE 'E'.
+  ELSEIF ( lv_line CS 'REL' AND lv_line NS 'RELR' ) AND header_imp-revlv IS NOT INITIAL.
+*    SELECT SINGLE revlv INTO lv_revlv FROM afko WHERE aufnr = header_imp-aufnr.
+*    CHECK lv_revlv NE header_imp-revlv.
+    SELECT SINGLE oitxt INTO lv_oitxt
+      FROM aeoi
+      WHERE revlv = header_imp-revlv
+        AND objkt = header_imp-matnr
+        AND aetyp = '41'.
+
+    TRANSLATE lv_oitxt TO UPPER CASE.
+    TRANSLATE lv_charg TO UPPER CASE.
+
+    IF lv_oitxt IS NOT INITIAL AND lv_oitxt <> lv_charg.
+      CONCATENATE '请修改生产订单批号为：' lv_oitxt INTO lv_mess.
+      MESSAGE lv_mess TYPE 'E' DISPLAY LIKE 'E'.
+*  LEAVE TO TRANSACTION 'CO02'.
+    ENDIF.
+  ENDIF.
+ENDIF.

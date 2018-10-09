@@ -1,0 +1,161 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPSD012T01
+*&---------------------------------------------------------------------*
+TYPE-POOLS:truxs,slis.
+TABLES:likp,vbak,vbkd,ztsd004.
+
+********************ALV 事件****************
+DATA:
+  it_fieldcat TYPE lvc_t_fcat,
+  wa_fieldcat LIKE LINE OF it_fieldcat,
+  gs_layout   TYPE lvc_s_layo,
+  it_events   TYPE slis_t_event, ""事件属性
+  wa_events   TYPE slis_alv_event.
+
+DATA:BEGIN OF gw_item,
+       kunag           TYPE likp-kunag, "客户
+       dzdhm           TYPE ztsd004-dzdhm, "对账单号码
+       zdate           TYPE ztsd004-zdate, "对账日期
+       sel(1)          TYPE c, "复选框
+       zdate_last      TYPE ztsd004-zdate, "上一次对账日期
+       zstatus         TYPE ztsd004-zstatus, "审批状态
+       zstatus_txt(40) TYPE c, "审批状态文本
+       wadat_ist       TYPE likp-wadat_ist, "实际交货日期
+       vbeln           TYPE lips-vbeln, "交货单
+       posnr           TYPE lips-posnr, "行项目
+       vgbel           TYPE lips-vgbel, "销售订单
+       vgpos           TYPE lips-vgpos, "销售订单项次
+       lfart           TYPE likp-lfart, "类型
+       spart           TYPE lips-spart, "
+       pstyv           TYPE lips-pstyv,
+       name1           TYPE kna1-name1, "客户名称
+       matnr           TYPE lips-matnr, "物料
+       werks           TYPE lips-werks, "工厂
+       arktx           TYPE lips-arktx, "物料描述
+       lfimg           TYPE lips-lfimg, "交货数量
+       vrkme           TYPE lips-vrkme, "单位
+       netpr           TYPE lips-netpr, "单价
+       kzwi1           TYPE vbap-kzwi1, "总价
+       kwmeng          TYPE vbap-kwmeng, "订单数量
+       dmbtr           TYPE bseg-dmbtr, "金额 = 单价 *数量
+       waerk           TYPE vbak-waerk, "币别
+       bstnk           TYPE vbak-bstnk, "客户订单号
+       knumv           TYPE vbak-knumv,  "条件记录号
+       titel_ap        TYPE knvk-titel_ap, "公司地址
+       name_lx         TYPE knvk-name1, "联系人
+       telf1           TYPE c LENGTH 50, "电话
+       parnr           TYPE knvk-parnr, "联系人电话
+       addrnumber      TYPE adr3-addrnumber, "号码
+       fax_number      TYPE adrc-fax_number, "传真
+       kvgr2           TYPE vbak-kvgr2, "商务人员
+       bezei3          TYPE tvv2t-bezei, "商务描述
+       tel_sw          TYPE ztsd002-tel, "商务人员电话
+*       bezei           TYPE ztsd002-bezei, "商务人员名称
+       fax_sw          TYPE ztsd002-fax, "商务人员传真
+       vkorg           TYPE vbak-vkorg, "销售组织
+       vkgrp           TYPE vbak-vkgrp, "销售组
+       bezei2          TYPE tvgrt-bezei, "销售组描述
+       vtweg           TYPE vbak-vtweg, "分销渠道
+       bzirk           TYPE vbkd-bzirk, "大区
+       bztxt           TYPE t171t-bztxt, "销售大区描述
+       vkbur           TYPE vbak-vkbur, "行办
+       bezei1          TYPE tvkbt-bezei, "行办描述
+       kvgr1           TYPE vbak-kvgr1, "业务员
+       bezei4          TYPE tvv1t-bezei, "业务员描述
+       tel_yw          TYPE ztsd002-tel, "业务员电话
+       fax_yw          TYPE ztsd002-fax, "业务员传真
+       kdgrp           TYPE vbkd-kdgrp, "行业
+       ktext           TYPE t151t-ktext, "行业描述
+       kukla           TYPE kna1-kukla, "客户等级
+       kulab           TYPE msku-kulab, "客户样品库存
+       beizhu          TYPE char200, "备注
+       sum_ys          TYPE bsad-dmbtr, "应收总额
+       dmbtr_ys        TYPE bsad-dmbtr, "本期应收款
+       dmbtr_hk        TYPE bsad-dmbtr, "本期回款
+       dmbtr_ys_last   TYPE bsad-dmbtr, "上期应收款
+       bolnr           TYPE likp-bolnr, "物流单号
+       vsart           TYPE likp-vsart, "运输方式
+       vsart_bezei     TYPE t173t-bezei, "运输方式描述
+       kbetr           TYPE komv-kbetr, "运费
+       augru           TYPE vbak-augru, "订单原因
+       augru_ms        TYPE tvaut-bezei, "订单原因描述
+       czbs            TYPE char1,
+       sfakn           LIKE vbrk-sfakn, "冲销单据
+       vbeln_fp        LIKE vbrk-vbeln, "处理发票冲销
+       field_style     TYPE lvc_t_styl, " 为内表添加设置编辑状态所需的字段
+       zzxno           LIKE ztsd003zxdb-zzxno, "装箱单号 add by wusk 20180118
+       brgew           LIKE ztsd003zxdb-brgew, "add by wusk 20180118
+       zsjyf           LIKE ztsd003zxdb-zsjyf, "add by wusk 20180118
+       zslv            TYPE char3,
+       kvgr4           TYPE vbak-kvgr4,
+       bezei_kvgr4     TYPE tvv4t-bezei,
+     END OF gw_item.
+DATA:gt_item LIKE gw_item OCCURS 0.
+
+DATA:gw_post LIKE gw_item,
+     gt_post LIKE gw_item OCCURS 0.
+
+DATA:gw_daochu LIKE gw_item,
+     gt_daochu LIKE gw_item OCCURS 0.
+
+DATA: i_grid_settings TYPE lvc_s_glay.
+
+DATA:ok_code   TYPE sy-ucomm,
+     save_ok   TYPE sy-ucomm,
+     errorcode TYPE i.
+DATA: l_grid TYPE REF TO cl_gui_alv_grid,
+      stbl   TYPE lvc_s_stbl. ""稳定刷新
+
+
+DATA:l_wa_ssfcompop    TYPE  ssfcompop,  "Smart Forms: 智能写作器 (传输) 选项
+     l_wa_ssfctrlop    TYPE  ssfctrlop,  "Smart Forms: 控制结构
+     w_job_output_info TYPE ssfcrescl . "取值预览打印还是打印
+DATA:funname           TYPE rs38l_fnam,        "Smart Forms: 函数
+     ls_composer_param TYPE ssfcompop.
+DATA:xssfctrlop LIKE ssfctrlop.
+
+DATA:lt_ztsd004 LIKE ztsd004 OCCURS 0 WITH HEADER LINE .
+
+DATA: BEGIN OF gt_tvzbt OCCURS 0,
+        zterm LIKE tvzbt-zterm,
+        vtext LIKE tvzbt-vtext,
+      END OF gt_tvzbt.
+
+CONSTANTS:gcst_excel_template TYPE w3objid VALUE 'ZSD012'.
+*  ADD BY PFT 20171221
+*  逻辑：深圳取模板ZSD012 ,香港取模板ZSD012A
+CONSTANTS:gcst_excel_template_xg TYPE w3objid VALUE 'ZSD012A'.
+*  END BY PFT 20171221
+
+
+*******数据定义*******
+DATA:lo_excel     TYPE ole2_object,
+     lo_workbooks TYPE ole2_object,
+     lo_workbook  TYPE ole2_object,
+     lo_sheet     TYPE ole2_object,
+     tmp_sheet    TYPE ole2_object, "EMPTY SHEET
+     lo_cell      TYPE ole2_object,
+     lo_cell2     TYPE ole2_object,
+     lo_cells     TYPE ole2_object,
+     borders_obj  TYPE ole2_object,
+     lo_range     TYPE ole2_object,
+     row_obj      TYPE ole2_object,
+     gs_borders   TYPE ole2_object,
+     lo_cell1     TYPE ole2_object.
+DATA lv_file LIKE rlgrap-filename.
+DATA:lt_excel_in                    "内表：从源文件中读取到的数据
+       TYPE STANDARD TABLE OF alsmex_tabline WITH HEADER LINE.
+
+"划分类型
+DATA:BEGIN OF lt_vbeln OCCURS 0,
+       vbeln LIKE lips-vbeln,
+       kunag LIKE likp-kunag,
+     END OF lt_vbeln.
+
+DATA:BEGIN OF lt_dzdhm OCCURS 0,
+       dzdhm TYPE ztsd004-dzdhm, "对账单号码
+     END OF lt_dzdhm.
+
+DATA:lv_tel   TYPE char40,
+     lv_bezei TYPE char40,
+     lv_fax   TYPE char40.

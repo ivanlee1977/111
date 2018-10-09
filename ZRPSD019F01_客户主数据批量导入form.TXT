@@ -1,0 +1,396 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM008F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FILENAME_FIND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      <--P_P_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_filename_find  CHANGING xc_file.
+  CALL FUNCTION 'WS_FILENAME_GET'
+    EXPORTING
+      def_filename     = xc_file
+      def_path         = 'C:\'
+      mask             = ',*.XLS.'
+      mode             = 'O'
+      title            = '文件名'
+    IMPORTING
+      filename         = xc_file
+    EXCEPTIONS
+      inv_winsys       = 1
+      no_batch         = 2
+      selection_cancel = 3
+      selection_error  = 4
+      OTHERS           = 5.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_INITIAL_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_initial_data .
+*******数据定义*******
+  INCLUDE <icon>.
+  DATA ls_functxt TYPE smp_dyntxt.
+  DATA:gt_exbut TYPE TABLE OF sy-ucomm.
+*******初始化*******
+*******程序主体*******
+  "屏幕工具栏中按饼
+  "启用自定义工具
+  CLEAR ls_functxt.
+  ls_functxt-icon_text = '模板下载'."'Download Template'.
+  ls_functxt-icon_id   = '@49@'.
+  ls_functxt-quickinfo =  '模板下载'.
+  sscrfields-functxt_01 = ls_functxt.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DOWNLOAD_TEMPLATE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0040   text
+*      <--P_P_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_download_template  USING u_objid LIKE wwwdatatab-objid CHANGING ic_file.
+  DATA:l_path   TYPE string.
+
+  CALL METHOD zcl_ole_excel=>download_templet
+    EXPORTING
+      iv_objid        = u_objid
+      iv_win_title    = '请指定下载路径'
+      iv_df_extension = 'XLS'
+    IMPORTING
+      ev_fullpath     = l_path.
+
+  CALL METHOD cl_gui_frontend_services=>execute
+    EXPORTING
+      document = l_path
+    EXCEPTIONS
+      OTHERS   = 10.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_UPLOAD_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_upload_data .
+  DATA:ls_header LIKE LINE OF gt_header.
+  DATA:ls_table_field LIKE  tabfield,
+       lv_string      TYPE string.
+  FIELD-SYMBOLS:<fs_field>    TYPE any..
+
+  CALL FUNCTION 'ZALSM_EXCEL_TO_INTERNAL_TABLE'
+    EXPORTING
+      filename                = p_file
+      i_begin_col             = 1
+      i_begin_row             = 2
+      i_end_col               = 100
+      i_end_row               = 9999
+    TABLES
+      intern                  = gt_upload
+    EXCEPTIONS
+      inconsistent_parameters = 1
+      upload_ole              = 2
+      OTHERS                  = 3.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+  gv_structure = 'ZSD_CUSTOMER_INFO'.
+  ASSIGN gt_customer_data TO <fs_tab_line>.
+  ASSIGN gt_customer_data[] TO <fs_tab>.
+
+***将数据整理到内表中
+  LOOP AT gt_upload ASSIGNING <fs_data>.
+    IF <fs_data>-row EQ 1.
+      MOVE-CORRESPONDING <fs_data> TO gt_header.
+      APPEND gt_header.
+      CONTINUE.
+    ENDIF.
+    CLEAR:ls_header,ls_table_field.
+    READ TABLE gt_header INTO ls_header WITH KEY col = <fs_data>-col.
+    IF <fs_data>-value NE '/' AND <fs_data>-value IS NOT INITIAL.
+      ls_table_field-tabname = gv_structure.
+      ls_table_field-fieldname  = ls_header-value.
+*& 字段校验
+      CALL FUNCTION 'RS_CHECK_CONV_EX_2_IN'
+        EXPORTING
+          input_external               = <fs_data>-value
+          table_field                  = ls_table_field
+        EXCEPTIONS
+          input_not_numerical          = 1
+          too_many_decimals            = 2
+          more_than_one_sign           = 3
+          ill_thousand_separator_dist  = 4
+          too_many_digits              = 5
+          sign_for_unsigned            = 6
+          too_large                    = 7
+          too_small                    = 8
+          invalid_date_format          = 9
+          invalid_date                 = 10
+          invalid_time_format          = 11
+          invalid_time                 = 12
+          invalid_hex_digit            = 13
+          unexpected_error             = 14
+          invalid_fieldname            = 15
+          field_and_descr_incompatible = 16
+          input_too_long               = 17
+          no_decimals                  = 18
+          invalid_float                = 19
+          conversion_exit_error        = 20
+          OTHERS                       = 21.
+      IF sy-subrc <> 0.
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4 INTO lv_string.
+        MESSAGE e001(00) WITH 'ROW,COL' <fs_data>-row <fs_data>-col lv_string.
+      ENDIF.
+    ENDIF.
+    CONDENSE <fs_data>-value.
+    ASSIGN COMPONENT ls_header-value OF STRUCTURE <fs_tab_line> TO <fs_field>.
+    IF sy-subrc = 0.
+      <fs_field> = <fs_data>-value.
+    ENDIF.
+    AT END OF row.              "新的一行EXCEL数据_结束
+      PERFORM frm_check_data.
+      APPEND <fs_tab_line> TO <fs_tab>.     "收集一行EXCEL数据
+      CLEAR <fs_tab_line>.
+    ENDAT.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_DATA_BASIC_VIEW
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_data.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
+    EXPORTING
+*     I_BUFFER_ACTIVE        =
+      i_structure_name       = gv_structure
+*     I_CLIENT_NEVER_DISPLAY = 'X'
+*     I_BYPASSING_BUFFER     =
+*     I_INTERNAL_TABNAME     =
+    CHANGING
+      ct_fieldcat            = gt_fcat[]
+    EXCEPTIONS
+      inconsistent_interface = 1
+      program_error          = 2
+      OTHERS                 = 3.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+  gt_fcat-fieldname = 'ZICON'.
+  gt_fcat-coltext  = '状态'.
+  gt_fcat-scrtext_l = '状态'.
+  gt_fcat-scrtext_m = '状态'.
+  gt_fcat-scrtext_s = '状态'.
+  gt_fcat-inttype = 'C'.
+  gt_fcat-intlen = '30'.
+  INSERT gt_fcat INDEX 1.
+  CLEAR gt_fcat.
+
+  gt_fcat-fieldname = 'ZMSG'.
+  gt_fcat-coltext  = '消息'.
+  gt_fcat-scrtext_l = '消息'.
+  gt_fcat-scrtext_m = '消息'.
+  gt_fcat-scrtext_s = '消息'.
+  gt_fcat-inttype = 'C'.
+  gt_fcat-intlen = '200'.
+  APPEND gt_fcat..
+  CLEAR gt_fcat.
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+  gs_layout-no_toolbar = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK        = ' '
+*     I_BYPASSING_BUFFER       =
+*     I_BUFFER_ACTIVE          =
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'FRM_SET_PF_STATUS'
+      i_callback_user_command  = 'FRM_USER_COMMAND'
+*     I_CALLBACK_TOP_OF_PAGE   = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME         =
+*     I_BACKGROUND_ID          = ' '
+*     I_GRID_TITLE             =
+*     I_GRID_SETTINGS          =
+      is_layout_lvc            = gs_layout
+      it_fieldcat_lvc          = gt_fcat[]
+*     IT_EXCLUDING             =
+*     IT_SPECIAL_GROUPS_LVC    =
+*     IT_SORT_LVC              =
+*     IT_FILTER_LVC            =
+*     IT_HYPERLINK             =
+*     IS_SEL_HIDE              =
+      i_default                = 'X'
+      i_save                   = 'A'
+*     IS_VARIANT               =
+*     IT_EVENTS                =
+*     IT_EVENT_EXIT            =
+*     IS_PRINT_LVC             =
+*     IS_REPREP_ID_LVC         =
+*     I_SCREEN_START_COLUMN    = 0
+*     I_SCREEN_START_LINE      = 0
+*     I_SCREEN_END_COLUMN      = 0
+*     I_SCREEN_END_LINE        = 0
+*     I_HTML_HEIGHT_TOP        =
+*     I_HTML_HEIGHT_END        =
+*     IT_ALV_GRAPHICS          =
+*     IT_EXCEPT_QINFO_LVC      =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER  =
+*     ES_EXIT_CAUSED_BY_USER   =
+    TABLES
+      t_outtab                 = <fs_tab>
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PF_STATUS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_set_pf_status USING rt_extab TYPE slis_t_extab.
+  SET PF-STATUS 'PF_1000'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_USER_COMMAND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_user_command USING r_ucomm LIKE sy-ucomm
+                            rs_selfield TYPE slis_selfield..
+
+  DATA:lv_grid TYPE REF TO cl_gui_alv_grid.
+
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = lv_grid.
+
+  CASE r_ucomm.
+    WHEN 'ZUPLOAD'.  "导入数据
+      IF lv_flag IS INITIAL.
+        PERFORM frm_create_material.
+        lv_flag = 'X'.
+      ELSEIF lv_flag = 'X'.
+        MESSAGE e398(00) WITH '请勿重复导入数据' DISPLAY LIKE 'E'.
+      ENDIF.
+      CALL METHOD lv_grid->set_frontend_layout
+        EXPORTING
+          is_layout = gs_layout.
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CREATE_MATERIAL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_create_material .
+  DATA: ls_data LIKE zsd_customer_info.
+  LOOP AT gt_customer_data.
+    CLEAR: ls_data.
+    MOVE-CORRESPONDING gt_customer_data TO ls_data.
+    CALL FUNCTION 'ZF_SD_CREATE_CUSTOMER_DATA'
+      EXPORTING
+        i_data  = ls_data
+      IMPORTING
+        e_msgty = gt_customer_data-msgty
+        e_msg   = gt_customer_data-zmsg
+        e_kunnr = gt_customer_data-kunnr.
+    IF gt_customer_data-msgty EQ 'S'.
+      gt_customer_data-zicon = icon_led_green.
+    ELSE.
+      gt_customer_data-zicon = icon_led_red.
+    ENDIF.
+    MODIFY gt_customer_data TRANSPORTING zicon msgty zmsg kunnr.
+  ENDLOOP.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_MSG
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LT_RETURN  text
+*      <--P_GT_BASIC_DATA_ZMSG  text
+*----------------------------------------------------------------------*
+FORM frm_get_msg  TABLES  lt_return STRUCTURE bapi_matreturn2
+                  CHANGING c_zmsg TYPE bapi_msg.
+  DATA:lv_msg TYPE string.
+  CLEAR c_zmsg.
+  LOOP AT lt_return WHERE type  = 'E' OR type = 'A'.
+    CLEAR lv_msg.
+    CALL FUNCTION 'MESSAGE_TEXT_BUILD'
+      EXPORTING
+        msgid               = lt_return-id
+        msgnr               = lt_return-number
+        msgv1               = lt_return-message_v1
+        msgv2               = lt_return-message_v2
+        msgv3               = lt_return-message_v3
+        msgv4               = lt_return-message_v4
+      IMPORTING
+        message_text_output = lv_msg.
+    IF c_zmsg IS INITIAL.
+      c_zmsg = lv_msg.
+    ELSE.
+      CONCATENATE c_zmsg lv_msg INTO c_zmsg.
+    ENDIF.
+  ENDLOOP.
+ENDFORM.

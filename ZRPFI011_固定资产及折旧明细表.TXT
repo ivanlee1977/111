@@ -1,0 +1,23 @@
+*&---------------------------------------------------------------------*
+*& Report ZRPFI011
+*&---------------------------------------------------------------------*
+*&固定资产及折旧明细表
+*制作人：雷鸣涛
+*制作时间：2017-7-28
+*&---------------------------------------------------------------------*
+REPORT ZRPFI011.
+
+INCLUDE zrpfi011_t01.
+INCLUDE zrpfi011_s01.
+INCLUDE zrpfi011_f01.
+
+at SELECTION-SCREEN OUTPUT.
+
+at SELECTION-SCREEN.
+  PERFORM frm_check_auth.
+
+  START-OF-SELECTION.
+
+  PERFORM frm_getdata.
+
+  PERFORM frm_toexcel.

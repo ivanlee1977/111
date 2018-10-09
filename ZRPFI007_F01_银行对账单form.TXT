@@ -1,0 +1,322 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI007_F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:lt_ztfi002 LIKE ztfi002 OCCURS 0 WITH HEADER LINE.
+  DATA:lv_year(5) TYPE c.
+  DATA:BEGIN OF lt_bseg OCCURS 0,
+         bukrs LIKE bkpf-bukrs,
+         belnr LIKE bkpf-belnr,
+         gjahr LIKE bkpf-gjahr,
+         monat LIKE bkpf-monat,
+         buzei LIKE bseg-buzei,
+         hkont LIKE bseg-hkont,
+         zuonr LIKE bseg-zuonr,
+         sgtxt LIKE bseg-sgtxt,
+         dmbtr LIKE bseg-dmbtr,
+         shkzg LIKE bseg-shkzg,
+       END OF lt_bseg.
+  DATA:lv_index LIKE sy-tabix.
+
+  CONCATENATE lv_year '%' INTO lv_year.
+***抓取符合条件的自定义表数据
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE lt_ztfi002
+    FROM ztfi002
+    WHERE bukrs IN r_bukrs
+     AND prctr IN s_prctr
+     AND zjyrq LIKE lv_year
+     AND zyhzh IN s_zyhzh.
+  LOOP AT lt_ztfi002.
+    IF lt_ztfi002-zjyrq+4(2) NOT IN s_month.
+      DELETE lt_ztfi002 INDEX sy-tabix.
+    ENDIF.
+  ENDLOOP.
+
+***抓取SAP表数据
+  SELECT a~bukrs
+         a~belnr
+         a~gjahr
+         a~monat
+         b~buzei
+         b~hkont
+         b~zuonr
+         b~sgtxt
+         b~dmbtr
+         b~shkzg
+    INTO CORRESPONDING FIELDS OF TABLE lt_bseg
+    FROM bkpf AS a
+    INNER JOIN bseg AS b
+    ON a~bukrs = b~bukrs
+    AND a~belnr = b~belnr
+    AND a~gjahr = b~gjahr
+    WHERE a~bukrs IN r_bukrs
+      AND a~gjahr = p_year
+      AND a~monat IN s_month
+      AND b~prctr IN s_prctr
+      AND b~hkont IN s_zyhzh.
+
+***整理数据到输出表
+  LOOP AT lt_ztfi002.
+    lv_index = sy-tabix.
+    READ TABLE lt_bseg WITH KEY bukrs = lt_ztfi002-bukrs hkont = lt_ztfi002-zyhzh zuonr = lt_ztfi002-zyhlsh.
+    IF sy-subrc = 0. "能匹配到
+      MOVE-CORRESPONDING lt_ztfi002 TO gt_out.
+      LOOP AT lt_bseg WHERE bukrs = lt_ztfi002-bukrs AND hkont = lt_ztfi002-zyhzh AND zuonr = lt_ztfi002-zyhlsh.
+        IF lt_bseg-shkzg = 'H'.
+          lt_bseg-dmbtr = -1 * lt_bseg-dmbtr.
+        ENDIF.
+        CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+          EXPORTING
+            input  = lt_bseg-belnr
+          IMPORTING
+            output = lt_bseg-belnr.
+        IF gt_out-belnr IS INITIAL.
+          gt_out-belnr = lt_bseg-belnr.
+          gt_out-sgtxt = lt_bseg-sgtxt.
+          gt_out-dmbtr = lt_bseg-dmbtr.
+        ELSE.
+          CONCATENATE gt_out-belnr lt_bseg-belnr INTO gt_out-belnr SEPARATED BY '/'.
+          CONCATENATE gt_out-sgtxt lt_bseg-sgtxt INTO gt_out-sgtxt SEPARATED BY '/'.
+          gt_out-dmbtr = gt_out-dmbtr + lt_bseg-dmbtr.
+          CONDENSE:gt_out-belnr,gt_out-sgtxt.
+        ENDIF.
+        DELETE lt_bseg.
+      ENDLOOP.
+      IF gt_out-zje EQ gt_out-dmbtr. "完全匹配
+        gt_out-zstat = icon_led_green.
+      ELSE.                          "能匹配但是金额不等
+        gt_out-zstat = icon_led_yellow.
+      ENDIF.
+      APPEND gt_out.
+      CLEAR gt_out.
+    ELSE.            "匹配不到
+      gt_out-zstat = icon_led_red.
+      MOVE-CORRESPONDING lt_ztfi002 TO gt_out.
+      APPEND gt_out.
+      CLEAR gt_out.
+    ENDIF.
+    DELETE lt_ztfi002 INDEX lv_index.
+  ENDLOOP.
+
+***将剩余的BSEG匹配不到的数据整理到输出表
+  LOOP AT lt_bseg.
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+      EXPORTING
+        input  = lt_bseg-belnr
+      IMPORTING
+        output = lt_bseg-belnr.
+    IF lt_bseg-shkzg = 'H'.
+      lt_bseg-dmbtr = -1 * lt_bseg-dmbtr.
+    ENDIF.
+    READ TABLE gt_out WITH KEY bukrs = lt_bseg-bukrs zyhzh = lt_bseg-hkont  zyhlsh = lt_bseg-zuonr.
+    IF sy-subrc NE 0.
+      gt_out-zstat = icon_led_red.
+      gt_out-bukrs = lt_bseg-bukrs.
+      gt_out-zyhzh = lt_bseg-hkont.
+      gt_out-zyhlsh = lt_bseg-zuonr.
+      gt_out-belnr  = lt_bseg-belnr.
+      gt_out-sgtxt  = lt_bseg-sgtxt.
+      gt_out-dmbtr  = lt_bseg-dmbtr.
+      APPEND gt_out.
+      CLEAR gt_out.
+    ELSE.
+      CONCATENATE gt_out-belnr lt_bseg-belnr INTO gt_out-belnr SEPARATED BY '/'.
+      CONCATENATE gt_out-sgtxt lt_bseg-sgtxt INTO gt_out-sgtxt SEPARATED BY '/'.
+      gt_out-dmbtr = gt_out-dmbtr + lt_bseg-dmbtr.
+      CONDENSE:gt_out-belnr,gt_out-sgtxt.
+      MODIFY gt_out INDEX sy-tabix TRANSPORTING belnr sgtxt dmbtr .
+    ENDIF.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  mcr_build_fieldcat:'ZSTAT'    '状态'        ''         ''           'C'  '4',
+                     'ZYHZH'    '银行账户'    'ZYHZH'    'ZTFI002'    ''  '',
+                     'ZYHLSH'   '银行流水号'  'ZYHLSH'   'ZTFI002'    ''  '',
+                     'BUKRS'    '公司代码'    'BUKRS'    'ZTFI002'    ''  '',
+                     'PRCTR'    '利润中心'    'PRCTR'    'ZTFI002'    ''  '',
+                     'ZJYRQ'    '交易日期'    'ZJYRQ'    'ZTFI002'    ''  '',
+                     'ZZY'      '摘要'        'ZZY'      'ZTFI002'    ''  '',
+                     'ZJE'      '金额'        'ZJE'      'ZTFI002'    ''  '',
+                     'BELNR'    'SAP会计凭证号'  ''      ''           'C'  '100',
+                     'SGTXT'    'SAP凭证摘要'    ''      ''           'C'  '500',
+                     'DMBTR'    'SAP金额'        ''      ''           'P'  '15'.
+
+  gs_layout-colwidth_optimize = 'X'.
+  gs_layout-zebra = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+*     I_INTERFACE_CHECK  = ' '
+*     I_BYPASSING_BUFFER = ' '
+*     I_BUFFER_ACTIVE    = ' '
+      i_callback_program = sy-repid
+*     I_CALLBACK_PF_STATUS_SET          = ' '
+*     I_CALLBACK_USER_COMMAND           = ' '
+*     I_CALLBACK_TOP_OF_PAGE            = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME   =
+*     I_BACKGROUND_ID    = ' '
+*     I_GRID_TITLE       =
+*     I_GRID_SETTINGS    =
+      is_layout          = gs_layout
+      it_fieldcat        = gt_fcat[]
+*     IT_EXCLUDING       =
+*     IT_SPECIAL_GROUPS  =
+*     IT_SORT            =
+*     IT_FILTER          =
+*     IS_SEL_HIDE        =
+      i_default          = 'X'
+      i_save             = 'A'
+*     IS_VARIANT         =
+*     IT_EVENTS          =
+*     IT_EVENT_EXIT      =
+*     IS_PRINT           =
+*     IS_REPREP_ID       =
+*     I_SCREEN_START_COLUMN             = 0
+*     I_SCREEN_START_LINE               = 0
+*     I_SCREEN_END_COLUMN               = 0
+*     I_SCREEN_END_LINE  = 0
+*     I_HTML_HEIGHT_TOP  = 0
+*     I_HTML_HEIGHT_END  = 0
+*     IT_ALV_GRAPHICS    =
+*     IT_HYPERLINK       =
+*     IT_ADD_FIELDCAT    =
+*     IT_EXCEPT_QINFO    =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER           =
+*     ES_EXIT_CAUSED_BY_USER            =
+    TABLES
+      t_outtab           = gt_out[]
+    EXCEPTIONS
+      program_error      = 1
+      OTHERS             = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_ZYHZH_F4
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_zyhzh_f4 USING u_fname TYPE help_info-dynprofld.
+  DATA:BEGIN OF lt_skb1 OCCURS 0,
+         bukrs LIKE skb1-bukrs,
+         saknr LIKE skb1-saknr,
+         txt50 LIKE skat-txt50,
+       END OF lt_skb1.
+
+  SELECT a~bukrs
+         a~saknr
+         b~txt50
+    INTO CORRESPONDING FIELDS OF TABLE lt_skb1
+    FROM skb1 AS a
+    LEFT JOIN skat AS b
+    ON a~saknr = b~saknr
+    AND b~spras = sy-langu
+    AND b~ktopl = '1000'
+    WHERE a~saknr LIKE '1002%'.
+
+  CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+    EXPORTING
+*     DDIC_STRUCTURE  = ' '
+      retfield        = 'SAKNR'
+*     PVALKEY         = ' '
+      dynpprog        = sy-repid
+      dynpnr          = sy-dynnr
+      dynprofield     = u_fname
+*     STEPL           = 0
+*     WINDOW_TITLE    =
+*     VALUE           = ' '
+      value_org       = 'S'
+*     MULTIPLE_CHOICE = ' '
+*     DISPLAY         = ' '
+*     CALLBACK_PROGRAM       = ' '
+*     CALLBACK_FORM   = ' '
+*     CALLBACK_METHOD =
+*     MARK_TAB        =
+*     IMPORTING
+*     USER_RESET      =
+    TABLES
+      value_tab       = lt_skb1
+*     FIELD_TAB       =
+*     RETURN_TAB      =
+*     DYNPFLD_MAPPING =
+    EXCEPTIONS
+      parameter_error = 1
+      no_values_found = 2
+      OTHERS          = 3.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_AUTH
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_auth .
+  DATA:BEGIN OF lt_bukrs OCCURS 0,
+         bukrs LIKE t001-bukrs,
+       END OF lt_bukrs.
+  CHECK sy-ucomm = 'ONLI'.
+  REFRESH r_bukrs.
+
+  SELECT bukrs INTO TABLE lt_bukrs FROM t001 WHERE bukrs IN s_bukrs.
+  IF sy-subrc NE 0.
+    MESSAGE '输入公司代码无效' TYPE 'E'.
+  ELSE.
+    LOOP AT lt_bukrs.
+      AUTHORITY-CHECK OBJECT 'F_BKPF_BUK'
+                    ID 'BUKRS' FIELD lt_bukrs-bukrs
+                    ID 'ACTVT' FIELD '03'.
+      IF sy-subrc <> 0.
+        DELETE lt_bukrs.
+      ELSE.
+        r_bukrs = 'IEQ'.
+        r_bukrs-low = lt_bukrs-bukrs.
+        APPEND r_bukrs.
+        CLEAR r_bukrs.
+      ENDIF.
+    ENDLOOP.
+    IF r_bukrs[] IS INITIAL.
+      MESSAGE '你没有公司代码的权限' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+ENDFORM.

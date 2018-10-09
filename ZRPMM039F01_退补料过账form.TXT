@@ -1,0 +1,351 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM039F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:lt_makt LIKE makt OCCURS 0 WITH HEADER LINE.
+***抓取满足条件的数据
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE gt_out
+    FROM ztmm008
+    WHERE aufnr IN s_aufnr
+      AND erdat IN s_erdat
+      AND zsqno IN s_zsqno
+      AND ernam IN s_ernam
+      AND zstat IN s_zstat
+      AND zdel EQ space.
+
+  CHECK gt_out[] IS NOT INITIAL.
+
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_makt FROM makt FOR ALL ENTRIES IN gt_out WHERE matnr = gt_out-matnr AND spras = sy-langu.
+
+  SORT lt_makt BY matnr.
+
+  LOOP AT gt_out.
+    READ TABLE lt_makt WITH KEY matnr = gt_out-matnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-maktx = lt_makt-maktx.
+    ENDIF.
+    IF gt_out-zstat = '2'.
+      gt_out-menge_f = gt_out-menge_t.
+    ENDIF.
+    MODIFY gt_out.
+  ENDLOOP.
+
+  SORT gt_out BY zsqno aufnr rsnum rspos.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  mcr_build_fieldcat: 'CHECK'   '选择'           ''       ''       'C'    '1'   '4'   'X',
+                      'ZSQNO'   '退补料申请单号' 'ZSQNO'  'ZTMM008'  ''    ''   ''   '',
+                      'AUFNR'   '生产订单号'     'AUFNR'  'AFKO'    ''    ''    '8'   '',
+                      'RSNUM'   '预留号码'       'RSNUM'  'RESB'    ''    ''    '6'   '',
+                      'RSPOS'   '预留项次'       'RSPOS'  'RESB'    ''    ''    '4'   '',
+                      'RSART'   '预留记录类型'       'RSART'  'RESB'    ''    ''    '4'   '',
+                      'MATNR'   '物料号码'       'MATNR'  'RESB'    ''    ''    '8'   '',
+                      'MAKTX'   '物料描述'       'MAKTX'  'MAKT'    ''    ''    '20'   '',
+                      'CHARG'   '批次'           'CHARG'  'RESB'    ''    ''    '10'   '',
+                      'LGORT'   '退料库位'       'LGORT'  'T001L'    ''    ''    '4'   'X',
+                      'MENGE_T' '退料数量'       'MENGE_T'  'ZTMM008'    ''    ''    '8'   'X',
+                      'LGORT_F'  '补料库位'      'LGORT'  'T001L'    ''    ''    '4'   'X',
+                      'MENGE_F' '补料数量'       'MENGE_F'  'ZTMM008'    ''    ''    '8'   'X',
+                      'MEINS'   '单位'           'MEINS'  'RESB'    ''    ''    '4'   '',
+                      'ZSTAT'   '过账状态'       'ZSTAT'  'ZTMM008'    ''    ''    '4'   '',
+                      'ZTEXT'   '文本'           'ZTEXT'  'ZTMM008'    ''    ''    '30'   'X',
+                      'ZMATDOC' '物料凭证'       ''       ''           'C'   '14'    '14'   ''.
+
+  gs_layout-no_toolbar = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK        = ' '
+*     I_BYPASSING_BUFFER       =
+*     I_BUFFER_ACTIVE          =
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'FRM_PF_STATUS'
+      i_callback_user_command  = 'FRM_USER_COMMAND'
+*     I_CALLBACK_TOP_OF_PAGE   = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME         =
+*     I_BACKGROUND_ID          = ' '
+*     I_GRID_TITLE             =
+*     I_GRID_SETTINGS          =
+      is_layout_lvc            = gs_layout
+      it_fieldcat_lvc          = gt_fcat[]
+*     IT_EXCLUDING             =
+*     IT_SPECIAL_GROUPS_LVC    =
+*     IT_SORT_LVC              =
+*     IT_FILTER_LVC            =
+*     IT_HYPERLINK             =
+*     IS_SEL_HIDE              =
+      i_default                = 'X'
+      i_save                   = 'A'
+*     IS_VARIANT               =
+*     IT_EVENTS                =
+*     IT_EVENT_EXIT            =
+*     IS_PRINT_LVC             =
+*     IS_REPREP_ID_LVC         =
+*     I_SCREEN_START_COLUMN    = 0
+*     I_SCREEN_START_LINE      = 0
+*     I_SCREEN_END_COLUMN      = 0
+*     I_SCREEN_END_LINE        = 0
+*     I_HTML_HEIGHT_TOP        =
+*     I_HTML_HEIGHT_END        =
+*     IT_ALV_GRAPHICS          =
+*     IT_EXCEPT_QINFO_LVC      =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER  =
+*     ES_EXIT_CAUSED_BY_USER   =
+    TABLES
+      t_outtab                 = gt_out[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_INITIAL_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_initial_data .
+  s_zstat = 'INE'.
+  s_zstat-low = '3'.
+  APPEND s_zstat.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PF_STATUS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_pf_status USING rt_extab TYPE slis_t_extab.
+  SET PF-STATUS 'PF_1000'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_USER_COMMAND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_user_command USING r_ucomm LIKE sy-ucomm
+                            rs_selfield TYPE slis_selfield..
+  DATA:lv_grid TYPE REF TO cl_gui_alv_grid.
+
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = lv_grid.
+
+  CALL METHOD lv_grid->check_changed_data( ).
+
+  CASE r_ucomm.
+    WHEN 'ZALL'.  "全选
+      PERFORM frm_select_all_data USING 'X'.
+    WHEN 'ZDALL'. "取消全选
+      PERFORM frm_select_all_data USING space.
+    WHEN 'ZPOST_T'."退料过账
+      PERFORM frm_post_data USING 'T'.
+    WHEN 'ZPOST_F'."补料过账
+      PERFORM frm_post_data USING 'F'.
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SELECT_ALL_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0329   text
+*----------------------------------------------------------------------*
+FORM frm_select_all_data  USING  u_flag TYPE c.
+  LOOP AT gt_out WHERE check NE u_flag.
+    gt_out-check = u_flag.
+    MODIFY gt_out.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_POST_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_post_data USING u_flag TYPE c.
+  DATA:ls_heaer  TYPE bapi2017_gm_head_01,
+       lt_item   TYPE bapi2017_gm_item_create OCCURS 0 WITH HEADER LINE,
+       lt_return TYPE bapiret2 OCCURS 0 WITH HEADER LINE.
+  DATA:lv_document TYPE bapi2017_gm_head_ret-mat_doc,
+       lv_year     TYPE bapi2017_gm_head_ret-doc_year.
+  DATA:lt_data LIKE gt_out OCCURS 0 WITH HEADER LINE.
+  DATA:lv_msg      TYPE string,
+       lv_msg_temp TYPE string.
+  DATA:lt_ztmm008 LIKE ztmm008 OCCURS 0 WITH HEADER LINE.
+
+  READ TABLE gt_out WITH KEY check = 'X'.
+  IF sy-subrc NE 0.
+    MESSAGE '请至少选择一行数据' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  APPEND LINES OF gt_out TO lt_data.
+  DELETE lt_data WHERE check EQ space.
+  SORT lt_data BY zsqno.
+  DELETE ADJACENT DUPLICATES FROM lt_data COMPARING zsqno.
+  IF lines( lt_data ) > 1.
+    MESSAGE '一次只能选择同一个申请单号的数据进行过账' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  IF u_flag = 'T'.
+    LOOP AT gt_out WHERE check = 'X' AND ( zstat NE '1' OR menge_t EQ 0  OR lgort EQ space ).
+      IF  gt_out-zstat NE '1'.
+        MESSAGE '退料发货只能选择过账状态为1的数据' TYPE 'I'.
+      ENDIF.
+      IF gt_out-menge_t EQ 0.
+        MESSAGE '退料数量不能为0' TYPE 'I'.
+      ENDIF.
+      IF gt_out-lgort EQ 0.
+        MESSAGE '退料库位不能为空' TYPE 'I'.
+      ENDIF.
+      EXIT.
+    ENDLOOP.
+  ELSEIF u_flag = 'F'.
+    LOOP AT gt_out WHERE check = 'X' AND ( zstat NE '2' OR menge_f EQ 0 OR lgort_f EQ space ).
+      IF gt_out-zstat NE '2'.
+        MESSAGE '补料发货只能选择过账状态为2的数据' TYPE 'I'.
+      ENDIF.
+      IF gt_out-menge_f EQ 0.
+        MESSAGE '补料数量不能为0' TYPE 'I'.
+      ENDIF.
+      IF gt_out-lgort_f EQ 0.
+        MESSAGE '补料库位不能为空' TYPE 'I'.
+      ENDIF.
+      EXIT.
+    ENDLOOP.
+  ENDIF.
+
+  CHECK sy-subrc NE 0.
+
+  READ TABLE gt_out WITH KEY check = 'X'.
+
+  ls_heaer-pstng_date = sy-datum.
+  ls_heaer-header_txt = gt_out-zsqno.
+
+  LOOP AT gt_out WHERE check = 'X'.
+    lt_item-material = gt_out-matnr.
+    lt_item-plant    = gt_out-werks.
+    lt_item-batch    = gt_out-charg.
+    IF u_flag = 'T'.
+      lt_item-stge_loc = gt_out-lgort.
+      lt_item-move_type = '262'.
+      lt_item-xstob  = 'X'.
+      lt_item-entry_qnt = gt_out-menge_t.
+    ELSEIF u_flag = 'F'.
+      lt_item-stge_loc = gt_out-lgort_f.
+      lt_item-move_type = '261'.
+      lt_item-entry_qnt = gt_out-menge_f.
+    ENDIF.
+    lt_item-entry_uom = gt_out-meins.
+    lt_item-reserv_no = gt_out-rsnum.
+    lt_item-res_item  = gt_out-rspos.
+    lt_item-res_type = gt_out-rsart.
+    lt_item-orderid   = gt_out-aufnr.
+    lt_item-item_text = gt_out-ztext.
+    APPEND lt_item.
+    CLEAR lt_item.
+  ENDLOOP.
+
+  CALL FUNCTION 'BAPI_GOODSMVT_CREATE'
+    EXPORTING
+      goodsmvt_header  = ls_heaer
+      goodsmvt_code    = '03'
+    IMPORTING
+      materialdocument = lv_document
+      matdocumentyear  = lv_year
+    TABLES
+      goodsmvt_item    = lt_item[]
+      return           = lt_return.
+  IF lv_document IS NOT INITIAL.
+    CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+      EXPORTING
+        wait = 'X'.
+    LOOP AT gt_out WHERE check = 'X'.
+      IF u_flag = 'T'.
+        gt_out-zstat = 2.
+        gt_out-menge_f = gt_out-menge_t.
+      ELSE.
+        gt_out-zstat = 3.
+      ENDIF.
+      gt_out-zmatdoc = lv_document && lv_year.
+      MODIFY gt_out.
+      MOVE-CORRESPONDING gt_out TO lt_ztmm008.
+      APPEND lt_ztmm008.
+      CLEAR lt_ztmm008.
+    ENDLOOP.
+    CONCATENATE '过账成功：物料凭证号：' lv_document '年度:' lv_year INTO lv_msg.
+    MESSAGE lv_msg TYPE 'S'.
+    IF lt_ztmm008[] IS NOT INITIAL.
+      MODIFY ztmm008 FROM TABLE lt_ztmm008.
+      COMMIT WORK AND WAIT.
+    ENDIF.
+  ELSE.
+    CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+    lv_msg = '过账失败,'.
+    LOOP AT lt_return WHERE type = 'E' OR type = 'A'.
+      CLEAR lv_msg_temp.
+      CALL FUNCTION 'MESSAGE_TEXT_BUILD'
+        EXPORTING
+          msgid               = lt_return-id
+          msgnr               = lt_return-number
+          msgv1               = lt_return-message_v1
+          msgv2               = lt_return-message_v2
+          msgv3               = lt_return-message_v3
+          msgv4               = lt_return-message_v4
+        IMPORTING
+          message_text_output = lv_msg_temp.
+      CONCATENATE lv_msg lv_msg_temp INTO lv_msg.
+    ENDLOOP.
+    MESSAGE lv_msg TYPE 'E'.
+  ENDIF.
+ENDFORM.

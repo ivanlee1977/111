@@ -1,0 +1,18 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPSD006S01
+*&---------------------------------------------------------------------*
+
+***selection screen define
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_vkorg FOR vbak-vkorg,
+               s_bzirk FOR vbkd-bzirk,
+               s_kvgr1 FOR vbak-kvgr1,
+               s_kvgr2 FOR vbak-kvgr2,
+               s_kunnr FOR vbak-kunnr,
+               s_vbeln FOR vbak-vbeln,
+               s_audat FOR vbak-audat.
+SELECTION-SCREEN END OF BLOCK blc.
+SELECTION-SCREEN BEGIN OF BLOCK blc1 WITH FRAME TITLE TEXT-002.
+PARAMETERS:r1 RADIOBUTTON GROUP ra DEFAULT 'X',
+           r2 RADIOBUTTON GROUP ra.
+SELECTION-SCREEN END OF BLOCK blc1.

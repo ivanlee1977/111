@@ -1,0 +1,9 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM013S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_badat FOR eban-badat OBLIGATORY DEFAULT sy-datum,"凭证日期
+               s_lifnr FOR ekko-lifnr,"供应商
+               s_ekgrp FOR ekko-ekgrp,"采购组
+               s_matkl FOR mara-matkl."物料组
+SELECTION-SCREEN END OF BLOCK blc.

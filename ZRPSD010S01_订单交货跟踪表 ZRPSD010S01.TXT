@@ -1,0 +1,39 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPSD010S01
+*&---------------------------------------------------------------------*
+PARAMETERS: zmx RADIOBUTTON GROUP rad1 DEFAULT 'X',
+            zhz RADIOBUTTON GROUP rad1.
+SELECTION-SCREEN BEGIN OF BLOCK a1 WITH FRAME TITLE TEXT-001.
+PARAMETERS:p_vkorg LIKE vbak-vkorg OBLIGATORY.
+
+SELECT-OPTIONS:s_vtweg FOR vbak-vtweg,
+               s_spart FOR vbap-spart,
+               s_auart FOR vbak-auart,
+               s_vbeln FOR vbak-vbeln,
+               s_augru FOR vbak-augru,
+               s_abgru FOR vbap-abgru,
+               s_audat FOR vbak-audat.
+SELECTION-SCREEN END OF BLOCK a1.
+
+SELECTION-SCREEN BEGIN OF BLOCK a2 WITH FRAME TITLE TEXT-002.
+SELECT-OPTIONS:s_kunnr FOR vbak-kunnr,
+               s_bzirk FOR vbkd-bzirk,
+               s_vkbur FOR vbak-vkbur,
+               s_vkgrp FOR vbak-vkgrp,
+               s_kvgr1 FOR vbak-kvgr1,
+               s_kvgr2 FOR vbak-kvgr2.
+SELECTION-SCREEN END OF BLOCK a2.
+DATA c30 TYPE char30.
+SELECTION-SCREEN BEGIN OF BLOCK a3 WITH FRAME TITLE TEXT-003.
+SELECT-OPTIONS:s_matnr FOR vbap-matnr,
+               s_atwrt FOR ausp-atwrt,
+               s_xl FOR c30,
+*              s_xl    FOR ausp-atinn,
+              s_zxl   FOR c30,
+              s_cpx   FOR c30.
+SELECTION-SCREEN END OF BLOCK a3.
+
+
+
+PARAMETERS: zwq RADIOBUTTON GROUP rad2 DEFAULT 'X',
+            zqb RADIOBUTTON GROUP rad2.

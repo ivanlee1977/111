@@ -1,0 +1,832 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPSD011F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:lt_ztsd003cpys LIKE ztsd003cpys OCCURS 0 WITH HEADER LINE.
+  DATA:BEGIN OF lt_vbap OCCURS 0,
+         vbeln  LIKE vbap-vbeln,
+         posnr  LIKE vbap-posnr,
+         kzwi1  LIKE vbap-kzwi1,
+         kwmeng LIKE vbap-kwmeng,
+         waerk  LIKE vbak-waerk,
+         erdat  LIKE vbak-erdat,
+       END OF lt_vbap.
+
+  DATA:BEGIN OF lt_vbpa OCCURS 0,
+         vbeln      LIKE vbpa-vbeln,
+         posnr      LIKE vbpa-posnr,
+         parvw      LIKE vbpa-parvw,
+         kunnr      LIKE vbpa-kunnr,
+         adrnr      LIKE vbpa-adrnr,
+         country    LIKE adrc-country,
+         name1      LIKE adrc-name1,
+         name2      LIKE adrc-name2,
+         name_co    LIKE adrc-name_co,
+         str_suppl1 LIKE adrc-str_suppl1,
+         str_suppl2 LIKE adrc-str_suppl2,
+         str_suppl3 LIKE adrc-str_suppl3,
+         street     LIKE adrc-street,
+         location   LIKE adrc-location,
+         house_num1 LIKE adrc-house_num1,
+         post_code1 LIKE adrc-post_code1,
+         tel_number LIKE adrc-tel_number,
+       END OF lt_vbpa.
+
+  DATA:lt_tspat LIKE tspat OCCURS 0 WITH HEADER LINE.
+
+  SELECT a~vbeln
+         a~posnr
+         b~kunag
+         b~zzxno
+         b~zsno
+         b~zeno
+         b~brgew
+         b~erdat
+         c~matnr
+         c~lfimg
+         c~uepos
+         c~spart
+         c~vgbel
+         c~vgpos
+    INTO CORRESPONDING FIELDS OF TABLE gt_out
+    FROM ztsd003jhdy AS a
+    INNER JOIN ztsd003zxdb AS b
+    ON a~zzxno = b~zzxno
+    INNER JOIN lips AS c
+    ON a~vbeln = c~vbeln
+    AND a~posnr = c~posnr
+    WHERE a~zzxno = p_zzxno
+      AND b~kunag IN s_kunnr
+      AND b~erdat IN s_erdat.
+
+  CHECK gt_out[] IS NOT INITIAL.
+
+  SORT gt_out BY vbeln posnr.
+***抓取产品要素数据
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE lt_ztsd003cpys
+    FROM ztsd003cpys
+    FOR ALL ENTRIES IN gt_out
+    WHERE matnr = gt_out-matnr.
+
+***抓取销售订单数据
+  SELECT  a~vbeln
+          a~posnr
+          a~kzwi1
+          a~kwmeng
+          b~waerk
+          b~erdat
+    INTO CORRESPONDING FIELDS OF TABLE lt_vbap
+    FROM vbap AS a
+    INNER JOIN vbak AS b
+    ON a~vbeln = b~vbeln
+    FOR ALL ENTRIES IN gt_out
+    WHERE a~vbeln = gt_out-vgbel
+      AND a~posnr = gt_out-vgpos.
+
+***抓取伙伴数据
+  SELECT a~vbeln
+         a~posnr
+         a~parvw
+         a~kunnr
+         a~adrnr
+         b~country
+         b~name1
+         b~name2
+         b~name_co
+         b~str_suppl1
+         b~str_suppl2
+         b~str_suppl3
+         b~location
+         b~street
+         b~house_num1
+         b~post_code1
+         b~tel_number
+    INTO CORRESPONDING FIELDS OF TABLE lt_vbpa
+    FROM vbpa AS a
+    LEFT JOIN adrc AS b
+    ON a~adrnr = b~addrnumber
+    FOR ALL ENTRIES IN gt_out
+    WHERE a~vbeln = gt_out-vbeln
+      AND a~posnr = '000000'
+      AND a~parvw IN ('AG','WE').
+
+***产品组描述
+  SELECT * INTO TABLE lt_tspat FROM tspat WHERE spras = sy-langu.
+***整理数据到输出表
+  SORT lt_ztsd003cpys BY matnr.
+  SORT lt_vbpa BY vbeln parvw.
+  SORT lt_vbap BY vbeln posnr.
+  SORT lt_tspat BY spart.
+  LOOP AT gt_out.
+***产品要素相关信息
+    READ TABLE lt_ztsd003cpys WITH KEY matnr = gt_out-matnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      MOVE-CORRESPONDING lt_ztsd003cpys TO gt_out.
+    ENDIF.
+***贸易国地区
+    READ TABLE lt_vbpa WITH KEY vbeln = gt_out-vbeln parvw = 'AG' BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-country = lt_vbpa-country.
+      SELECT SINGLE landx INTO gt_out-landx FROM t005t WHERE spras = sy-langu AND land1 = gt_out-country .
+***Buyers
+      gt_out-zbuyer = lt_vbpa-name1 && lt_vbpa-name2.
+***Address
+      gt_out-zaddress = lt_vbpa-name_co && lt_vbpa-str_suppl1 && lt_vbpa-str_suppl2.
+***邮编p.c
+      gt_out-zpost = lt_vbpa-post_code1.
+***Tel
+      gt_out-ztel = lt_vbpa-tel_number.
+    ENDIF.
+***产品组描述
+    READ TABLE lt_tspat WITH KEY spart = gt_out-spart BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-spart_txt = lt_tspat-vtext.
+    ENDIF.
+***运抵国（地区）
+    READ TABLE lt_vbpa WITH KEY vbeln = gt_out-vbeln parvw = 'WE' BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-country_t = lt_vbpa-country.
+      SELECT SINGLE landx INTO gt_out-landx_t FROM t005t WHERE spras = sy-langu AND land1 = gt_out-country_t .
+***Ship to
+      gt_out-zship = lt_vbpa-street && lt_vbpa-str_suppl3 && lt_vbpa-location.
+    ENDIF.
+***单价
+    READ TABLE lt_vbap WITH KEY vbeln = gt_out-vgbel posnr = gt_out-vgpos BINARY SEARCH.
+    IF sy-subrc = 0.
+      IF lt_vbap-kwmeng NE 0.
+        gt_out-netpr = lt_vbap-kzwi1 / lt_vbap-kwmeng.
+      ENDIF.
+***总价
+      gt_out-netpr_t = gt_out-lfimg * gt_out-netpr.
+***币别
+      gt_out-waerk = lt_vbap-waerk.
+***装船日期
+      gt_out-zzcqx = lt_vbap-erdat + 90.
+    ENDIF.
+***znw
+    gt_out-znw = gt_out-zjz * gt_out-lfimg.
+    MODIFY gt_out.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  mcr_build_fieldcat:'VBELN'     '交货单号'           'VBELN'    'LIPS'   ''  '',
+                     'POSNR'     '交货单项次'         'POSNR'    'LIPS'   ''  '',
+                     'SPART'     '产品组'             'SPART'    'LIPS'   ''  '',
+                     'SPART_TXT' '产品组描述'         'VTEXT'    'TSPAT'   ''  '',
+                     'COUNTRY'   '贸易国地区'         'COUNTRY'  'ADRC'   ''  '',
+                     'LANDX'     '贸易国地区描述'     'LANDX'    'T005T'  ''  '',
+                     'COUNTRY_T' '运抵国（地区）'     'COUNTRY'  'ADRC'   ''  '',
+                     'LANDX_T'   '运抵国（地区）描述' 'LANDX'    'T005T'  ''  '',
+                     'ZZXNO'     '装箱单号'           'ZZXNO'    'ZTSD003ZXDB'  ''  '',
+                     'ZSNO'      '开始箱号'           'ZSNO'     'ZTSD003ZXDB'  ''  '',
+                     'ZENO'      '结束箱号'           'ZENO'     'ZTSD003ZXDB'  ''  '',
+                     'BRGEW'     '毛重'               'BRGEW'    'ZTSD003ZXDB'  ''  '',
+                     'LFIMG'     '数量'               'LFIMG'    'LIPS'         ''  '',
+                     'NETPR'     '单价'               ''         ''             'P'  '15',
+                     'NETPR_T'   '总价'               ''         ''             'P'  '15',
+                     'WAERK'     '币别'               'WAERK'    'VBAK'         ''   '',
+                     'ERDAT'     '创建日期'           'ERDAT'    'ZTSD003ZXDB'  ''   '',
+                     'ZBUYER'    'BUYERS'             ''         ''             'C'   '70',
+                     'ZADDRESS'  'ADDRESS'            ''         ''             'C'   '100',
+                     'ZPOST'     '邮编'               'POST_CODE1'         'ADRC'             ''   '',
+                     'ZTEL'      '电话TEL'            'TEL_NUMBER'         'ADRC'             ''   '',
+                     'ZZCQX'     '装船期限'           ''         ''        'D'   '8',
+                     'ZSHIP'     'SHIP TO'            ''         ''        'C'   '70',
+                     'ZNW'       'N.W.(KG)'           ''         ''        'P'   '15',
+                     'UEPOS'     '主行项目'           'UEPOS'    'LIPS'    ''    '',
+                     'SPART'     '产品分类'           'SPART'    'LIPS'    ''    '',
+                     'ZZWPM'     '中文品名'           'ZZWPM'    'ZTSD003CPYS'    ''    '',
+                     'ZYT'       '用途'               'ZYT'      'ZTSD003CPYS'    ''    '',
+                     'ZGN'       '功能'               'ZGN'      'ZTSD003CPYS'    ''    '',
+                     'ZGZYL'     '工作原理'           'ZGZYL'    'ZTSD003CPYS'    ''    '',
+                     'ZXH'       '型号'               'ZXH'      'ZTSD003CPYS'    ''    '',
+                     'ZDESC'     'DESCRIPTION'        'ZDESC'    'ZTSD003CPYS'    ''    '',
+                     'ZPP'       '品牌'               'ZPP'      'ZTSD003CPYS'    ''    '',
+                     'ZHS'       'HS CODE'            'ZHS'      'ZTSD003CPYS'    ''    '',
+                     'ZSPBM'     '商品编码描述'       'ZSPBM'    'ZTSD003CPYS'    ''    '',
+                     'ZJZ'       '净重/个'            'ZJZ'      'ZTSD003CPYS'    ''    '',
+                     'ZDY'       '电压'               'ZDY'      'ZTSD003CPYS'    ''    '',
+                     'ZGL'       '功率'               'ZGL'      'ZTSD003CPYS'    ''    '',
+                     'ZJD'       '精度'               'ZJD'      'ZTSD003CPYS'    ''    '',
+                     'ZXS'       '相数'               'ZXS'      'ZTSD003CPYS'    ''    '',
+                     'ZJZL'      '交直流'             'ZJZL'     'ZTSD003CPYS'    ''    '',
+                     'ZKBH'      '开闭环'             'ZKBH'     'ZTSD003CPYS'    ''    '',
+                     'ZJZCC'     '机座尺寸'           'ZJZCC'    'ZTSD003CPYS'    ''    ''.
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK        = ' '
+*     I_BYPASSING_BUFFER       =
+*     I_BUFFER_ACTIVE          =
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'FRM_SET_PF_STATUS'
+      i_callback_user_command  = 'FRM_USER_COMMAND'
+*     I_CALLBACK_TOP_OF_PAGE   = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME         =
+*     I_BACKGROUND_ID          = ' '
+*     I_GRID_TITLE             =
+*     I_GRID_SETTINGS          =
+      is_layout_lvc            = gs_layout
+      it_fieldcat_lvc          = gt_fcat[]
+*     IT_EXCLUDING             =
+*     IT_SPECIAL_GROUPS_LVC    =
+*     IT_SORT_LVC              =
+*     IT_FILTER_LVC            =
+*     IT_HYPERLINK             =
+*     IS_SEL_HIDE              =
+      i_default                = 'X'
+      i_save                   = 'A'
+*     IS_VARIANT               =
+*     IT_EVENTS                =
+*     IT_EVENT_EXIT            =
+*     IS_PRINT_LVC             =
+*     IS_REPREP_ID_LVC         =
+*     I_SCREEN_START_COLUMN    = 0
+*     I_SCREEN_START_LINE      = 0
+*     I_SCREEN_END_COLUMN      = 0
+*     I_SCREEN_END_LINE        = 0
+*     I_HTML_HEIGHT_TOP        =
+*     I_HTML_HEIGHT_END        =
+*     IT_ALV_GRAPHICS          =
+*     IT_EXCEPT_QINFO_LVC      =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER  =
+*     ES_EXIT_CAUSED_BY_USER   =
+    TABLES
+      t_outtab                 = gt_out[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SET_PF_STATUS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_set_pf_status USING rt_extab TYPE slis_t_extab.
+  SET PF-STATUS 'PF_1000'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_USER_COMMAND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_user_command USING r_ucomm LIKE sy-ucomm
+                            rs_selfield TYPE slis_selfield..
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CASE r_ucomm.
+    WHEN 'ZDOWNLOAD'.
+      PERFORM frm_download_data.
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DOWNLOAD_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_download_data .
+  DATA:ls_key   TYPE wwwdatatab,
+       lv_subrc TYPE sy-subrc.
+  DATA lv_file LIKE rlgrap-filename.
+  DATA:lv_sortl LIKE kna1-sortl.
+
+  SELECT SINGLE a~sortl INTO lv_sortl FROM kna1 AS a INNER JOIN ztsd003zxdb AS b ON a~kunnr = b~kunag WHERE b~zzxno = p_zzxno.
+
+  CONCATENATE 'C:\SD\' lv_sortl  '-'   sy-datum '-' sy-uzeit '.xlsx' INTO lv_file.
+
+  ls_key-relid = 'MI'.
+  ls_key-objid = gcst_excel_template.
+  CALL FUNCTION 'DOWNLOAD_WEB_OBJECT'
+    EXPORTING
+      key         = ls_key
+      destination = lv_file
+    IMPORTING
+      rc          = lv_subrc.
+  IF lv_subrc <> 0.
+    MESSAGE '下载模板出错，请检查，谢谢' TYPE 'E'.
+    EXIT.
+  ENDIF.
+***填充EXCEL数据
+  PERFORM frm_filldata_excel USING lv_file.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FILLDATA_EXCEL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LV_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_filldata_excel  USING iv_file TYPE rlgrap-filename.
+*******数据定义*******
+  DATA:lo_excel     TYPE ole2_object,
+       lo_workbooks TYPE ole2_object,
+       lo_workbook  TYPE ole2_object,
+       lo_sheet     TYPE ole2_object,
+       lo_range     TYPE ole2_object,
+       lo_cell      TYPE ole2_object,
+       lo_cell1     TYPE ole2_object,
+       activewindow TYPE ole2_object.
+  DATA lv_file LIKE rlgrap-filename.
+
+  DATA lv_row TYPE i.
+  DATA lv_col TYPE i.
+  DATA:lv_times TYPE i,
+       lv_mod   TYPE i.
+  DATA:lv_row_c TYPE i,
+       lv_row_l TYPE i.
+
+  DEFINE mac_fill_cell.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+      EXPORTING
+        #1 = &1
+        #2 = &2.
+    SET PROPERTY OF lo_cell 'VALUE' = &3.
+  END-OF-DEFINITION.
+
+  DEFINE mac_mer_cell.
+    CALL METHOD OF lo_sheet 'RANGE' = lo_cell
+      EXPORTING
+      #1 = &1.
+    CALL METHOD OF lo_cell  'MERGE'.
+  END-OF-DEFINITION.               "mergerange
+
+  DATA:lt_data      LIKE gt_out OCCURS 0 WITH HEADER LINE,
+       lt_data_temp LIKE gt_out OCCURS 0 WITH HEADER LINE,
+       ls_data      LIKE LINE OF gt_out.
+
+***报关合同数据定义
+  DATA:BEGIN OF lt_bght OCCURS 0,
+         matnr   LIKE ztsd003cpys-matnr,
+         zhs     LIKE ztsd003cpys-zhs,
+         zxh     LIKE ztsd003cpys-zxh,   "型号
+         zdesc   LIKE ztsd003cpys-zdesc, "物料英文描述
+         zzwpm   LIKE ztsd003cpys-zzwpm, "中文品名
+         zpp     LIKE ztsd003cpys-zpp,   "品牌
+         lfimg   LIKE lips-lfimg,        "数量
+         netpr   TYPE p DECIMALS 2,      "单价
+         netpr_t TYPE p DECIMALS 2,      "总价
+         brgew   TYPE ztsd003zxdb-brgew, "毛重
+         znw     TYPE p DECIMALS 2,      "净重
+       END OF lt_bght.
+  DATA:lv_line  TYPE i,
+       lt_times TYPE i.
+  DATA:lv_menge_total  TYPE p DECIMALS 2,
+       lv_amount_total TYPE netwr,
+       lv_amount_c     TYPE string,
+       lv_saywords     TYPE char200.
+  DATA:lv_text TYPE string.
+  DATA:lv_znw_total   TYPE p DECIMALS 2.      "净重
+  DATA:lv_num   TYPE i,
+       lv_matnr LIKE mara-matnr.
+  DATA:lv_landx_t LIKE t005t-landx.
+  DATA:lv_str         TYPE string,
+       lv_contract_no TYPE string.
+  DATA:lv_waerk TYPE vbak-waerk.
+***报关发票数据定义
+
+
+*填充excel
+  CREATE OBJECT lo_excel 'EXCEL.APPLICATION'.
+  SET PROPERTY OF lo_excel 'VISIBLE' = 0.
+  CALL METHOD OF lo_excel 'WORKBOOKS' = lo_workbooks.
+
+  CALL METHOD OF lo_workbooks 'OPEN' = lo_workbook EXPORTING #1 = iv_file.
+  CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = 1.
+  CALL METHOD OF lo_sheet 'ACTIVATE'.
+  CALL METHOD OF lo_excel 'ACTIVEWINDOW' = activewindow.
+  SET PROPERTY OF activewindow 'DISPLAYGRIDLINES' = 0.
+
+  APPEND LINES OF gt_out TO lt_data.
+  APPEND LINES OF gt_out TO lt_data_temp.
+  DELETE lt_data_temp WHERE  spart NE '13'.
+  DELETE lt_data_temp WHERE  uepos IS INITIAL.
+  LOOP AT lt_data_temp.
+    READ TABLE lt_data INTO ls_data WITH KEY vbeln = lt_data_temp-vbeln posnr = lt_data_temp-uepos.
+    IF sy-subrc = 0.
+      ls_data-netpr = ls_data-netpr + lt_data_temp-netpr.
+      ls_data-netpr_t = ls_data-netpr_t + lt_data_temp-netpr_t.
+      ls_data-znw     = ls_data-znw + lt_data_temp-znw.
+      MODIFY lt_data FROM ls_data INDEX sy-tabix.
+      DELETE lt_data WHERE vbeln = lt_data_temp-vbeln AND posnr = lt_data_temp-posnr.
+    ENDIF.
+  ENDLOOP.
+
+********************************************************************************************
+***----------------------填充报关合同sheet ----------------------------------------------***
+********************************************************************************************
+  CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = '报关合同'.
+  CALL METHOD OF lo_sheet 'ACTIVATE'.
+  LOOP AT lt_data.
+    MOVE-CORRESPONDING lt_data TO lt_bght.
+    READ TABLE lt_bght WITH KEY matnr = lt_data-matnr TRANSPORTING NO FIELDS.
+    IF sy-subrc = 0. "毛重是针对整个装箱单的，不能汇总
+      CLEAR lt_bght-brgew.
+    ENDIF.
+    CLEAR lt_bght-netpr.
+    COLLECT lt_bght.
+    CLEAR lt_bght.
+    lv_menge_total  = lv_menge_total  + lt_data-lfimg.
+    lv_amount_total = lv_amount_total + lt_data-netpr_t.
+    lv_znw_total = lv_znw_total + lt_data-znw.
+  ENDLOOP.
+
+***计算汇总后的单价
+  LOOP AT lt_bght.
+    IF lt_bght-lfimg NE 0.
+      lt_bght-netpr = lt_bght-netpr_t / lt_bght-lfimg.
+    ENDIF.
+    MODIFY lt_bght.
+  ENDLOOP.
+
+  DATA:lv_date LIKE sy-datum.
+  READ TABLE lt_data INTO ls_data INDEX 1.
+  lv_date = ls_data-erdat - 30.
+  mac_fill_cell 3  'F'  lv_date.    "日期
+  CONCATENATE 'EX-' ls_data-zbuyer(1) ls_data-zzxno INTO lv_contract_no.
+  mac_fill_cell 5  'F'  lv_contract_no.   "合同号Contract No
+  mac_fill_cell 8  'F'  ls_data-zbuyer.   "Buyers
+  mac_fill_cell 11 'F'  ls_data-zaddress. "Address
+  mac_fill_cell 13 'F'  ls_data-zpost.    "邮编p.c
+  mac_fill_cell 14 'F'  ls_data-ztel.     "电话Tel
+
+  DESCRIBE TABLE lt_bght LINES lv_line.
+  lv_line = lv_line - 1.
+  IF lv_line > 0.
+    DO lv_line TIMES.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell EXPORTING #1 = 19 #2 = 1.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell1 EXPORTING #1 = 19 #2 = 7.
+      CALL METHOD OF lo_sheet 'Range' = lo_range EXPORTING #1 = lo_cell #2 = lo_cell1.
+      CALL METHOD OF lo_range 'Select' .
+      CALL METHOD OF lo_range 'Copy'.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell EXPORTING #1 = 20 #2 = 1.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell1 EXPORTING #1 = 20 #2 = 7.
+      CALL METHOD OF lo_sheet 'Range' = lo_range EXPORTING #1 = lo_cell #2 = lo_cell1.
+      CALL METHOD OF lo_range 'Insert'.
+    ENDDO.
+  ENDIF.
+
+***获取币别
+  READ TABLE gt_out INDEX 1.
+  IF sy-subrc = 0.
+    SELECT SINGLE waerk INTO lv_waerk FROM vbak AS a INNER JOIN lips AS b ON a~vbeln = b~vgbel WHERE b~vbeln = gt_out-vbeln AND b~posnr = gt_out-posnr.
+  ENDIF.
+
+***动态生成表头行
+  CONCATENATE '单 价(' lv_waerk ')                            Unit Price' INTO lv_str.
+  mac_fill_cell 18  'F'  lv_str.               "单价抬头
+  CONCATENATE '总 价(' lv_waerk ')                            Amount'    INTO lv_str.
+  mac_fill_cell 18  'G'  lv_str.               "金额抬头
+  lv_row = 19.
+  LOOP AT lt_bght.
+    mac_fill_cell lv_row  'A'  lt_bght-zxh.    "型号
+    mac_fill_cell lv_row  'B'  lt_bght-zdesc.  "物料英文描述
+    mac_fill_cell lv_row  'C'  lt_bght-zzwpm.  "品名
+    mac_fill_cell lv_row  'D'  lt_bght-zpp.    "品牌
+    mac_fill_cell lv_row  'E'  lt_bght-lfimg.  "数量
+    mac_fill_cell lv_row  'F'  lt_bght-netpr.  "单价
+    mac_fill_cell lv_row  'G'  lt_bght-netpr_t."总价
+    lv_row = lv_row + 1.
+  ENDLOOP.
+
+  IF lv_line <= 0.
+    lv_row = 20.
+  ENDIF.
+
+  CONCATENATE 'Total(' lv_waerk ') ：' INTO lv_str.
+  mac_fill_cell lv_row  'A'  lv_str.
+
+  mac_fill_cell lv_row  'E'  lv_menge_total.    "总数量
+  lv_amount_c = lv_amount_total.
+  mac_fill_cell lv_row  'G'  lv_amount_c.       "总金额
+  lv_row = lv_row + 1.
+
+  CONCATENATE '（1）总值（' lv_waerk '） ：' INTO lv_str.
+  mac_fill_cell lv_row  'A'  lv_str.
+
+  lv_amount_c = lv_amount_total.
+  mac_fill_cell lv_row  'B'  lv_amount_c.       "总金额
+
+  CALL FUNCTION 'Z_CONVERT_NUMERIC_TO_ENGLISH'
+    EXPORTING
+      i_amt      = lv_amount_total
+      i_waers    = lv_waerk
+    IMPORTING
+      e_saywords = lv_saywords.
+  lv_row = lv_row + 1.
+  mac_fill_cell lv_row  'B'  lv_saywords.    "总金额大写
+  lv_row = lv_row + 1.
+  mac_fill_cell lv_row  'B'  ls_data-zzcqx.  "装船期限
+  mac_fill_cell lv_row  'G'  ls_data-landx_t."目的地
+  lv_row = lv_row + 1.
+  mac_fill_cell lv_row  'B'  ls_data-zzcqx.
+  SELECT SINGLE landx INTO lv_landx_t FROM t005t WHERE spras = 'E' AND land1 = ls_data-country_t.
+  mac_fill_cell lv_row  'G'  lv_landx_t."目的地
+
+
+********************************************************************************************
+***----------------------填充报关发票sheet ----------------------------------------------***
+********************************************************************************************
+  CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = '报关发票'.
+  CALL METHOD OF lo_sheet 'ACTIVATE'.
+  mac_fill_cell 8   'B'  ls_data-zbuyer.    "buyer
+  mac_fill_cell 8   'G'  ls_data-zzxno.     "Invoice No
+  mac_fill_cell 9   'B'  ls_data-zaddress.  "Address
+  mac_fill_cell 9   'G'  ls_data-erdat.     "DATE
+  mac_fill_cell 10  'B'  ls_data-zship.     "Ship to
+
+  DESCRIBE TABLE lt_bght LINES lv_line.
+  lv_line = lv_line - 1.
+  IF lv_line > 0.
+    DO lv_line TIMES.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell EXPORTING #1 = 12 #2 = 1.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell1 EXPORTING #1 = 12 #2 = 7.
+      CALL METHOD OF lo_sheet 'Range' = lo_range EXPORTING #1 = lo_cell #2 = lo_cell1.
+      CALL METHOD OF lo_range 'Select' .
+      CALL METHOD OF lo_range 'Copy'.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell EXPORTING #1 = 13 #2 = 1.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell1 EXPORTING #1 = 13 #2 = 7.
+      CALL METHOD OF lo_sheet 'Range' = lo_range EXPORTING #1 = lo_cell #2 = lo_cell1.
+      CALL METHOD OF lo_range 'Insert'.
+    ENDDO.
+  ENDIF.
+
+  CONCATENATE 'UNIT PRICE          单价/(' lv_waerk ')' INTO lv_str.
+  mac_fill_cell '11'  'F'  lv_str.         "单价列名称
+  CONCATENATE 'AMOUNT          总价/(' lv_waerk ')' INTO lv_str.
+  mac_fill_cell '11'  'G'  lv_str.         "总价列名称
+
+  lv_row = 12.
+  LOOP AT lt_bght.
+    lv_num = lv_num + 1.
+    mac_fill_cell lv_row  'A'  lv_num.         "ITEM
+    mac_fill_cell lv_row  'B'  lt_bght-zxh.    "MODEL
+    mac_fill_cell lv_row  'C'  lt_bght-zdesc.  "DESCRIPTION
+    mac_fill_cell lv_row  'D'  lt_bght-zzwpm.  "品名
+    mac_fill_cell lv_row  'E'  lt_bght-lfimg.  "QUANTITY
+    lv_amount_c = lt_bght-netpr.
+    mac_fill_cell lv_row  'F'  lv_amount_c.    "UNIT PRICE
+    lv_amount_c = lt_bght-netpr_t.
+    mac_fill_cell lv_row  'G'  lv_amount_c.     "AMOUNT
+    lv_row = lv_row + 1.
+  ENDLOOP.
+
+  IF lv_line > 0.
+*    lv_row = lv_row + 1.
+  ELSE.
+    lv_row = 13.
+  ENDIF.
+  mac_fill_cell lv_row  'E'  lv_menge_total.    "总数量
+  mac_fill_cell lv_row  'G'  lv_amount_total.   "总金额
+
+********************************************************************************************
+***--------------------填充 报关箱单 sheet ----------------------------------------------***
+********************************************************************************************
+  CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = '报关箱单'.
+  CALL METHOD OF lo_sheet 'ACTIVATE'.
+  mac_fill_cell 8   'B'  ls_data-zbuyer.    "buyer
+  mac_fill_cell 8   'G'  ls_data-zzxno.     "Invoice No
+  mac_fill_cell 9   'B'  ls_data-zaddress.  "Address
+  mac_fill_cell 9   'G'  ls_data-erdat.     "DATE
+  mac_fill_cell 10  'B'  ls_data-zship.     "Ship to
+
+  DESCRIBE TABLE lt_bght LINES lv_line.
+  lv_line = lv_line - 1.
+  IF lv_line > 0.
+    DO lv_line TIMES.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell EXPORTING #1 = 12 #2 = 1.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell1 EXPORTING #1 = 12 #2 = 7.
+      CALL METHOD OF lo_sheet 'Range' = lo_range EXPORTING #1 = lo_cell #2 = lo_cell1.
+      CALL METHOD OF lo_range 'Select' .
+      CALL METHOD OF lo_range 'Copy'.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell EXPORTING #1 = 13 #2 = 1.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell1 EXPORTING #1 = 13 #2 = 7.
+      CALL METHOD OF lo_sheet 'Range' = lo_range EXPORTING #1 = lo_cell #2 = lo_cell1.
+      CALL METHOD OF lo_range 'Insert'.
+    ENDDO.
+  ENDIF.
+
+  lv_row = 12.
+  LOOP AT lt_bght.
+    mac_fill_cell lv_row  'B'  lt_bght-zxh.    "MODEL
+    mac_fill_cell lv_row  'C'  lt_bght-zdesc.  "DESCRIPTION
+    mac_fill_cell lv_row  'D'  lt_bght-zzwpm.  "品名
+    mac_fill_cell lv_row  'E'  lt_bght-lfimg.  "QUANTITY
+    mac_fill_cell lv_row  'F'  lt_bght-znw.    "N.W.(KG)
+    lv_row = lv_row + 1.
+  ENDLOOP.
+  IF lv_line > 0.
+    lv_row = lv_row - 1.
+    CALL METHOD OF lo_sheet 'Cells' = lo_cell EXPORTING #1 = 12 #2 = 1.
+    CALL METHOD OF lo_sheet 'Cells' = lo_cell1 EXPORTING #1 = lv_row #2 = 1.
+    CALL METHOD OF lo_sheet 'Range' = lo_range EXPORTING #1 = lo_cell #2 = lo_cell1.
+    CALL METHOD OF lo_range 'MERGE' .
+    CALL METHOD OF lo_sheet 'Cells' = lo_cell EXPORTING #1 = 12 #2 = 'G'.
+    CALL METHOD OF lo_sheet 'Cells' = lo_cell1 EXPORTING #1 = lv_row #2 = 'G'.
+    CALL METHOD OF lo_sheet 'Range' = lo_range EXPORTING #1 = lo_cell #2 = lo_cell1.
+    CALL METHOD OF lo_range 'MERGE' .
+    lv_row = lv_row + 1.
+  ELSE.
+    lv_row = 13.
+  ENDIF.
+
+  lv_str = | { ls_data-zsno }-{ ls_data-zeno }| .
+  mac_fill_cell 12    'A'  lv_str .        "CTN NO.
+
+  lv_text = ls_data-zeno.
+  mac_fill_cell lv_row  'B'  lv_text.         "CTN NO.
+  mac_fill_cell lv_row  'E'  lv_menge_total.  "总数量
+  mac_fill_cell lv_row  'F'  lv_znw_total.    "总净重
+  mac_fill_cell lv_row  'G'  lt_bght-brgew.   "总毛重
+  mac_fill_cell 12      'G'  lt_bght-brgew.   "G.W.(KG)
+  lv_row = lv_row + 1.
+  CONCATENATE lv_text 'Ctns' INTO lv_text SEPARATED BY space.
+  mac_fill_cell lv_row  'C'  lv_text.
+
+********************************************************************************************
+***--------------------填充 出口货物报关草单 sheet --------------------------------------***
+********************************************************************************************
+  CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = '出口货物报关草单'.
+  CALL METHOD OF lo_sheet 'ACTIVATE'.
+  mac_fill_cell  4   'A'  '深圳市雷赛智能控制股份有限公司'.    "收货人
+  mac_fill_cell  6   'A'  '深圳市雷赛智能控制股份有限公司'.    "生产销售单位
+  mac_fill_cell  10  'A'  ls_data-landx.                       "贸易国（地区）
+  mac_fill_cell  10  'E'  ls_data-landx_t.                     "运抵国（地区）
+  mac_fill_cell  10  'I'  ls_data-landx_t.                     "运抵国（地区）
+  mac_fill_cell  14  'A'  lv_contract_no.                      "合同协议号
+
+  mac_fill_cell  14  'E'  ls_data-zeno.                        "件数
+  mac_fill_cell  14  'J'  lt_bght-brgew.                       "毛重（公斤）
+  mac_fill_cell  14  'M'  lv_znw_total.                        "净重（公斤）
+
+  DESCRIBE TABLE lt_bght LINES lv_line.
+  lv_line = lv_line - 1.
+  IF lv_line > 0.
+    DO lv_line TIMES.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell EXPORTING #1 = 21 #2 = 1.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell1 EXPORTING #1 = 32 #2 = 15.
+      CALL METHOD OF lo_sheet 'Range' = lo_range EXPORTING #1 = lo_cell #2 = lo_cell1.
+      CALL METHOD OF lo_range 'Select' .
+      CALL METHOD OF lo_range 'Copy'.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell EXPORTING #1 = 33 #2 = 1.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell1 EXPORTING #1 = 33 #2 = 15.
+      CALL METHOD OF lo_sheet 'Range' = lo_range EXPORTING #1 = lo_cell #2 = lo_cell1.
+      CALL METHOD OF lo_range 'Insert'.
+    ENDDO.
+  ENDIF.
+  lv_num = 0.
+  lv_row = 20.
+  LOOP AT lt_bght.
+    lv_row = lv_row + 1.
+    lv_num = lv_num + 1.
+    mac_fill_cell  lv_row  'A'  lv_num.                         "序号
+*    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+*      EXPORTING
+*        input  = lt_bght-matnr
+*      IMPORTING
+*        output = lv_matnr.
+    mac_fill_cell  lv_row  'B'  lt_bght-zhs.                    "商品编号
+    mac_fill_cell  lv_row  'D'  lt_bght-zzwpm.                  "中文品名
+    mac_fill_cell  lv_row  'F'  lt_bght-lfimg.                  "数量
+    mac_fill_cell  lv_row  'I'  ls_data-landx_t.                "最终目的国（地区）
+    mac_fill_cell  lv_row  'K'  lt_bght-netpr.                  "单价
+    mac_fill_cell  lv_row  'L'  lt_bght-netpr_t.                "总价
+    mac_fill_cell  lv_row  'N'  ls_data-waerk.                  "币种
+    READ TABLE gt_out WITH KEY matnr = lt_bght-matnr.
+    IF sy-subrc = 0.
+      lv_row = lv_row + 1.
+      mac_fill_cell  lv_row  'D'  gt_out-zpp.                   "品牌
+      lv_row = lv_row + 1.
+      mac_fill_cell  lv_row  'D'  gt_out-zxh.                   "型号
+      lv_row = lv_row + 1.
+      mac_fill_cell  lv_row  'D'  gt_out-zdy.                   "电压
+      lv_row = lv_row + 1.
+      mac_fill_cell  lv_row  'D'  gt_out-zgl.                   "功率
+      lv_row = lv_row + 1.
+      mac_fill_cell  lv_row  'D'  gt_out-zjd.                   "精度
+      lv_row = lv_row + 1.
+      mac_fill_cell  lv_row  'D'  gt_out-zjzcc.                 "机座尺寸
+      lv_row = lv_row + 1.
+      mac_fill_cell  lv_row  'D'  gt_out-zjzl.                 "交直流
+      lv_row = lv_row + 1.
+      mac_fill_cell  lv_row  'D'  gt_out-zkbh.                 "开闭环
+      lv_row = lv_row + 1.
+      mac_fill_cell  lv_row  'D'  gt_out-zyt.                  "用途
+      lv_row = lv_row + 1.
+      mac_fill_cell  lv_row  'D'  gt_out-zgn.                  "功能
+      lv_row = lv_row + 1.
+      mac_fill_cell  lv_row  'D'  gt_out-zgzyl.                "工作原理
+    ELSE.
+      lv_row = lv_row + 11.
+    ENDIF.
+  ENDLOOP.
+
+********************************************************************************************
+***------------------------填充 申请要素清单sheet --------------------------------------***
+********************************************************************************************
+  CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = '申请要素清单'.
+  CALL METHOD OF lo_sheet 'ACTIVATE'.
+  DESCRIBE TABLE lt_bght LINES lv_line.
+  lv_line = lv_line - 4.
+  IF lv_line > 0.
+    DO lv_line TIMES.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell EXPORTING #1 = 3 #2 = 1.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell1 EXPORTING #1 = 10 #2 = 8.
+      CALL METHOD OF lo_sheet 'Range' = lo_range EXPORTING #1 = lo_cell #2 = lo_cell1.
+      CALL METHOD OF lo_range 'Select' .
+      CALL METHOD OF lo_range 'Copy'.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell EXPORTING #1 = 11 #2 = 1.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell1 EXPORTING #1 = 18 #2 = 8.
+      CALL METHOD OF lo_sheet 'Range' = lo_range EXPORTING #1 = lo_cell #2 = lo_cell1.
+      CALL METHOD OF lo_range 'Insert'.
+    ENDDO.
+  ENDIF.
+
+  lv_num = 0.
+  LOOP AT lt_bght.
+    lv_num = lv_num + 1.
+    lv_row = ( lv_num - 1 ) * 8 + 3.
+    mac_fill_cell  lv_row  'A'  lv_num.                      "序号
+    mac_fill_cell  lv_row  'C'  lt_bght-zhs.                 "商品编码
+    READ TABLE gt_out WITH KEY matnr = lt_bght-matnr.
+    IF sy-subrc = 0.
+      lv_row = lv_row + 1.
+      mac_fill_cell  lv_row  'C'  gt_out-zspbm.               "商品描述
+      lv_row = lv_row + 1.
+      mac_fill_cell  lv_row  'D'  gt_out-zzwpm.               "品名
+      mac_fill_cell  lv_row  'F'  gt_out-zpp.                 "品牌
+      mac_fill_cell  lv_row  'H'  gt_out-zxh.                 "型号
+      lv_row = lv_row + 1.
+      mac_fill_cell  lv_row  'D'  gt_out-zdy.                 "电压
+      mac_fill_cell  lv_row  'F'  gt_out-zgl.                 "功率
+      mac_fill_cell  lv_row  'H'  gt_out-zjd.                 "精度
+      lv_row = lv_row + 1.
+      mac_fill_cell  lv_row  'D'  gt_out-zjzcc.                "机座尺寸
+      mac_fill_cell  lv_row  'F'  gt_out-zjzl.                 "交直流
+      mac_fill_cell  lv_row  'H'  gt_out-zkbh.                 "开闭环
+      lv_row = lv_row + 1.
+      mac_fill_cell  lv_row  'D'  gt_out-zyt.                  "用途
+      lv_row = lv_row + 1.
+      mac_fill_cell  lv_row  'D'  gt_out-zgn.                  "功能
+      lv_row = lv_row + 1.
+      mac_fill_cell  lv_row  'D'  gt_out-zgzyl.                "工作原理
+    ENDIF.
+  ENDLOOP.
+
+  CALL METHOD OF lo_sheet 'CELLS' = lo_cell EXPORTING #1 = 1 #2 = 1.
+  CALL METHOD OF lo_cell 'SELECT'.
+  SET PROPERTY OF lo_excel 'CutCopyMode' = 0.
+
+  CALL METHOD OF lo_workbook 'SAVE'.
+  SET PROPERTY OF lo_excel 'VISIBLE' = 1.
+  CALL METHOD OF lo_sheet 'CLOSE'.
+  FREE OBJECT:lo_excel,lo_workbooks,lo_workbook,lo_sheet,lo_range,lo_cell.
+ENDFORM.

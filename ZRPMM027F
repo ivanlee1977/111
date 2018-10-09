@@ -1,0 +1,524 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM027F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_MODIDATE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_modidate .
+
+  DATA date TYPE sy-datum.
+  CALL FUNCTION 'CCM_GO_BACK_MONTHS'
+    EXPORTING
+      currdate   = sy-datum   "输入日期
+      backmonths = 3            "过去月数
+    IMPORTING
+      newdate    = date.
+
+  s_aedat-low = date.
+  s_aedat-high = sy-datum.
+  APPEND s_aedat.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GETDATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_getdata .
+
+  SELECT
+      a~lifnr
+      b~name1
+      a~ebeln
+      a~knumv
+    INTO CORRESPONDING FIELDS OF TABLE gt_mm
+    FROM ekko AS a INNER JOIN lfa1 AS b ON a~lifnr = b~lifnr
+    WHERE a~lifnr = p_lifnr
+    AND a~ebeln IN s_ebeln
+    AND a~aedat IN s_aedat
+    AND a~frgke = 'R'
+    AND a~loekz = ' '
+    .
+
+  SORT gt_mm BY ebeln.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GETFIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_getfieldcat .
+  mcr_build_fieldcat:
+    'LIFNR' '供应商代码' 'LIFNR' 'EKKO' ,
+    'NAME1' '供应商名称' 'NAME1' 'LFA1' ,
+    'EBELN' '采购订单号' 'EBELN' 'EKPO' .
+
+  gs_layout-colwidth_optimize = 'X'.
+  gs_layout-box_fieldname = 'CHK'.
+  gs_layout-box_tabname = 'gt_mm'.
+*  gs_layout-edit = 'X'.
+  gs_layout-zebra = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUTDATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_outputdata .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'SET_PF_STATUS'
+      i_callback_user_command  = 'ALV_USER_COMMAND'
+      is_layout                = gs_layout
+      it_fieldcat              = gt_fcat[]
+      I_SAVE                   = 'A'
+    TABLES
+      t_outtab                 = gt_mm[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+           WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+ENDFORM.
+
+FORM set_pf_status USING rt_extab TYPE slis_t_extab.
+
+  DATA: wa_extab TYPE slis_extab.
+
+  SET PF-STATUS '0100' EXCLUDING rt_extab.
+
+ENDFORM.                    "set_pf_status1
+
+FORM alv_user_command USING r_ucomm LIKE sy-ucomm  rs_selfield TYPE slis_selfield.
+*   获取ALV中的鼠标勾选记录
+  DATA: l_grid TYPE REF TO cl_gui_alv_grid.
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = l_grid.
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  r_ucomm = sy-ucomm.
+*  save_ok =  r_ucomm .
+  CASE r_ucomm.
+      "打印
+    WHEN 'ZDOWNLOAD'.
+      PERFORM print_report.
+  ENDCASE.
+
+
+ENDFORM.                    "alv_user_command
+*&---------------------------------------------------------------------*
+*&      Form  PRINT_REPORT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM print_report .
+  DATA:ls_key   TYPE wwwdatatab,
+       lv_subrc TYPE sy-subrc.
+  DATA lv_file LIKE rlgrap-filename.
+  DATA:lv_sortl LIKE lfa1-sortl.
+
+  SELECT SINGLE sortl INTO lv_sortl FROM lfa1 WHERE lifnr = p_lifnr.
+
+  CONCATENATE 'C:\MM\' lv_sortl '_合同发票_' sy-datum '_' sy-uzeit '.xls' INTO lv_file.
+
+*  DATA: fullpath    TYPE string,
+*        filename    TYPE string,
+*        path        TYPE string,
+*        user_action TYPE i,
+*        encoding    TYPE abap_encoding.
+
+*  CALL METHOD cl_gui_frontend_services=>file_save_dialog
+*    EXPORTING
+*      window_title      = '下载到本地文件'
+*      default_extension = 'XLSX'           "缺省文件类型
+*      default_file_name = '海外进口报关合同.XLSX'
+*      file_filter       = 'Excel 文件 (*.XLS)|*.XLS;*.XLSX|'
+*      with_encoding     = 'X'
+*      initial_directory = 'D:\'
+*    CHANGING
+*      filename          = filename    "获得用户输入文件名
+*      path              = path        "获得用户所选路径
+*      fullpath          = fullpath    "路径加文件名
+*      user_action       = user_action
+*      file_encoding     = encoding.
+
+
+*  MOVE fullpath TO lv_file.
+
+  ls_key-relid = 'MI'.
+  ls_key-objid = gcst_excel_template.
+  CALL FUNCTION 'DOWNLOAD_WEB_OBJECT'
+    EXPORTING
+      key         = ls_key
+      destination = lv_file
+    IMPORTING
+      rc          = lv_subrc.
+  IF lv_subrc <> 0.
+    MESSAGE '下载模板出错，请检查，谢谢' TYPE 'E'.
+    EXIT.
+  ENDIF.
+***填充EXCEL数据
+  PERFORM frm_filldata_excel USING lv_file.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FILLDATA_EXCEL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LV_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_filldata_excel  USING    iv_file TYPE rlgrap-filename.
+  DATA:lo_excel     TYPE ole2_object,
+       lo_workbooks TYPE ole2_object,
+       lo_workbook  TYPE ole2_object,
+       lo_sheet     TYPE ole2_object,
+       lo_range     TYPE ole2_object,
+       lo_cell      TYPE ole2_object,
+       lo_cell1     TYPE ole2_object,
+       activewindow TYPE ole2_object.
+*  DATA lv_file LIKE rlgrap-filename.
+
+  DATA lv_row TYPE i.
+  DATA lv_col TYPE i.
+  DATA:lv_times TYPE i.
+  DATA:lv_row_c TYPE i,
+       lv_row_l TYPE i.
+
+  DEFINE mac_fill_cell.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+      EXPORTING
+        #1 = &1
+        #2 = &2.
+    SET PROPERTY OF lo_cell 'VALUE' = &3.
+  END-OF-DEFINITION.
+
+
+
+  DATA: BEGIN OF lt_head1 OCCURS 0,
+          lifnr  LIKE ekko-lifnr,
+          ebeln  LIKE ekko-ebeln,
+          name1  LIKE lfa1-name1,
+          street LIKE adrc-street,
+          telf1  LIKE lfa1-telf1,
+          name2  LIKE knvk-name1,
+          kbetr  LIKE konv-kbetr,
+          land1  LIKE lfa1-land1,
+          knumv  LIKE konv-knumv,
+        END OF lt_head1.
+  DATA: BEGIN OF lt_tmp OCCURS 0,
+          ebeln LIKE ekko-ebeln,
+          ebelp LIKE ekpo-ebelp,
+          matnr LIKE ekpo-matnr,
+          zxh   LIKE ztsd003cpys-zxh,
+          zzwpm LIKE ztsd003cpys-zzwpm,
+          zdesc LIKE ztsd003cpys-zdesc,
+          zpp   LIKE ztsd003cpys-zpp,
+          menge LIKE ekpo-menge,
+          netpr LIKE ekpo-netpr,
+          peinh LIKE ekpo-peinh,
+          zdj   TYPE p DECIMALS 2,
+          zsum  TYPE p DECIMALS 2, "  数量*单价
+
+        END OF lt_tmp.
+  DATA: BEGIN OF lt_item1 OCCURS 0,
+*          ebeln LIKE ekko-ebeln,
+          matnr LIKE ekpo-matnr,
+          zxh   LIKE ztsd003cpys-zxh,
+          zdesc LIKE ztsd003cpys-zdesc,
+          zzwpm LIKE ztsd003cpys-zzwpm,
+          zpp   LIKE ztsd003cpys-zpp,
+          menge LIKE ekpo-menge,
+          netpr LIKE ekpo-netpr,
+          peinh LIKE ekpo-peinh,
+          zdj   TYPE p DECIMALS 2,
+          zsum  TYPE p DECIMALS 2, "  数量*单价
+
+        END OF lt_item1.
+  DATA: lv_adrnr LIKE lfa1-adrnr,
+        lv_menge LIKE ekpo-menge,
+        lv_matnr LIKE ekpo-matnr,
+        lv       TYPE int4,
+        ztotal   TYPE netwr,
+        znum     TYPE netwr,
+        kbetr    LIKE konv-kbetr
+        .
+  DATA:lt_data LIKE lt_item1 OCCURS 0 WITH HEADER LINE,
+       lt_ztd  LIKE ztsd003cpys OCCURS 0 WITH HEADER LINE,
+       ls_data LIKE LINE OF lt_item1.
+*       lt_tmp  LIKE lt_item1 OCCURS 0 WITH HEADER LINE.
+  DATA:lv_zbz LIKE ztmm004-zbz.
+  DATA:lv_waers LIKE ekko-waers.
+  DATA:lv_str TYPE string.
+
+  LOOP AT gt_mm WHERE chk = 'X'.
+    MOVE-CORRESPONDING gt_mm TO lt_head1.
+    APPEND lt_head1.
+  ENDLOOP.
+
+  LOOP AT lt_head1.
+    SELECT SINGLE telf1  adrnr land1 INTO ( lt_head1-telf1,lv_adrnr,lt_head1-land1 )  FROM lfa1 WHERE lifnr = lt_head1.
+    SELECT SINGLE street INTO lt_head1-street FROM adrc WHERE addrnumber = lv_adrnr.
+    SELECT SINGLE name1 INTO lt_head1-name2 FROM knvk WHERE lifnr = lt_head1-lifnr AND telf1 IS NOT NULL.
+    SELECT SINGLE kbetr INTO lt_head1-kbetr FROM konv WHERE kschl = 'HB00' AND kposn = '' AND knumv = lt_head1-knumv.
+    MODIFY lt_head1.
+    kbetr = lt_head1-kbetr + kbetr.
+  ENDLOOP.
+
+  SELECT
+          a~ebeln
+          a~ebelp
+          a~matnr
+          a~menge
+          a~netpr
+          a~peinh
+  INTO CORRESPONDING FIELDS OF TABLE lt_tmp
+    FROM ekpo AS a
+    FOR ALL ENTRIES IN lt_head1
+    WHERE a~ebeln = lt_head1-ebeln
+    .
+
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_ztd FROM ztsd003cpys
+    FOR ALL ENTRIES IN lt_tmp
+    WHERE matnr = lt_tmp-matnr.
+
+  SORT lt_tmp BY matnr.
+  SORT lt_ztd BY matnr.
+
+  LOOP AT lt_tmp.
+    CLEAR:LT_ZTD.
+    READ TABLE lt_ztd WITH KEY matnr = lt_tmp-matnr BINARY SEARCH..
+    lt_tmp-zxh = lt_ztd-zxh.
+    lt_tmp-zzwpm = lt_ztd-zzwpm.
+    lt_tmp-zdesc = lt_ztd-zdesc.
+    lt_tmp-zpp = lt_ztd-zpp.
+    MODIFY lt_tmp.
+    MOVE-CORRESPONDING lt_tmp TO lt_item1.
+    APPEND lt_item1.
+  ENDLOOP.
+
+
+  CHECK lt_item1[] IS NOT INITIAL.
+  SORT lt_item1 BY matnr.
+
+  LOOP AT lt_item1.
+    COLLECT lt_item1 INTO lt_data.
+  ENDLOOP.
+
+  DELETE ADJACENT DUPLICATES FROM lt_data.
+  ztotal = 0.
+  znum = 0.
+  LOOP AT lt_data.
+    lt_data-zdj = lt_data-netpr / lt_data-peinh .
+    lt_data-zsum = lt_data-menge * lt_data-zdj .
+    MODIFY lt_data.
+    ztotal = ztotal + lt_data-zsum.
+    znum = znum + lt_data-menge.
+  ENDLOOP.
+
+  ztotal = ztotal + kbetr. "总金额加运费
+*填充excel
+  CREATE OBJECT lo_excel 'EXCEL.APPLICATION'.
+  SET PROPERTY OF lo_excel 'VISIBLE' = 0.
+  CALL METHOD OF lo_excel 'WORKBOOKS' = lo_workbooks.
+  CALL METHOD OF lo_workbooks 'OPEN' = lo_workbook EXPORTING #1 = iv_file.
+*************************************************************************************
+
+  CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = '报关合同'.
+  CALL METHOD OF lo_sheet 'ACTIVATE'.
+
+  DATA: date  TYPE sy-datum,
+        zland TYPE char15,
+        zmy   TYPE char20,
+        zmy1  TYPE char25,
+        zwje  TYPE char200,
+        zsn   TYPE char20.
+  CALL FUNCTION 'CCM_GO_BACK_MONTHS'
+    EXPORTING
+      currdate   = sy-datum   "输入日期
+      backmonths = 1            "过去月数
+    IMPORTING
+      newdate    = date.
+
+  READ TABLE lt_head1 INDEX 1.
+  mac_fill_cell 3  'F'  date.    "日期
+  CONCATENATE 'IM-' lt_head1-name1+0(1) lt_head1-ebeln INTO zsn.
+  mac_fill_cell 5  'F'  zsn.    "合同号Contract No
+  CONCATENATE 'FOB '  lt_head1-land1 INTO zland SEPARATED BY ' '.
+  mac_fill_cell 7  'F'  zland.   "FOB国家
+  mac_fill_cell 11 'F'  lt_head1-street. "Address
+  mac_fill_cell 9 'F'  lt_head1-name1.    "邮编p.c
+  mac_fill_cell 14 'F'  lt_head1-telf1.     "电话Tel
+
+  DATA lv_line TYPE int4.
+  DESCRIBE TABLE lt_data LINES lv_line.
+  lv_line = lv_line - 1.
+  IF lv_line > 0.
+    DO lv_line TIMES.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell EXPORTING #1 = 19 #2 = 1.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell1 EXPORTING #1 = 19 #2 = 7.
+      CALL METHOD OF lo_sheet 'Range' = lo_range EXPORTING #1 = lo_cell #2 = lo_cell1.
+      CALL METHOD OF lo_range 'Select' .
+      CALL METHOD OF lo_range 'Copy'.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell EXPORTING #1 = 20 #2 = 1.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell1 EXPORTING #1 = 20 #2 = 7.
+      CALL METHOD OF lo_sheet 'Range' = lo_range EXPORTING #1 = lo_cell #2 = lo_cell1.
+      CALL METHOD OF lo_range 'Insert'.
+    ENDDO.
+  ENDIF.
+
+***获取币别码
+  SELECT SINGLE waers INTO lv_waers FROM ekko WHERE ebeln = lt_head1-ebeln.
+  CONCATENATE '单 价(' lv_waers ')                            Unit Price' INTO lv_str.
+  mac_fill_cell 18  'F'  lv_str.               "单价抬头
+  CONCATENATE '总 价(' lv_waers ')                            Amount'    INTO lv_str.
+  mac_fill_cell 18  'G'  lv_str.               "金额抬头
+
+  SORT lt_data BY matnr.
+
+  lv_row = 19.
+  LOOP AT lt_data.
+*    mac_fill_cell lv_row  'A'  lt_data-matnr.    "型号
+    mac_fill_cell lv_row  'A'  lt_data-zxh.
+    mac_fill_cell lv_row  'B'  lt_data-zdesc.  "品名
+    mac_fill_cell lv_row  'C'  lt_data-zzwpm.  "物料英文描述
+    mac_fill_cell lv_row  'D'  lt_data-zpp.    "品牌
+    mac_fill_cell lv_row  'E'  lt_data-menge.  "数量
+    mac_fill_cell lv_row  'F'  lt_data-zdj.  "单价
+    mac_fill_cell lv_row  'G'  lt_data-zsum."总价
+    lv_row = lv_row + 1.
+
+  ENDLOOP.
+
+  IF lv_line > 0.
+  ELSE.
+    lv_row = 20.
+  ENDIF.
+
+  mac_fill_cell lv_row 'G'  kbetr. "附加费
+  lv_row = lv_row + 1.
+  mac_fill_cell lv_row 'E'  znum. "总数量
+  mac_fill_cell lv_row 'G'  ztotal. "总金额
+
+  lv_row = lv_row + 1.
+  CONCATENATE '（1）总值（' lv_waers '） ：' INTO lv_str.
+  mac_fill_cell lv_row  'A'  lv_str.
+  mac_fill_cell lv_row 'B'  ztotal.  "金额
+
+  CALL FUNCTION 'Z_CONVERT_NUMERIC_TO_ENGLISH'
+    EXPORTING
+      i_amt      = ztotal
+      i_waers    = lv_waers
+    IMPORTING
+      e_saywords = zwje.
+  lv_row = lv_row + 1.
+  mac_fill_cell lv_row 'B'  zwje. "大写金额
+
+  CALL FUNCTION 'MONTH_PLUS_DETERMINE'
+    EXPORTING
+      months  = 2
+      olddate = sy-datum   "输入日期
+    IMPORTING
+      newdate = date.        "返回日期
+  lv_row = lv_row + 1.
+  mac_fill_cell lv_row 'B'  date. "后二个月
+  mac_fill_cell lv_row 'E'  lt_head1-land1. "国家
+  lv_row = lv_row + 1.
+  mac_fill_cell lv_row 'B'  date.
+***取包装方式
+  SELECT SINGLE a~zbz INTO lv_zbz
+    FROM ztmm004 AS a INNER JOIN ztmm005 AS b ON a~zxhm = b~zxhm
+    WHERE b~ebeln = lt_head1-ebeln
+      AND b~zflag NE 'X'. "chang by pft 20171108  增加限制条件
+  lv_row = lv_row + 1.
+  mac_fill_cell lv_row 'B'  lv_zbz.
+
+******************************************************************************
+  DATA ztel TYPE char20.
+  DATA lv_date type sy-datum.
+  CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = '报关发票'.
+  CALL METHOD OF lo_sheet 'ACTIVATE'.
+  mac_fill_cell 1 'A'  lt_head1-name1.
+  mac_fill_cell 2 'A'  lt_head1-street.
+  CONCATENATE 'TEL:' lt_head1-telf1 INTO ztel.
+  mac_fill_cell 3 'A'  ztel.
+  mac_fill_cell 6 'G'  lt_head1-ebeln.
+  lv_date = sy-datum - 7.                     "将日期减7天。 add by leimt 20180316
+  mac_fill_cell 7 'G'  lv_date.
+  mac_fill_cell 8 'G'  lt_head1-land1.
+
+  DESCRIBE TABLE lt_data LINES lv_line.
+  lv_line = lv_line - 1.
+  IF lv_line > 0.
+    DO lv_line TIMES.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell EXPORTING #1 = 10 #2 = 1.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell1 EXPORTING #1 = 10 #2 = 7.
+      CALL METHOD OF lo_sheet 'Range' = lo_range EXPORTING #1 = lo_cell #2 = lo_cell1.
+      CALL METHOD OF lo_range 'Select' .
+      CALL METHOD OF lo_range 'Copy'.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell EXPORTING #1 = 11 #2 = 1.
+      CALL METHOD OF lo_sheet 'Cells' = lo_cell1 EXPORTING #1 = 11 #2 = 7.
+      CALL METHOD OF lo_sheet 'Range' = lo_range EXPORTING #1 = lo_cell #2 = lo_cell1.
+      CALL METHOD OF lo_range 'Insert'.
+    ENDDO.
+  ENDIF.
+
+  CONCATENATE '单 价(' lv_waers ')                            Unit Price' INTO lv_str.
+  mac_fill_cell 9  'F'  lv_str.               "单价抬头
+  CONCATENATE '总 价(' lv_waers ')                            Amount'    INTO lv_str.
+  mac_fill_cell 9  'G'  lv_str.               "金额抬头
+
+  lv = 1.
+  lv_row = 10.
+  LOOP AT lt_data.
+    mac_fill_cell lv_row  'A' lv.
+*    mac_fill_cell lv_row  'B'  lt_data-matnr.    "型号
+    mac_fill_cell lv_row  'B'  lt_data-zxh.
+    mac_fill_cell lv_row  'C'  lt_data-zdesc.  "品名
+    mac_fill_cell lv_row  'D'  lt_data-zzwpm.  "物料英文描述
+*    mac_fill_cell lv_row  'D'  lt_data-zpp.    "品牌
+    mac_fill_cell lv_row  'E'  lt_data-menge.  "数量
+    mac_fill_cell lv_row  'F'  lt_data-zdj.  "单价
+    mac_fill_cell lv_row  'G'  lt_data-zsum."总价
+    lv_row = lv_row + 1.
+    lv = lv + 1.
+  ENDLOOP.
+
+  mac_fill_cell lv_row 'G'  kbetr. "附加费
+  lv_row = lv_row + 1.
+  mac_fill_cell lv_row 'E'  znum. "总数量
+  mac_fill_cell lv_row 'G'  ztotal. "总金额
+
+******************************************************************************
+  CALL METHOD OF lo_sheet 'CELLS' = lo_cell EXPORTING #1 = 1 #2 = 1.
+  CALL METHOD OF lo_cell 'SELECT'.
+  SET PROPERTY OF lo_excel 'CutCopyMode' = 0.
+
+  CALL METHOD OF lo_workbook 'SAVE'.
+  SET PROPERTY OF lo_excel 'VISIBLE' = 1.
+  CALL METHOD OF lo_sheet 'CLOSE'.
+  FREE OBJECT:lo_excel,lo_workbooks,lo_workbook,lo_sheet,lo_range,lo_cell.
+ENDFORM.

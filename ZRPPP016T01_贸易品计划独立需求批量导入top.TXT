@@ -1,0 +1,59 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP001T01
+*&---------------------------------------------------------------------*
+TABLES:sscrfields,ztsd001c,ztsd007.
+
+*  内表定义
+DATA: BEGIN OF gt_alv OCCURS 0,
+        matnr      LIKE ztsd001c-matnr, "物料
+        zfer_dyzxh LIKE ztsd007-zfer_dyzxh, "主型号
+        value1     LIKE ztsd001c-zbyjh, "预测数量1
+        value2     LIKE ztsd001c-zbyjh, "预测数量2
+        value3     LIKE ztsd001c-zbyjh, "预测数量3
+        value4     LIKE ztsd001c-zbyjh, "预测数量4
+        value5     LIKE ztsd001c-zbyjh, "预测数量5
+        value6     LIKE ztsd001c-zbyjh, "预测数量6
+        value7     LIKE ztsd001c-zbyjh, "预测数量7
+        objek      LIKE ausp-objek, "内部对象码
+        zicon(20)  TYPE c,
+        msgty      LIKE sy-msgty,
+        zmsg       TYPE bapi_msg,
+      END OF gt_alv.
+***alv data definr
+DATA: gs_layout TYPE lvc_s_layo,
+      gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DATA: lv_date1 LIKE sy-datum,
+      lv_date2 LIKE sy-datum,
+      lv_date3 LIKE sy-datum,
+      lv_date4 LIKE sy-datum,
+      lv_date5 LIKE sy-datum,
+      lv_date6 LIKE sy-datum,
+      lv_date7 LIKE sy-datum.
+
+
+*  BDC错误消息
+DATA: bdcdata_itab LIKE bdcdata OCCURS 0 WITH HEADER LINE.
+DATA: messtab LIKE bdcmsgcoll OCCURS 0 WITH HEADER LINE.
+DATA: l_msgtyp       TYPE bdc_mart,
+      l_message_nr   LIKE sy-msgno,
+      l_message_var1 TYPE symsgv,
+      l_message_var2 TYPE symsgv,
+      l_message_var3 TYPE symsgv,
+      l_message_var4 TYPE symsgv,
+      l_message_text LIKE sy-lisel.
+DATA:lv_EXIT TYPE c. "是否执行
+
+
+DEFINE  mcr_fieldcat.
+  CLEAR: gt_fcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext  = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-inttype = &3.
+  gt_fcat-intlen = &4.
+  gt_fcat-no_zero = &5.
+  APPEND gt_fcat.
+END-OF-DEFINITION.

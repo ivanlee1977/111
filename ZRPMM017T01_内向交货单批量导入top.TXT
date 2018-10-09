@@ -1,0 +1,45 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPMM017T01
+*&---------------------------------------------------------------------*
+TABLES:sscrfields,ekpo.
+
+DATA:gt_upload LIKE alsmex_tabline OCCURS 0 WITH HEADER LINE.
+FIELD-SYMBOLS:<fs_data> LIKE LINE OF gt_upload.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       ebeln     LIKE ekpo-ebeln,
+       ebelp     LIKE ekpo-ebelp,
+       matnr     LIKE ekpo-matnr,
+       txz01     LIKE ekpo-txz01,
+       lfdat     LIKE likp-lfdat,
+       lfimg     LIKE lips-lfimg,
+       zicon(30) TYPE c,            "icon
+       zmsg(200) TYPE c,            "message
+     END OF gt_out.
+
+***ALV data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+CONSTANTS:c_pf_status    TYPE slis_formname VALUE 'FRM_SET_PF_STATUS',
+          c_user_command TYPE slis_formname VALUE 'FRM_USER_COMMAND'.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  gt_fcat-inttype = &5.
+  gt_fcat-intlen = &6.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.
+
+DATA:  bdcdata LIKE bdcdata    OCCURS 0 WITH HEADER LINE.
+DATA:  messtab LIKE bdcmsgcoll OCCURS 0 WITH HEADER LINE.
+DATA:gv_mode TYPE c VALUE 'N'.
+
+DATA:gv_flag TYPE c.

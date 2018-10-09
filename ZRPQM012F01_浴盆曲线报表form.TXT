@@ -1,0 +1,532 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPQM009F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_AUSP
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_ausp .
+  REFRESH:gt_ausp.
+*  根据物料取出产品线和系列
+  SELECT a~objek a~atinn a~atwrt b~atnam
+   INTO CORRESPONDING FIELDS OF TABLE gt_ausp
+   FROM ausp AS a INNER JOIN cabn AS b ON a~atinn = b~atinn
+   WHERE b~atnam IN ('ZFER_XL','ZFER_CPX','ZFER_ZXL','ZFER_DYZXH','ZFER_CPXH').
+  SORT gt_ausp BY objek.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SUB_SEARCH_HELP_ZXL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM sub_search_help_zxl USING lv_field LIKE dfies-fieldname
+                               lv_dynfield LIKE help_info-dynprofld
+                               lv_atnam LIKE cabn-atnam.
+  DATA: lv_pvalkey TYPE ddshpvkey.
+
+  DATA: lt_zxl LIKE gt_xl OCCURS 0 WITH HEADER LINE.
+
+  LOOP AT gt_ausp WHERE atnam = lv_atnam.
+    lt_zxl-atwrt = gt_ausp-atwrt.
+    APPEND lt_zxl.
+  ENDLOOP.
+
+  SORT lt_zxl BY atwrt.
+  DELETE ADJACENT DUPLICATES FROM lt_zxl.
+
+  lv_pvalkey = lv_field.
+  CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+    EXPORTING
+      retfield        = lv_field
+      pvalkey         = lv_pvalkey
+      dynpprog        = sy-repid
+      dynpnr          = sy-dynnr
+      dynprofield     = lv_dynfield
+      window_title    = '选择'
+      value           = ' '
+      value_org       = 'S'
+    TABLES
+      value_tab       = lt_zxl
+    EXCEPTIONS
+      parameter_error = 1
+      no_values_found = 2
+      OTHERS          = 3.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+
+  CONCATENATE p_fxqj '01' INTO lv_date_from.
+
+  CALL FUNCTION 'FKK_LAST_DAY_OF_MONTH'
+    EXPORTING
+      day_in            = lv_date_from
+    IMPORTING
+      last_day_of_month = lv_date_to
+    EXCEPTIONS
+      day_in_no_date    = 1
+      OTHERS            = 2.
+
+***处理账龄
+  PERFORM frm_process_month .
+
+***抓取满足条件的物料凭证信息
+  SELECT a~mblnr a~mjahr a~zeile a~matnr a~werks a~bwart a~erfmg AS menge a~charg a~sjahr
+         a~smbln a~smblp a~budat_mkpf a~kunnr b~spart
+    INTO CORRESPONDING FIELDS OF TABLE gt_mseg
+    FROM mseg AS a INNER JOIN mara AS b ON a~matnr = b~matnr
+    WHERE a~werks IN s_werks
+      AND a~kunnr IN s_kunnr
+      AND a~matnr IN s_matnr
+      AND a~budat_mkpf LE lv_date_to
+      AND a~bwart IN ('601','602','631','632')
+      AND b~spart IN s_spart
+      AND a~xauto EQ space.
+
+*  处理冲销单据
+  LOOP AT gt_mseg WHERE smbln IS NOT INITIAL.
+    DELETE gt_mseg WHERE mjahr = gt_mseg-sjahr AND mblnr = gt_mseg-smbln AND zeile = gt_mseg-smblp.
+  ENDLOOP.
+  DELETE gt_mseg WHERE smbln IS NOT INITIAL.
+
+
+***抓取维修通知单中的数据
+  IF p_r1 EQ 'X'.
+    SELECT a~qmnum a~zindx a~matnr a~zbarcode a~zversion a~menge a~zjhrq a~erdat
+           c~spart d~kunum AS kunnr
+      INTO CORRESPONDING FIELDS OF TABLE gt_ztcs001
+      FROM ztcs001 AS a INNER JOIN ztcs004 AS b ON a~qmnum = b~qmnum
+                                               AND a~zindx = b~zindx
+                        INNER JOIN mara AS c ON a~matnr = c~matnr
+                        INNER JOIN qmel AS d ON a~qmnum = d~qmnum
+      WHERE a~matnr IN s_matnr
+        AND c~spart IN s_spart
+        AND a~erdat LE lv_date_to
+        AND d~kunum IN s_kunnr
+        AND a~zjhrq NE '00000000'.
+  ELSE.
+    SELECT a~qmnum a~zindx a~matnr a~zbarcode a~zversion a~menge a~zjhrq a~erdat
+           b~spart c~kunum AS kunnr
+      INTO CORRESPONDING FIELDS OF TABLE gt_ztcs001
+      FROM ztcs001 AS a INNER JOIN mara AS b ON a~matnr = b~matnr
+                        INNER JOIN qmel AS c ON a~qmnum = c~qmnum
+      WHERE a~matnr IN s_matnr
+        AND b~spart IN s_spart
+        AND a~erdat LE lv_date_to
+        AND c~kunum IN s_kunnr
+        AND a~zjhrq NE '00000000'.
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PROCESS_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_process_data .
+  DATA: BEGIN OF lt_mseg OCCURS 0,
+          kunnr LIKE mseg-kunnr,
+          spart LIKE mara-spart,
+          matnr LIKE mseg-matnr,
+          charg LIKE mseg-charg,
+          dlymo TYPE t5a4a-dlymo,
+          menge LIKE mseg-menge,
+        END OF lt_mseg.
+  DATA: lv_objek LIKE ausp-objek,
+        lv_tabix LIKE sy-tabix.
+
+*** 将客户、物料等信息输出ALV
+  LOOP AT gt_mseg.
+    CLEAR: gt_alv.
+    gt_alv-kunnr = gt_mseg-kunnr."客户
+    gt_alv-spart = gt_mseg-spart."产品组
+    gt_alv-matnr = gt_mseg-matnr."物料
+    gt_alv-charg = gt_mseg-charg."版本(批次)
+    PERFORM frm_get_month USING lv_date_to gt_mseg-budat_mkpf
+                       CHANGING gt_alv-dlymo.
+
+    gt_alv-menge_fh = gt_mseg-menge."发货数量
+    COLLECT gt_alv.
+    CLEAR: gt_mseg.
+  ENDLOOP.
+
+  LOOP AT gt_ztcs001.
+    CLEAR: gt_alv.
+    gt_alv-kunnr = gt_ztcs001-kunnr."客户
+    gt_alv-spart = gt_ztcs001-spart."产品组
+    gt_alv-matnr = gt_ztcs001-matnr."物料
+    gt_alv-charg = gt_ztcs001-zversion."版本(批次)
+    PERFORM frm_get_month USING gt_ztcs001-erdat gt_ztcs001-zjhrq
+                       CHANGING gt_alv-dlymo.
+    IF gt_ztcs001-zbarcode IS INITIAL.
+      gt_alv-menge_wx = gt_ztcs001-menge."发货数量
+    ELSE.
+      gt_alv-menge_wx = 1.
+    ENDIF.
+    COLLECT gt_alv.
+    CLEAR: gt_mseg.
+  ENDLOOP.
+
+* 数据处理
+  CHECK gt_alv[] IS NOT INITIAL.
+  SELECT * INTO TABLE gt_kna1
+    FROM kna1
+    FOR ALL ENTRIES IN gt_alv
+    WHERE kunnr = gt_alv-kunnr.
+  SORT gt_kna1 BY kunnr.
+
+  SELECT * INTO TABLE gt_knvv
+    FROM knvv
+    FOR ALL ENTRIES IN gt_alv
+    WHERE kunnr = gt_alv-kunnr
+      AND kdgrp IN s_kdgrp.
+  SORT gt_knvv BY kunnr.
+
+  SELECT * INTO TABLE gt_makt
+    FROM makt
+    FOR ALL ENTRIES IN gt_alv
+    WHERE matnr = gt_alv-matnr
+      AND spras = sy-langu.
+  SORT gt_makt BY matnr.
+
+  LOOP AT gt_alv.
+    CLEAR:lv_objek.
+    lv_tabix = sy-tabix.
+    lv_objek = gt_alv-matnr.
+*  取客户名称
+    READ TABLE gt_kna1 WITH KEY kunnr = gt_alv-kunnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-name1 = gt_kna1-name1.
+    ENDIF.
+*  取物料名称
+    READ TABLE gt_makt WITH KEY matnr = gt_alv-matnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-maktx = gt_makt-maktx.
+    ENDIF.
+*  取所属行业
+    READ TABLE gt_knvv WITH KEY kunnr = gt_alv-kunnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_alv-kdgrp = gt_knvv-kdgrp.
+    ELSE.
+      DELETE gt_alv INDEX lv_tabix.
+      CONTINUE.
+    ENDIF.
+* 取所属行业描述
+    SELECT SINGLE ktext INTO gt_alv-ktext FROM t151t WHERE kdgrp = gt_alv-kdgrp AND spras = sy-langu.
+* 取产品组描述
+    SELECT SINGLE vtext INTO gt_alv-vtext FROM tspat WHERE spart = gt_alv-spart AND spras = sy-langu.
+* 取产品线、系列、子系列、对应主型号
+    LOOP AT gt_ausp WHERE objek = lv_objek.
+      CASE gt_ausp-atnam.
+        WHEN 'ZFER_CPX'.
+          gt_alv-zcpx = gt_ausp-atwrt.
+        WHEN 'ZFER_XL'.
+          gt_alv-zxl = gt_ausp-atwrt.
+        WHEN 'ZFER_ZXL'.
+          gt_alv-zzxl = gt_ausp-atwrt.
+        WHEN 'ZFER_DYZXH'.
+          gt_alv-dyzxh = gt_ausp-atwrt.
+        WHEN OTHERS.
+      ENDCASE.
+    ENDLOOP.
+    MODIFY gt_alv .
+    CLEAR: gt_alv.
+  ENDLOOP.
+
+  DELETE gt_alv WHERE zcpx NOT IN s_cpx.
+  DELETE gt_alv WHERE zxl NOT IN s_xl.
+  DELETE gt_alv WHERE zzxl NOT IN s_zxl.
+  DELETE gt_alv WHERE dyzxh NOT IN s_zxh.
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  DATA:lv_num       TYPE i,
+       colname(20),
+       colname1(20),
+       index        TYPE n LENGTH 2,
+       lv_low(2),
+       lv_high(2).
+
+  mcr_build_fieldcat:'KUNNR'     '客户代码'        'KUNNR'      'KNA1'     ''     '',
+                     'NAME1'     '客户名称'        'NAME1'      'KNA1'     ''     '',
+                     'KDGRP'     '所属行业'        'KDGRP'      'KNVV'     ''     '',
+                     'KTEXT'     '所属行业描述'    'KTEXT'      'T151T'    ''     '',
+                     'SPART'     '产品组'          'SPART'      'MARA'     ''     '10',
+                     'VTEXT'     '产品组描述'      'VTEXT'      'TSPAT'    ''    '',
+                     'ZCPX'      '产品线'          'ATWRT'      'AUSP'    ''    '',
+                     'ZXL'       '系列'            ''           ''    ''    '',
+                     'ZZXL'      '子系列'          'ATWRT'      'AUSP'    ''    '',
+                     'DYZXH'     '对应主型号'      'ATWRT'      'AUSP'    ''    '',
+                     'MATNR'     '物料编码'        'MATNR'      'MARA'    ''    '',
+                     'MAKTX'     '物料描述'        'MAKTX'      'MAKT'    ''    '',
+                     'CHARG'     '版本'            'CHARG'      'MSEG'    ''    ''.
+
+  DO 14 TIMES." 根据条件动态生成列
+    index = index + 1.
+    CLEAR: lv_low,lv_high,colname,colname1,lt_month.
+
+    READ TABLE lt_month WITH KEY dlymo = index.
+    lv_low = lt_month-low.
+    lv_high = lt_month-high.
+
+    CONCATENATE lv_low '-' lv_high '月发货数' INTO colname1.
+    CONCATENATE 'COL' index 'A' INTO colname.
+    mcr_build_fieldcat:  colname  colname1     'LFIMG'  'LIPS' '15' 'X'.
+
+    CONCATENATE lv_low '-' lv_high '月不良数' INTO colname1.
+    CONCATENATE 'COL' index 'B' INTO colname.
+    mcr_build_fieldcat:  colname  colname1     'LFIMG'  'LIPS' '15' 'X'.
+
+    CONCATENATE lv_low '-' lv_high '月不良率' INTO colname1.
+    CONCATENATE 'COL' index 'C' INTO colname.
+    mcr_build_fieldcat:  colname  colname1     'LFIMG'  'LIPS' '15' 'X'.
+  ENDDO.
+
+  mcr_build_fieldcat:  'COL15A'  '大于60月发货数'     'LFIMG'  'LIPS' '15' 'X'.
+  mcr_build_fieldcat:  'COL15B'  '大于60月不良数'     'LFIMG'  'LIPS' '15' 'X'.
+  mcr_build_fieldcat:  'COL15C'  '大于60月不良率'     'LFIMG'  'LIPS' '15' 'X'.
+
+*内表创建
+
+  CALL METHOD cl_alv_table_create=>create_dynamic_table
+    EXPORTING
+      it_fieldcatalog = lt_alv_cat
+    IMPORTING
+      ep_table        = d_ref.
+
+*指定生成的内表到字段符号
+  ASSIGN d_ref->* TO <dyn_table>.
+
+*创建动态工作区结构
+  CREATE DATA dyn_wa LIKE LINE OF <dyn_table>.
+
+*创建动态工作区
+  ASSIGN dyn_wa->* TO <dyn_wa>.
+
+*  给动态内表赋值
+  LOOP AT gt_alv .
+    CLEAR:lv_num,index.
+    ASSIGN COMPONENT 'KUNNR' OF STRUCTURE <dyn_wa> TO <fs_str>.
+    <fs_str> = gt_alv-kunnr.
+    ASSIGN COMPONENT 'NAME1' OF STRUCTURE <dyn_wa> TO <fs_str>.
+    <fs_str> = gt_alv-name1.
+    ASSIGN COMPONENT 'KDGRP' OF STRUCTURE <dyn_wa> TO <fs_str>.
+    <fs_str> = gt_alv-kdgrp.
+    ASSIGN COMPONENT 'KTEXT' OF STRUCTURE <dyn_wa> TO <fs_str>.
+    <fs_str> = gt_alv-ktext.
+    ASSIGN COMPONENT 'SPART' OF STRUCTURE <dyn_wa> TO <fs_str>.
+    <fs_str> = gt_alv-spart.
+    ASSIGN COMPONENT 'VTEXT' OF STRUCTURE <dyn_wa> TO <fs_str>.
+    <fs_str> = gt_alv-vtext.
+    ASSIGN COMPONENT 'ZCPX' OF STRUCTURE <dyn_wa> TO <fs_str>.
+    <fs_str> = gt_alv-zcpx.
+    ASSIGN COMPONENT 'ZXL' OF STRUCTURE <dyn_wa> TO <fs_str>.
+    <fs_str> = gt_alv-zxl.
+    ASSIGN COMPONENT 'ZZXL' OF STRUCTURE <dyn_wa> TO <fs_str>.
+    <fs_str> = gt_alv-zzxl.
+    ASSIGN COMPONENT 'DYZXH' OF STRUCTURE <dyn_wa> TO <fs_str>.
+    <fs_str> = gt_alv-dyzxh.
+    ASSIGN COMPONENT 'MATNR' OF STRUCTURE <dyn_wa> TO <fs_str>.
+    <fs_str> = gt_alv-matnr.
+    ASSIGN COMPONENT 'MAKTX' OF STRUCTURE <dyn_wa> TO <fs_str>.
+    <fs_str> = gt_alv-maktx.
+    ASSIGN COMPONENT 'CHARG' OF STRUCTURE <dyn_wa> TO <fs_str>.
+    <fs_str> = gt_alv-charg.
+    lv_num = gt_alv-dlymo.
+    index = lv_num.
+    PERFORM read_col USING index 'A' gt_alv.
+    PERFORM read_col USING index 'B' gt_alv.
+    PERFORM read_col USING index 'C' gt_alv.
+    COLLECT <dyn_wa> INTO <dyn_table>.
+    CLEAR:<dyn_wa>.
+  ENDLOOP.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  READ_COL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_INDEX  text
+*      <--P_GT_ALV  text
+*----------------------------------------------------------------------*
+FORM read_col USING p_monat
+                    p_value
+                    pt_alv STRUCTURE gt_alv.
+  FIELD-SYMBOLS :<fs_str_fh> TYPE any,
+                 <fs_str_wx> TYPE any.
+  DATA: l_text(10),
+        l_text_fh(10),
+        l_text_wx(10).
+  CONCATENATE 'COL' p_monat p_value INTO l_text.
+  CONDENSE l_text.
+  ASSIGN COMPONENT l_text OF STRUCTURE <dyn_wa> TO <fs_str>.
+  CASE p_value.
+    WHEN 'A'.
+      <fs_str> = pt_alv-menge_fh.
+    WHEN 'B'.
+      <fs_str> = pt_alv-menge_wx.
+    WHEN 'C'.
+      CONCATENATE 'COL' p_monat 'A' INTO l_text_fh.
+      CONDENSE l_text_fh.
+      ASSIGN COMPONENT l_text_fh OF STRUCTURE <dyn_wa> TO <fs_str_fh>.
+
+      CONCATENATE 'COL' p_monat 'B' INTO l_text_wx.
+      CONDENSE l_text_wx.
+      ASSIGN COMPONENT l_text_wx OF STRUCTURE <dyn_wa> TO <fs_str_wx>.
+
+      IF <fs_str_wx> NE 0.
+        <fs_str> = ( <fs_str_fh> / <fs_str_wx> ) * 100.
+      ENDIF.
+    WHEN OTHERS.
+  ENDCASE.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  i_layout_lvc-zebra       = 'X' ." 使ALV界面呈现颜色交替
+  i_layout_lvc-sel_mode      = 'A' ." 选择模式，“A”在最左端有选择按钮
+*  i_layout_lvc-cwidth_opt       = 'X' ." 自动优化列宽
+  i_layout_lvc-detailinit      = 'X' ." 是否出现细节屏幕
+  i_layout_lvc-detailtitl      = '详细内容'."    细节屏幕标题
+
+
+*显示内表中的数据
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program      = sy-repid          " 当前程序
+      i_callback_user_command = 'ALV_USER_COMMAND'
+      is_layout_lvc           = i_layout_lvc      " 属性内表
+      it_fieldcat_lvc         = lt_alv_cat  " 列明内表
+      i_save                  = 'X'               " 是否保存布局
+      it_events               = gt_events[]
+    TABLES
+      t_outtab                = <dyn_table>             " 数据内表
+    EXCEPTIONS
+      program_error           = 1
+      OTHERS                  = 2.
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+    WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PROCESS_MONTH
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_process_month .
+  DATA:lv_dlymo LIKE t5a4a-dlymo,
+       lv_low   LIKE t5a4a-dlymo,
+       lv_high  LIKE t5a4a-dlymo.
+
+  REFRESH:lt_month.
+  lv_dlymo = '01'.
+  CLEAR:lv_low,lv_high.
+*  0-1月、1-2月、2-3月
+  DO 3 TIMES.
+    lv_low = lv_high .
+    lv_high = lv_high + 1.
+    lt_month-dlymo = lv_dlymo.
+    lt_month-low = lv_low.
+    lt_month-high = lv_high.
+    APPEND lt_month.
+    lv_dlymo = lv_dlymo + 1.
+  ENDDO.
+
+*3-6月、6-9月、9-12月
+  DO 3 TIMES.
+    lv_low = lv_high.
+    lv_high = lv_high + 3.
+    lt_month-dlymo = lv_dlymo.
+    lt_month-low = lv_low.
+    lt_month-high = lv_high.
+    APPEND lt_month.
+    lv_dlymo = lv_dlymo + 1.
+  ENDDO.
+
+*  12-18月、18-24月、24-30月、30-36月、36-42月、42-48月、48-54月、54-60月
+  DO 8 TIMES.
+    lv_low = lv_high.
+    lv_high = lv_high + 6.
+    lt_month-dlymo = lv_dlymo.
+    lt_month-low = lv_low.
+    lt_month-high = lv_high.
+    APPEND lt_month.
+    lv_dlymo = lv_dlymo + 1.
+  ENDDO.
+*  大于60月
+  lt_month-dlymo = lv_dlymo.
+  lt_month-low = lv_high.
+  lt_month-high = '99999'.
+  APPEND lt_month.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_MONTH
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*    计算区间相差的月份
+*----------------------------------------------------------------------*
+FORM frm_get_month  USING  pv_budat
+                            pv_date
+                    CHANGING pv_dlymo TYPE char2 .
+  DATA:lv_days   TYPE i,
+       lv_months TYPE vtbbewe-atage,
+       lv_years  TYPE vtbbewe-atage.
+
+  CALL FUNCTION 'FIMA_DAYS_AND_MONTHS_AND_YEARS'
+    EXPORTING
+      i_date_from = pv_date
+      i_date_to   = pv_budat
+    IMPORTING
+      e_months    = lv_months
+      e_years     = lv_years.
+
+  IF lv_months = 0.
+    pv_dlymo = 1.
+  ELSE.
+    LOOP AT lt_month WHERE low LT lv_months AND high GE lv_months.
+      pv_dlymo = lt_month-dlymo.
+    ENDLOOP.
+  ENDIF.
+ENDFORM.

@@ -1,0 +1,214 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPCS002T01
+*&---------------------------------------------------------------------*
+TABLES:qmel,knvv,ztcs001,ztcs005.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       check TYPE c.           "选择
+    INCLUDE STRUCTURE ztcs001.
+DATA:qmart         LIKE qmel-qmart,     "通知单类型
+     kunum         LIKE qmel-kunum,     "客户代码
+     sortl         LIKE adrc-sort1,     "客户简称
+     maktx         LIKE makt-maktx,     "物料描述
+     name1         LIKE lfa1-name1,     "供应商名称
+     maktx1        LIKE makt-maktx,     "物料描述1
+     maktx2        LIKE makt-maktx,     "物料描述2
+     maktx3        LIKE makt-maktx,     "物料描述3
+     maktx4        LIKE makt-maktx,     "物料描述4
+     maktx5        LIKE makt-maktx,     "物料描述5
+     adrnr         LIKE qmel-adrnr,
+     extension1    LIKE adrc-extension1, "收货联系人
+     zshdz(100)    TYPE c,              "收货地址
+     zshdh         LIKE adrc-tel_number, "收货电话
+     zshsj         LIKE adrc-tel_number, "收货手机
+     zkhmc(70)     TYPE c,              "客户名称
+     bzirk         LIKE knvv-bzirk,     "销售大区代码
+     bzirk_txt     LIKE t171t-bztxt,    "销售大区代码描述
+     vkbur         LIKE knvv-vkbur,     "行办代码
+     vkbur_txt     LIKE tvkbt-bezei,    "行办描述
+     vkgrp         LIKE knvv-vkgrp,     "销售组代码
+     vkgrp_txt     LIKE tvgrt-bezei,    "销售组描述
+     kvgr1         LIKE knvv-kvgr1,     "业务员代码
+     kvgr1_txt     LIKE tvv1t-bezei,    "业务员描述
+     kvgr2         LIKE knvv-kvgr2,     "商务代码
+     kvgr2_txt     LIKE tvv2t-bezei,    "商务描述
+***故障代码及描述
+     fegrp1        LIKE qmfe-fegrp,     "代码组 - 问题
+     fecod1        LIKE qmfe-fecod,     "问题或损坏代码
+     txtcdfe1      LIKE riwo00-txtcdfe, "故障描述
+     fegrp2        LIKE qmfe-fegrp,     "代码组 - 问题
+     fecod2        LIKE qmfe-fecod,     "问题或损坏代码
+     txtcdfe2      LIKE riwo00-txtcdfe, "故障描述
+     fegrp3        LIKE qmfe-fegrp,     "代码组 - 问题
+     fecod3        LIKE qmfe-fecod,     "问题或损坏代码
+     txtcdfe3      LIKE riwo00-txtcdfe, "故障描述
+****原因代码及描述
+     urgrp1        LIKE ztcs004-urgrp,  "代码组－责任方
+     urcod1        LIKE ztcs004-urcod,  "责任方的代码
+     txtcdur1      LIKE riwo00-txtcdur, "原因描述
+     urgrp2        LIKE ztcs004-urgrp,  "代码组－责任方
+     urcod2        LIKE ztcs004-urcod,  "责任方的代码
+     txtcdur2      LIKE riwo00-txtcdur, "原因描述
+     urgrp3        LIKE ztcs004-urgrp,  "代码组－责任方
+     urcod3        LIKE ztcs004-urcod,  "责任方的代码
+     txtcdur3      LIKE riwo00-txtcdur, "原因描述
+     ztext         LIKE ztcs002-ztext,  "维修状态描述
+     zkdgs         LIKE t173t-bezei,    "快递公司
+***ADD BY QUYT 20170929
+     vbeln         LIKE qmel-vbeln,      "退货订单
+     zdn           LIKE likp-vbeln,      "退货交货
+     zjhzt(10)     TYPE c,               "交货过账状态
+***END ADD
+***add by quyantao 2018.01.22
+     zfhdn         LIKE likp-vbeln,      "发货交货
+     zjhzt1(10)    TYPE c,               "发货交货过账状态
+***end add
+***ADD BY QUYT 20171012
+     spart         LIKE mara-spart,     "产品组
+     spart_txt     LIKE tspat-vtext,    "产品组描述
+     matkl         LIKE mara-matkl,     "物料组
+     matkl_txt     LIKE t023t-wgbez,    "物料组描述
+***END ADD
+*** ADD BY PFT 20171116
+     vkorg         LIKE knvv-vkorg  , "销售组织
+     qmtxt         LIKE qmel-qmtxt,  "K3维修单据号
+     bstnk         LIKE qmel-bstnk,  "存放位置
+*** END BY PFT 20171116
+*** ADD BY PFT 20180123
+     zfhyj(20)     TYPE c, "返还预警
+*** END BY PFT 20180123
+     zthwx_txt(50) TYPE c,        "退货标识描述
+     stytab        TYPE lvc_t_styl,
+     zwx(5)        TYPE c,
+     END OF gt_out.
+
+***通知单类型权限
+DATA:gt_tq80_t LIKE tq80_t OCCURS 0 WITH HEADER LINE.
+
+DATA: BEGIN OF gt_zwxy OCCURS 0,
+        zcode LIKE ztcs005-zcode,
+        zwxy  LIKE ztcs005-zwxy,
+      END OF gt_zwxy.
+
+***alv data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE,
+     gt_events TYPE slis_t_event WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-key = &1.
+  gt_fcat-fieldname = &2.
+  gt_fcat-coltext   = &3.
+  gt_fcat-scrtext_l = &3.
+  gt_fcat-scrtext_m = &3.
+  gt_fcat-scrtext_s = &3.
+  gt_fcat-ref_field = &4.
+  gt_fcat-ref_table = &5.
+  gt_fcat-inttype = &6.
+  gt_fcat-intlen = &7.
+
+  IF &2 = 'CHECK'.
+    gt_fcat-checkbox = 'X'.
+    gt_fcat-edit = 'X'.
+  ENDIF.
+  IF &2 = 'ZWCZT' OR &2 = 'ZFHKH' OR &2 = 'ZGBBS' OR &2 = 'ZYCYW' OR &2 = 'ZBFH' OR &2 = 'ZWFWX'.
+    gt_fcat-checkbox = 'X'.
+  ENDIF.
+  IF &2 = 'QMNUM' OR &2 = 'ZDN' OR &2 = 'ZFHDN'.
+    gt_fcat-hotspot = 'X'.
+  ENDIF.
+  IF &2 = 'ZWX'.
+     gt_fcat-hotspot = 'X'.
+  ENDIF.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.
+
+DATA: gv_grid TYPE REF TO cl_gui_alv_grid.
+DATA gv TYPE char1.
+*----------------------------------------------------------------------*
+*       CLASS lcl_event_receiver DEFINITION
+*----------------------------------------------------------------------*
+CLASS lcl_event_receiver DEFINITION.
+  PUBLIC SECTION.
+    METHODS:
+      handle_modify
+                    FOR EVENT data_changed_finished OF cl_gui_alv_grid
+        IMPORTING e_modified et_good_cells,
+      handle_data_changed
+                    FOR EVENT data_changed OF cl_gui_alv_grid
+        IMPORTING er_data_changed.
+ENDCLASS. "LCL_EVENT_RECEIVER DEFINITION
+*----------------------------------------------------------------------*
+*       CLASS LCL_EVENT_RECEIVER IMPLEMENTATION
+*----------------------------------------------------------------------*
+CLASS lcl_event_receiver IMPLEMENTATION.
+  METHOD handle_modify.
+    DATA: wa_cells   TYPE lvc_s_modi,
+          lv_enter   TYPE REF TO cl_gui_event,
+          lv_eventid TYPE i,
+          lv_tabix   LIKE sy-tabix.
+    DATA:ls_out LIKE LINE OF gt_out.
+    DATA:lv_wbstk TYPE vbuk-wbstk.
+
+*   获取当前事件
+    lv_enter   = gv_grid->cur_event.
+*   实例化成功的时候
+    IF lv_enter IS NOT INITIAL.
+      lv_eventid = lv_enter->eventid.
+    ENDIF.
+*   只有在[回车]事件的时候，再进行检查(19:代表回车事件)
+    IF lv_eventid = 19 AND sy-ucomm   = ''.
+      LOOP AT et_good_cells INTO wa_cells WHERE fieldname = 'ZSO' OR fieldname = 'ZTHWX' OR fieldname = 'ZFHDD'.
+        READ TABLE gt_out INTO ls_out INDEX wa_cells-row_id.
+        lv_tabix = sy-tabix.
+        IF  ls_out-zso IS NOT INITIAL.
+          CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+            EXPORTING
+              input  = ls_out-zso
+            IMPORTING
+              output = ls_out-zso.
+          SELECT SINGLE vbeln INTO ls_out-zdn FROM vbfa WHERE vbelv = ls_out-zso AND vbtyp_n = 'T' AND vbtyp_v IN ('H','C').
+        ENDIF.
+***交货状态
+        IF ls_out-zdn IS NOT INITIAL.
+          CLEAR lv_wbstk.
+          SELECT SINGLE wbstk INTO lv_wbstk FROM vbuk WHERE vbeln = ls_out-zdn.
+          IF lv_wbstk EQ 'C'.
+            ls_out-zjhzt = '已交货'.
+          ELSE.
+            ls_out-zjhzt = '未交货'.
+          ENDIF.
+        ENDIF.
+***发货订单
+        IF  ls_out-zfhdd IS NOT INITIAL.
+          CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+            EXPORTING
+              input  = ls_out-zfhdd
+            IMPORTING
+              output = ls_out-zfhdd.
+          SELECT SINGLE vbeln INTO ls_out-zfhdn FROM vbfa WHERE vbelv = ls_out-zfhdd AND vbtyp_n = 'J' AND vbtyp_v IN ('H','C').
+        ENDIF.
+        IF ls_out-zfhdn IS NOT INITIAL.
+          CLEAR lv_wbstk.
+          SELECT SINGLE wbstk INTO lv_wbstk FROM vbuk WHERE vbeln = ls_out-zfhdn.
+          IF lv_wbstk EQ 'C'.
+            ls_out-zjhzt1 = '已交货'.
+          ELSE.
+            ls_out-zjhzt1 = '未交货'.
+          ENDIF.
+        ENDIF.
+        PERFORM frm_get_domain_text USING ls_out-zthwx CHANGING ls_out-zthwx_txt.
+        MODIFY gt_out FROM ls_out INDEX lv_tabix .
+      ENDLOOP.
+      CALL METHOD gv_grid->refresh_table_display( ).
+    ENDIF.
+
+  ENDMETHOD.
+  METHOD handle_data_changed.
+*    PERFORM f_class_data_changed USING er_data_changed.
+  ENDMETHOD.
+
+  "HANDLE_MODIFY
+ENDCLASS. "LCL_EVENT_RECEIVER IMPLEMENTATION
+DATA:gt_event_receiver TYPE REF TO lcl_event_receiver.

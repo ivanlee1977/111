@@ -1,0 +1,117 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM013T01
+*&---------------------------------------------------------------------*
+TABLES:likp,lips,vbuk,zprintnum.
+TYPE-POOLS vrm.
+
+DATA:BEGIN OF gt_alv OCCURS 0,
+       box(1),
+       vbeln       LIKE lips-vbeln, "交货单号
+       posnr       LIKE lips-posnr, "交货单行项目
+       matnr       LIKE lips-matnr, "物料编码
+       lgort       LIKE lips-lgort, "仓库
+       charg       LIKE lips-charg, "批次
+       kdmat       LIKE lips-kdmat, "客户物料
+       lfimg       LIKE lips-lfimg, "发货数量
+       vrkme       LIKE lips-vrkme, "单位
+*       arktx       LIKE lips-arktx, "物料描述
+       arktx(60)   TYPE  c,
+       vgbel       LIKE lips-vgbel, "销售订单号
+       vgpos       LIKE lips-vgpos, "销售订单行项目
+       vtweg       LIKE lips-vtweg, "渠道
+       vkorg       LIKE likp-vkorg, "销售组织
+       lfart       LIKE likp-lfart, "交货单类型
+       wadat       LIKE likp-wadat, "计划交货日期
+       lifsk       LIKE likp-lifsk, "审批状态代码
+       kunnr       LIKE likp-kunnr, "送达方
+       kunag       LIKE likp-kunag, "客户
+       aenam       LIKE likp-aenam, "制单人代码
+       bldat       LIKE likp-bldat, "交货单创建日期
+       wadat_ist   LIKE likp-wadat_ist, "发货日期
+       vsart       LIKE likp-vsart, "运输方式代码
+       bolnr       LIKE likp-bolnr, "物流单号
+       wbstk       LIKE vbuk-wbstk, "发货状态
+       cmgst       LIKE vbuk-cmgst, "信用状态
+       zzdry(60),                   "制单人
+       kvgr1       LIKE vbak-kvgr1, "业务员代码
+       bezei_kvgr1 LIKE tvv1t-bezei, "业务员
+       kvgr2       LIKE vbak-kvgr2, "商务代码
+       bezei_kvgr2 LIKE tvv2t-bezei, "商务
+       bstnk       LIKE vbak-bstnk, "采购订单号
+       tel         LIKE ztsd002-tel, "商务电话
+       fax         LIKE ztsd002-fax, "商务传真
+       zxhdz       LIKE ztsd010-zxhdz, "销货单位地址
+       lgobe       LIKE t001l-lgobe, "仓库描述
+       vtext_vtweg LIKE tvtwt-vtext, "渠道描述
+       bezei_vsart LIKE t173t-bezei, "运输方式描述
+       vtext_lifsk LIKE tvlst-vtext, "审批状态描述
+       name1(60),                 "客户名称
+       sortl       LIKE kna1-sortl, "客户简称
+       vtext_lfart LIKE tvlkt-vtext, "交货单类型描述
+       name2(60),                    "送达方名称
+       street(200), "送货地址
+       tel_number  LIKE adrc-tel_number, "电话
+       tel_number2 LIKE adr2-tel_number, "手机
+       fax_number  LIKE adrc-fax_number, "传真
+       extension1  LIKE adrc-extension1, "收件人
+       wbstk_c(10),"发货状态
+       cmgst_c(10),"信用状态
+       vrkme_c     TYPE mseht, "单位
+       zsum        LIKE zprintnum-zsum,
+       ktgrd       LIKE vbkd-ktgrd, "内外销
+       menge_sum   LIKE lips-lfimg, "总数量
+       netpr_sum   TYPE dmbtr, "总金额
+       ztext1      TYPE char255, "注意事项
+       ztext2      TYPE char255, "提单要求
+       ztext3      TYPE char255, "标签要求
+       ztext4      TYPE char255, "箱唛要求
+       ztext5      TYPE char255, "随货单证
+       ztext6      TYPE char255, "特殊包装
+       zbarcode    TYPE char255, "注意事项
+       werks       TYPE werks_d,
+       name1_new       TYPE kna1-name1,
+     END OF gt_alv.
+
+*  取业务员、商务
+DATA: BEGIN OF gt_vbak OCCURS 0,
+        vbeln LIKE vbak-vbeln,
+        kvgr1 LIKE vbak-kvgr1, "业务员代码
+        kvgr2 LIKE vbak-kvgr2, "商务代码
+        bstnk LIKE vbak-bstnk, "采购订单号
+        ktgrd LIKE vbkd-ktgrd, "内外销
+      END OF gt_vbak.
+
+*  取发货状态和信用状态
+DATA: gt_vbuk    LIKE vbuk OCCURS 0 WITH HEADER LINE,
+      gt_ztsd002 LIKE ztsd002 OCCURS 0 WITH HEADER LINE,
+      gt_ztsd010 LIKE ztsd010 OCCURS 0 WITH HEADER LINE,
+      gt_vbpa    LIKE vbpa OCCURS 0 WITH HEADER LINE,
+      gt_adrc    LIKE adrc OCCURS 0 WITH HEADER LINE,
+      gt_adr2    LIKE adr2 OCCURS 0 WITH HEADER LINE.
+
+*  取销售相关数据
+DATA: BEGIN OF gt_vbap OCCURS 0,
+        vbeln  LIKE vbap-vbeln,
+        posnr  LIKE vbap-posnr,
+        kwmeng LIKE vbap-kwmeng,
+        kzwi1  LIKE vbap-kzwi1,
+      END OF gt_vbap.
+
+DATA: BEGIN OF gt_alv_col OCCURS 0,
+        vbeln LIKE lips-vbeln,
+        posnr LIKE lips-posnr,
+        lfimg LIKE lips-lfimg,
+        netpr LIKE vbap-kzwi1,
+      END OF gt_alv_col.
+
+DATA:gt_kna1  LIKE kna1 OCCURS 0 WITH HEADER LINE,
+     gt_tvtwt LIKE tvtwt OCCURS 0 WITH HEADER LINE,
+     gt_t001l LIKE t001l OCCURS 0 WITH HEADER LINE.
+
+* 打印外箱地址变量
+DATA: lt_wxdz LIKE zszsd018_head OCCURS 0 WITH HEADER LINE.
+DATA: lv_field TYPE char5, "打印地址
+      lv_dyts  TYPE i. "打印条数
+
+DATA: list  TYPE vrm_values, " list box的值
+      value LIKE LINE OF list . " list box的结构

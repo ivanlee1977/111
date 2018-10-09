@@ -1,0 +1,71 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM013T01
+*&---------------------------------------------------------------------*
+TABLES:ekko,ekpo,eban,mara.
+
+DATA: BEGIN OF gt_alv OCCURS 0,
+        box(1),
+        banfn        LIKE eban-banfn, "采购申请单号
+        bnfpo        LIKE eban-bnfpo, "采购申请行项目号
+        badat        LIKE eban-badat, "采购申请日期
+        frgdt        LIKE eban-frgdt, "采购申请审批日期
+        matnr        LIKE eban-matnr, "物料号
+        txz01        LIKE eban-txz01, "物料描述
+        matkl        LIKE eban-matkl, "物料组
+        wgbez        LIKE t023t-wgbez, "物料组描述
+        menge        LIKE eban-menge, "采购申请数量
+        ebeln        LIKE ekko-ebeln, "采购订单号
+        ebelp        LIKE ekpo-ebelp, "采购订单行项目
+        aedat        LIKE ekko-aedat, "采购订单日期
+        menge_ekpo   LIKE ekpo-menge, "采购订单数量
+        udate        LIKE cdhdr-udate, "订单审批日期
+        utime        LIKE cdhdr-utime, "订单审批时间
+        djcjc        TYPE int4, "订单创建日期和申请审批日期差
+        djspc        TYPE int4, "订单审批日期和申请审批日期差
+        ernam        LIKE ekko-ernam, "采购员
+        ernam_ms(50),"采购员名称
+        ekgrp        LIKE ekko-ekgrp, "采购组
+        eknam        LIKE t024-eknam, "采购组描述
+        lifnr        LIKE ekko-lifnr, "供应商
+        name1        LIKE lfa1-name1, "供应商名称
+      END OF gt_alv.
+
+DATA: BEGIN OF gt_eban OCCURS 0,
+        banfn LIKE eban-banfn, "采购申请单号
+        bnfpo LIKE eban-bnfpo, "采购申请行项目号
+        badat LIKE eban-badat, "采购申请日期
+        frgdt LIKE eban-frgdt, "采购申请审批日期
+        matnr LIKE eban-matnr, "物料号
+        txz01 LIKE eban-txz01, "物料描述
+        matkl LIKE eban-matkl, "物料组
+        menge LIKE eban-menge, "采购申请数量
+      END OF gt_eban.
+
+DATA: BEGIN OF gt_ekko OCCURS 0,
+        ebeln    LIKE ekko-ebeln, "采购订单号
+        ebelp    LIKE ekpo-ebelp, "采购订单行项目
+        aedat    LIKE ekko-aedat, "采购订单日期
+        menge    LIKE ekpo-menge, "采购订单数量
+        ernam    LIKE ekko-ernam, "采购员
+        ekgrp    LIKE ekko-ekgrp, "采购组
+        banfn    LIKE ekpo-banfn, "采购申请
+        bnfpo    LIKE ekpo-bnfpo, "采购申请行项目
+        lifnr    LIKE ekko-lifnr, "供应商
+        objectid LIKE cdpos-objectid, "对象值
+      END OF gt_ekko.
+
+DATA: BEGIN OF gt_cdhdr OCCURS 0,
+        objectclas LIKE cdhdr-objectclas, "对象类
+        objectid   LIKE cdhdr-objectid, "对象值
+        changenr   LIKE cdhdr-changenr, "文档的更改编号
+        tabname    LIKE cdpos-tabname, "表名
+        tabkey     LIKE cdpos-tabkey, "已更改的表记录键
+        fname      LIKE cdpos-fname, "FNAME
+        value_new  LIKE cdpos-value_new, "更改字段新值
+        udate      LIKE cdhdr-udate, "订单审批日期
+        utime      LIKE cdhdr-utime, "订单审批时间
+      END OF gt_cdhdr.
+
+DATA: gt_t023t LIKE t023t OCCURS 0 WITH HEADER LINE,
+      gt_t024  LIKE t024 OCCURS 0 WITH HEADER LINE,
+      gt_lfa1  LIKE lfa1 OCCURS 0 WITH HEADER LINE.

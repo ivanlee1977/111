@@ -1,0 +1,42 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPPP002T01
+*&---------------------------------------------------------------------*
+TABLES:mapl,plko,marc.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       matnr LIKE mapl-matnr,
+       werks LIKE mapl-werks,
+       plnnr LIKE mapl-plnnr,
+       plnal LIKE mapl-plnal,
+       ktext LIKE plko-ktext,
+       verwe LIKE plko-verwe,
+       statu LIKE plko-statu,
+       vornr LIKE plpo-vornr,
+       ltxa1 LIKE plpo-ltxa1,
+       arbid LIKE plpo-arbid,
+       arbpl LIKE crhd-arbpl,
+       werkw LIKE plpo-werks,
+       steus LIKE plpo-steus,
+       bmsch LIKE plpo-bmsch,
+       vgw01 LIKE plpo-vgw01,
+       vgw02 LIKE plpo-vgw02,
+       splim LIKE plpo-splim,
+       spmus LIKE plpo-spmus,
+       dispo LIKE marc-dispo,
+     END OF gt_out.
+
+***alv data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

@@ -1,0 +1,116 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPMM008T01
+*&---------------------------------------------------------------------*
+TABLES:sscrfields,t001w,t001l.
+
+DATA:gt_upload LIKE alsmex_tabline OCCURS 0 WITH HEADER LINE.
+FIELD-SYMBOLS:<fs_data> LIKE LINE OF gt_upload.
+
+DATA:gt_header TYPE alsmex_tabline OCCURS 0 WITH HEADER LINE.
+
+DATA:BEGIN OF gt_basic_data OCCURS 0.
+    INCLUDE STRUCTURE zsmm_mat_master_data.
+DATA:zicon(20) TYPE c,
+     msgty     LIKE sy-msgty,
+     zmsg      TYPE bapi_msg,
+     END OF gt_basic_data.
+
+DATA:BEGIN OF gt_sales_data OCCURS 0.
+    INCLUDE STRUCTURE zsmm_mat_sales_data.
+DATA:zicon(20) TYPE c,
+     msgty     LIKE sy-msgty,
+     zmsg      TYPE bapi_msg,
+     END OF gt_sales_data.
+
+DATA:BEGIN OF gt_purchase_data OCCURS 0.
+    INCLUDE STRUCTURE zsmm_mat_purchase_data.
+DATA:zicon(20) TYPE c,
+     msgty     LIKE sy-msgty,
+     zmsg      TYPE bapi_msg,
+     END OF gt_purchase_data.
+
+DATA:BEGIN OF gt_product_data OCCURS 0.
+    INCLUDE STRUCTURE zsmm_mat_product_data.
+DATA:zicon(20) TYPE c,
+     msgty     LIKE sy-msgty,
+     zmsg      TYPE bapi_msg,
+     END OF gt_product_data.
+
+DATA:BEGIN OF gt_qm_data OCCURS 0.
+    INCLUDE STRUCTURE zsmm_mat_qm_data.
+DATA:zicon(20) TYPE c,
+     msgty     LIKE sy-msgty,
+     zmsg      TYPE bapi_msg,
+     END OF gt_qm_data.
+
+DATA:BEGIN OF gt_fi_data OCCURS 0.
+    INCLUDE STRUCTURE zsmm_mat_fi_data.
+DATA:zicon(20) TYPE c,
+     msgty     LIKE sy-msgty,
+     zmsg      TYPE bapi_msg,
+     END OF gt_fi_data.
+
+DATA:BEGIN OF gt_mpn_data OCCURS 0.
+    INCLUDE STRUCTURE zsmm_mat_mpn_data.
+DATA:zicon(20) TYPE c,
+     msgty     LIKE sy-msgty,
+     zmsg      TYPE bapi_msg,
+     END OF gt_mpn_data.
+
+DATA:BEGIN OF gt_class_data OCCURS 0.
+    INCLUDE STRUCTURE zsmm_mat_class_data.
+DATA:zicon(20) TYPE c,
+     msgty     LIKE sy-msgty,
+     zmsg      TYPE bapi_msg,
+     END OF gt_class_data.
+
+DATA:BEGIN OF gt_storage_data OCCURS 0.
+    INCLUDE STRUCTURE zsmm_mat_storage_data.
+DATA:zicon(20) TYPE c,
+     msgty     LIKE sy-msgty,
+     zmsg      TYPE bapi_msg,
+     END OF gt_storage_data.
+
+DATA:gv_structure   TYPE dd02l-tabname,
+     gv_tabname(30) TYPE c.
+
+FIELD-SYMBOLS: <fs_tab_line> TYPE any,
+               <fs_tab>      TYPE STANDARD TABLE.
+
+DEFINE mcr_add_zero.
+  IF &1 IS NOT INITIAL.
+  CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+     EXPORTING
+       input  = &1
+     IMPORTING
+       output = &1.
+ ENDIF.
+END-OF-DEFINITION.
+
+DEFINE mcr_convert_unit_input.
+  IF &1 IS NOT INITIAL.
+  CALL FUNCTION 'CONVERSION_EXIT_CUNIT_INPUT'
+     EXPORTING
+       input          = &1
+       language       = sy-langu
+     IMPORTING
+       output         = &1
+     EXCEPTIONS
+       unit_not_found = 1
+       OTHERS         = 2.
+  ENDIF.
+END-OF-DEFINITION.
+
+DEFINE mcr_add_msg.
+  IF &1-zmsg IS INITIAL.
+   &1-zmsg = &2.
+  ELSE.
+    CONCATENATE &1-zmsg &2 INTO &1-zmsg.
+  ENDIF.
+END-OF-DEFINITION.
+
+CONSTANTS:con_x TYPE c  VALUE 'X'.
+
+***alv data definr
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.

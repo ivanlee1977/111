@@ -1,0 +1,46 @@
+*&---------------------------------------------------------------------*
+*& Report ZRPSD029
+*& 创建者(公司)/日期： leimt/20180112
+*& 程序描述:返修率报表
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    LEIMT           2018      创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpsd029.
+INCLUDE zrpsd029_t01.
+INCLUDE zrpsd029_s01.
+INCLUDE zrpsd029_f01.
+
+
+INITIALIZATION.
+  PERFORM frm_get_ausp."取产品线和系列
+************************************************************************
+*AT SELECTION-SCREEN ON VALUE_REQUEST.
+************************************************************************
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_cpx-low.
+  PERFORM sub_search_help_zxl USING 'CPX' 'S_CPX'  'ZFER_CPX'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_cpx-high.
+  PERFORM sub_search_help_zxl USING 'CPX' 'S_CPX'  'ZFER_CPX'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_dyzxh-low.
+  PERFORM sub_search_help_zxl USING 'DYZXH' 'S_DYZXH'  'ZFER_DYZXH'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_dyzxh-high.
+  PERFORM sub_search_help_zxl USING 'DYZXH' 'S_DYZXH'  'ZFER_DYZXH'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_lb-low.
+  PERFORM sub_search_help USING 'LB' 'S_LB'  .
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_zwxy-low.
+  PERFORM sub_search_f4 USING  'S_ZWXY'  .
+
+AT SELECTION-SCREEN OUTPUT.
+
+START-OF-SELECTION.
+
+  PERFORM get_data."取数据
+  PERFORM process_data."处理数据
+
+END-OF-SELECTION.
+  PERFORM get_alv."ALV显示界面

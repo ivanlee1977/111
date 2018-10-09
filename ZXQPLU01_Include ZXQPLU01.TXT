@@ -1,0 +1,33 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZXQPLU01
+*&---------------------------------------------------------------------*
+e_revlv = ''. "20171123 add by chenhg , 1、  取消版次作为选择检验计划的条件
+E_ACTIVE = 'X'.
+E_HERSTELLER = I_HERSTELLER.
+E_LIEFERANT = I_LIEFERANT .
+E_KUNDE = I_KUNDE.
+E_MATERIAL = I_MATERIAL.
+*E_SUCHFELD =
+E_VERWENDUNG = I_VERWENDUNG.
+E_WERKS =  I_WERKS .
+E_STICHTAG =  i_qals-GUELTIGAB.
+*I_QALS LIKE  QALS                        Current Inspection Lot Record
+*I_HERSTELLER LIKE  RMQEA-HERSTELLER                        Manufacturer
+*I_KUNDE  LIKE  RMQEA-KUNNR                       Customer
+*I_MATERIAL LIKE  RMQEA-MATNR                       Material
+*I_REVLV  LIKE  RMQEA-REVLV                       Revision Level
+*I_STICHTAG LIKE  RMQEA-STICHTAG                        Key Date
+*I_VERWENDUNG LIKE  RMQEA-PPLVERW                       Task List Usage
+*I_WERKS  LIKE  RMQEA-WERKS                       Plant
+*I_LIEFERANT  LIKE  RMQEA-LIFNR
+
+*E_HERSTELLER LIKE  RMQEA-HERSTELLER  Manufacturer
+*E_LIEFERANT  LIKE  RMQEA-LIFNR Vendor
+*E_KUNDE  LIKE  RMQEA-KUNNR Customer
+*E_MATERIAL LIKE  RMQEA-MATNR Material
+*E_SUCHFELD LIKE  RMQEA-SUCHFELD  Search Field
+*E_VERWENDUNG LIKE  RMQEA-PPLVERW Task List Usage
+*E_ACTIVE LIKE  QM00-QKZ  Copy Values to Task List Selection (if 'X')
+*E_REVLV  LIKE  RMQEA-REVLV Revision Level
+*E_WERKS  LIKE  RMQEA-WERKS Plant
+*E_STICHTAG LIKE  RMQEA-STICHTAG  Key Date

@@ -1,0 +1,314 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPLM001_F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GETDATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_getdata .
+  DATA:lt_mast LIKE mast OCCURS 0 WITH HEADER LINE.
+  DATA:ls_cstmat       LIKE cstmat,
+       lt_stpo         LIKE stpox OCCURS 0 WITH HEADER LINE,
+       lt_stpo_total   LIKE stpox OCCURS 0 WITH HEADER LINE,
+       lt_matcat       LIKE cscmat OCCURS 0 WITH HEADER LINE,
+       lt_matcat_total LIKE cscmat OCCURS 0 WITH HEADER LINE,
+       lt_stpu         LIKE stpu OCCURS 0 WITH HEADER LINE.
+  DATA :BEGIN OF lt_mard OCCURS 0,
+          labst LIKE mard-labst,
+          matnr LIKE mard-matnr,
+        END OF lt_mard.
+
+  DATA: BEGIN OF alv_ltb OCCURS 0.
+      INCLUDE STRUCTURE stpov_alv.
+  DATA: info(3) TYPE c,
+        END OF alv_ltb.
+  DATA:BEGIN OF lt_mara OCCURS 0,
+         matnr LIKE mara-matnr,
+         mtart LIKE mara-mtart,
+       END OF lt_mara.
+  DATA lv_atinn LIKE ausp-atinn.
+  CALL FUNCTION 'CONVERSION_EXIT_ATINN_INPUT'
+    EXPORTING
+      input  = 'ZFER_DYZXH'
+    IMPORTING
+      output = lv_atinn.
+  .
+
+  SELECT objek AS matnr INTO CORRESPONDING FIELDS OF TABLE gt_plm FROM ausp
+*    WHERE atwrt IN s_atwrt AND atinn = '0000000833'.
+    WHERE atwrt IN s_atwrt AND atinn = lv_atinn.
+
+  LOOP AT gt_plm.
+    IF gt_plm-matnr IN s_matnr AND s_matnr[] IS NOT INITIAL.
+      DELETE gt_plm.
+      CONTINUE.
+    ENDIF.
+  ENDLOOP.
+
+  SELECT *
+  INTO CORRESPONDING FIELDS OF TABLE lt_mast
+  FROM mast AS a    INNER JOIN stko AS b
+  ON a~stlnr = b~stlnr    AND a~stlal = b~stlal
+    FOR ALL ENTRIES IN gt_plm
+  WHERE a~matnr = gt_plm-matnr
+    AND a~werks IN s_werks
+    AND b~stlty = 'M'.
+
+
+  LOOP AT lt_mast.
+    PERFORM frm_explo_bom TABLES lt_stpo lt_matcat USING lt_mast-matnr lt_mast-werks 'X' lt_mast-stlal CHANGING ls_cstmat. "展开BOM
+    APPEND LINES OF lt_stpo TO lt_stpo_total.
+*    APPEND LINES OF lt_matcat TO lt_matcat_total.
+  ENDLOOP.
+  SORT lt_stpo_total BY idnrk.
+  DELETE ADJACENT DUPLICATES FROM lt_stpo_total COMPARING idnrk.
+
+  IF lt_stpo_total[] IS NOT INITIAL.
+    SELECT *
+      APPENDING CORRESPONDING FIELDS OF TABLE lt_mast
+      FROM mast AS a
+     INNER JOIN stko AS b
+        ON a~stlnr = b~stlnr
+       AND a~stlal = b~stlal
+      FOR ALL ENTRIES IN lt_stpo_total
+     WHERE a~matnr = lt_stpo_total-idnrk
+*       AND a~werks IN s_werks
+       AND b~stlty = 'M'.
+  ENDIF.
+
+  SORT lt_mast BY matnr.
+  DELETE ADJACENT DUPLICATES FROM lt_mast COMPARING matnr.
+
+*  CLEAR lt_matcat_total.
+*  REFRESH lt_matcat_total.
+***调用函数 展开BOM
+  LOOP AT lt_mast.
+    READ TABLE lt_stpo_total WITH KEY idnrk = lt_mast-matnr werks = lt_mast-werks stlan = lt_mast-stlan stlal = lt_mast-stlal.
+    CHECK sy-subrc NE 0. "如果已经存在不需要再展BOM
+    REFRESH:lt_stpo.
+*    IF sy-subrc = 0.
+*      CONTINUE.
+*    ENDIF.
+
+    PERFORM frm_explo_bom TABLES lt_stpo lt_matcat USING lt_mast-matnr lt_mast-werks 'X'  lt_mast-stlal CHANGING ls_cstmat.
+    APPEND LINES OF lt_stpo TO lt_stpo_total.
+*    APPEND LINES OF lt_matcat TO lt_matcat_total.
+  ENDLOOP.
+
+
+  LOOP AT lt_stpo_total .
+    IF lt_stpo_total-idnrk = ''.
+      DELETE lt_stpo_total .
+      CONTINUE.
+    ENDIF.
+    IF lt_stpo_total-werks = ''.
+      DELETE lt_stpo_total .
+      CONTINUE.
+    ENDIF.
+*    MOVE-CORRESPONDING lt_stpo_total  TO gt_plm1.
+    MOVE lt_stpo_total-idnrk TO gt_plm1-matnr.
+    MOVE lt_stpo_total-werks TO gt_plm1-werks.
+    APPEND gt_plm1.
+  ENDLOOP.
+  SORT gt_plm1 BY matnr.
+  DELETE ADJACENT DUPLICATES FROM gt_plm1 COMPARING matnr.
+
+  SELECT matnr labst INTO CORRESPONDING FIELDS OF TABLE lt_mard FROM mard
+    FOR ALL ENTRIES IN gt_plm1
+    WHERE matnr = gt_plm1-matnr.
+  DATA lv_labst LIKE mard-labst.
+  LOOP AT gt_plm1.
+    SELECT SINGLE maktx INTO gt_plm1-maktx FROM makt WHERE matnr = gt_plm1-matnr AND spras = 1.
+    LOOP AT lt_mard WHERE matnr = gt_plm1-matnr.
+      lv_labst = lv_labst + lt_mard-labst.
+    ENDLOOP.
+    gt_plm1-zlabst = lv_labst.
+**********************************************************    专用物料
+    SELECT SINGLE * FROM mast WHERE matnr = gt_plm1-matnr AND werks = gt_plm1-werks.
+    IF sy-subrc = 0.
+      SUBMIT zrcs15001 WITH pm_idnrk = gt_plm1-matnr
+                   WITH pm_werks = gt_plm1-werks
+                   WITH pm_stlan = '1'
+                   WITH pm_dirkt = 'X'
+                   WITH pm_mehrs = 'X'
+                   WITH pm_mattp = 'X' AND RETURN.
+      IMPORT alv_ltb = alv_ltb FROM MEMORY ID 'ZRCS15001'.
+      FREE MEMORY ID 'ZRCS15001'.
+    ENDIF.
+    REFRESH lt_mara.
+
+    IF alv_ltb[] IS NOT INITIAL.
+      SELECT matnr mtart
+        INTO CORRESPONDING FIELDS OF TABLE lt_mara
+        FROM mara
+        FOR ALL ENTRIES IN alv_ltb
+        WHERE matnr = alv_ltb-matnr
+          AND mtart = 'Z003'.
+      IF lines( lt_mara ) > 1.
+        gt_plm1-zflag = ''.
+      ELSEIF lines( lt_mara ) = 1.
+        gt_plm1-zflag  = 'X'.
+        gt_plm1-clr = 'C610'.
+      ENDIF.
+    ENDIF.
+***********************************************************
+    MODIFY gt_plm1.
+    CLEAR lv_labst.
+  ENDLOOP.
+
+**********************************************************  在途采购订单 在途生产订单
+  DATA:BEGIN OF lt_s012 OCCURS 0,
+         wemng LIKE s012-wemng,
+         menge LIKE s012-menge,
+         matnr LIKE s012-matnr,
+         werks LIKE s012-werks,
+       END OF lt_s012.
+  DATA:BEGIN OF lt_afpo OCCURS 0,
+         wemng LIKE s012-wemng,
+         psmng LIKE afpo-psmng,
+         matnr LIKE s012-matnr,
+         werks LIKE s012-werks,
+       END OF lt_afpo.
+
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_s012 FROM s012
+  FOR ALL ENTRIES IN gt_plm1
+  WHERE matnr = gt_plm1-matnr AND werks = gt_plm1-werks .
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_afpo FROM afpo
+    FOR ALL ENTRIES IN gt_plm1
+    WHERE matnr = gt_plm1-matnr AND dwerk = gt_plm1-werks .
+  LOOP AT gt_plm1.
+
+    LOOP AT lt_s012 WHERE matnr = gt_plm1-matnr AND werks = gt_plm1-werks .
+      gt_plm1-zmenge = gt_plm1-zmenge + lt_s012-menge - lt_s012-wemng.
+    ENDLOOP.
+    LOOP AT lt_afpo WHERE matnr = gt_plm1-matnr AND werks = gt_plm1-werks .
+      gt_plm1-zpsmng = gt_plm1-zpsmng + lt_afpo-psmng - lt_afpo-wemng.
+    ENDLOOP.
+    MODIFY gt_plm1.
+  ENDLOOP.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GETFACT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_getfact .
+  mcr_build_fieldcat:
+    'WERKS' '工厂' 'WERKS' 'MARD' ,
+    'MATNR' '物料编码' 'MATNR' 'MARD' ,
+    'MAKTX' '物料描述' 'MAKTX' 'MAKT' ,
+    'ZLABST' '物料库存数' 'LABST' 'MARD' ,
+
+    'ZMENGE' '在途采购订单' 'LABST' 'MARD' ,
+    'ZPSMNG' '在途生产订单' 'LABST' 'MARD'  ,
+  'ZFLAG' '是否专用物料' '' ''.
+*        wemng  LIKE afpo-wemng,
+*        psmng  LIKE afpo-psmng,
+*         LIKE afpo-wemng,
+*        menge  LIKE s012-menge,
+*         LIKE  s012-menge,
+
+  gs_layout-colwidth_optimize = 'X'.
+  gs_layout-box_fieldname = 'CHK'.
+  gs_layout-box_tabname = 'gt_plm'.
+  gs_layout-info_fieldname = 'CLR'.
+  gs_layout-zebra = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SHOW
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_show .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'SET_PF_STATUS'
+      i_callback_user_command  = 'ALV_USER_COMMAND'
+      is_layout                = gs_layout
+      it_fieldcat              = gt_fcat[]
+    TABLES
+      t_outtab                 = gt_plm1[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+           WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+ENDFORM.
+
+FORM set_pf_status USING rt_extab TYPE slis_t_extab.
+
+  DATA: wa_extab TYPE slis_extab.
+
+  SET PF-STATUS '0100' EXCLUDING rt_extab.
+
+ENDFORM.                    "set_pf_status1
+
+FORM alv_user_command USING r_ucomm LIKE sy-ucomm  rs_selfield TYPE slis_selfield.
+*   获取ALV中的鼠标勾选记录
+  DATA: l_grid TYPE REF TO cl_gui_alv_grid.
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = l_grid.
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  r_ucomm = sy-ucomm.
+*  save_ok =  r_ucomm .
+  CASE r_ucomm.
+      "打印
+    WHEN 'ZDOWNLOAD'.
+*      PERFORM print_report.
+  ENDCASE.
+
+
+ENDFORM.
+
+FORM frm_explo_bom  TABLES   lt_stpo STRUCTURE stpox
+                             lt_matcat STRUCTURE cscmat
+                     USING    u_matnr LIKE mara-matnr
+                              u_werks LIKE marc-werks
+                              u_mehrs TYPE c
+                              u_stlal LIKE mast-stlal
+                    CHANGING ls_cstmat LIKE cstmat.
+  REFRESH:lt_stpo,lt_matcat.
+  CLEAR:ls_cstmat.
+  CALL FUNCTION 'CS_BOM_EXPL_MAT_V2'
+    EXPORTING
+      capid                 = 'PP01'
+      datuv                 = sy-datum
+      mehrs                 = u_mehrs
+      mtnrv                 = u_matnr
+      werks                 = u_werks
+      stlal                 = u_stlal
+    IMPORTING
+      topmat                = ls_cstmat
+    TABLES
+      matcat                = lt_matcat
+      stb                   = lt_stpo
+    EXCEPTIONS
+      alt_not_found         = 1
+      call_invalid          = 2
+      material_not_found    = 3
+      missing_authorization = 4
+      no_bom_found          = 5
+      no_plant_data         = 6
+      no_suitable_bom_found = 7
+      conversion_error      = 8
+      OTHERS                = 9.
+ENDFORM.

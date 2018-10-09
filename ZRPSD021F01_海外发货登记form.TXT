@@ -1,0 +1,397 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPSD021F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:BEGIN OF lt_data OCCURS 0.
+      INCLUDE STRUCTURE ztsd003zxdb.
+  DATA:vbeln LIKE ztsd003jhdy-vbeln,
+       posnr LIKE ztsd003jhdy-posnr,
+       vkorg LIKE knvv-vkorg,
+       kvgr1 LIKE knvv-kvgr1,
+       END OF lt_data.
+  FIELD-SYMBOLS:<fs_data> LIKE LINE OF lt_data.
+
+  DATA:BEGIN OF lt_lips OCCURS 0,
+         vbeln LIKE lips-vbeln,
+         posnr LIKE lips-posnr,
+         vgbel LIKE lips-vgbel,
+         vgpos LIKE lips-vgpos,
+         kzwi1 LIKE vbap-kzwi1,
+         kunnr LIKE vbak-kunnr,
+         waerk LIKE vbak-waerk,
+         vkorg LIKE vbak-vkorg,
+         vtweg LIKE vbak-vtweg,
+       END OF lt_lips.
+
+  DATA:lt_lips_temp LIKE lt_lips OCCURS 0 WITH HEADER LINE.
+
+  DATA:BEGIN OF lt_konv OCCURS 0,
+         vbeln LIKE vbak-vbeln,
+         knumv LIKE vbak-knumv,
+         waerk LIKE vbak-waerk,
+         kschl LIKE konv-kschl,
+         kbetr LIKE konv-kbetr,
+       END OF lt_konv.
+
+  DATA: BEGIN OF lt_vbak OCCURS 0,
+          vbeln LIKE vbak-vbeln,
+          waerk LIKE vbak-waerk,
+        END OF lt_vbak.
+
+  DATA:BEGIN OF lt_kna1 OCCURS 0,
+         kunnr LIKE kna1-kunnr,
+         name1 LIKE kna1-name1,
+         sortl LIKE kna1-sortl,
+         land1 LIKE kna1-land1,
+       END OF lt_kna1.
+
+  DATA:lt_t005t LIKE t005t OCCURS 0 WITH HEADER LINE,
+       lt_tvv1t LIKE tvv1t OCCURS 0 WITH HEADER LINE.
+
+  DATA:lv_vbeln LIKE likp-vbeln,
+       lv_str   TYPE string.
+
+***抓取满足条件的装箱单数据
+  SELECT  a~kunag
+          a~zzxno
+          a~erdat
+          a~zsno
+          a~zeno
+          a~brgew
+          a~zsjyf
+          a~vsart
+          a~zkdzh
+          a~zysdh
+          a~zfhrq
+          a~zqsrq
+          a~waers
+          a~zwcbs
+          a~zbgdh
+          a~zbz
+          b~vbeln
+          b~posnr
+          d~vkorg
+          d~kvgr1
+    INTO CORRESPONDING FIELDS OF TABLE lt_data
+    FROM ztsd003zxdb AS a
+    INNER JOIN ztsd003jhdy AS b
+    ON a~zzxno = b~zzxno
+    INNER JOIN likp AS c
+    ON b~vbeln = c~vbeln
+    INNER JOIN knvv AS d
+    ON c~vkorg = d~vkorg
+    AND c~kunag = d~kunnr
+    WHERE a~kunag IN s_kunnr
+      AND d~kvgr1 IN s_kvgr1
+      AND a~zzxno IN s_zzxno
+      AND a~zfhrq IN s_zfhrq
+      AND a~erdat IN s_erdat.
+
+  CHECK lt_data[] IS NOT INITIAL.
+
+***获取销售订单信息
+  SELECT a~vbeln a~posnr a~vgbel a~vgpos b~kzwi1 c~kunnr c~waerk c~vkorg c~vtweg
+    INTO CORRESPONDING FIELDS OF TABLE lt_lips
+    FROM lips AS a
+    INNER JOIN vbap AS b
+    ON a~vgbel = b~vbeln
+    AND a~vgpos = b~posnr
+    INNER JOIN vbak AS c
+    ON a~vgbel = c~vbeln
+    FOR ALL ENTRIES IN lt_data
+    WHERE a~vbeln = lt_data-vbeln
+      AND a~posnr = lt_data-posnr.
+
+***获取运费信息
+  IF lt_lips[] IS NOT INITIAL.
+    SELECT a~vbeln
+           a~knumv
+           a~waerk
+           b~kschl
+           b~kbetr
+      INTO CORRESPONDING FIELDS OF TABLE lt_konv
+      FROM vbak AS a
+      INNER JOIN konv AS b
+      ON a~knumv = b~knumv
+      FOR ALL ENTRIES IN lt_lips
+      WHERE a~vbeln = lt_lips-vgbel
+        AND b~kschl = 'ZTR1'
+        AND b~kposn = '000000'.
+    SELECT vbeln waerk
+      INTO CORRESPONDING FIELDS OF TABLE lt_vbak
+      FROM vbak
+      FOR ALL ENTRIES IN lt_lips
+      WHERE vbeln = lt_lips-vgbel.
+    SORT lt_vbak BY vbeln.
+  ENDIF.
+
+***获取客户主数据信息
+  SELECT kunnr name1 sortl land1
+    INTO CORRESPONDING FIELDS OF TABLE lt_kna1
+    FROM kna1
+    FOR ALL ENTRIES IN lt_data
+    WHERE kunnr = lt_data-kunag.
+***获取国家名称
+  SELECT * INTO TABLE lt_t005t FROM t005t WHERE spras = sy-langu.
+***获取客户组描述
+  SELECT * INTO TABLE lt_tvv1t FROM tvv1t WHERE spras = sy-langu.
+
+  SORT lt_data BY kunag zzxno.
+  SORT lt_kna1 BY kunnr.
+  SORT lt_t005t BY land1.
+  SORT lt_lips BY vbeln posnr.
+  SORT lt_tvv1t BY kvgr1.
+
+  IF r1 = 'X'.  "装箱单
+    LOOP AT lt_data ASSIGNING <fs_data>.
+      AT NEW zzxno.
+        REFRESH:lt_lips_temp.
+        CLEAR:gs_alv_zxd.
+        MOVE-CORRESPONDING <fs_data> TO gs_alv_zxd.
+        gs_alv_zxd-kunnr = <fs_data>-kunag.
+        READ TABLE lt_kna1 WITH KEY kunnr = <fs_data>-kunag BINARY SEARCH.
+        IF sy-subrc = 0.
+          gs_alv_zxd-name1 = lt_kna1-name1.
+          gs_alv_zxd-sortl = lt_kna1-sortl.
+          gs_alv_zxd-land1 = lt_kna1-land1.
+          READ TABLE lt_t005t WITH KEY land1 = lt_kna1-land1 BINARY SEARCH.
+          IF sy-subrc = 0.
+            gs_alv_zxd-landx = lt_t005t-landx.
+          ENDIF.
+        ENDIF.
+        READ TABLE lt_tvv1t WITH KEY kvgr1 = <fs_data>-kvgr1 BINARY SEARCH.
+        IF sy-subrc = 0.
+          gs_alv_zxd-bezei = lt_tvv1t-bezei.
+        ENDIF.
+        "运输方式描述
+        SELECT SINGLE bezei INTO gs_alv_zxd-vsart_txt FROM t173t WHERE spras = sy-langu AND vsart = <fs_data>-vsart.
+      ENDAT.
+
+      READ TABLE lt_lips WITH KEY vbeln = <fs_data>-vbeln posnr = <fs_data>-posnr BINARY SEARCH.
+      IF sy-subrc = 0.
+        MOVE-CORRESPONDING lt_lips TO lt_lips_temp.
+        APPEND lt_lips_temp.
+        CLEAR lt_lips_temp.
+      ENDIF.
+
+      CLEAR:lv_vbeln.
+      CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+        EXPORTING
+          input  = <fs_data>-vbeln
+        IMPORTING
+          output = lv_vbeln.
+
+      IF gs_alv_zxd-zdn NS lv_vbeln.
+        IF gs_alv_zxd-zdn IS INITIAL.
+          gs_alv_zxd-zdn = lv_vbeln.
+        ELSE.
+          CONCATENATE gs_alv_zxd-zdn lv_vbeln INTO gs_alv_zxd-zdn SEPARATED BY ','.
+        ENDIF.
+      ENDIF.
+
+      AT END OF zzxno.
+        SORT lt_lips_temp BY vgbel.
+        DELETE ADJACENT DUPLICATES FROM lt_lips_temp COMPARING vgbel.
+        LOOP AT lt_lips_temp.
+          CLEAR:lv_str,lv_vbeln.
+          READ TABLE lt_konv WITH KEY vbeln = lt_lips_temp-vgbel.
+          IF sy-subrc = 0 AND lt_konv-kbetr IS NOT INITIAL.
+            lv_str = lt_konv-kbetr.
+            gs_alv_zxd-zysyf = gs_alv_zxd-zysyf + lt_konv-kbetr.
+          ELSE.
+            lv_str = '0'.
+          ENDIF.
+          CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+            EXPORTING
+              input  = lt_lips_temp-vgbel
+            IMPORTING
+              output = lv_vbeln.
+          CONCATENATE lv_vbeln '/' lv_str INTO lv_str.
+          CONDENSE lv_str.
+          IF gs_alv_zxd-zso IS INITIAL.
+            gs_alv_zxd-zso = lv_str.
+          ELSE.
+            CONCATENATE gs_alv_zxd-zso lv_str INTO gs_alv_zxd-zso SEPARATED BY ','.
+          ENDIF.
+*       取订单币别
+          READ TABLE lt_vbak WITH KEY vbeln = lt_lips_temp-vgbel.
+          IF sy-subrc = 0 AND  gs_alv_zxd-waerk IS INITIAL .
+            gs_alv_zxd-waerk = lt_vbak-waerk.
+          ENDIF.
+        ENDLOOP.
+        APPEND gs_alv_zxd TO gt_alv_zxd.
+        CLEAR gs_alv_zxd.
+      ENDAT.
+    ENDLOOP.
+  ELSEIF r2 = 'X'.
+    APPEND LINES OF lt_lips TO lt_lips_temp.
+    SORT lt_lips_temp BY vgbel vgpos.
+    DELETE ADJACENT DUPLICATES FROM lt_lips_temp COMPARING vgbel.
+
+    LOOP AT lt_lips_temp.
+      gs_alv_so-kunnr = lt_lips_temp-kunnr.
+      READ TABLE lt_kna1 WITH KEY kunnr = lt_lips_temp-kunnr BINARY SEARCH.
+      IF sy-subrc = 0.
+        gs_alv_so-name1 = lt_kna1-name1.
+        gs_alv_so-sortl = lt_kna1-sortl.
+      ENDIF.
+      gs_alv_so-vbeln = lt_lips_temp-vgbel.
+***预收运费
+      READ TABLE lt_konv WITH KEY vbeln = lt_lips_temp-vgbel.
+      IF sy-subrc = 0.
+        gs_alv_so-zysyf = lt_konv-kbetr.
+      ENDIF.
+***订单金额
+      LOOP AT lt_lips WHERE vgbel = lt_lips_temp-vgbel.
+        gs_alv_so-kzwi1 = gs_alv_so-kzwi1 + lt_lips-kzwi1.
+      ENDLOOP.
+***币别
+      gs_alv_so-waerk = lt_lips_temp-waerk.
+***业务员代码
+      SELECT SINGLE kvgr1 INTO gs_alv_so-kvgr1 FROM knvv WHERE kunnr = lt_lips_temp-kunnr AND vkorg = lt_lips_temp-vkorg AND vtweg = lt_lips_temp-vtweg.
+      IF sy-subrc = 0.
+        READ TABLE lt_tvv1t WITH KEY kvgr1 = gs_alv_so-kvgr1 BINARY SEARCH.
+        IF sy-subrc = 0.
+          gs_alv_so-bezei = lt_tvv1t-bezei.
+        ENDIF.
+      ENDIF.
+      APPEND gs_alv_so TO gt_alv_so.
+      CLEAR gs_alv_so.
+    ENDLOOP.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  IF r1 = 'X'.
+    mcr_build_fieldcat:'KUNNR'   '客户'         'KUNNR'     'KNA1'           ''     '',
+                       'NAME1'   '客户名称'     'NAME1'     'KNA1'           ''     '',
+                       'SORTL'   '客户简称'     'SORTL'     'KNA1'           ''     '',
+                       'ZZXNO'   '装箱单号'     'ZZXNO'     'ZTSD003ZXDB'     ''     '',
+                       'BRGEW'   '毛重'         'BRGEW'     'ZTSD003ZXDB'     ''     '',
+                       'ZSNO'    '开始箱号'     'ZSNO'      'ZTSD003ZXDB'     ''     '',
+                       'ZENO'    '结束箱号'     'ZENO'      'ZTSD003ZXDB'     ''     '',
+                       'ZFHRQ'   '发货日期'     'ZFHRQ'     'ZTSD003ZXDB'     ''     '',
+                       'ZQSRQ'   '签收日期'     'ZQSRQ'     'ZTSD003ZXDB'     ''     '',
+                       'ZSJYF'   '实际运费'     'ZSJYF'     'ZTSD003ZXDB'     ''     '',
+                       'WAERS'   '运费币别'     'WAERS'     'ZTSD003ZXDB'     ''     '',
+                       'VSART_TXT' '运输方式'   'BEZEI'     'T173T'           ''     '',
+                       'ZYSDH'   '运输单号'     'ZYSDH'     'ZTSD003ZXDB'     ''     '',
+                       'ZBGDH'   '报关单号'     'ZBGDH'     'ZTSD003ZXDB'     ''     '',
+                       'ZBZ'     '备注'         'ZBZ'       'ZTSD003ZXDB'     ''     '',
+                       'ZDN'     '交货单'       ''          ''                'C'     '5000',
+                       'ZSO'     '销售订单'     ''          ''                'C'     '5000',
+                       'ZYSYF'   '预收运费'     ''          ''                'P'     '15',
+                       'LANDX'   '国家描述'     'LANDX'     'T005T'           ''      '',
+                       'WAERK'   '币别'     'LANDX'     'T005T'           ''      '',
+                       'BEZEI'   '业务员'       'BEZEI'     'TVV1T'           ''      ''.
+  ENDIF.
+
+  IF r2 = 'X'.
+    mcr_build_fieldcat:'KUNNR'   '客户'         'KUNNR'     'KNA1'           ''     '',
+                       'NAME1'   '客户名称'     'NAME1'     'KNA1'           ''     '',
+                       'SORTL'   '客户简称'     'SORTL'     'KNA1'           ''     '',
+                       'VBELN'   '销售订单'     'VBELN'     'VBAK'           ''     '',
+                       'ZYSYF'   '预收运费'     ''          ''               'P'    '15',
+                       'KZWI1'   '订单金额'     ''          ''               'P'    '15',
+                       'WAERK'   '币别'         'WAERK'     'VBAK'           ''     '',
+                       'BEZEI'   '业务员'       'BEZEI'     'TVV1T'         ''      ''.
+  ENDIF.
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  FIELD-SYMBOLS:<fs_tab> TYPE STANDARD TABLE.
+  IF r1 = 'X'.
+    ASSIGN gt_alv_zxd[] TO <fs_tab>.
+  ELSE.
+    ASSIGN gt_alv_so[] TO <fs_tab>.
+  ENDIF.
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK  = ' '
+*     I_BYPASSING_BUFFER =
+*     I_BUFFER_ACTIVE    =
+      i_callback_program = sy-repid
+*     I_CALLBACK_PF_STATUS_SET          = ' '
+*     I_CALLBACK_USER_COMMAND           = ' '
+*     I_CALLBACK_TOP_OF_PAGE            = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME   =
+*     I_BACKGROUND_ID    = ' '
+*     I_GRID_TITLE       =
+*     I_GRID_SETTINGS    =
+      is_layout_lvc      = gs_layout
+      it_fieldcat_lvc    = gt_fcat[]
+*     IT_EXCLUDING       =
+*     IT_SPECIAL_GROUPS_LVC             =
+*     IT_SORT_LVC        =
+*     IT_FILTER_LVC      =
+*     IT_HYPERLINK       =
+*     IS_SEL_HIDE        =
+      i_default          = 'X'
+      i_save             = 'A'
+*     IS_VARIANT         =
+*     IT_EVENTS          =
+*     IT_EVENT_EXIT      =
+*     IS_PRINT_LVC       =
+*     IS_REPREP_ID_LVC   =
+*     I_SCREEN_START_COLUMN             = 0
+*     I_SCREEN_START_LINE               = 0
+*     I_SCREEN_END_COLUMN               = 0
+*     I_SCREEN_END_LINE  = 0
+*     I_HTML_HEIGHT_TOP  =
+*     I_HTML_HEIGHT_END  =
+*     IT_ALV_GRAPHICS    =
+*     IT_EXCEPT_QINFO_LVC               =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER           =
+*     ES_EXIT_CAUSED_BY_USER            =
+    TABLES
+      t_outtab           = <fs_tab>
+    EXCEPTIONS
+      program_error      = 1
+      OTHERS             = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_EXPORT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_export_data .
+  FREE MEMORY ID 'ZRPSD021'.
+  EXPORT gt_alv_zxd TO MEMORY ID 'ZRPSD021'.
+ENDFORM.

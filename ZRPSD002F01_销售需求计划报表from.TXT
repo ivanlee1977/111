@@ -1,0 +1,1761 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPSD002F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_MODIFY_SCREEN
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_modify_screen .
+  IF r2 = 'X'.
+    LOOP AT SCREEN.
+      IF screen-group1 = 'M2'.
+        screen-active = 0.
+        screen-invisible = 1.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+  ELSEIF r3 = 'X'.
+    LOOP AT SCREEN.
+      IF screen-group1 = 'M2' OR screen-group1 = 'M1' OR screen-group1 = 'M3' OR screen-group1 = 'M4'.
+        screen-active = 0.
+        screen-invisible = 1.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+  ELSEIF r1 = 'X'.
+    LOOP AT SCREEN.
+      IF screen-group1 = 'M4'.
+        screen-active = 0.
+        screen-invisible = 1.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_data .
+  CHECK sy-ucomm = 'ONLI'.
+  IF r2 = 'X'.
+    IF s_bzirk[] IS INITIAL.
+      MESSAGE '请输入大区' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+
+  CASE 'X'.
+    WHEN r1.
+      AUTHORITY-CHECK OBJECT 'ZXSTYPE'
+               ID 'ZXSTYPE' FIELD '01'.
+      IF sy-subrc <> 0.
+        MESSAGE '你没有查询客户数据的权限' TYPE 'E'.
+      ENDIF.
+    WHEN r2.
+      AUTHORITY-CHECK OBJECT 'ZXSTYPE'
+               ID 'ZXSTYPE' FIELD '02'.
+      IF sy-subrc <> 0.
+        MESSAGE '你没有查询销售大区数据的权限' TYPE 'E'.
+      ENDIF.
+    WHEN r3.
+      AUTHORITY-CHECK OBJECT 'ZXSTYPE'
+       ID 'ZXSTYPE' FIELD '03'.
+      IF sy-subrc <> 0.
+        MESSAGE '你没有查询公司数据的权限' TYPE 'E'.
+      ENDIF.
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA1
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data1 .
+  DATA:BEGIN OF lt_knvv OCCURS 0,
+         kunnr LIKE knvv-kunnr,
+         vkorg LIKE knvv-vkorg,
+         vtweg LIKE knvv-vtweg,
+         spart LIKE knvv-spart,
+         bzirk LIKE knvv-bzirk,
+         kvgr1 LIKE knvv-kvgr1,
+       END OF lt_knvv.
+  DATA:lt_ztsd001a      LIKE ztsd001a OCCURS 0 WITH HEADER LINE,
+       lt_ztsd001a_last LIKE ztsd001a OCCURS 0 WITH HEADER LINE.
+  DATA:lt_tvv1t LIKE tvv1t OCCURS 0 WITH HEADER LINE.
+  DATA:BEGIN OF lt_makt OCCURS 0,
+         matnr LIKE mara-matnr,
+         maktx LIKE makt-maktx,
+       END OF lt_makt.
+  DATA:BEGIN OF lt_kna1 OCCURS 0,
+         kunnr LIKE kna1-kunnr,
+         sortl LIKE kna1-sortl,      "客户简称
+       END OF lt_kna1.
+  DATA:BEGIN OF lt_dn_data OCCURS 0,
+         vbeln     LIKE likp-vbeln,
+         lfart     LIKE likp-lfart,
+         vkorg     LIKE likp-vkorg,
+         kunnr     LIKE likp-kunnr,
+         wadat_ist LIKE likp-wadat_ist,
+         posnr     LIKE lips-posnr,
+         matnr     LIKE lips-matnr,
+         lfimg     LIKE lips-lfimg,
+       END OF lt_dn_data.
+
+  DATA:lv_last_month LIKE ztsd001a-zmonth,
+       lv_year(4)    TYPE c,
+       lv_month(2)   TYPE n.
+  DATA:lv_date_from LIKE sy-datum,
+       lv_date_to   LIKE sy-datum.
+  DATA:lv_percent TYPE p DECIMALS 5.
+
+***抓取满足条件的销售区域数据
+  SELECT  kunnr
+          vkorg
+          vtweg
+          spart
+          bzirk
+          kvgr1
+    INTO CORRESPONDING FIELDS OF TABLE lt_knvv
+    FROM knvv
+    WHERE vkorg IN s_vkorg
+      AND bzirk IN s_bzirk
+      AND kvgr1 IN s_kvgr1
+      AND kvgr2 IN s_kvgr2
+      AND kunnr IN s_kunnr.
+
+  CHECK lt_knvv[] IS NOT INITIAL.
+***上个月月份
+  IF p_month+4(2) = '01'.
+    lv_year = p_month(4).
+    lv_year = lv_year - 1.
+    CONCATENATE lv_year '12' INTO lv_last_month.
+  ELSE.
+    lv_month = p_month+4(2) - 1.
+    lv_year = p_month(4).
+    CONCATENATE  lv_year  lv_month INTO lv_last_month.
+  ENDIF.
+
+***抓取满足条件的销售计划需求数据
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE lt_ztsd001a
+    FROM ztsd001a
+    FOR ALL ENTRIES IN lt_knvv
+    WHERE zmonth IN (p_month,lv_last_month)
+      AND vkorg IN s_vkorg
+      AND kunnr = lt_knvv-kunnr
+      AND matnr IN s_matnr.
+
+***抓取物料描述
+  IF lt_ztsd001a[] IS NOT INITIAL.
+    SELECT matnr maktx
+      INTO CORRESPONDING FIELDS OF TABLE lt_makt
+      FROM makt
+      FOR ALL ENTRIES IN lt_ztsd001a
+      WHERE matnr = lt_ztsd001a-matnr
+        AND spras = sy-langu.
+***客户简称
+    SELECT kunnr sortl
+      INTO CORRESPONDING FIELDS OF TABLE lt_kna1
+      FROM kna1
+      FOR ALL ENTRIES IN lt_ztsd001a
+      WHERE kunnr = lt_ztsd001a-kunnr.
+  ENDIF.
+***抓取交货数据
+  CONCATENATE p_month '01' INTO lv_date_from.
+
+  CALL FUNCTION 'FKK_LAST_DAY_OF_MONTH'
+    EXPORTING
+      day_in            = lv_date_from
+    IMPORTING
+      last_day_of_month = lv_date_to
+    EXCEPTIONS
+      day_in_no_date    = 1
+      OTHERS            = 2.
+***获取当月实际发生数据
+  SELECT a~vbeln
+         a~lfart
+         a~kunag AS kunnr
+         a~vkorg
+         a~wadat_ist
+         b~posnr
+         b~matnr
+         b~lfimg
+    INTO CORRESPONDING FIELDS OF TABLE lt_dn_data
+    FROM likp AS a
+    INNER JOIN lips AS b
+    ON a~vbeln = b~vbeln
+    FOR ALL ENTRIES IN lt_knvv
+*    WHERE a~lfart IN ('ZLF1','ZLR1','ZLF3','ZLF4')
+
+      WHERE a~wadat_ist BETWEEN lv_date_from AND lv_date_to
+      AND a~vkorg IN s_vkorg
+      AND a~kunag = lt_knvv-kunnr
+      AND b~matnr IN s_matnr.
+
+***销售工程师名称
+  SELECT * INTO TABLE lt_tvv1t FROM tvv1t WHERE spras = sy-langu.
+
+  APPEND LINES OF lt_ztsd001a TO lt_ztsd001a_last.
+  DELETE lt_ztsd001a_last WHERE zmonth = p_month.
+  DELETE lt_ztsd001a WHERE zmonth = lv_last_month.
+
+  SORT lt_knvv BY kunnr vkorg.
+  SORT lt_tvv1t BY kvgr1.
+  SORT lt_kna1 BY kunnr.
+  SORT lt_makt BY matnr.
+
+  LOOP AT lt_ztsd001a.
+    MOVE-CORRESPONDING lt_ztsd001a TO gt_out_a.
+***销售工程师及名称
+    READ TABLE lt_knvv WITH KEY kunnr = lt_ztsd001a-kunnr vkorg = lt_ztsd001a-vkorg BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out_a-kvgr1 = lt_knvv-kvgr1.
+      READ TABLE lt_tvv1t WITH KEY kvgr1 = gt_out_a-kvgr1 BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_out_a-bezei = lt_tvv1t-bezei.
+      ENDIF.
+    ENDIF.
+***客户简称
+    READ TABLE lt_kna1 WITH KEY kunnr = lt_ztsd001a-kunnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out_a-sortl = lt_kna1-sortl.
+    ENDIF.
+***物料描述
+    READ TABLE lt_makt WITH KEY matnr = lt_ztsd001a-matnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out_a-maktx = lt_makt-maktx.
+    ENDIF.
+***上月计划
+    READ TABLE lt_ztsd001a_last WITH KEY vkorg = lt_ztsd001a-vkorg kunnr = lt_ztsd001a-kunnr matnr = lt_ztsd001a-matnr.
+    IF sy-subrc = 0.
+      gt_out_a-zsyjh = lt_ztsd001a_last-zbyjh_sw.
+      DELETE lt_ztsd001a_last INDEX sy-tabix.
+    ENDIF.
+***上月实际
+    LOOP AT lt_dn_data WHERE vkorg = lt_ztsd001a-vkorg AND kunnr = lt_ztsd001a-kunnr AND matnr = lt_ztsd001a-matnr.
+      CASE lt_dn_data-lfart.
+        WHEN 'ZLF1' OR 'ZLF3' OR 'ZLF4'.
+          gt_out_a-zsysj = gt_out_a-zsysj + lt_dn_data-lfimg.
+        WHEN 'ZLR1' OR 'ZLR2'OR  'ZLR3' OR 'ZLR4'.
+          gt_out_a-zsysj = gt_out_a-zsysj - lt_dn_data-lfimg.
+        WHEN OTHERS.
+      ENDCASE.
+      DELETE lt_dn_data.
+    ENDLOOP.
+***上月达成率
+    CLEAR:lv_percent.
+    IF gt_out_a-zsyjh NE 0.
+      lv_percent = gt_out_a-zsysj / gt_out_a-zsyjh * 100.
+    ENDIF.
+    CALL FUNCTION 'ROUND'
+      EXPORTING
+        decimals      = 1
+        input         = lv_percent
+        sign          = '-'
+      IMPORTING
+        output        = gt_out_a-zsydcl
+      EXCEPTIONS
+        input_invalid = 1
+        overflow      = 2
+        type_invalid  = 3
+        OTHERS        = 4.
+
+*    CONDENSE gt_out_a-zsydcl.      "add by leimt 20180322 去掉%
+*    CONCATENATE gt_out_a-zsydcl '%' INTO gt_out_a-zsydcl.
+*    CONDENSE gt_out_a-zsydcl NO-GAPS.
+    APPEND gt_out_a.
+    CLEAR gt_out_a.
+  ENDLOOP.
+
+  LOOP AT lt_ztsd001a_last.
+    gt_out_a-vkorg = lt_ztsd001a_last-vkorg. "销售组织
+    gt_out_a-kunnr = lt_ztsd001a_last-kunnr. "客户
+    gt_out_a-matnr = lt_ztsd001a_last-matnr.
+***销售工程师及名称
+    READ TABLE lt_knvv WITH KEY kunnr = lt_ztsd001a_last-kunnr vkorg = lt_ztsd001a_last-vkorg BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out_a-kvgr1 = lt_knvv-kvgr1.
+      READ TABLE lt_tvv1t WITH KEY kvgr1 = gt_out_a-kvgr1 BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_out_a-bezei = lt_tvv1t-bezei.
+      ENDIF.
+    ENDIF.
+***客户简称
+    READ TABLE lt_kna1 WITH KEY kunnr = lt_ztsd001a_last-kunnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out_a-sortl = lt_kna1-sortl.
+    ENDIF.
+***物料描述
+    READ TABLE lt_makt WITH KEY matnr = lt_ztsd001a_last-matnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out_a-maktx = lt_makt-maktx.
+    ENDIF.
+***上月计划
+    gt_out_a-zsyjh = lt_ztsd001a_last-zbyjh_sw.
+***上月实际
+    LOOP AT lt_dn_data WHERE vkorg = lt_ztsd001a_last-vkorg AND kunnr = lt_ztsd001a_last-kunnr AND matnr = lt_ztsd001a_last-matnr.
+      CASE lt_dn_data-lfart.
+        WHEN 'ZLF1' OR  'ZLF3' OR 'ZLF4'.
+          gt_out_a-zsysj = gt_out_a-zsysj + lt_dn_data-lfimg.
+        WHEN 'ZLR1' OR 'ZLR2'OR  'ZLR3' OR 'ZLR4'.
+          gt_out_a-zsysj = gt_out_a-zsysj - lt_dn_data-lfimg.
+        WHEN OTHERS.
+      ENDCASE.
+      DELETE lt_dn_data.
+    ENDLOOP.
+***上月达成率
+    CLEAR:lv_percent.
+    IF gt_out_a-zsyjh NE 0.
+      lv_percent = gt_out_a-zsysj / gt_out_a-zsyjh * 100.
+    ENDIF.
+    CALL FUNCTION 'ROUND'
+      EXPORTING
+        decimals      = 1
+        input         = lv_percent
+        sign          = '-'
+      IMPORTING
+        output        = gt_out_a-zsydcl
+      EXCEPTIONS
+        input_invalid = 1
+        overflow      = 2
+        type_invalid  = 3
+        OTHERS        = 4.
+*    CONDENSE gt_out_a-zsydcl.    "add by leimt 20180322 去掉%
+*    CONCATENATE gt_out_a-zsydcl '%' INTO gt_out_a-zsydcl.
+*    CONDENSE gt_out_a-zsydcl NO-GAPS.
+    APPEND gt_out_a.
+    CLEAR gt_out_a.
+  ENDLOOP.
+***只有本月发生额，其他都没有的也需要放入输出表中
+  DATA:BEGIN OF lt_dn_data_sum OCCURS 0,
+         vkorg LIKE likp-vkorg,
+         kunnr LIKE likp-kunnr,
+         matnr LIKE lips-matnr,
+         lfimg LIKE lips-lfimg,
+       END OF lt_dn_data_sum.
+  LOOP AT lt_dn_data.
+    IF lt_dn_data-lfart = 'ZLR1' OR lt_dn_data-lfart = 'ZLR2'OR lt_dn_data-lfart =  'ZLR3' OR lt_dn_data-lfart =  'ZLR4'.
+      lt_dn_data-lfimg = -1 * lt_dn_data-lfimg.
+    ENDIF.
+    MOVE-CORRESPONDING lt_dn_data TO lt_dn_data_sum.
+    COLLECT lt_dn_data_sum.
+    CLEAR lt_dn_data_sum.
+  ENDLOOP.
+  LOOP AT lt_dn_data_sum.
+    gt_out_a-vkorg = lt_dn_data_sum-vkorg. "销售组织
+    gt_out_a-kunnr = lt_dn_data_sum-kunnr. "客户
+    gt_out_a-matnr = lt_dn_data_sum-matnr.
+***销售工程师及名称
+    READ TABLE lt_knvv WITH KEY kunnr = lt_dn_data_sum-kunnr vkorg = lt_dn_data_sum-vkorg BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out_a-kvgr1 = lt_knvv-kvgr1.
+      READ TABLE lt_tvv1t WITH KEY kvgr1 = gt_out_a-kvgr1 BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_out_a-bezei = lt_tvv1t-bezei.
+      ENDIF.
+    ENDIF.
+***客户简称
+    SELECT SINGLE sortl INTO gt_out_a-sortl FROM kna1 WHERE kunnr = gt_out_a-kunnr.
+***物料描述
+    SELECT SINGLE maktx INTO gt_out_a-maktx FROM makt WHERE matnr = gt_out_a-matnr AND spras = sy-langu.
+***上月实际
+    gt_out_a-zsysj = lt_dn_data_sum-lfimg.
+    APPEND gt_out_a.
+    CLEAR gt_out_a.
+  ENDLOOP.
+
+***add by 201710.13 增加物料组，产品组取数
+  DATA:BEGIN OF lt_mara OCCURS 0,
+         matnr LIKE mara-matnr,
+         spart LIKE mara-spart,     "产品组
+         matkl LIKE mara-matkl,     "物料组
+       END OF lt_mara.
+  DATA: lt_tspat LIKE tspat OCCURS 0 WITH HEADER LINE,
+        lt_t023t LIKE t023t OCCURS 0 WITH HEADER LINE.
+  IF gt_out_a[] IS NOT INITIAL.
+    SELECT matnr
+           spart
+           matkl
+      INTO CORRESPONDING FIELDS OF TABLE lt_mara
+      FROM mara
+       FOR ALL ENTRIES IN gt_out_a
+     WHERE matnr = gt_out_a-matnr.
+  ENDIF.
+  SELECT * INTO TABLE lt_tspat FROM tspat WHERE spras = sy-langu.
+  SELECT * INTO TABLE lt_t023t FROM t023t WHERE spras = sy-langu.
+
+  SORT lt_mara BY matnr.
+  SORT lt_tspat BY spart.
+  SORT lt_t023t BY matkl.
+
+  LOOP AT gt_out_a.
+    AUTHORITY-CHECK OBJECT 'V_VBAK_VKO'
+             ID 'VKORG' FIELD gt_out_a-vkorg
+             ID 'VTWEG' DUMMY
+             ID 'SPART' DUMMY
+             ID 'ACTVT' FIELD '03'.
+    IF sy-subrc <> 0.
+      DELETE gt_out_a.
+      CONTINUE.
+    ENDIF.
+    AUTHORITY-CHECK OBJECT 'Z_KVGR1'
+             ID 'KVGR1' FIELD gt_out_a-kvgr1.
+    IF sy-subrc <> 0.
+      DELETE gt_out_a.
+      CONTINUE.
+    ENDIF.
+
+    READ TABLE lt_mara WITH KEY matnr = gt_out_a-matnr BINARY SEARCH.
+    IF sy-subrc = 0 .
+***产品组 & 描述
+      gt_out_a-spart = lt_mara-spart.
+      READ TABLE lt_tspat WITH KEY spart = gt_out_a-spart BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_out_a-spart_txt = lt_tspat-vtext.
+      ENDIF.
+***物料组 & 描述
+      gt_out_a-matkl = lt_mara-matkl.
+      READ TABLE lt_t023t WITH KEY matkl = gt_out_a-matkl BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_out_a-matkl_txt = lt_t023t-wgbez.
+      ENDIF.
+    ENDIF.
+    MODIFY gt_out_a.
+  ENDLOOP.
+  PERFORM frm_remonth.
+  LOOP AT gt_out_a.
+    READ TABLE gt_dn_data_sum WITH  KEY vkorg = gt_out_a-vkorg kunnr = gt_out_a-kunnr matnr = gt_out_a-matnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out_a-zsysj1 = gt_dn_data_sum-lfimg1.
+      gt_out_a-zsysj2 = gt_dn_data_sum-lfimg2.
+      gt_out_a-zsysj3 = gt_dn_data_sum-lfimg3.
+      MODIFY gt_out_a.
+    ENDIF.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA2
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data2 .
+  DATA:BEGIN OF lt_knvv OCCURS 0,
+         kunnr LIKE knvv-kunnr,
+         vkorg LIKE knvv-vkorg,
+         vtweg LIKE knvv-vtweg,
+         spart LIKE knvv-spart,
+         bzirk LIKE knvv-bzirk,
+         kvgr1 LIKE knvv-kvgr1,
+       END OF lt_knvv.
+  DATA:lt_ztsd001b      LIKE ztsd001b OCCURS 0 WITH HEADER LINE,
+       lt_ztsd001b_last LIKE ztsd001b OCCURS 0 WITH HEADER LINE,
+       lt_ztsd001a      LIKE ztsd001a OCCURS 0 WITH HEADER LINE,
+       lt_ztsd001a_sum  LIKE ztsd001b OCCURS 0 WITH HEADER LINE.
+
+  DATA:BEGIN OF lt_dq_detail OCCURS 0,
+         vkorg LIKE knvv-vkorg,
+         bzirk LIKE knvv-bzirk,
+         matnr LIKE mara-matnr,
+         kunnr LIKE knvv-kunnr,
+         menge TYPE p DECIMALS 2,
+       END OF lt_dq_detail.
+
+  DATA:BEGIN OF lt_dn_data OCCURS 0,
+         vbeln     LIKE likp-vbeln,
+         lfart     LIKE likp-lfart,
+         vkorg     LIKE likp-vkorg,
+         kunnr     LIKE likp-kunnr,
+         wadat_ist LIKE likp-wadat_ist,
+         posnr     LIKE lips-posnr,
+         matnr     LIKE lips-matnr,
+         lfimg     LIKE lips-lfimg,
+       END OF lt_dn_data.
+
+  DATA:BEGIN OF lt_dn_data_sum OCCURS 0,
+         vkorg LIKE likp-vkorg,
+         bzirk LIKE knvv-bzirk,
+         matnr LIKE lips-matnr,
+         lfimg LIKE lips-lfimg,
+       END OF lt_dn_data_sum.
+
+  DATA:lv_last_month LIKE ztsd001a-zmonth,
+       lv_year(4)    TYPE c,
+       lv_month(2)   TYPE n.
+  DATA:lv_date_from LIKE sy-datum,
+       lv_date_to   LIKE sy-datum.
+  DATA:lv_percent TYPE p DECIMALS 3.
+  DATA:lv_sortl LIKE kna1-sortl.
+
+  DATA:lt_t171t LIKE t171t OCCURS 0 WITH HEADER LINE.
+***抓取满足条件的销售区域数据
+  SELECT  kunnr
+          vkorg
+          vtweg
+          spart
+          bzirk
+          kvgr1
+    INTO CORRESPONDING FIELDS OF TABLE lt_knvv
+    FROM knvv
+    WHERE vkorg IN s_vkorg
+      AND bzirk IN s_bzirk.
+
+  CHECK lt_knvv[] IS NOT INITIAL.
+***上个月
+  IF p_month+4(2) = '01'.
+    lv_year = p_month(4).
+    lv_year = lv_year - 1.
+    CONCATENATE lv_year '12' INTO lv_last_month.
+  ELSE.
+    lv_month = p_month+4(2) - 1.
+    lv_year = p_month(4).
+    CONCATENATE  lv_year  lv_month INTO lv_last_month.
+  ENDIF.
+***抓取导入的大区数据
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE lt_ztsd001b
+    FROM ztsd001b
+    WHERE zmonth IN (p_month,lv_last_month)
+      AND vkorg IN s_vkorg
+      AND bzirk IN s_bzirk
+      AND matnr IN s_matnr.
+
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE lt_ztsd001a
+    FROM ztsd001a
+    FOR ALL ENTRIES IN lt_knvv
+    WHERE zmonth IN (p_month,lv_last_month)
+      AND vkorg IN s_vkorg
+      AND kunnr = lt_knvv-kunnr
+      AND matnr IN s_matnr.
+  LOOP AT lt_ztsd001a.
+    lt_ztsd001a_sum-zmonth = lt_ztsd001a-zmonth.
+    lt_ztsd001a_sum-vkorg = lt_ztsd001a-vkorg.
+    lt_ztsd001a_sum-matnr = lt_ztsd001a-matnr.
+    READ TABLE lt_knvv WITH  KEY vkorg = lt_ztsd001a-vkorg kunnr = lt_ztsd001a-kunnr.
+    IF sy-subrc = 0.
+      lt_ztsd001a_sum-bzirk = lt_knvv-bzirk.
+    ENDIF.
+    lt_ztsd001a_sum-zbyjh = lt_ztsd001a-zbyjh_sw.
+    lt_ztsd001a_sum-zbyyc1  = lt_ztsd001a-zydyc_sw1.
+    lt_ztsd001a_sum-zbyyc2 = lt_ztsd001a-zydyc_sw2.
+    COLLECT lt_ztsd001a_sum.
+
+    IF lt_ztsd001a-zmonth = p_month.
+      lt_dq_detail-vkorg = lt_ztsd001a_sum-vkorg.
+      lt_dq_detail-bzirk = lt_ztsd001a_sum-bzirk.
+      lt_dq_detail-matnr = lt_ztsd001a_sum-matnr.
+      lt_dq_detail-kunnr = lt_ztsd001a-kunnr.
+      lt_dq_detail-menge = lt_ztsd001a-zbyjh_sw.
+      COLLECT lt_dq_detail.
+    ENDIF.
+
+    CLEAR:lt_ztsd001a_sum,lt_dq_detail.
+  ENDLOOP.
+
+  DELETE lt_dq_detail WHERE menge = 0.
+
+  IF lt_ztsd001b[] IS INITIAL.
+    APPEND LINES OF lt_ztsd001a_sum TO lt_ztsd001b.
+  ENDIF.
+
+  APPEND LINES OF lt_ztsd001b TO lt_ztsd001b_last.
+  DELETE lt_ztsd001b WHERE zmonth = lv_last_month.
+  DELETE lt_ztsd001b_last WHERE zmonth = p_month.
+
+***抓取交货数据
+
+  CONCATENATE p_month '01' INTO lv_date_from.
+  CALL FUNCTION 'FKK_LAST_DAY_OF_MONTH'
+    EXPORTING
+      day_in            = lv_date_from
+    IMPORTING
+      last_day_of_month = lv_date_to
+    EXCEPTIONS
+      day_in_no_date    = 1
+      OTHERS            = 2.
+***获取当月实际发生数据
+  SELECT a~vbeln
+         a~lfart
+          a~kunag AS kunnr      "modi by leimt 20180517
+         a~vkorg
+         a~wadat_ist
+         b~posnr
+         b~matnr
+         b~lfimg
+    INTO CORRESPONDING FIELDS OF TABLE lt_dn_data
+    FROM likp AS a
+    INNER JOIN lips AS b
+    ON a~vbeln = b~vbeln
+    FOR ALL ENTRIES IN lt_knvv
+    WHERE a~lfart IN ('ZLF1','ZLR1','ZLF3','ZLF4')
+      AND a~wadat_ist BETWEEN lv_date_from AND lv_date_to
+      AND a~vkorg IN s_vkorg
+      AND a~kunag = lt_knvv-kunnr
+      AND b~matnr IN s_matnr.
+***汇总交货数据
+  LOOP AT lt_dn_data.
+    IF lt_dn_data-lfart = 'ZLR1'.
+      lt_dn_data-lfimg = -1 * lt_dn_data-lfimg.
+    ENDIF.
+    MOVE-CORRESPONDING lt_dn_data TO lt_dn_data_sum.
+    READ TABLE lt_knvv WITH KEY kunnr = lt_dn_data-kunnr vkorg = lt_dn_data-vkorg.
+    IF sy-subrc = 0.
+      lt_dn_data_sum-bzirk = lt_knvv-bzirk.
+    ENDIF.
+    COLLECT lt_dn_data_sum.
+    CLEAR lt_dn_data_sum.
+  ENDLOOP.
+
+***销售大区文本
+  SELECT * INTO TABLE lt_t171t FROM t171t WHERE spras = sy-langu.
+
+  SORT lt_t171t BY bzirk.
+
+  LOOP AT lt_ztsd001b.
+    gt_out_b-vkorg = lt_ztsd001b-vkorg.
+    gt_out_b-bzirk = lt_ztsd001b-bzirk.
+***销售大区文本
+    READ TABLE lt_t171t WITH KEY bzirk = lt_ztsd001b-bzirk BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out_b-bztxt = lt_t171t-bztxt.
+    ENDIF.
+    gt_out_b-matnr = lt_ztsd001b-matnr.
+***物料描述
+    SELECT SINGLE maktx INTO gt_out_b-maktx FROM makt WHERE matnr = gt_out_b-matnr AND spras = sy-langu.
+***上月计划
+    READ TABLE lt_ztsd001b_last WITH KEY vkorg = gt_out_b-vkorg bzirk = gt_out_b-bzirk matnr = gt_out_b-matnr.
+    IF sy-subrc = 0.
+      gt_out_b-zsyjh = lt_ztsd001b_last-zbyjh.
+      DELETE lt_ztsd001b_last INDEX sy-tabix.
+    ENDIF.
+***上月实际
+    READ TABLE lt_dn_data_sum WITH KEY vkorg = gt_out_b-vkorg bzirk = gt_out_b-bzirk matnr = gt_out_b-matnr.
+    IF sy-subrc = 0.
+      gt_out_b-zsysj = lt_dn_data_sum-lfimg.
+      DELETE lt_dn_data_sum INDEX sy-tabix.
+    ENDIF.
+***上月达成率
+    CLEAR:lv_percent.
+    IF gt_out_b-zsyjh NE 0.
+      lv_percent = gt_out_b-zsysj / gt_out_b-zsyjh * 100.
+    ENDIF.
+    CALL FUNCTION 'ROUND'
+      EXPORTING
+        decimals      = 1
+        input         = lv_percent
+        sign          = '-'
+      IMPORTING
+        output        = gt_out_b-zsydcl
+      EXCEPTIONS
+        input_invalid = 1
+        overflow      = 2
+        type_invalid  = 3
+        OTHERS        = 4.
+*    CONDENSE gt_out_b-zsydcl.                  "add by leimt 20180322 去掉%
+*    CONCATENATE gt_out_b-zsydcl '%' INTO gt_out_b-zsydcl.
+*    CONDENSE gt_out_b-zsydcl NO-GAPS.
+***本月计划
+    gt_out_b-zbyjh_sw = lt_ztsd001b-zbyjh.
+    gt_out_b-zbyyc1_sw = lt_ztsd001b-zbyyc1.
+    gt_out_b-zbyyc2_sw = lt_ztsd001b-zbyyc2.
+
+***本月计划商务 & 月预测1 & 月预测2
+    READ TABLE lt_ztsd001a_sum WITH KEY zmonth = p_month vkorg = gt_out_b-vkorg bzirk = gt_out_b-bzirk matnr = gt_out_b-matnr.
+    IF sy-subrc = 0.
+      gt_out_b-zbyjh = lt_ztsd001a_sum-zbyjh.
+      gt_out_b-zbyyc1 = lt_ztsd001a_sum-zbyyc1.
+      gt_out_b-zbyyc2 = lt_ztsd001a_sum-zbyyc2.
+    ENDIF.
+***差异
+    gt_out_b-zbyjh_cy = gt_out_b-zbyjh_sw - gt_out_b-zbyjh.
+    gt_out_b-zbyyc1_cy = gt_out_b-zbyyc1_sw - gt_out_b-zbyyc1.
+    gt_out_b-zbyyc2_cy = gt_out_b-zbyyc2_sw - gt_out_b-zbyyc2 .
+***客户名称及数量
+    LOOP AT lt_dq_detail WHERE vkorg = gt_out_b-vkorg AND bzirk = gt_out_b-bzirk AND matnr = gt_out_b-matnr.
+      CLEAR lv_sortl.
+      SELECT SINGLE sortl INTO lv_sortl FROM kna1 WHERE kunnr = lt_dq_detail-kunnr.
+      IF gt_out_b-zname IS INITIAL.
+        gt_out_b-zname = |{ lv_sortl }{ lt_dq_detail-menge }|.
+      ELSE.
+        gt_out_b-zname = gt_out_b-zname && |,{ lv_sortl }{ lt_dq_detail-menge }|.
+      ENDIF.
+      CONDENSE gt_out_b-zname NO-GAPS.
+    ENDLOOP.
+    APPEND gt_out_b.
+    CLEAR gt_out_b.
+  ENDLOOP.
+
+  LOOP AT lt_ztsd001b_last.
+    gt_out_b-vkorg = lt_ztsd001b_last-vkorg.
+    gt_out_b-bzirk = lt_ztsd001b_last-bzirk.
+***销售大区文本
+    READ TABLE lt_t171t WITH KEY bzirk = lt_ztsd001b_last-bzirk BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out_b-bztxt = lt_t171t-bztxt.
+    ENDIF.
+    gt_out_b-matnr = lt_ztsd001b_last-matnr.
+***物料描述
+    SELECT SINGLE maktx INTO gt_out_b-maktx FROM makt WHERE matnr = gt_out_b-matnr AND spras = sy-langu.
+***上月计划
+    gt_out_b-zsyjh = lt_ztsd001b_last-zbyjh.
+***上月实际
+    READ TABLE lt_dn_data_sum WITH KEY vkorg = gt_out_b-vkorg bzirk = gt_out_b-bzirk matnr = gt_out_b-matnr.
+    IF sy-subrc = 0.
+      gt_out_b-zsysj = lt_dn_data_sum-lfimg.
+      DELETE lt_dn_data_sum INDEX sy-tabix.
+    ENDIF.
+***本月计划商务 & 月预测1 & 月预测2
+    READ TABLE lt_ztsd001a_sum WITH KEY zmonth = p_month vkorg = gt_out_b-vkorg bzirk = gt_out_b-bzirk matnr = gt_out_b-matnr.
+    IF sy-subrc = 0.
+      gt_out_b-zbyjh = lt_ztsd001a_sum-zbyjh.
+      gt_out_b-zbyyc1 = lt_ztsd001a_sum-zbyyc1.
+      gt_out_b-zbyyc2 = lt_ztsd001a_sum-zbyyc2.
+    ENDIF.
+***差异
+    gt_out_b-zbyjh_cy = gt_out_b-zbyjh_sw - gt_out_b-zbyjh.
+    gt_out_b-zbyyc1_cy = gt_out_b-zbyyc1_sw - gt_out_b-zbyyc1.
+    gt_out_b-zbyyc2_cy = gt_out_b-zbyyc2_sw - gt_out_b-zbyyc2 .
+***客户名称及数量
+    LOOP AT lt_dq_detail WHERE vkorg = gt_out_b-vkorg AND bzirk = gt_out_b-bzirk AND matnr = gt_out_b-matnr.
+      CLEAR lv_sortl.
+      SELECT SINGLE sortl INTO lv_sortl FROM kna1 WHERE kunnr = lt_dq_detail-kunnr.
+      IF gt_out_b-zname IS INITIAL.
+        gt_out_b-zname = |{ lv_sortl }{ lt_dq_detail-menge }|.
+      ELSE.
+        gt_out_b-zname = gt_out_b-zname && |,{ lv_sortl }{ lt_dq_detail-menge }|.
+      ENDIF.
+      CONDENSE gt_out_b-zname NO-GAPS.
+    ENDLOOP.
+***上月达成率
+    CLEAR:lv_percent.
+    IF gt_out_b-zsyjh NE 0.
+      lv_percent = gt_out_b-zsysj / gt_out_b-zsyjh * 100.
+    ENDIF.
+    CALL FUNCTION 'ROUND'
+      EXPORTING
+        decimals      = 1
+        input         = lv_percent
+        sign          = '-'
+      IMPORTING
+        output        = gt_out_b-zsydcl
+      EXCEPTIONS
+        input_invalid = 1
+        overflow      = 2
+        type_invalid  = 3
+        OTHERS        = 4.
+*    CONDENSE gt_out_b-zsydcl.
+*    CONCATENATE gt_out_b-zsydcl '%' INTO gt_out_b-zsydcl.
+*    CONDENSE gt_out_b-zsydcl NO-GAPS.
+    APPEND gt_out_b.
+    CLEAR gt_out_b.
+  ENDLOOP.
+
+  LOOP AT lt_dn_data_sum .
+    gt_out_b-vkorg = lt_dn_data_sum-vkorg.
+    gt_out_b-bzirk = lt_dn_data_sum-bzirk.
+***销售大区文本
+    READ TABLE lt_t171t WITH KEY bzirk = lt_dn_data_sum-bzirk BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out_b-bztxt = lt_t171t-bztxt.
+    ENDIF.
+    gt_out_b-matnr = lt_dn_data_sum-matnr.
+***物料描述
+    SELECT SINGLE maktx INTO gt_out_b-maktx FROM makt WHERE matnr = gt_out_b-matnr AND spras = sy-langu.
+    gt_out_b-zsysj = lt_dn_data_sum-lfimg.
+***本月计划商务 & 月预测1 & 月预测2
+    READ TABLE lt_ztsd001a_sum WITH KEY zmonth = p_month vkorg = gt_out_b-vkorg bzirk = gt_out_b-bzirk matnr = gt_out_b-matnr.
+    IF sy-subrc = 0.
+      gt_out_b-zbyjh = lt_ztsd001a_sum-zbyjh.
+      gt_out_b-zbyyc1 = lt_ztsd001a_sum-zbyyc1.
+      gt_out_b-zbyyc2 = lt_ztsd001a_sum-zbyyc2.
+    ENDIF.
+***客户名称及数量
+    LOOP AT lt_dq_detail WHERE vkorg = gt_out_b-vkorg AND bzirk = gt_out_b-bzirk AND matnr = gt_out_b-matnr.
+      CLEAR lv_sortl.
+      SELECT SINGLE sortl INTO lv_sortl FROM kna1 WHERE kunnr = lt_dq_detail-kunnr.
+      IF gt_out_b-zname IS INITIAL.
+        gt_out_b-zname = |{ lv_sortl }{ lt_dq_detail-menge }|.
+      ELSE.
+        gt_out_b-zname = gt_out_b-zname && |,{ lv_sortl }{ lt_dq_detail-menge }|.
+      ENDIF.
+      CONDENSE gt_out_b-zname NO-GAPS.
+    ENDLOOP.
+***差异
+    gt_out_b-zbyjh_cy = gt_out_b-zbyjh_sw - gt_out_b-zbyjh.
+    gt_out_b-zbyyc1_cy = gt_out_b-zbyyc1_sw - gt_out_b-zbyyc1.
+    gt_out_b-zbyyc2_cy = gt_out_b-zbyyc2_sw - gt_out_b-zbyyc2 .
+
+    APPEND gt_out_b.
+    CLEAR gt_out_b.
+  ENDLOOP.
+
+***将上个月导入的客户明细，在清单中未显示的也显示出来
+  LOOP AT lt_ztsd001a_sum WHERE zmonth = p_month.
+    CLEAR gt_out_b.
+    READ TABLE gt_out_b WITH KEY vkorg = lt_ztsd001a_sum-vkorg bzirk = lt_ztsd001a_sum-bzirk matnr = lt_ztsd001a_sum-matnr.
+    IF sy-subrc NE 0.
+      gt_out_b-vkorg  = lt_ztsd001a_sum-vkorg.
+      gt_out_b-bzirk  = lt_ztsd001a_sum-bzirk.
+***销售大区文本
+      READ TABLE lt_t171t WITH KEY bzirk = lt_ztsd001a_sum-bzirk BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_out_b-bztxt = lt_t171t-bztxt.
+      ENDIF.
+      gt_out_b-matnr = lt_ztsd001a_sum-matnr.
+***物料描述
+      SELECT SINGLE maktx INTO gt_out_b-maktx FROM makt WHERE matnr = gt_out_b-matnr AND spras = sy-langu.
+***客户名称及数量
+      LOOP AT lt_dq_detail WHERE vkorg = gt_out_b-vkorg AND bzirk = gt_out_b-bzirk AND matnr = gt_out_b-matnr.
+        CLEAR lv_sortl.
+        SELECT SINGLE sortl INTO lv_sortl FROM kna1 WHERE kunnr = lt_dq_detail-kunnr.
+        IF gt_out_b-zname IS INITIAL.
+          gt_out_b-zname = |{ lv_sortl }{ lt_dq_detail-menge }|.
+        ELSE.
+          gt_out_b-zname = gt_out_b-zname && |,{ lv_sortl }{ lt_dq_detail-menge }|.
+        ENDIF.
+        CONDENSE gt_out_b-zname NO-GAPS.
+      ENDLOOP.
+***本月计划商务 & 月预测1 & 月预测2
+      gt_out_b-zbyjh = lt_ztsd001a_sum-zbyjh.
+      gt_out_b-zbyyc1 = lt_ztsd001a_sum-zbyyc1.
+      gt_out_b-zbyyc2 = lt_ztsd001a_sum-zbyyc2.
+
+***差异
+      gt_out_b-zbyjh_cy = gt_out_b-zbyjh_sw - gt_out_b-zbyjh.
+      gt_out_b-zbyyc1_cy = gt_out_b-zbyyc1_sw - gt_out_b-zbyyc1.
+      gt_out_b-zbyyc2_cy = gt_out_b-zbyyc2_sw - gt_out_b-zbyyc2 .
+
+      APPEND gt_out_b.
+      CLEAR gt_out_b.
+    ENDIF.
+  ENDLOOP.
+
+***add by 201710.13 增加物料组，产品组取数
+  DATA:BEGIN OF lt_mara OCCURS 0,
+         matnr LIKE mara-matnr,
+         spart LIKE mara-spart,     "产品组
+         matkl LIKE mara-matkl,     "物料组
+       END OF lt_mara.
+  DATA: lt_tspat LIKE tspat OCCURS 0 WITH HEADER LINE,
+        lt_t023t LIKE t023t OCCURS 0 WITH HEADER LINE.
+  IF gt_out_b[] IS NOT INITIAL.
+    SELECT matnr
+           spart
+           matkl
+      INTO CORRESPONDING FIELDS OF TABLE lt_mara
+      FROM mara
+       FOR ALL ENTRIES IN gt_out_b
+     WHERE matnr = gt_out_b-matnr.
+  ENDIF.
+  SELECT * INTO TABLE lt_tspat FROM tspat WHERE spras = sy-langu.
+  SELECT * INTO TABLE lt_t023t FROM t023t WHERE spras = sy-langu.
+
+  SORT lt_mara BY matnr.
+  SORT lt_tspat BY spart.
+  SORT lt_t023t BY matkl.
+
+  LOOP AT gt_out_b.
+    AUTHORITY-CHECK OBJECT 'V_VBAK_VKO'
+         ID 'VKORG' FIELD gt_out_b-vkorg
+         ID 'VTWEG' DUMMY
+         ID 'SPART' DUMMY
+         ID 'ACTVT' FIELD '03'.
+    IF sy-subrc <> 0.
+      DELETE gt_out_b.
+      CONTINUE.
+    ENDIF.
+    READ TABLE lt_mara WITH KEY matnr = gt_out_b-matnr BINARY SEARCH.
+    IF sy-subrc = 0 .
+***产品组 & 描述
+      gt_out_b-spart = lt_mara-spart.
+      READ TABLE lt_tspat WITH KEY spart = gt_out_b-spart BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_out_b-spart_txt = lt_tspat-vtext.
+      ENDIF.
+***物料组 & 描述
+      gt_out_b-matkl = lt_mara-matkl.
+      READ TABLE lt_t023t WITH KEY matkl = gt_out_b-matkl BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_out_b-matkl_txt = lt_t023t-wgbez.
+      ENDIF.
+    ENDIF.
+    MODIFY gt_out_b.
+  ENDLOOP.
+  PERFORM frm_remonth.
+  LOOP AT gt_out_b.
+    READ TABLE gt_dn_data_sum WITH  KEY vkorg = gt_out_b-vkorg  matnr = gt_out_b-matnr bzirk = gt_out_b-bzirk BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out_b-zsysj1 = gt_dn_data_sum-lfimg1.
+      gt_out_b-zsysj2 = gt_dn_data_sum-lfimg2.
+      gt_out_b-zsysj3 = gt_dn_data_sum-lfimg3.
+      MODIFY gt_out_b.
+    ENDIF.
+  ENDLOOP.
+
+  IF p_chk EQ 'X'. "按销售组织汇总
+    DATA:lt_out_b LIKE gt_out_b OCCURS 0 WITH HEADER LINE.
+    APPEND LINES OF gt_out_b TO lt_out_b.
+    REFRESH gt_out_b.
+    LOOP AT lt_out_b.
+      MOVE-CORRESPONDING lt_out_b TO gt_out_b.
+      CLEAR:gt_out_b-bzirk,gt_out_b-bztxt,gt_out_b-zsydcl,gt_out_b-zname.
+      COLLECT gt_out_b.
+      CLEAR gt_out_b.
+    ENDLOOP.
+
+    LOOP AT gt_out_b.
+***上月达成率
+      CLEAR:lv_percent.
+      IF gt_out_b-zsyjh NE 0.
+        lv_percent = gt_out_b-zsysj / gt_out_b-zsyjh * 100.
+      ENDIF.
+      CALL FUNCTION 'ROUND'
+        EXPORTING
+          decimals      = 1
+          input         = lv_percent
+          sign          = '-'
+        IMPORTING
+          output        = gt_out_b-zsydcl
+        EXCEPTIONS
+          input_invalid = 1
+          overflow      = 2
+          type_invalid  = 3
+          OTHERS        = 4.
+*    CONDENSE gt_out_b-zsydcl.
+*    CONCATENATE gt_out_b-zsydcl '%' INTO gt_out_b-zsydcl.
+*    CONDENSE gt_out_b-zsydcl NO-GAPS.
+
+***客户名称及数量
+      LOOP AT lt_out_b WHERE vkorg = gt_out_b-vkorg AND matnr = gt_out_b-matnr.
+        IF gt_out_b-zname IS INITIAL.
+          gt_out_b-zname = lt_out_b-zname.
+        ELSE.
+          CONCATENATE gt_out_b-zname lt_out_b-zname INTO gt_out_b-zname SEPARATED BY ','.
+        ENDIF.
+        CONDENSE gt_out_b-zname NO-GAPS.
+      ENDLOOP.
+      MODIFY gt_out_b.
+    ENDLOOP.
+    PERFORM frm_remonth.
+    LOOP AT gt_out_b.
+      READ TABLE gt_dn_data_sum WITH  KEY vkorg = gt_out_b-vkorg matnr = gt_out_b-matnr .
+      IF sy-subrc = 0.
+        gt_out_b-zsysj1 = gt_dn_data_sum-lfimg1.
+        gt_out_b-zsysj2 = gt_dn_data_sum-lfimg2.
+        gt_out_b-zsysj3 = gt_dn_data_sum-lfimg3.
+        MODIFY gt_out_b.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA3
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data3 .
+  DATA:lt_ztsd001c      LIKE ztsd001c OCCURS 0 WITH HEADER LINE,
+       lt_ztsd001c_last LIKE ztsd001c OCCURS 0 WITH HEADER LINE,
+       lt_ztsd001b      LIKE ztsd001b OCCURS 0 WITH HEADER LINE,
+       lt_ztsd001b_sum  LIKE ztsd001c OCCURS 0 WITH HEADER LINE.
+  DATA:lt_ztsd001a      LIKE ztsd001a OCCURS 0 WITH HEADER LINE.
+
+  DATA:lv_last_month LIKE ztsd001a-zmonth,
+       lv_year(4)    TYPE c,
+       lv_month(2)   TYPE n.
+  DATA:lv_date_from LIKE sy-datum,
+       lv_date_to   LIKE sy-datum.
+  DATA:lv_percent TYPE p DECIMALS 3.
+
+  DATA:BEGIN OF lt_dn_data OCCURS 0,
+         vbeln     LIKE likp-vbeln,
+         lfart     LIKE likp-lfart,
+         vkorg     LIKE likp-vkorg,
+         kunnr     LIKE likp-kunnr,
+         wadat_ist LIKE likp-wadat_ist,
+         posnr     LIKE lips-posnr,
+         matnr     LIKE lips-matnr,
+         lfimg     LIKE lips-lfimg,
+       END OF lt_dn_data.
+
+  DATA:BEGIN OF lt_dn_data_sum OCCURS 0,
+         matnr LIKE lips-matnr,
+         lfimg LIKE lips-lfimg,
+       END OF lt_dn_data_sum.
+
+  DATA:BEGIN OF lt_dq_detail OCCURS 0,
+         matnr LIKE mara-matnr,
+         kunnr LIKE knvv-kunnr,
+         menge TYPE p DECIMALS 2,
+       END OF lt_dq_detail.
+  DATA:lv_sortl LIKE kna1-sortl.
+
+***上个月
+  IF p_month+4(2) = '01'.
+    lv_year = p_month(4).
+    lv_year = lv_year - 1.
+    CONCATENATE lv_year '12' INTO lv_last_month.
+  ELSE.
+    lv_month = p_month+4(2) - 1.
+    lv_year = p_month(4).
+    CONCATENATE  lv_year  lv_month INTO lv_last_month.
+  ENDIF.
+
+***抓取导入公司数据
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE lt_ztsd001c
+    FROM ztsd001c
+    WHERE zmonth IN (p_month,lv_last_month)
+      AND matnr IN s_matnr.
+
+***抓取导入的大区数据
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE lt_ztsd001b
+    FROM ztsd001b
+    WHERE zmonth IN (p_month,lv_last_month)
+      AND matnr IN s_matnr.
+
+***抓取导入的客户数据
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE lt_ztsd001a
+    FROM ztsd001a
+    WHERE zmonth = p_month
+      AND matnr IN s_matnr.
+  LOOP AT lt_ztsd001a.
+    lt_dq_detail-matnr = lt_ztsd001a-matnr.
+    lt_dq_detail-kunnr = lt_ztsd001a-kunnr.
+    lt_dq_detail-menge = lt_ztsd001a-zbyjh_sw.
+    COLLECT lt_dq_detail.
+    CLEAR lt_dq_detail.
+  ENDLOOP.
+
+  DELETE lt_dq_detail WHERE menge = 0.
+
+***按照物料汇总
+  LOOP AT lt_ztsd001b.
+    lt_ztsd001b_sum-zmonth = lt_ztsd001b-zmonth.
+    lt_ztsd001b_sum-matnr  = lt_ztsd001b-matnr.
+    lt_ztsd001b_sum-zbyjh  = lt_ztsd001b-zbyjh.
+    lt_ztsd001b_sum-zbyyc1 = lt_ztsd001b-zbyyc1.
+    lt_ztsd001b_sum-zbyyc2 = lt_ztsd001b-zbyyc2.
+    COLLECT lt_ztsd001b_sum.
+    CLEAR:lt_ztsd001b_sum.
+  ENDLOOP.
+
+  IF lt_ztsd001c[] IS INITIAL.
+    APPEND LINES OF lt_ztsd001b_sum TO lt_ztsd001c.
+  ENDIF.
+
+  APPEND LINES OF lt_ztsd001c TO lt_ztsd001c_last.
+  DELETE lt_ztsd001c WHERE zmonth = lv_last_month.
+  DELETE lt_ztsd001c_last WHERE zmonth = p_month.
+
+***抓取交货数据
+  CONCATENATE p_month '01' INTO lv_date_from.
+  CALL FUNCTION 'FKK_LAST_DAY_OF_MONTH'
+    EXPORTING
+      day_in            = lv_date_from
+    IMPORTING
+      last_day_of_month = lv_date_to
+    EXCEPTIONS
+      day_in_no_date    = 1
+      OTHERS            = 2.
+***获取当月实际发生数据
+  SELECT a~vbeln
+         a~lfart
+         a~kunag AS kunnr
+         a~vkorg
+         a~wadat_ist
+         b~posnr
+         b~matnr
+         b~lfimg
+    INTO CORRESPONDING FIELDS OF TABLE lt_dn_data
+    FROM likp AS a
+    INNER JOIN lips AS b
+    ON a~vbeln = b~vbeln
+    WHERE a~lfart IN ('ZLF1','ZLR1','ZLF3','ZLF4')
+      AND a~wadat_ist BETWEEN lv_date_from AND lv_date_to
+      AND b~matnr IN s_matnr.
+***汇总交货数据
+  LOOP AT lt_dn_data.
+    IF lt_dn_data-lfart = 'ZLR1'.
+      lt_dn_data-lfimg = -1 * lt_dn_data-lfimg.
+    ENDIF.
+    lt_dn_data_sum-matnr = lt_dn_data-matnr.
+    lt_dn_data_sum-lfimg = lt_dn_data-lfimg.
+    COLLECT lt_dn_data_sum.
+    CLEAR lt_dn_data_sum.
+  ENDLOOP.
+
+  LOOP AT lt_ztsd001c.
+    gt_out_c-matnr = lt_ztsd001c-matnr.
+***物料描述
+    SELECT SINGLE maktx INTO gt_out_c-maktx FROM makt WHERE matnr = gt_out_c-matnr AND spras = sy-langu.
+***上月计划
+    READ TABLE lt_ztsd001c_last WITH KEY matnr = lt_ztsd001c-matnr.
+    IF sy-subrc = 0.
+      gt_out_c-zsyjh = lt_ztsd001c_last-zbyjh.
+      DELETE lt_ztsd001c_last INDEX sy-tabix.
+    ENDIF.
+***上月实际
+    READ TABLE lt_dn_data_sum WITH KEY matnr = lt_ztsd001c-matnr.
+    IF sy-subrc = 0.
+      gt_out_c-zsysj = lt_dn_data_sum-lfimg.
+      DELETE lt_dn_data_sum INDEX sy-tabix.
+    ENDIF.
+***上月达成率
+    CLEAR:lv_percent.
+    IF gt_out_c-zsyjh NE 0.
+      lv_percent = gt_out_c-zsysj / gt_out_c-zsyjh * 100.
+    ENDIF.
+    CALL FUNCTION 'ROUND'
+      EXPORTING
+        decimals      = 1
+        input         = lv_percent
+        sign          = '-'
+      IMPORTING
+        output        = gt_out_c-zsydcl
+      EXCEPTIONS
+        input_invalid = 1
+        overflow      = 2
+        type_invalid  = 3
+        OTHERS        = 4.
+*    CONDENSE gt_out_c-zsydcl.
+*    CONCATENATE gt_out_c-zsydcl '%' INTO gt_out_c-zsydcl.
+*    CONDENSE gt_out_c-zsydcl NO-GAPS.
+***本月计划 & 月预测
+    gt_out_c-zbyjh  = lt_ztsd001c-zbyjh.
+    gt_out_c-zbyyc1 = lt_ztsd001c-zbyyc1.        "月预测1
+    gt_out_c-zbyyc2 = lt_ztsd001c-zbyyc2.        "月预测2
+***本月计划-大区 & 月预测
+    READ TABLE lt_ztsd001b_sum WITH KEY zmonth = p_month  matnr = gt_out_c-matnr.
+    IF sy-subrc = 0.
+      gt_out_c-zbyjh_dq = lt_ztsd001b_sum-zbyjh.
+      gt_out_c-zbyyc1_dq = lt_ztsd001b_sum-zbyyc1.
+      gt_out_c-zbyyc2_dq = lt_ztsd001b_sum-zbyyc2.
+    ENDIF.
+***差异
+    gt_out_c-zbyjh_cy = gt_out_c-zbyjh - gt_out_c-zbyjh_dq.        "本月计划差异
+    gt_out_c-zbyyc1_cy = gt_out_c-zbyyc1 - gt_out_c-zbyyc1_dq.     "月预测1-差异
+    gt_out_c-zbyyc2_cy = gt_out_c-zbyyc2 - gt_out_c-zbyyc2_dq.     "月预测2-差异
+
+***客户名称及数量
+    LOOP AT lt_dq_detail WHERE matnr = gt_out_c-matnr.
+      CLEAR lv_sortl.
+      SELECT SINGLE sortl INTO lv_sortl FROM kna1 WHERE kunnr = lt_dq_detail-kunnr.
+      IF gt_out_c-zname IS INITIAL.
+        gt_out_c-zname = |{ lv_sortl }{ lt_dq_detail-menge }|.
+      ELSE.
+        gt_out_c-zname = gt_out_c-zname && |,{ lv_sortl }{ lt_dq_detail-menge }|.
+      ENDIF.
+      CONDENSE gt_out_c-zname NO-GAPS.
+    ENDLOOP.
+
+    APPEND gt_out_c.
+    CLEAR gt_out_c.
+  ENDLOOP.
+
+  LOOP AT lt_ztsd001c_last.
+    gt_out_c-matnr = lt_ztsd001c_last-matnr.
+***物料描述
+    SELECT SINGLE maktx INTO gt_out_c-maktx FROM makt WHERE matnr = gt_out_c-matnr AND spras = sy-langu.
+***上月计划
+    gt_out_c-zsyjh = lt_ztsd001c_last-zbyjh.
+***上月实际
+    READ TABLE lt_dn_data_sum WITH KEY matnr = lt_ztsd001c_last-matnr.
+    IF sy-subrc = 0.
+      gt_out_c-zsysj = lt_dn_data_sum-lfimg.
+      DELETE lt_dn_data_sum INDEX sy-tabix.
+    ENDIF.
+***上月达成率
+    CLEAR:lv_percent.
+    IF gt_out_c-zsyjh NE 0.
+      lv_percent = gt_out_c-zsysj / gt_out_c-zsyjh * 100.
+    ENDIF.
+    CALL FUNCTION 'ROUND'
+      EXPORTING
+        decimals      = 1
+        input         = lv_percent
+        sign          = '-'
+      IMPORTING
+        output        = gt_out_c-zsydcl
+      EXCEPTIONS
+        input_invalid = 1
+        overflow      = 2
+        type_invalid  = 3
+        OTHERS        = 4.
+*    CONDENSE gt_out_c-zsydcl.
+*    CONCATENATE gt_out_c-zsydcl '%' INTO gt_out_c-zsydcl.
+*    CONDENSE gt_out_c-zsydcl NO-GAPS.
+
+***本月计划-大区 & 月预测
+    READ TABLE lt_ztsd001b_sum WITH KEY zmonth = p_month  matnr = gt_out_c-matnr.
+    IF sy-subrc = 0.
+      gt_out_c-zbyjh_dq = lt_ztsd001b_sum-zbyjh.
+      gt_out_c-zbyyc1_dq = lt_ztsd001b_sum-zbyyc1.
+      gt_out_c-zbyyc2_dq = lt_ztsd001b_sum-zbyyc2.
+    ENDIF.
+***差异
+    gt_out_c-zbyjh_cy = gt_out_c-zbyjh - gt_out_c-zbyjh_dq.        "本月计划差异
+    gt_out_c-zbyyc1_cy = gt_out_c-zbyyc1 - gt_out_c-zbyyc1_dq.     "月预测1-差异
+    gt_out_c-zbyyc2_cy = gt_out_c-zbyyc2 - gt_out_c-zbyyc2_dq.     "月预测2-差异
+
+***客户名称及数量
+    LOOP AT lt_dq_detail WHERE matnr = gt_out_c-matnr.
+      CLEAR lv_sortl.
+      SELECT SINGLE sortl INTO lv_sortl FROM kna1 WHERE kunnr = lt_dq_detail-kunnr.
+      IF gt_out_c-zname IS INITIAL.
+        gt_out_c-zname = |{ lv_sortl }{ lt_dq_detail-menge }|.
+      ELSE.
+        gt_out_c-zname = gt_out_c-zname && |,{ lv_sortl }{ lt_dq_detail-menge }|.
+      ENDIF.
+      CONDENSE gt_out_c-zname NO-GAPS.
+    ENDLOOP.
+
+    APPEND gt_out_c.
+    CLEAR gt_out_c.
+  ENDLOOP.
+
+  LOOP AT lt_dn_data_sum.
+    gt_out_c-matnr = lt_dn_data_sum-matnr.
+***物料描述
+    SELECT SINGLE maktx INTO gt_out_c-maktx FROM makt WHERE matnr = lt_dn_data_sum-matnr AND spras = sy-langu.
+***上月实际
+    gt_out_c-zsysj = lt_dn_data_sum-lfimg.
+
+***本月计划-大区 & 月预测
+    READ TABLE lt_ztsd001b_sum WITH KEY zmonth = p_month  matnr = gt_out_c-matnr.
+    IF sy-subrc = 0.
+      gt_out_c-zbyjh_dq = lt_ztsd001b_sum-zbyjh.
+      gt_out_c-zbyyc1_dq = lt_ztsd001b_sum-zbyyc1.
+      gt_out_c-zbyyc2_dq = lt_ztsd001b_sum-zbyyc2.
+    ENDIF.
+***差异
+    gt_out_c-zbyjh_cy = gt_out_c-zbyjh - gt_out_c-zbyjh_dq.        "本月计划差异
+    gt_out_c-zbyyc1_cy = gt_out_c-zbyyc1 - gt_out_c-zbyyc1_dq.     "月预测1-差异
+    gt_out_c-zbyyc2_cy = gt_out_c-zbyyc2 - gt_out_c-zbyyc2_dq.     "月预测2-差异
+
+***客户名称及数量
+    LOOP AT lt_dq_detail WHERE matnr = gt_out_c-matnr.
+      CLEAR lv_sortl.
+      SELECT SINGLE sortl INTO lv_sortl FROM kna1 WHERE kunnr = lt_dq_detail-kunnr.
+      IF gt_out_c-zname IS INITIAL.
+        gt_out_c-zname = |{ lv_sortl }{ lt_dq_detail-menge }|.
+      ELSE.
+        gt_out_c-zname = gt_out_c-zname && |,{ lv_sortl }{ lt_dq_detail-menge }|.
+      ENDIF.
+      CONDENSE gt_out_c-zname NO-GAPS.
+    ENDLOOP.
+
+    APPEND gt_out_c.
+    CLEAR gt_out_c.
+  ENDLOOP.
+
+  LOOP AT lt_ztsd001b_sum WHERE zmonth = p_month.
+    CLEAR gt_out_c.
+    READ TABLE gt_out_c WITH KEY matnr = lt_ztsd001b_sum-matnr.
+    IF sy-subrc NE 0.
+      gt_out_c-matnr = lt_ztsd001b_sum-matnr.
+***物料描述
+      SELECT SINGLE maktx INTO gt_out_c-maktx FROM makt WHERE matnr = gt_out_c-matnr AND spras = sy-langu.
+***本月计划-大区 & 月预测
+      gt_out_c-zbyjh_dq = lt_ztsd001b_sum-zbyjh.
+      gt_out_c-zbyyc1_dq = lt_ztsd001b_sum-zbyyc1.
+      gt_out_c-zbyyc2_dq = lt_ztsd001b_sum-zbyyc2.
+***差异
+      gt_out_c-zbyjh_cy = gt_out_c-zbyjh - gt_out_c-zbyjh_dq.        "本月计划差异
+      gt_out_c-zbyyc1_cy = gt_out_c-zbyyc1 - gt_out_c-zbyyc1_dq.     "月预测1-差异
+      gt_out_c-zbyyc2_cy = gt_out_c-zbyyc2 - gt_out_c-zbyyc2_dq.     "月预测2-差异
+
+***客户名称及数量
+      LOOP AT lt_dq_detail WHERE matnr = gt_out_c-matnr.
+        CLEAR lv_sortl.
+        SELECT SINGLE sortl INTO lv_sortl FROM kna1 WHERE kunnr = lt_dq_detail-kunnr.
+        IF gt_out_c-zname IS INITIAL.
+          gt_out_c-zname = |{ lv_sortl }{ lt_dq_detail-menge }|.
+        ELSE.
+          gt_out_c-zname = gt_out_c-zname && |,{ lv_sortl }{ lt_dq_detail-menge }|.
+        ENDIF.
+        CONDENSE gt_out_c-zname NO-GAPS.
+      ENDLOOP.
+
+      APPEND gt_out_c.
+      CLEAR gt_out_c.
+    ENDIF.
+  ENDLOOP.
+
+***add by 201710.13 增加物料组，产品组取数
+  DATA:BEGIN OF lt_mara OCCURS 0,
+         matnr LIKE mara-matnr,
+         spart LIKE mara-spart,     "产品组
+         matkl LIKE mara-matkl,     "物料组
+       END OF lt_mara.
+  DATA:BEGIN OF lt_marc OCCURS 0,
+         matnr LIKE marc-matnr,
+         werks LIKE marc-werks,
+         dispo LIKE marc-dispo,
+       END OF lt_marc.
+  DATA: lt_tspat LIKE tspat OCCURS 0 WITH HEADER LINE,
+        lt_t023t LIKE t023t OCCURS 0 WITH HEADER LINE.
+  IF gt_out_c[] IS NOT INITIAL.
+    SELECT matnr
+           spart
+           matkl
+      INTO CORRESPONDING FIELDS OF TABLE lt_mara
+      FROM mara
+       FOR ALL ENTRIES IN gt_out_c
+     WHERE matnr = gt_out_c-matnr.
+    SELECT matnr
+           werks
+           dispo
+      INTO CORRESPONDING FIELDS OF TABLE lt_marc
+      FROM marc
+      FOR ALL ENTRIES IN gt_out_c
+      WHERE matnr = gt_out_c-matnr
+        AND werks = '1000'.
+  ENDIF.
+  SELECT * INTO TABLE lt_tspat FROM tspat WHERE spras = sy-langu.
+  SELECT * INTO TABLE lt_t023t FROM t023t WHERE spras = sy-langu.
+
+  SORT lt_mara BY matnr.
+  SORT lt_tspat BY spart.
+  SORT lt_t023t BY matkl.
+  SORT lt_marc BY matnr werks.
+
+  LOOP AT gt_out_c.
+    READ TABLE lt_mara WITH KEY matnr = gt_out_c-matnr BINARY SEARCH.
+    IF sy-subrc = 0 .
+***产品组 & 描述
+      gt_out_c-spart = lt_mara-spart.
+      READ TABLE lt_tspat WITH KEY spart = gt_out_c-spart BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_out_c-spart_txt = lt_tspat-vtext.
+      ENDIF.
+***物料组 & 描述
+      gt_out_c-matkl = lt_mara-matkl.
+      READ TABLE lt_t023t WITH KEY matkl = gt_out_c-matkl BINARY SEARCH.
+      IF sy-subrc = 0.
+        gt_out_c-matkl_txt = lt_t023t-wgbez.
+      ENDIF.
+    ENDIF.
+***MRP控制哲
+    READ TABLE lt_marc WITH KEY matnr = gt_out_c-matnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      IF lt_marc-dispo = 'M05'.
+        gt_out_c-dispo = '商务'.
+      ELSE.
+        gt_out_c-dispo = '计划'.
+      ENDIF.
+    ENDIF.
+    MODIFY gt_out_c.
+  ENDLOOP.
+  PERFORM frm_remonth.
+  LOOP AT gt_out_c.
+    READ TABLE gt_dn_data_sum WITH  KEY   matnr = gt_out_c-matnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out_c-zsysj1 = gt_dn_data_sum-lfimg1.
+      gt_out_c-zsysj2 = gt_dn_data_sum-lfimg2.
+      gt_out_c-zsysj3 = gt_dn_data_sum-lfimg3.
+      MODIFY gt_out_c.
+    ENDIF.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  DATA:lv_name(30) TYPE c.
+  IF r1 = 'X'.
+    mcr_build_fieldcat:'VKORG'     '销售组织'     'C'      '4'  'VKORG'  'VBAK',
+                       'KVGR1'     '销售工程师'   'C'      '3'  'KVGR1'  'KNVV',
+                       'BEZEI'     '姓名'         'C'      '20' 'BEZEI'  'TVV1T',
+                       'KUNNR'     '客户'         'C'      '10' 'KUNNR'  'KNA1',
+                       'SORTL'     '客户简称'     'C'      '10' 'SORTL'  'KNA1',
+                       'MATNR'     '物料号码'     'C'      '18' 'MATNR'  'MARA',
+                       'MAKTX'     '物料描述'     'C'      '40' 'MAKTX'  'MAKT'.
+*    PERFORM frm_build_fieldcat USING  'ZSYSJ3'   '-3' '实际' 'P'  '15'.     "add by leimt 20180403 增加三列
+    PERFORM frm_build_fieldcat USING  'ZSYSJ2'   '-2' '实际' 'P'  '15'.     "add by leimt 20180403 增加三列
+    PERFORM frm_build_fieldcat USING  'ZSYSJ1'   '-1' '实际' 'P'  '15'.     "add by leimt 20180403 增加三列
+    PERFORM frm_build_fieldcat USING  'ZSYJH'   '0' '计划' 'P'  '15'.
+    PERFORM frm_build_fieldcat USING  'ZSYSJ'   '0' '实际' 'P'  '15'.
+    PERFORM frm_build_fieldcat USING  'ZSYDCL'  '0' '达成率(%)' 'P' ''.      "add by leimt 20180322 去掉%
+    PERFORM frm_build_fieldcat USING  'ZBYJH_YW'  '1' '计划-业务' 'P' '15'.
+    PERFORM frm_build_fieldcat USING  'ZYDYC_YW1'  '2' '预测-业务' 'P' '15'.
+    PERFORM frm_build_fieldcat USING  'ZYDYC_YW2'  '3' '预测-业务' 'P' '15'.
+    PERFORM frm_build_fieldcat USING  'ZBYJH_SW'  '1' '计划-商务' 'P' '15'.
+    PERFORM frm_build_fieldcat USING  'ZYDYC_SW1'  '2' '预测-商务' 'P' '15'.
+    PERFORM frm_build_fieldcat USING  'ZYDYC_SW2'  '3' '预测-商务' 'P' '15'.
+
+  ELSEIF r2 = 'X'.
+    mcr_build_fieldcat:'VKORG'     '销售组织'     'C'      '4' 'VKORG'  'VBAK',
+                       'BZIRK'     '销售大区'     'C'      '6' 'BZIRK'  'KNVV',
+                       'BZTXT'     '销售大区文本' 'C'      '20' 'BZTXT' 'T171T',
+                       'MATNR'     '物料号码'     'C'      '18' 'MATNR'  'MARA',
+                       'MAKTX'     '物料描述'     'C'      '40' 'MAKTX'  'MAKT'.
+*    PERFORM frm_build_fieldcat USING  'ZSYSJ3'   '-3' '实际' 'P'  '15'.
+    PERFORM frm_build_fieldcat USING  'ZSYSJ2'   '-2' '实际' 'P'  '15'.
+    PERFORM frm_build_fieldcat USING  'ZSYSJ1'   '-1' '实际' 'P'  '15'.
+    PERFORM frm_build_fieldcat USING  'ZSYJH'   '0' '计划' 'P'  '15'.
+    PERFORM frm_build_fieldcat USING  'ZSYSJ'   '0' '实际' 'P'  '15'.
+    PERFORM frm_build_fieldcat USING  'ZSYDCL'  '0' '达成率(%)' 'P' '20'.      "add by leimt 20180322 去掉%
+    mcr_build_fieldcat:'ZNAME'     '客户名称及数量'     'C'      '500' '' ''.
+    PERFORM frm_build_fieldcat USING  'ZBYJH'  '1' '计划' 'P' '15'.
+    PERFORM frm_build_fieldcat USING  'ZBYYC1'  '2' '预测' 'P' '15'.
+    PERFORM frm_build_fieldcat USING  'ZBYYC2'  '3' '预测' 'P' '15'.
+    PERFORM frm_build_fieldcat USING  'ZBYJH_CY'  '1' '计划-差异' 'P' '15'.
+    PERFORM frm_build_fieldcat USING  'ZBYYC1_CY'  '2' '预测-差异' 'P' '15'.
+    PERFORM frm_build_fieldcat USING  'ZBYYC2_CY'  '3' '预测-差异' 'P' '15'.
+    PERFORM frm_build_fieldcat USING  'ZBYJH_SW'  '1' '计划-商务' 'P' '15'.
+    PERFORM frm_build_fieldcat USING  'ZBYYC1_SW'  '2' '预测-商务' 'P' '15'.
+    PERFORM frm_build_fieldcat USING  'ZBYYC2_SW'  '3' '预测-商务' 'P' '15'.
+  ELSEIF r3 = 'X'.
+    mcr_build_fieldcat:'MATNR'     '物料号码'     'C'      '18' 'MATNR'  'MARA',
+                       'MAKTX'     '物料描述'     'C'      '40'  'MAKTX'  'MAKT',
+                       'DISPO'     '计划负责人'   'C'      '3'  ''  ''.
+*    PERFORM frm_build_fieldcat USING  'ZSYSJ3'   '-3' '实际' 'P'  '15'.
+    PERFORM frm_build_fieldcat USING  'ZSYSJ2'   '-2' '实际' 'P'  '15'.
+    PERFORM frm_build_fieldcat USING  'ZSYSJ1'   '-1' '实际' 'P'  '15'.
+    PERFORM frm_build_fieldcat USING  'ZSYJH'   '0' '计划' 'P'  '15'.
+    PERFORM frm_build_fieldcat USING  'ZSYSJ'   '0' '实际' 'P'  '15'.
+    PERFORM frm_build_fieldcat USING  'ZSYDCL'  '0' '达成率(%)' 'P' '20'.    "add by leimt 20180322 去掉%
+    mcr_build_fieldcat:'ZNAME'     '客户名称及数量'     'C'      '500' '' ''.
+    PERFORM frm_build_fieldcat USING  'ZBYJH_DQ'  '1' '计划-大区' 'P' '15'.
+    PERFORM frm_build_fieldcat USING  'ZBYYC1_DQ'  '2' '预测-大区' 'P' '15'.
+    PERFORM frm_build_fieldcat USING  'ZBYYC2_DQ'  '3' '预测-大区' 'P' '15'.
+    PERFORM frm_build_fieldcat USING  'ZBYJH_CY'  '1' '计划-差异' 'P' '15'.
+    PERFORM frm_build_fieldcat USING  'ZBYYC1_CY'  '2' '预测-差异' 'P' '15'.
+    PERFORM frm_build_fieldcat USING  'ZBYYC2_CY'  '3' '预测-差异' 'P' '15'.
+    PERFORM frm_build_fieldcat USING  'ZBYJH'  '1' '计划' 'P' '15'.
+    PERFORM frm_build_fieldcat USING  'ZBYYC1'  '2' '预测' 'P' '15'.
+    PERFORM frm_build_fieldcat USING  'ZBYYC2'  '3' '预测' 'P' '15'.
+
+  ENDIF.
+
+  mcr_build_fieldcat:'SPART_TXT'     '产品组'   ''      ''  'VTEXT'  'TSPAT',
+                     'MATKL_TXT'     '物料组'   ''      ''  'MATKL'  'T023T'.
+
+  gs_layout-colwidth_optimize = 'X'.
+  gs_layout-zebra = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  FIELD-SYMBOLS:<fs_tab> TYPE STANDARD TABLE.
+  CASE 'X'.
+    WHEN r1.
+      ASSIGN gt_out_a[] TO <fs_tab>.
+    WHEN r2.
+      ASSIGN gt_out_b[] TO <fs_tab>.
+    WHEN r3.
+      ASSIGN gt_out_c[] TO <fs_tab>.
+    WHEN OTHERS.
+  ENDCASE.
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+*     I_INTERFACE_CHECK  = ' '
+*     I_BYPASSING_BUFFER = ' '
+*     I_BUFFER_ACTIVE    = ' '
+      i_callback_program = sy-repid
+*     I_CALLBACK_PF_STATUS_SET          = ' '
+*     I_CALLBACK_USER_COMMAND           = ' '
+*     I_CALLBACK_TOP_OF_PAGE            = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME   =
+*     I_BACKGROUND_ID    = ' '
+*     I_GRID_TITLE       =
+*     I_GRID_SETTINGS    =
+      is_layout          = gs_layout
+      it_fieldcat        = gt_fcat[]
+*     IT_EXCLUDING       =
+*     IT_SPECIAL_GROUPS  =
+*     IT_SORT            =
+*     IT_FILTER          =
+*     IS_SEL_HIDE        =
+      i_default          = 'X'
+      i_save             = 'A'
+*     IS_VARIANT         =
+*     IT_EVENTS          =
+*     IT_EVENT_EXIT      =
+*     IS_PRINT           =
+*     IS_REPREP_ID       =
+*     I_SCREEN_START_COLUMN             = 0
+*     I_SCREEN_START_LINE               = 0
+*     I_SCREEN_END_COLUMN               = 0
+*     I_SCREEN_END_LINE  = 0
+*     I_HTML_HEIGHT_TOP  = 0
+*     I_HTML_HEIGHT_END  = 0
+*     IT_ALV_GRAPHICS    =
+*     IT_HYPERLINK       =
+*     IT_ADD_FIELDCAT    =
+*     IT_EXCEPT_QINFO    =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER           =
+*     ES_EXIT_CAUSED_BY_USER            =
+    TABLES
+      t_outtab           = <fs_tab>
+    EXCEPTIONS
+      program_error      = 1
+      OTHERS             = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_BUILD_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_2580   text
+*      -->P_2581   text
+*      -->P_2582   text
+*      -->P_2583   text
+*----------------------------------------------------------------------*
+FORM frm_build_fieldcat  USING  u_name TYPE c
+                                 u_num TYPE i
+                                 u_str TYPE c
+                                 u_type TYPE c
+                                 u_lenth TYPE i.
+  DATA:lv_coltxt(30) TYPE c,
+       lv_date       LIKE sy-datum.
+
+  CONCATENATE p_month '01' INTO lv_date.
+  CALL FUNCTION 'BKK_ADD_MONTH_TO_DATE'
+    EXPORTING
+      months  = u_num
+      olddate = lv_date
+    IMPORTING
+      newdate = lv_date.
+
+  CONCATENATE lv_date(6) u_str INTO lv_coltxt.
+
+  gt_fcat-fieldname = u_name.
+  gt_fcat-seltext_l = lv_coltxt.
+  gt_fcat-seltext_m = lv_coltxt.
+  gt_fcat-seltext_s = lv_coltxt.
+  gt_fcat-inttype   = u_type.
+  gt_fcat-intlen    = u_lenth.
+*  IF u_name = 'ZSYDCL' .
+*    gt_fcat-decimals_out = 1.
+*  ENDIF.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+ENDFORM.
+
+FORM frm_remonth.
+
+  DATA:lv_coltxt(30) TYPE c,
+       lv_date       LIKE sy-datum.
+  DATA:lv_date_from LIKE sy-datum,
+       lv_date_to   LIKE sy-datum.
+  DATA:BEGIN OF lt_dn_data OCCURS 0,
+         vbeln     LIKE likp-vbeln,
+         lfart     LIKE likp-lfart,
+         vkorg     LIKE likp-vkorg,
+         kunnr     LIKE likp-kunnr,
+         wadat_ist LIKE likp-wadat_ist,
+*         posnr     LIKE lips-posnr,
+         matnr     LIKE lips-matnr,
+         lfimg     LIKE lips-lfimg,
+         bzirk     LIKE knvv-bzirk,
+       END OF lt_dn_data.
+  DATA:BEGIN OF lt_knvv OCCURS 0,
+         kunnr LIKE knvv-kunnr,
+         vkorg LIKE knvv-vkorg,
+         vtweg LIKE knvv-vtweg,
+         spart LIKE knvv-spart,
+         bzirk LIKE knvv-bzirk,
+         kvgr1 LIKE knvv-kvgr1,
+       END OF lt_knvv.
+  DATA: days   TYPE i,
+        weeks  TYPE i,
+        months TYPE i,
+        years  TYPE i.
+
+  CONCATENATE p_month '01' INTO lv_date.
+  CALL FUNCTION 'BKK_ADD_MONTH_TO_DATE'
+    EXPORTING
+      months  = -3
+      olddate = lv_date
+    IMPORTING
+      newdate = lv_date_from.
+  lv_date_to = lv_date - 1.
+  CASE 'X'.
+    WHEN r1.
+      SELECT  kunnr
+        vkorg
+        vtweg
+        spart
+        bzirk
+        kvgr1
+  INTO CORRESPONDING FIELDS OF TABLE lt_knvv  FROM knvv
+  WHERE vkorg IN s_vkorg
+    AND bzirk IN s_bzirk.
+
+      SELECT a~vbeln
+     a~lfart
+     a~kunag AS kunnr
+     a~vkorg
+     a~wadat_ist
+     b~posnr
+     b~matnr
+     b~lfimg
+INTO CORRESPONDING FIELDS OF TABLE lt_dn_data
+FROM likp AS a  INNER JOIN lips AS b  ON a~vbeln = b~vbeln
+*WHERE a~lfart IN ('ZLF1','ZLR1','ZLF3','ZLF4')
+ FOR ALL ENTRIES IN lt_knvv
+  WHERE a~wadat_ist BETWEEN lv_date_from AND lv_date_to
+  AND a~kunag = lt_knvv-kunnr
+  AND b~matnr IN s_matnr.
+
+    WHEN r2.
+
+      SELECT  kunnr
+        vkorg
+        vtweg
+        spart
+        bzirk
+        kvgr1
+  INTO CORRESPONDING FIELDS OF TABLE lt_knvv  FROM knvv
+  WHERE vkorg IN s_vkorg
+    AND bzirk IN s_bzirk.
+
+      SELECT
+        a~vbeln
+             a~lfart
+             a~kunag AS kunnr     "modi by leimt 20180517
+             a~vkorg
+             a~wadat_ist
+             b~posnr
+             b~matnr
+             b~lfimg
+        a~bzirk
+        INTO CORRESPONDING FIELDS OF TABLE lt_dn_data
+        FROM likp AS a
+        INNER JOIN lips AS b
+        ON a~vbeln = b~vbeln
+        FOR ALL ENTRIES IN lt_knvv
+        WHERE a~lfart IN ('ZLF1','ZLR1','ZLF3','ZLF4')
+          AND a~wadat_ist BETWEEN lv_date_from AND lv_date_to
+          AND a~vkorg IN s_vkorg
+          AND a~kunag = lt_knvv-kunnr
+          AND b~matnr IN s_matnr.
+
+
+
+    WHEN r3.
+      SELECT a~vbeln
+       a~lfart
+         a~kunnr
+         a~vkorg
+       a~wadat_ist
+         b~posnr
+       b~matnr
+       b~lfimg
+  INTO CORRESPONDING FIELDS OF TABLE lt_dn_data
+  FROM likp AS a
+  INNER JOIN lips AS b
+  ON a~vbeln = b~vbeln
+  WHERE a~lfart IN ('ZLF1','ZLR1','ZLF3','ZLF4')
+    AND a~wadat_ist BETWEEN lv_date_from AND lv_date_to
+    AND b~matnr IN s_matnr.
+
+    WHEN OTHERS.
+  ENDCASE.
+
+
+
+  DATA:BEGIN OF lt_dn_data_sum OCCURS 0,
+         vkorg  LIKE likp-vkorg,
+         kunnr  LIKE likp-kunnr,
+         bzirk  LIKE knvv-bzirk,
+         matnr  LIKE lips-matnr,
+         lfimg  LIKE lips-lfimg,
+         lfimg1 LIKE lips-lfimg,
+         lfimg2 LIKE lips-lfimg,
+         lfimg3 LIKE lips-lfimg,
+       END OF lt_dn_data_sum.
+
+  LOOP AT lt_dn_data.
+    IF lt_dn_data-lfart = 'ZLR1'.
+      lt_dn_data-lfimg = -1 * lt_dn_data-lfimg.
+    ENDIF.
+    MOVE-CORRESPONDING lt_dn_data TO lt_dn_data_sum.
+
+    IF r2 = 'X'.
+      READ TABLE lt_knvv WITH  KEY vkorg = lt_dn_data-vkorg kunnr = lt_dn_data-kunnr.
+      IF sy-subrc = 0.
+        lt_dn_data_sum-bzirk = lt_knvv-bzirk.
+      ENDIF.
+    ENDIF.
+    CALL FUNCTION 'FIMA_DAYS_AND_MONTHS_AND_YEARS'
+      EXPORTING
+        i_date_from    = lt_dn_data-wadat_ist
+        i_date_to      = lv_date
+        i_flg_separate = ' '       "是否单独计算 若有标识，则返回两日期相差的天数
+      IMPORTING
+*       e_days         = days      "返回天数：638
+        e_months       = months.    "返回月数：21
+*        e_years        = years.    "返回年数：2
+    CASE months.
+      WHEN 1.
+        lt_dn_data_sum-lfimg1 =  lt_dn_data_sum-lfimg.
+      WHEN 2.
+        lt_dn_data_sum-lfimg2 =  lt_dn_data_sum-lfimg.
+      WHEN 3.
+        lt_dn_data_sum-lfimg3 =  lt_dn_data_sum-lfimg.
+      WHEN OTHERS.
+    ENDCASE.
+    CASE 'X'.
+      WHEN r1.
+
+      WHEN r2.
+        lt_dn_data_sum-kunnr = ''.
+      WHEN r3.
+        lt_dn_data_sum-kunnr = ''.
+        lt_dn_data_sum-vkorg = ''.
+        lt_dn_data_sum-bzirk = ''.
+      WHEN OTHERS.
+    ENDCASE.
+    COLLECT lt_dn_data_sum.
+    CLEAR: lt_dn_data_sum,months,lt_dn_data.
+
+  ENDLOOP.
+  REFRESH: gt_dn_data_sum.
+  CLEAR: gt_dn_data_sum.
+  gt_dn_data_sum[] = lt_dn_data_sum[].
+  SORT gt_dn_data_sum BY vkorg kunnr matnr bzirk.
+
+ENDFORM.

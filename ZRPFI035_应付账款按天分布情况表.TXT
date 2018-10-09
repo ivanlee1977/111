@@ -1,0 +1,42 @@
+*&---------------------------------------------------------------------*
+*& 程序名： ZRPFI035
+*& 创建者(公司)/日期： PFT/20171012
+*& 程序描述：应付账款按天分布情况表
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    PFT           20171012      创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpfi035.
+
+INCLUDE zrpfi035_top.
+INCLUDE zrpfi035_s01.
+INCLUDE zrpfi035_f01.
+
+INITIALIZATION.
+
+AT SELECTION-SCREEN.
+  CHECK sy-ucomm EQ 'ONLI'.
+  AUTHORITY-CHECK OBJECT 'F_BKPF_BUK'
+                ID 'BUKRS' FIELD p_bukrs
+                ID 'ACTVT' FIELD '03'.
+  IF sy-subrc <> 0.
+    MESSAGE '没有公司代码的权限' TYPE 'E'.
+  ENDIF.
+
+START-OF-SELECTION.
+  PERFORM check_enter.
+
+  PERFORM get_data."取数据
+
+  PERFORM process_data."处理数据
+
+  PERFORM sub_dny_field_create.
+  "赋值到表里
+  PERFORM sub_dny_table_create.
+  "字段赋值
+  PERFORM sub_dny_field_update.
+
+
+END-OF-SELECTION.
+  "显示字段
+  PERFORM sub_write_data.

@@ -1,0 +1,43 @@
+*&---------------------------------------------------------------------*
+*& Report ZRPFI011
+*&---------------------------------------------------------------------*
+*&货币资金明细表
+*制作人：雷鸣涛
+*制作时间：2017-8-2
+*&---------------------------------------------------------------------*
+REPORT zrpfi017.
+
+INCLUDE zrpfi017_t01.
+
+INCLUDE zrpfi017_s01.
+
+INCLUDE zrpfi017_f01.
+
+
+AT SELECTION-SCREEN OUTPUT.
+
+************************************************************************
+* AT SELECTION-SCREEN
+************************************************************************
+AT SELECTION-SCREEN.
+  CHECK sy-ucomm EQ 'ONLI'.
+*  取出公司代码主数据
+  SELECT * INTO TABLE gt_t001 FROM t001 WHERE bukrs IN s_rbukrs.
+  LOOP AT gt_t001.
+    AUTHORITY-CHECK OBJECT 'F_BKPF_BUK'
+                  ID 'BUKRS' FIELD gt_t001-bukrs
+                  ID 'ACTVT' FIELD '03'.
+    IF sy-subrc <> 0.
+      DELETE gt_t001.
+      CONTINUE.
+    ENDIF.
+  ENDLOOP.
+  IF gt_t001[] IS INITIAL.
+    MESSAGE '没有公司代码的权限' TYPE 'E'.
+  ENDIF.
+
+START-OF-SELECTION.
+
+  PERFORM frm_getdata.
+
+  PERFORM frm_toexcel.

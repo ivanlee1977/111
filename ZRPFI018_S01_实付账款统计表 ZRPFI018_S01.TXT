@@ -1,0 +1,12 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPFI018_S01
+*&---------------------------------------------------------------------*
+
+*SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+*SELECT-OPTIONS:s_BUKRS FOR BSIK-BUKRS OBLIGATORY,
+*               s_prctr FOR BSIK-prctr,
+*               s_LIFNR FOR BSIK-LIFNR,
+*               s_HKONT FOR BSIK-HKONT OBLIGATORY.
+*PARAMETERS:    p_gjahr LIKE BSIK-gjahr OBLIGATORY DEFAULT sy-datum(4).
+*SELECT-OPTIONS s_monat FOR  BSIK-monat OBLIGATORY DEFAULT sy-datum+4(2) no-EXTENSION.
+*SELECTION-SCREEN END OF BLOCK blc.

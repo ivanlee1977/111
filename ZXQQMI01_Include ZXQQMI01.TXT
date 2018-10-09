@@ -1,0 +1,277 @@
+*----------------------------------------------------------------------*
+***INCLUDE ZXQQMI01.
+*----------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0100  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_0100 INPUT.
+
+  DATA:lv_fname(30) TYPE c,
+       lv_line      TYPE i.
+
+  CLEAR gw_data.
+
+  CASE sy-ucomm.
+    WHEN 'AZOB'.  "双击
+      GET CURSOR FIELD lv_fname.
+      GET CURSOR LINE lv_line.
+      lv_line = lv_line + ztdata-top_line - 1.
+      READ TABLE gt_data INDEX lv_line INTO gw_data.
+      IF lv_fname = 'GT_DATA-ZWXZT_TXT'.
+      ELSEIF lv_fname = 'GT_DATA-FECOD'.
+        PERFORM frm_display_gz_detail_data.
+      ELSEIF lv_fname = 'GT_DATA-URCOD'.
+        PERFORM frm_dispaly_yy_detail_data.
+      ENDIF.
+    WHEN 'ZFINISH'.  "设置完成标识
+      PERFORM frm_set_finish_data.
+    WHEN OTHERS.
+  ENDCASE.
+***清空当前屏幕的事物代码
+  PERFORM frm_reset_function_code.
+ENDMODULE.
+
+*&SPWIZARD: INPUT MODULE FOR TC 'ZTDATA'. DO NOT CHANGE THIS LINE!
+*&SPWIZARD: MODIFY TABLE
+MODULE ztdata_modify INPUT.
+***获取相关字段数据
+  PERFORM frm_get_fields_data.
+
+  READ TABLE gt_data INDEX ztdata-current_line TRANSPORTING NO FIELDS.
+  IF sy-subrc = 0.
+    MODIFY gt_data
+      FROM gt_data
+      INDEX ztdata-current_line.
+  ELSE.
+    APPEND gt_data.
+    CLEAR gt_data.
+  ENDIF.
+ENDMODULE.
+
+*&SPWIZARD: INPUT MODUL FOR TC 'ZTDATA'. DO NOT CHANGE THIS LINE!
+*&SPWIZARD: MARK TABLE
+MODULE ztdata_mark INPUT.
+  DATA: g_ztdata_wa2 LIKE LINE OF gt_data.
+  IF ztdata-line_sel_mode = 1
+  AND gt_data-check = 'X'.
+    LOOP AT gt_data INTO g_ztdata_wa2
+      WHERE check = 'X'.
+      g_ztdata_wa2-check = ''.
+      MODIFY gt_data
+        FROM g_ztdata_wa2
+        TRANSPORTING check.
+    ENDLOOP.
+  ENDIF.
+  MODIFY gt_data
+    FROM gt_data
+    INDEX ztdata-current_line
+    TRANSPORTING check.
+ENDMODULE.
+
+*&SPWIZARD: INPUT MODULE FOR TC 'ZTDATA'. DO NOT CHANGE THIS LINE!
+*&SPWIZARD: PROCESS USER COMMAND
+MODULE ztdata_user_command INPUT.
+  FIELD-SYMBOLS:<fs_code> TYPE t185f-fcode.
+  DATA:lv_str TYPE string VALUE '(SAPLIQS0)ok-code'.
+  ASSIGN  (lv_str) TO <fs_code>.
+
+  ok_code = <fs_code>.
+  PERFORM user_ok_tc USING    'ZTDATA'
+                              'GT_DATA'
+                              'CHECK'
+                     CHANGING ok_code.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  FECOD_PF4  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE fecod_pf4 INPUT.
+  PERFORM frm_code_f4 USING 'C' 'CODE' 'FECOD'.
+ENDMODULE.
+
+MODULE ztgz_modify INPUT.
+
+  IF gt_ztcs003-fecod IS NOT INITIAL.
+    SELECT SINGLE codegruppe INTO gt_ztcs003-fegrp FROM qpcd WHERE katalogart = 'C' AND code = gt_ztcs003-fecod."每个代码配置为唯一
+    IF sy-subrc EQ 0.
+      SELECT SINGLE kurztext
+        INTO gt_ztcs003-txtcdfe
+        FROM qpct
+       WHERE katalogart = 'C'
+         AND codegruppe = gt_ztcs003-fegrp
+         AND code       = gt_ztcs003-fecod
+         AND sprache    = '1'.
+    ELSE.
+      MESSAGE '故障代码不存在' TYPE 'E' DISPLAY LIKE 'S'.
+    ENDIF.
+  ENDIF.
+
+  gt_ztcs003-zindx = gw_data-zindx.
+
+  READ TABLE gt_ztcs003 INDEX ztgz-current_line TRANSPORTING NO FIELDS.
+  IF sy-subrc = 0.
+    MODIFY gt_ztcs003
+      FROM gt_ztcs003
+      INDEX ztgz-current_line.
+  ELSE.
+    APPEND gt_ztcs003.
+  ENDIF.
+ENDMODULE.
+*&SPWIZARD: INPUT MODUL FOR TC 'ZTGZ'. DO NOT CHANGE THIS LINE!
+*&SPWIZARD: MARK TABLE
+MODULE ztgz_mark INPUT.
+  DATA: g_ztgz_wa2 LIKE LINE OF gt_ztcs003.
+  IF ztgz-line_sel_mode = 1
+  AND gt_ztcs003-check = 'X'.
+    LOOP AT gt_ztcs003 INTO g_ztgz_wa2
+      WHERE check = 'X'.
+      g_ztgz_wa2-check = ''.
+      MODIFY gt_ztcs003
+        FROM g_ztgz_wa2
+        TRANSPORTING check.
+    ENDLOOP.
+  ENDIF.
+  MODIFY gt_ztcs003
+    FROM gt_ztcs003
+    INDEX ztgz-current_line
+    TRANSPORTING check.
+ENDMODULE.
+
+*&SPWIZARD: INPUT MODULE FOR TC 'ZTGZ'. DO NOT CHANGE THIS LINE!
+*&SPWIZARD: PROCESS USER COMMAND
+MODULE ztgz_user_command INPUT.
+  ok_code = sy-ucomm.
+  PERFORM user_ok_tc USING    'ZTGZ'
+                              'GT_ZTCS003'
+                              'CHECK'
+                     CHANGING ok_code.
+*  sy-ucomm = ok_code.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0200  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_0200 INPUT.
+  LOOP AT gt_ztcs003.
+    gt_ztcs003-fenum = sy-tabix * 10.
+    MODIFY gt_ztcs003.
+  ENDLOOP.
+
+  CASE sy-ucomm.
+    WHEN 'ZBACK'.
+      PERFORM frm_leave_to_screen_100 USING 'G'.
+    WHEN OTHERS.
+  ENDCASE.
+
+  PERFORM frm_reset_function_code.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  VUCOD_PF4  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE urcod_pf4 INPUT.
+  PERFORM frm_code_f4 USING '5' 'CODE' 'URCOD'.
+ENDMODULE.
+
+MODULE ztyy_modify INPUT.
+  IF gt_ztcs004-urcod IS NOT INITIAL.
+    SELECT SINGLE codegruppe INTO gt_ztcs004-urgrp FROM qpcd WHERE katalogart = '5' AND code = gt_ztcs004-urcod."每个代码配置为唯一
+    IF sy-subrc EQ 0.
+      SELECT SINGLE kurztext
+        INTO gt_ztcs004-txtcdfe
+        FROM qpct
+       WHERE katalogart = '5'
+         AND codegruppe = gt_ztcs004-urgrp
+         AND code       = gt_ztcs004-urcod
+         AND sprache    = '1'.
+    ELSE.
+      MESSAGE '原因代码不存在' TYPE 'E' DISPLAY LIKE 'S'.
+    ENDIF.
+  ENDIF.
+
+  gt_ztcs004-zindx = gw_data-zindx.
+
+  READ TABLE gt_ztcs004 INDEX ztyy-current_line TRANSPORTING NO FIELDS.
+  IF sy-subrc = 0.
+    MODIFY gt_ztcs004
+      FROM gt_ztcs004
+      INDEX ztyy-current_line.
+  ELSE.
+    APPEND gt_ztcs004.
+  ENDIF.
+ENDMODULE.
+
+*&SPWIZARD: INPUT MODUL FOR TC 'ZTYY'. DO NOT CHANGE THIS LINE!
+*&SPWIZARD: MARK TABLE
+MODULE ztyy_mark INPUT.
+  DATA: g_ztyy_wa2 LIKE LINE OF gt_ztcs004.
+  IF ztyy-line_sel_mode = 1
+  AND gt_ztcs004-check = 'X'.
+    LOOP AT gt_ztcs004 INTO g_ztyy_wa2
+      WHERE check = 'X'.
+      g_ztyy_wa2-check = ''.
+      MODIFY gt_ztcs004
+        FROM g_ztyy_wa2
+        TRANSPORTING check.
+    ENDLOOP.
+  ENDIF.
+  MODIFY gt_ztcs004
+    FROM gt_ztcs004
+    INDEX ztyy-current_line
+    TRANSPORTING check.
+ENDMODULE.
+
+*&SPWIZARD: INPUT MODULE FOR TC 'ZTYY'. DO NOT CHANGE THIS LINE!
+*&SPWIZARD: PROCESS USER COMMAND
+MODULE ztyy_user_command INPUT.
+  ok_code = sy-ucomm.
+  PERFORM user_ok_tc USING    'ZTYY'
+                              'GT_ZTCS004'
+                              'CHECK'
+                     CHANGING ok_code.
+*  sy-ucomm = ok_code.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0300  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_0300 INPUT.
+  LOOP AT gt_ztcs004.
+    gt_ztcs004-fenum = sy-tabix * 10.
+    MODIFY gt_ztcs004.
+  ENDLOOP.
+
+  CASE sy-ucomm.
+    WHEN 'ZBACK'.
+      PERFORM frm_leave_to_screen_100 USING 'Y'.
+    WHEN OTHERS.
+  ENDCASE.
+
+  PERFORM frm_reset_function_code.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  ZWXZT_PF4  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE zwxzt_pf4 INPUT.
+  GET CURSOR LINE lv_line.
+  lv_line = lv_line + ztdata-top_line - 1.
+  PERFORM frm_zwxzt_f4 USING lv_line.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  zwxy_pf4  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE zwxy_pf4 INPUT.
+  GET CURSOR LINE lv_line.
+  lv_line = lv_line + ztdata-top_line - 1.
+  PERFORM frm_zwxy_f4 USING lv_line.
+ENDMODULE.

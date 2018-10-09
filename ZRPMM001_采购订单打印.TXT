@@ -1,0 +1,38 @@
+*& 程序名： ZRPMM001
+*& 创建者(公司)/日期： LIJS/20170724
+*& 程序描述：采购订单打印
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    LIJS           20170724      创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpmm001.
+
+INCLUDE zrpmm001_top.      "全局数据定义
+INCLUDE zrpmm001_s01.      "选择界面定义
+INCLUDE zrpmm001_f01.      "子程序定义
+
+
+INITIALIZATION.
+  lv_date = sy-datum - 7.
+  s_bedat-sign = 'I'.
+  s_bedat-option = 'EQ'.
+  s_bedat-low = lv_date.
+  s_bedat-high = sy-datum.
+  APPEND s_bedat.
+
+AT SELECTION-SCREEN.
+  CHECK sy-ucomm EQ 'ONLI'.
+  PERFORM frm_check_auth.
+
+START-OF-SELECTION.
+  IF s_bukrs[] IS INITIAL AND s_ebeln[] IS INITIAL AND s_ekgrp[] IS INITIAL
+  AND   s_bedat[] IS INITIAL AND s_lifnr[] IS INITIAL .
+    MESSAGE '请输入相应查找条件！' TYPE 'I'.
+    RETURN.
+  ENDIF.
+
+  PERFORM get_data."取数据
+  PERFORM process_data."处理数据
+
+END-OF-SELECTION.
+  PERFORM get_alv."ALV显示界面

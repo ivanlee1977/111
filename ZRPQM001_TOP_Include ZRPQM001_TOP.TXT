@@ -1,0 +1,107 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPQM001_TOP
+*&---------------------------------------------------------------------*
+TYPE-POOLS:truxs,slis.
+DATA:xlstab TYPE truxs_t_text_data.
+TABLES:qals,zprintnum.
+********************ALV 事件****************
+DATA:
+  it_fieldcat TYPE lvc_t_fcat,
+  wa_fieldcat LIKE LINE OF it_fieldcat,
+  gs_layout   TYPE lvc_s_layo,
+  it_events   TYPE slis_t_event, ""事件属性
+  wa_events   TYPE slis_alv_event.
+
+*  取检验批相关信息
+DATA: BEGIN OF gt_alv OCCURS 0 ,
+        sel(1),
+        selmatnr   TYPE qals-selmatnr, "物料编码
+        selwerk    TYPE qals-selwerk, "工厂
+        prueflos   TYPE qals-prueflos, "检验批
+        charg      TYPE qals-charg, "批次
+        art        TYPE qals-art, "检验类型
+        pastrterm  TYPE qals-pastrterm, "检验开始日期
+        paendterm  TYPE qals-paendterm, "检验结束日期
+        lagortchrg TYPE qals-lagortchrg, "库存地点
+        sellifnr   TYPE qals-sellifnr, "供应商
+        losmenge   TYPE qals-losmenge, "送检数量
+        ebeln      TYPE qals-ebeln, "采购订单
+        mblnr      TYPE qals-mblnr, "物料凭证
+        gesstichpr TYPE qals-gesstichpr, "采样大小数量
+        ktextlos   TYPE qals-ktextlos, "处理方式 不合格数
+        maktx      TYPE makt-maktx, "物料描述
+        ekgrp      TYPE t024-ekgrp, "采购业务员
+        eknam      TYPE t024-eknam, "采购业务员
+        kurztext   TYPE tq30t-kurztext, ""检验类型
+        sortl      TYPE lfa1-sortl, "供应商简称
+        lgobe      TYPE t001l-lgobe, "库位名称
+        zsum       TYPE zprintnum-zsum, "打印次数
+        zdate      LIKE zprintnum-zdate, "最后打印日期
+        ztime      LIKE zprintnum-ztime, "最后打印时间
+        hgs_cljg   TYPE qals-losmenge, "处理结果中的合格数
+        bhgs_cljg  TYPE qals-losmenge, "处理结果中的不合格数
+        pruefer    LIKE qamr-pruefer, "IQC
+        ersteller  LIKE qals-ersteller, "仓库送检员
+      END OF gt_alv.
+
+* 打印缺陷输出
+DATA: BEGIN OF lt_qmfel OCCURS 0,
+        prueflos         LIKE qmfel-prueflos, "检验批
+        vorglfnr         LIKE qmfel-vorglfnr,
+        merknr           LIKE qmfel-merknr,
+        anzfehler        LIKE qmfel-anzfehler, "缺陷数
+        kurztext         LIKE qamv-kurztext, "检验项目
+        sollstpumf       LIKE qamv-sollstpumf, "取样数量
+        kurztext1(100),"抽检标准
+        kurztext2(100),"不良描述
+        mbewertg_txt(20),"检验结果
+      END OF lt_qmfel.
+
+*  取检验项目
+DATA:BEGIN OF gt_qamv OCCURS 0,
+       prueflos      LIKE qamv-prueflos, "检验批
+       vorglfnr      LIKE qamv-vorglfnr, "
+       merknr        LIKE qamv-merknr,
+       kurztext      LIKE qamv-kurztext, "检验项目
+       sollstpumf    LIKE qamv-sollstpumf, "取样数量
+       steuerkz      LIKE qamv-steuerkz, "检查定量性
+       dummy40       LIKE qamv-dummy40, "信息字段3
+       toleranzob    LIKE qamv-toleranzob, "上限
+       toleranzob_c  TYPE cha_class_view-sollwert, "上限C
+       toleranzun    LIKE qamv-toleranzun, "下限
+       toleranzun_c  TYPE cha_class_view-sollwert, "下限C
+       kurztext1(50),"验收标准
+     END OF gt_qamv.
+
+* 取样品不合格数
+DATA: gt_qmfel LIKE qmfel OCCURS 0 WITH HEADER LINE,
+      gt_qamr  LIKE qamr OCCURS 0 WITH HEADER LINE,
+      gt_qamb  LIKE qamb OCCURS 0 WITH HEADER LINE,
+      gt_qpct  LIKE qpct OCCURS 0 WITH HEADER LINE,
+      gt_qave  LIKE qave OCCURS 0 WITH HEADER LINE.
+
+*   物料凭证相关
+DATA: BEGIN OF gt_mseg OCCURS 0 ,
+        mblnr LIKE mseg-mblnr,
+        mjahr LIKE mseg-mjahr,
+        zeile LIKE mseg-zeile,
+        bwart LIKE mseg-bwart,
+        menge LIKE mseg-menge,
+      END OF gt_mseg.
+
+
+DATA: i_grid_settings TYPE lvc_s_glay.
+
+DATA:ok_code   TYPE sy-ucomm,
+     save_ok   TYPE sy-ucomm,
+     errorcode TYPE i.
+DATA: l_grid TYPE REF TO cl_gui_alv_grid,
+      stbl   TYPE lvc_s_stbl. ""稳定刷新
+
+
+DATA:l_wa_ssfcompop    TYPE  ssfcompop,  "Smart Forms: 智能写作器 (传输) 选项
+     l_wa_ssfctrlop    TYPE  ssfctrlop,  "Smart Forms: 控制结构
+     w_job_output_info TYPE ssfcrescl . "取值预览打印还是打印
+DATA:funname           TYPE rs38l_fnam,        "Smart Forms: 函数
+     ls_composer_param TYPE ssfcompop.
+DATA:xssfctrlop LIKE ssfctrlop.

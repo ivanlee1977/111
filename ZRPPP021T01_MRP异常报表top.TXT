@@ -1,0 +1,43 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP021T01
+*&---------------------------------------------------------------------*
+TABLES:marc,mdez.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       matnr LIKE marc-matnr, "物料号码
+       maktx LIKE makt-maktx, "物料描述
+       mtart LIKE mara-mtart, "物料类型
+       dismm LIKE marc-dismm, "MRP类型
+       dat00 LIKE mdez-dat00, "日期
+       delb0 LIKE mdez-delb0, "MRP元素
+       extra LIKE mdez-extra, "MRP元素数据
+       umdat LIKE mdez-umdat, "再计划日期
+       auskt LIKE mdez-auskt, "例外
+       auslt LIKE t458b-auslt, "例外描述
+       mng01 LIKE mdez-mng01, "收货/需求
+       beskz LIKE marc-beskz, "采购类型
+       sobsl LIKE marc-sobsl, "特殊采购类型
+       dispo LIKE marc-dispo, "MRP控制者
+       plifz LIKE marc-plifz, "计划交货时间
+       dzeit LIKE marc-dzeit, "自制天数
+       nfmat LIKE marc-nfmat, "后继物料
+       zmatn LIKE mara-matnr, "被取代物料
+     END OF gt_out.
+
+***ALV data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  gt_fcat-inttype = &5.
+  gt_fcat-intlen = &6.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

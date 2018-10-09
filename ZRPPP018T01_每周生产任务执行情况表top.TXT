@@ -1,0 +1,93 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP001T01
+*&---------------------------------------------------------------------*
+TABLES:mara,marc.
+DATA: BEGIN OF gt_alv OCCURS 0,
+        box(1),
+        werks  LIKE marc-werks, "工厂
+        spart  LIKE mara-spart, "产品组
+        vtext  LIKE tspat-vtext, "产品组名称
+        sjtrl  LIKE afko-gamng, "当月生产订单实际投入数量
+        sjrkl  LIKE afko-gamng, "当月生产订单实际入库数量
+        fgrks  LIKE afko-gamng, "当月返工生产订单实际入库数量
+        zzzsl  LIKE afko-gamng, "在制数量
+        zkcsl  LIKE afko-gamng, "库存数量
+        xschl  LIKE afko-gamng, "本月销售出货数量
+        matnr  LIKE mara-matnr, "物料号
+        maktx  LIKE makt-maktx, "物料描述
+        meins  LIKE mara-meins, "單位
+      END OF gt_alv.
+
+* 成品物料信息
+DATA:gt_mara LIKE gt_alv OCCURS 0 WITH HEADER LINE,
+     lt_mara LIKE gt_alv OCCURS 0 WITH HEADER LINE.
+
+* 成品物料库存信息
+DATA: BEGIN OF gt_mard OCCURS 0,
+        box(1),
+        matnr  LIKE mard-matnr,
+        werks  LIKE mard-werks,
+        lgort  LIKE mard-lgort,
+        labst  LIKE mard-labst,
+        spart  LIKE mara-spart, "产品组
+        maktx  LIKE makt-maktx, "物料描述
+        lgobe  LIKE t001l-lgobe, "仓库地点描述
+        meins  LIKE mara-meins, "单位
+      END OF gt_mard.
+
+* 生产订单相关信息
+DATA: BEGIN OF gt_afko OCCURS 0,
+        box(1),
+        aufnr  LIKE aufk-aufnr, "生产订单号
+        auart  LIKE aufk-auart, "订单类型
+        werks  LIKE aufk-werks, "工厂
+        objnr  LIKE aufk-objnr,
+        gstrp  LIKE afko-gstrp, "订单开始日期
+        matnr  LIKE afpo-matnr, "物料号
+        psmng  LIKE afpo-psmng, "订单数量
+        wemng  LIKE afpo-wemng, "入库数量
+        spart  LIKE mara-spart, "产品组
+        maktx  LIKE makt-maktx, "物料描述
+        sttxt  LIKE bsvx-sttxt , "订单状态
+        zflag  TYPE c, "类型：A 当月生产订单实际投入数量 B:当月返工生产订单实际入库数量C:在制数量
+        meins  LIKE mara-meins, "单位
+      END OF gt_afko.
+
+* 当月生产订单实际入库数量
+DATA: BEGIN OF gt_aufm OCCURS 0,
+        box(1),
+        mblnr  LIKE aufm-mblnr, "凭证号
+        mjahr  LIKE aufm-mjahr, "凭证年度
+        zeile  LIKE aufm-zeile, "凭证行项目
+        budat  LIKE aufm-budat, "过账日期
+        werks  LIKE aufm-werks, "工厂
+        matnr  LIKE aufm-matnr, "物料号
+        aufnr  LIKE aufm-aufnr, "生产订单号
+        menge  LIKE aufm-menge, "数量
+        bwart  LIKE aufm-bwart, "移动类型
+        spart  LIKE mara-spart, "产品组
+        maktx  LIKE makt-maktx, "物料描述
+        meins  LIKE mara-meins, "单位
+      END OF gt_aufm.
+
+*  本月销售出货数量
+DATA: BEGIN OF gt_lips OCCURS 0,
+        box(1),
+        vbeln  LIKE lips-vbeln, "交货单号
+        posnr  LIKE lips-posnr, "行项目
+        matnr  LIKE lips-matnr, "物料
+        werks  LIKE lips-werks, "工厂
+        lfimg  LIKE lips-lfimg, "数量
+        spart  LIKE mara-spart, "产品组
+        maktx  LIKE makt-maktx, "物料描述
+        meins  LIKE mara-meins, "单位
+      END OF gt_lips.
+
+DATA: lt_mard LIKE gt_mard OCCURS 0 WITH HEADER LINE,
+      lt_aufm LIKE gt_aufm OCCURS 0 WITH HEADER LINE,
+      lt_afko LIKE gt_afko OCCURS 0 WITH HEADER LINE,
+      lt_lips LIKE gt_lips OCCURS 0 WITH HEADER LINE.
+
+
+DATA: lv_date_low  LIKE sy-datum,
+      lv_date_high LIKE sy-datum.

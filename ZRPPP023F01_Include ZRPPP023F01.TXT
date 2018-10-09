@@ -1,0 +1,478 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP023F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+
+  DATA:lv_date  LIKE sy-datum,lv_date1 LIKE sy-datum.
+  DATA: BEGIN OF lt_matnr OCCURS 0,
+          matnr TYPE marc-matnr,
+        END OF lt_matnr.
+  DATA:BEGIN OF lt_dn_data OCCURS 0,
+         vbeln     LIKE likp-vbeln,
+         wadat_ist LIKE likp-wadat_ist,
+         posnr     LIKE lips-posnr,
+         matnr     LIKE lips-matnr,
+         werks     LIKE lips-werks,
+         lfimg     LIKE lips-lfimg,
+       END OF lt_dn_data.
+  DATA:BEGIN OF lt_mard OCCURS 0,
+         matnr LIKE mard-matnr,
+         werks LIKE mard-werks,
+         lgort LIKE mard-lgort,
+         labst LIKE mard-labst,
+         insme LIKE mard-insme,
+       END OF lt_mard.
+  DATA:BEGIN OF lt_afpo OCCURS 0,
+         aufnr LIKE afpo-aufnr,
+         matnr LIKE afpo-matnr,
+         dwerk LIKE afpo-dwerk,
+         psmng LIKE afpo-psmng,
+         wemng LIKE afpo-wemng,
+         objnr TYPE jest-objnr,
+       END OF lt_afpo.
+
+  DATA:BEGIN OF lt_jest OCCURS 0,
+         objnr TYPE jest-objnr,
+         stat  TYPE jest-stat,
+       END OF lt_jest.
+  DATA: lv_s     TYPE string,lv_stat1 TYPE jest-stat,lv_stat2 TYPE jest-stat.
+  DATA: iexcel TYPE TABLE OF makt WITH HEADER LINE.
+  DATA ls_excel LIKE LINE OF iexcel.
+  IF p_r1 = 'X'.
+    IF p_file IS INITIAL.
+      MESSAGE '请选择正确的文件' TYPE 'E'.
+    ENDIF.
+    IF p_file IS NOT INITIAL.
+      CALL FUNCTION 'ZF_PP_READEXCEL'
+        EXPORTING
+          p_file  = p_file
+        TABLES
+          toexcel = iexcel.
+
+      IF sy-subrc <> 0.
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+            WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      ENDIF.
+    ENDIF.
+    FREE MEMORY ID p_file.
+    CHECK iexcel[] IS NOT INITIAL.
+    LOOP AT  iexcel INTO ls_excel WHERE matnr <> ''.
+      MOVE ls_excel-matnr TO lt_matnr-matnr.
+      CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+        EXPORTING
+          input        = lt_matnr-matnr
+        IMPORTING
+          output       = lt_matnr-matnr
+        EXCEPTIONS
+          length_error = 1
+          OTHERS       = 2.
+      IF sy-subrc <> 0.
+* Implement suitable error handling here
+      ENDIF.
+      APPEND lt_matnr.
+    ENDLOOP.
+    CLEAR lv_date.
+
+    CONCATENATE s_tjyf-low '01' INTO lv_date.
+    IF s_tjyf-high <> space.
+      CONCATENATE s_tjyf-high '01' INTO lv_date1.
+      CALL FUNCTION 'LAST_DAY_OF_MONTHS'
+        EXPORTING
+          day_in            = lv_date1   "输入日期
+        IMPORTING
+          last_day_of_month = lv_date1           "返回日期
+        EXCEPTIONS
+          day_in_no_date    = 1
+          OTHERS            = 2.
+    ELSE.
+      CALL FUNCTION 'LAST_DAY_OF_MONTHS'
+        EXPORTING
+          day_in            = lv_date   "输入日期
+        IMPORTING
+          last_day_of_month = lv_date1           "返回日期
+        EXCEPTIONS
+          day_in_no_date    = 1
+          OTHERS            = 2.
+    ENDIF.
+***抓取当前月发货过账的交货单信息
+    SELECT a~vbeln
+           a~wadat_ist
+           b~posnr
+           b~matnr
+           b~werks
+           b~lfimg
+      INTO CORRESPONDING FIELDS OF TABLE lt_dn_data
+      FROM likp AS a      INNER JOIN lips AS b      ON a~vbeln = b~vbeln
+      INNER JOIN vbuk AS c      ON a~vbeln = c~vbeln
+      FOR ALL ENTRIES IN lt_matnr
+      WHERE b~matnr = lt_matnr-matnr
+        AND b~werks IN s_werks1
+        AND c~wbstk = 'C'
+        AND a~lfart IN ('ZLF1','ZLF3')
+        AND a~wadat_ist BETWEEN lv_date AND lv_date1.
+
+
+***抓取库存信息
+    SELECT matnr
+           werks
+           lgort
+           labst
+           insme
+      INTO CORRESPONDING FIELDS OF TABLE lt_mard
+      FROM mard
+      FOR ALL ENTRIES IN lt_matnr
+      WHERE matnr = lt_matnr-matnr
+        AND werks IN s_werks1
+        AND lgort IN ('1100','1020','3020').
+
+***抓取在制品信息  modi by leimt 20180320
+    SELECT a~aufnr
+           a~matnr
+           a~dwerk
+           a~psmng
+           a~wemng
+            b~objnr
+       INTO CORRESPONDING FIELDS OF TABLE lt_afpo
+       FROM afpo AS a
+       INNER JOIN aufk AS b     ON a~aufnr = b~aufnr
+*       INNER JOIN jest AS c     ON b~objnr = c~objnr
+       FOR ALL ENTRIES IN lt_matnr
+       WHERE a~matnr = lt_matnr-matnr
+         AND a~dwerk IN s_werks1
+         AND a~xloek EQ space
+*         AND ( c~stat = 'I0002' AND c~stat = 'I0321' )         "GMPS 已过帐的货物移动
+*         AND c~inact EQ space
+          AND b~loekz EQ space.
+
+    SELECT objnr stat INTO CORRESPONDING FIELDS OF TABLE lt_jest FROM jest
+      FOR ALL ENTRIES IN lt_afpo
+      WHERE objnr = lt_afpo-objnr
+      AND stat IN ('I0002' , 'I0321')
+      AND  inact EQ space.
+
+    LOOP AT lt_matnr .
+      gt_item1-matnr = lt_matnr-matnr.
+      SELECT SINGLE maktx INTO gt_item1-maktx FROM makt WHERE matnr = lt_matnr-matnr AND spras = 1.
+      SELECT SINGLE maabc bstmi INTO (gt_item1-maabc,gt_item1-bstmi) FROM marc WHERE matnr = lt_matnr-matnr AND werks IN s_werks1.
+      LOOP AT lt_mard WHERE matnr = lt_matnr-matnr.
+        gt_item1-labst = lt_mard-labst + gt_item1-labst.
+      ENDLOOP.
+      LOOP AT lt_dn_data WHERE matnr = lt_matnr-matnr.
+        gt_item1-lfimg = lt_dn_data-lfimg + gt_item1-lfimg.
+      ENDLOOP.
+      LOOP AT lt_afpo WHERE matnr = lt_matnr-matnr.
+        READ TABLE lt_jest  WITH  KEY objnr = lt_afpo-objnr stat = 'I0002' TRANSPORTING NO FIELDS.
+        IF sy-subrc = 0 .
+          lv_stat1 = 'I0002'.
+        ENDIF.
+        READ TABLE lt_jest WITH  KEY objnr = lt_afpo-objnr stat = 'I0321' TRANSPORTING NO FIELDS.
+        IF sy-subrc = 0 .
+          lv_stat2 = 'I0321'.
+        ENDIF.
+        IF lv_stat1 = 'I0002' AND lv_stat2 = 'I0321'.
+          gt_item1-zmenge = lt_afpo-psmng - lt_afpo-wemng + gt_item1-zmenge.
+        ENDIF.
+      ENDLOOP.
+      APPEND gt_item1.
+      CLEAR gt_item1.
+    ENDLOOP.
+  ENDIF.
+**************************************************************************************半成品
+  DATA:BEGIN OF lt_po_data OCCURS 0,
+         ebeln LIKE ekpo-ebeln,
+         ebelp LIKE ekpo-ebelp,
+         werks LIKE ekpo-werks,
+         matnr LIKE ekpo-matnr,
+         txz01 LIKE ekpo-txz01,
+         etenr LIKE eket-etenr,
+         eindt LIKE eket-eindt,
+         menge LIKE eket-menge,  "计划行数量
+         wemng LIKE eket-wemng,  "已收货数量
+         zwqsl LIKE eket-menge,  "未清数量
+         bpumz LIKE ekpo-bpumz,
+         bpumn LIKE ekpo-bpumn,
+       END OF lt_po_data.
+  DATA:BEGIN OF lt_marc OCCURS 0,
+         matnr LIKE marc-matnr,
+         werks LIKE marc-werks,
+         dispo LIKE marc-dispo,
+         spart LIKE mara-spart,
+
+       END OF lt_marc.
+  IF p_r2 = 'X'.
+    SELECT a~matnr
+           a~werks
+           a~dispo
+           b~spart
+      INTO CORRESPONDING FIELDS OF TABLE lt_marc
+      FROM marc AS a INNER JOIN mara AS b ON a~matnr = b~matnr
+      WHERE a~matnr IN s_matnr
+        AND a~werks IN s_werks2
+        AND a~dispo IN s_dispo
+        AND b~mtart IN s_mtart
+        .
+
+***抓取在制品信息
+    SELECT a~aufnr
+           a~matnr
+           a~dwerk
+           a~psmng
+           a~wemng
+      b~objnr
+       INTO CORRESPONDING FIELDS OF TABLE lt_afpo
+       FROM afpo AS a
+       INNER JOIN aufk AS b       ON a~aufnr = b~aufnr
+*       INNER JOIN jest AS c       ON b~objnr = c~objnr
+       FOR ALL ENTRIES IN lt_marc
+       WHERE a~matnr = lt_marc-matnr
+         AND a~dwerk = lt_marc-werks
+         AND a~xloek EQ space
+*         AND ( c~stat = 'I0002'  AND c~stat = 'I0321' )
+*         AND c~inact EQ space
+      AND b~loekz EQ space.
+
+***多个标志时必须单独筛选
+    SELECT objnr stat INTO CORRESPONDING FIELDS OF TABLE lt_jest FROM jest
+      FOR ALL ENTRIES IN lt_afpo
+      WHERE objnr = lt_afpo-objnr
+      AND stat IN ('I0002' , 'I0321')
+      AND  inact EQ space.
+
+***抓取未清PO数量
+    SELECT a~ebeln
+           a~ebelp
+           a~werks
+           a~matnr
+           a~txz01
+           b~etenr
+           b~eindt
+           b~menge
+           b~wemng
+           a~bpumz
+           a~bpumn
+      INTO CORRESPONDING FIELDS OF TABLE lt_po_data
+      FROM ekpo AS a
+      INNER JOIN eket AS b      ON a~ebeln = b~ebeln      AND a~ebelp = b~ebelp
+      FOR ALL ENTRIES IN lt_marc
+      WHERE a~matnr = lt_marc-matnr
+        AND a~werks = lt_marc-werks
+        AND a~loekz EQ space
+        AND a~elikz EQ space.
+
+    LOOP AT lt_po_data.
+      IF  lt_po_data-bpumn <> 0.
+        lt_po_data-menge =  lt_po_data-menge * lt_po_data-bpumz / lt_po_data-bpumn.
+        lt_po_data-wemng =  lt_po_data-wemng * lt_po_data-bpumz / lt_po_data-bpumn.
+      ENDIF.
+      "未清数量
+      lt_po_data-zwqsl = lt_po_data-menge - lt_po_data-wemng.
+      MODIFY lt_po_data.
+    ENDLOOP.
+
+    LOOP AT lt_marc.
+      MOVE-CORRESPONDING lt_marc TO gt_item2.
+      SELECT SINGLE maktx INTO gt_item2-maktx FROM makt WHERE matnr = lt_marc-matnr AND spras = 1.
+      SELECT SINGLE labst INTO gt_item2-labst1 FROM mard WHERE matnr = lt_marc-matnr AND lgort = '1010' AND werks = lt_marc-werks.
+      SELECT SINGLE insme INTO gt_item2-labst2 FROM mard WHERE matnr = lt_marc-matnr AND lgort = '1010' AND werks = lt_marc-werks.
+      SELECT SINGLE labst INTO gt_item2-labst3 FROM mard WHERE matnr = lt_marc-matnr AND lgort = '1100' AND werks = lt_marc-werks.
+      SELECT SINGLE labst INTO gt_item2-labst4 FROM mard WHERE matnr = lt_marc-matnr AND lgort = '1170' AND werks = lt_marc-werks.
+      SELECT SINGLE labst INTO gt_item2-labst5 FROM mard WHERE matnr = lt_marc-matnr AND lgort = '1120' AND werks = lt_marc-werks.
+*      gt_item2-zlabst = gt_item2-labst1 + gt_item2-labst2 + gt_item2-labst3 + gt_item2-labst4 + gt_item2-labst5  .
+      LOOP AT lt_afpo WHERE matnr = lt_marc-matnr AND dwerk = lt_marc-werks.
+        READ TABLE lt_jest  WITH  KEY objnr = lt_afpo-objnr stat = 'I0002' TRANSPORTING NO FIELDS.
+        IF sy-subrc = 0 .
+          lv_stat1 = 'I0002'.
+        ENDIF.
+        READ TABLE lt_jest WITH  KEY objnr = lt_afpo-objnr stat = 'I0321' TRANSPORTING NO FIELDS.
+        IF sy-subrc = 0 .
+          lv_stat2 = 'I0321'.
+        ENDIF.
+        IF lv_stat1 = 'I0002' AND lv_stat2 = 'I0321'.
+          gt_item2-zmenge = gt_item2-zmenge + lt_afpo-psmng - lt_afpo-wemng .
+        ENDIF.
+      ENDLOOP.
+      gt_item2-zlabst = gt_item2-labst1 + gt_item2-labst2 + gt_item2-labst3 + gt_item2-labst4 + gt_item2-labst5  + gt_item2-zmenge .
+      LOOP AT lt_po_data WHERE matnr = lt_marc-matnr AND werks = lt_marc-werks.
+        gt_item2-zmenge1 = gt_item2-zmenge1 + lt_po_data-zwqsl.
+      ENDLOOP.
+      IF gt_item2-zmenge1 = 0 AND gt_item2-zlabst = 0 .
+        CLEAR gt_item2.
+        CONTINUE.
+      ENDIF.
+      APPEND gt_item2.
+      CLEAR gt_item2.
+    ENDLOOP.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PROCESS_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_process_data .
+  IF p_r1 = 'X'.
+    g_fieldfcat:
+      'MATNR' '物料编号' 'MATNR' 'MAKT' ,
+      'MAKTX' '物料描述' 'MAKTX' 'MAKT' ,
+      'MAABC' 'ABC标识' 'MAABC' 'MARC' ,
+      'BSTMI' '最小交货量' 'BSTMI' 'MARC',
+      'LFIMG' '销售出库数' 'LFIMG' 'LIPS',
+      'LABST' '库存' 'LFIMG' 'LIPS',
+      'ZMENGE' '在制' 'LFIMG' 'LIPS'    .
+  ENDIF.
+  IF p_r2 = 'X'.
+    g_fieldfcat:
+      'MATNR' '物料编号' 'MATNR' 'MAKT' ,
+      'MAKTX' '物料描述' 'MAKTX' 'MAKT' ,
+      'ZMENGE' '在制' 'LFIMG' 'LIPS'    ,
+      'LABST1' '原材料仓' 'LFIMG' 'LIPS',
+      'LABST2' '原材料仓质检' 'LFIMG' 'LIPS',
+      'LABST3' '更改仓' 'LFIMG' 'LIPS',
+      'LABST4' '维嘉意仓' 'LFIMG' 'LIPS',
+      'LABST5' 'PCBA维修仓' 'LFIMG' 'LIPS',
+      'ZLABST' '厂内总数' 'LFIMG' 'LIPS',
+      'ZMENGE1' '委外在途' 'LFIMG' 'LIPS'    .
+  ENDIF.
+  gs_layout-colwidth_optimize = 'X'.
+*  gs_layout-box_fieldname = 'CHK'.
+*  gs_layout-box_tabname = 'gt_mm'.
+*  gs_layout-edit = 'X'.
+  gs_layout-zebra = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SHOW
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_show .
+  IF p_r1 = 'X'.
+    CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+      EXPORTING
+        i_callback_program       = sy-repid
+        i_callback_pf_status_set = 'SET_PF_STATUS'
+        i_callback_user_command  = 'ALV_USER_COMMAND'
+        is_layout                = gs_layout
+        it_fieldcat              = gt_fcat[]
+      TABLES
+        t_outtab                 = gt_item1[]
+      EXCEPTIONS
+        program_error            = 1
+        OTHERS                   = 2.
+
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+             WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ENDIF.
+  ENDIF.
+  IF p_r2 = 'X'.
+    CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+      EXPORTING
+        i_callback_program       = sy-repid
+        i_callback_pf_status_set = 'SET_PF_STATUS'
+        i_callback_user_command  = 'ALV_USER_COMMAND'
+        is_layout                = gs_layout
+        it_fieldcat              = gt_fcat[]
+      TABLES
+        t_outtab                 = gt_item2[]
+      EXCEPTIONS
+        program_error            = 1
+        OTHERS                   = 2.
+
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+             WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ENDIF.
+  ENDIF.
+
+ENDFORM.
+
+
+FORM set_pf_status USING rt_extab TYPE slis_t_extab.
+
+  DATA: wa_extab TYPE slis_extab.
+
+  SET PF-STATUS '0100' EXCLUDING rt_extab.
+
+ENDFORM.                    "set_pf_status1
+
+FORM alv_user_command USING r_ucomm LIKE sy-ucomm  rs_selfield TYPE slis_selfield.
+
+  DATA: lv_grid TYPE REF TO cl_gui_alv_grid.
+
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = lv_grid.
+
+*  CALL METHOD lv_grid->check_changed_data( ).
+*
+*  CASE r_ucomm.
+*
+*  ENDCASE.
+
+
+ENDFORM.                    "alv_user_command
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DOWNLOAD_TEMPLATE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_0112   text
+*      <--P_P_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_download_template  USING u_objid LIKE wwwdatatab-objid CHANGING ic_file.
+  DATA:l_path   TYPE string.
+
+  CALL METHOD zcl_ole_excel=>download_templet
+    EXPORTING
+      iv_objid        = u_objid
+      iv_win_title    = '请指定下载路径'
+      iv_df_extension = 'XLS'
+    IMPORTING
+      ev_fullpath     = l_path.
+
+  CALL METHOD cl_gui_frontend_services=>execute
+    EXPORTING
+      document = l_path
+    EXCEPTIONS
+      OTHERS   = 10.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_INITIAL_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_initial_data .
+  INCLUDE <icon>.
+  DATA ls_functxt TYPE smp_dyntxt.
+  DATA:gt_exbut TYPE TABLE OF sy-ucomm.
+*******初始化*******
+*******程序主体*******
+  "屏幕工具栏中按饼
+  "启用自定义工具
+  CLEAR ls_functxt.
+  ls_functxt-icon_text = '模板下载'."'Download Template'.
+  ls_functxt-icon_id   = '@49@'.
+  ls_functxt-quickinfo =  '模板下载'.
+  sscrfields-functxt_01 = ls_functxt.
+ENDFORM.

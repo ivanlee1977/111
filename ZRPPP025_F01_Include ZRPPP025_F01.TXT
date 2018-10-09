@@ -1,0 +1,564 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPPP025_F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM get_data .
+
+
+  CONCATENATE s_aedat-low '01' INTO date1.
+  IF s_aedat-high <> '' .
+    CONCATENATE s_aedat-high '01' INTO date2.
+    CALL FUNCTION 'RP_LAST_DAY_OF_MONTHS'
+      EXPORTING
+        day_in            = date2     "输入日期
+      IMPORTING
+        last_day_of_month = date2           "返回日期：20140131
+      EXCEPTIONS
+        day_in_no_date    = 1
+        OTHERS            = 2.
+
+    DATA: lv     TYPE char4,
+          months TYPE i,
+          n(6)   TYPE n.
+
+    CALL FUNCTION 'HR_99S_INTERVAL_BETWEEN_DATES'
+      EXPORTING
+        begda    = date1    "开始日期
+        endda    = date2    "截止日期
+      IMPORTING
+        c_months = months.       "返回月数：12
+
+    n = s_aedat-low.
+    DO months + 1 TIMES.
+      IF n+4(2) > 12.
+        lv = n+0(4) + 1.
+        CONCATENATE lv '01' INTO n.
+      ENDIF.
+      gt_out-aedat = n.
+      APPEND gt_out.
+      n = n + 1.
+    ENDDO.
+  ELSE.
+    CALL FUNCTION 'RP_LAST_DAY_OF_MONTHS'
+      EXPORTING
+        day_in            = date1     "输入日期
+      IMPORTING
+        last_day_of_month = date2           "返回日期：20140131
+      EXCEPTIONS
+        day_in_no_date    = 1
+        OTHERS            = 2.
+    gt_out-aedat = s_aedat-low.
+    APPEND gt_out.
+  ENDIF.
+
+
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE gt_pp  FROM ztpp001 .
+  SORT gt_pp BY zjhcpfl.
+
+  SELECT a~dauat a~psmng a~matnr b~gstrp a~pgmng INTO CORRESPONDING FIELDS OF TABLE gt_afpo
+    FROM afpo AS a INNER JOIN afko AS b ON a~aufnr = b~aufnr
+    FOR ALL ENTRIES IN gt_pp
+    WHERE matnr = gt_pp-matnr
+        AND a~dauat IN ('W001' , 'X001' ,'F001')
+        AND b~gstrp BETWEEN date1 AND date2.
+
+  SELECT a~gmnga b~plnbez AS matnr d~dauat a~vornr c~arbpl a~ism01 a~budat c~steus a~xmnga
+    INTO CORRESPONDING FIELDS OF TABLE gt_afru
+    FROM afru AS a INNER JOIN afko AS b ON a~aufnr = b~aufnr
+    INNER JOIN crhd AS c ON c~objid = a~arbid
+    INNER JOIN afpo AS d ON a~aufnr = d~aufnr
+    FOR ALL ENTRIES IN gt_pp
+    WHERE b~plnbez = gt_pp-matnr
+          AND a~stokz = ''
+*          AND a~stzhl = ''
+          AND d~dauat IN ('W001' , 'X001' ,'F001')
+          AND a~budat BETWEEN date1 AND date2.
+
+  SORT gt_afru BY matnr vornr arbpl.
+
+  SELECT a~matnr b~dauat a~menge a~budat INTO CORRESPONDING FIELDS OF TABLE gt_aufm
+    FROM aufm AS a INNER JOIN afpo AS b ON a~aufnr = b~aufnr
+    FOR ALL ENTRIES IN gt_pp
+    WHERE a~matnr = gt_pp-matnr
+    AND b~dauat IN ('W001' , 'X001' ,'F001')
+    AND a~bwart IN ('101','102')
+    AND a~budat BETWEEN date1 AND date2.
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  PROCESS_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM process_data .
+  DATA lt_afpo LIKE TABLE OF gt_afpo WITH HEADER LINE.
+  LOOP AT gt_afpo  .
+    IF gt_afpo-dauat = 'X001'.
+      gt_afpo-dauat = 'W001'.
+    ENDIF.
+    gt_afpo-aedat = gt_afpo-gstrp+0(6).
+    READ TABLE gt_pp WITH  KEY matnr = gt_afpo-matnr.
+    gt_afpo-zjhcpfl = gt_pp-zjhcpfl.
+    MODIFY gt_afpo.
+    lt_afpo-dauat = gt_afpo-dauat.
+    lt_afpo-psmng = gt_afpo-psmng.
+    lt_afpo-zjhcpfl = gt_afpo-zjhcpfl.
+    lt_afpo-aedat = gt_afpo-aedat.
+    lt_afpo-pgmng = gt_afpo-pgmng.
+    COLLECT lt_afpo.
+  ENDLOOP.
+  CLEAR gt_afpo[].
+  REFRESH gt_afpo[].
+  gt_afpo[] = lt_afpo[].
+
+  DATA lt_afru LIKE TABLE OF gt_afru WITH HEADER LINE.
+  LOOP AT gt_afru .
+    IF  gt_afru-dauat = 'X001'.
+      gt_afru-dauat = 'W001'.
+    ENDIF.
+    gt_afru-aedat = gt_afru-budat+0(6).
+    READ TABLE gt_pp WITH  KEY matnr = gt_afru-matnr.
+    gt_afru-zjhcpfl = gt_pp-zjhcpfl.
+    MODIFY gt_afru.
+    lt_afru-dauat = gt_afru-dauat.
+    lt_afru-gmnga = gt_afru-gmnga.
+    lt_afru-zjhcpfl = gt_afru-zjhcpfl.
+    lt_afru-aedat = gt_afru-aedat.
+    lt_afru-arbpl = gt_afru-arbpl.
+    lt_afru-ism01 = gt_afru-ism01.
+    lt_afru-xmnga = gt_afru-xmnga.
+    lt_afru-steus = gt_afru-steus.
+    COLLECT lt_afru.
+  ENDLOOP.
+  CLEAR gt_afru[].
+  REFRESH gt_afru[].
+  gt_afru[] = lt_afru[].
+
+  DATA lt_aufm LIKE TABLE OF gt_aufm WITH HEADER LINE.
+  LOOP AT gt_aufm .
+    IF gt_aufm-dauat = 'X001'.
+      gt_aufm-dauat = 'W001'.
+    ENDIF.
+    gt_aufm-aedat = gt_aufm-budat+0(6).
+    READ TABLE gt_pp WITH  KEY matnr = gt_aufm-matnr.
+    gt_aufm-zjhcpfl = gt_pp-zjhcpfl.
+    MODIFY gt_aufm.
+    lt_aufm-dauat = gt_aufm-dauat.
+    lt_aufm-menge = gt_aufm-menge.
+    lt_aufm-zjhcpfl = gt_aufm-zjhcpfl.
+    lt_aufm-aedat = gt_aufm-aedat.
+    COLLECT lt_aufm.
+  ENDLOOP.
+  CLEAR gt_aufm[].
+  REFRESH gt_aufm[].
+  gt_aufm[] = lt_aufm[].
+
+  DEFINE add_col.
+    gt_col-zjhcpfl = &1.
+    gt_col-table = &2.
+    gt_col-dauat = &3.
+    gt_col-arbpl = &4.
+    gt_col-zindex = &5.
+    APPEND gt_col.
+  END-OF-DEFINITION.
+
+  add_col:'高压' 'AFPO' 'W001' '0010' '2',
+          '高压' 'AFPO' 'F001' '0010' '3',
+          '高压伺服' 'AFPO' 'W001' '0010' '4',
+          '高压伺服' 'AFPO' 'F001' '0010' '5',
+          '中低压' 'AFPO' 'W001' '0010' '6',
+          '中低压' 'AFPO' 'F001' '0010' '7',
+          '一体电机' 'AFPO' 'W001' '0010' '8',
+          '一体电机' 'AFPO' 'F001' '0010' '9',
+          '其他电机' 'AFPO' 'W001' '0010' '10',
+          '其他电机' 'AFPO' 'F001' '0010' '11',
+          '电源' 'AFPO' 'W001' '0010' '12',
+          '电源' 'AFPO' 'F001' '0010' '13',
+                    '高压' 'AFRU' 'W001' 'ZZ0001' '15',
+          '高压' 'AFRU' 'F001' 'ZZ0001' '16',
+          '高压伺服' 'AFRU' 'W001' 'ZZ0001' '17',
+          '高压伺服' 'AFRU' 'F001' 'ZZ0001' '18',
+          '中低压' 'AFRU' 'W001' 'ZZ0001' '19',
+          '中低压' 'AFRU' 'F001' 'ZZ0001' '20',
+          '一体电机' 'AFRU' 'W001' 'DJZZ01' '21',
+          '一体电机' 'AFRU' 'F001' 'DJZZ01' '22',
+          '其他电机' 'AFRU' 'W001' 'DJZZ01' '23',
+          '其他电机' 'AFRU' 'F001' 'DJZZ01' '24',
+          '电源' 'AFRU' 'W001' 'ZZ0001' '25',
+          '电源' 'AFRU' 'F001' 'ZZ0001' '26',
+                    '高压' 'AFRU' 'W001' 'LH0001' '29',
+          '高压' 'AFRU' 'F001' 'LH0001' '30',
+          '高压伺服' 'AFRU' 'W001' 'LH0001' '31',
+          '高压伺服' 'AFRU' 'F001' 'LH0001' '32',
+          '中低压' 'AFRU' 'W001' 'LH0001' '33',
+          '中低压' 'AFRU' 'F001' 'LH0001' '34',
+          '一体电机' 'AFRU' 'W001' 'LH0001' '35',
+          '一体电机' 'AFRU' 'F001' 'LH0001' '36',
+          '其他电机' 'AFRU' 'W001' 'LH0001' '37',
+          '其他电机' 'AFRU' 'F001' 'LH0001' '38',
+          '电源' 'AFRU' 'W001' 'LH0001' '39',
+          '电源' 'AFRU' 'F001' 'LH0001' '40',
+                    '高压' 'AFRU' 'W001' 'BZ0001' '43',
+          '高压' 'AFRU' 'F001' 'BZ0001' '44',
+          '高压伺服' 'AFRU' 'W001' 'BZ0001' '45',
+          '高压伺服' 'AFRU' 'F001' 'BZ0001' '46',
+          '中低压' 'AFRU' 'W001' 'BZ0001' '47',
+          '中低压' 'AFRU' 'F001' 'BZ0001' '48',
+          '一体电机' 'AFRU' 'W001' 'BZ0001' '49',
+          '一体电机' 'AFRU' 'F001' 'BZ0001' '50',
+          '其他电机' 'AFRU' 'W001' 'BZ0001' '51',
+          '其他电机' 'AFRU' 'F001' 'BZ0001' '52',
+          '电源' 'AFRU' 'W001' 'BZ0001' '53',
+          '电源' 'AFRU' 'F001' 'BZ0001' '54',
+                    '高压' 'AUFM' 'W001' '0010' '57',
+          '高压' 'AUFM' 'F001' '0010' '58',
+          '高压伺服' 'AUFM' 'W001' '0010' '59',
+          '高压伺服' 'AUFM' 'F001' '0010' '60',
+          '中低压' 'AUFM' 'W001' '0010' '61',
+          '中低压' 'AUFM' 'F001' '0010' '62',
+          '一体电机' 'AUFM' 'W001' '0010' '63',
+          '一体电机' 'AUFM' 'F001' '0010' '64',
+          '其他电机' 'AUFM' 'W001' '0010' '65',
+          '其他电机' 'AUFM' 'F001' '0010' '66',
+          '电源' 'AUFM' 'W001' '0010' '67',
+          '电源' 'AUFM' 'F001' '0010' '68'
+  .
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  GET_ALV
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM get_alv .
+  DATA : col_pos TYPE i VALUE 1.
+  PERFORM frm_output_data .
+
+
+ENDFORM.
+
+FORM frm_output_data .
+********数据定义*******
+  DATA:lv_file   TYPE string,
+       lv_result TYPE c. "标识: 空表示文件不存在;否则,表示存在
+  DATA lv_answer TYPE c.
+  DATA:li_lines TYPE i.
+  DATA:ls_key   TYPE wwwdatatab,
+       lv_subrc TYPE sy-subrc.
+  DATA lv_file1 LIKE rlgrap-filename.
+
+  CONSTANTS:gcst_excel_template TYPE w3objid VALUE 'ZPP025'.
+  CONCATENATE 'C:\PP\' sy-title '-'   sy-datum '.xlsx' INTO lv_file.
+
+  ls_key-relid = 'MI'.
+  ls_key-objid = gcst_excel_template.
+  lv_file1 = lv_file.
+  CALL FUNCTION 'DOWNLOAD_WEB_OBJECT'
+    EXPORTING
+      key         = ls_key
+      destination = lv_file1
+    IMPORTING
+      rc          = lv_subrc.
+  IF lv_subrc <> 0.
+    MESSAGE '下载模板出错，请检查，谢谢' TYPE 'E'.
+    EXIT.
+  ENDIF.
+
+***填充EXCEL数据
+  PERFORM frm_filldata_excel USING lv_file.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_FILLDATA_EXCEL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LV_FILE  text
+*----------------------------------------------------------------------*
+FORM frm_filldata_excel USING  iv_file TYPE string.
+*******数据定义*******
+  DATA lv_s TYPE string.
+
+  DATA lv_row TYPE i.
+  DATA lv_col TYPE i.
+
+  DEFINE mac_fill_cell.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+      EXPORTING
+        #1 = &1
+        #2 = &2.
+    SET PROPERTY OF lo_cell 'VALUE' = &3.
+  END-OF-DEFINITION.
+  DATA: lv_ism01 TYPE afru-ism01,lv_ism02 TYPE afru-ism01,lv_ism03 TYPE afru-ism01.
+  DATA: lv_gmnga1 TYPE afru-gmnga,lv_gmnga2 TYPE afru-gmnga,lv_gmnga3 TYPE afru-gmnga.
+  DATA: lv_pgmng TYPE afpo-pgmng,lv_psmng TYPE afpo-psmng,lv_xmnga TYPE afru-xmnga.
+  DATA: lv_menge  TYPE aufm-menge,lv1 TYPE i,lv2 TYPE i,lv TYPE i,lv_menge1 TYPE aufm-menge.
+  DATA: lv_lp1   TYPE afpo-pgmng, lv_lp2 TYPE afpo-pgmng,lv_arbpl TYPE crhd-arbpl,lv_arbid TYPE afvc-arbid.
+  DATA: BEGIN OF lt_aufk OCCURS 0,
+          objnr    TYPE aufk-objnr,
+          gltri    TYPE afko-gltri,
+          gltrp    TYPE afko-gltrp,
+          gstrp    TYPE afko-gstrp,
+          aedat(6) TYPE c,
+        END OF lt_aufk.
+  DATA:BEGIN OF lt_afpo OCCURS 0,
+         psmng TYPE afpo-psmng,
+         pgmng TYPE afpo-pgmng,
+         arbid TYPE afvc-arbid,
+         arbpl TYPE crhd-arbpl,
+         gstrp TYPE afko-gstrp,
+         aufpl TYPE afko-aufpl,
+       END OF lt_afpo    .
+
+
+*填充excel
+  CREATE OBJECT lo_excel 'EXCEL.APPLICATION'.
+  CALL METHOD OF lo_excel 'WORKBOOKS' = lo_workbooks.
+  CALL METHOD OF lo_workbooks 'OPEN' = lo_workbook EXPORTING #1 = iv_file.
+  CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = 1.
+  lv_row = 2.
+  lv_col = 1.
+  LOOP AT gt_out.
+    mac_fill_cell lv_row lv_col gt_out-aedat.
+    LOOP AT gt_afpo WHERE aedat = gt_out-aedat.
+      lv_psmng = lv_psmng + gt_afpo-psmng.
+      lv_pgmng = lv_pgmng + gt_afpo-pgmng.
+      PERFORM frm_dosum USING gt_afpo-zjhcpfl  gt_afpo-dauat gt_afpo-psmng lv_row 'AFPO' '0010'.
+    ENDLOOP.
+
+    LOOP AT gt_afru WHERE aedat = gt_out-aedat.
+      CASE gt_afru-arbpl.
+        WHEN 'ZZ0001' .
+          IF gt_afru-zjhcpfl = '一体电机' OR gt_afru-zjhcpfl = '一体电机更改' OR gt_afru-zjhcpfl = '其他电机' OR gt_afru-zjhcpfl = '其他电机更改'.
+          ELSE.
+            lv_ism01 = lv_ism01 + gt_afru-ism01.
+            lv_gmnga1 = lv_gmnga1 + gt_afru-gmnga.
+          ENDIF.
+        WHEN 'DJZZ01'.
+          IF gt_afru-zjhcpfl = '一体电机' OR gt_afru-zjhcpfl = '一体电机更改' OR gt_afru-zjhcpfl = '其他电机' OR gt_afru-zjhcpfl = '其他电机更改'.
+            lv_ism01 = lv_ism01 + gt_afru-ism01.
+            lv_gmnga1 = lv_gmnga1 + gt_afru-gmnga.
+          ENDIF.
+        WHEN 'LH0001'.
+          lv_ism02 = lv_ism02 + gt_afru-ism01.
+          lv_gmnga2 = lv_gmnga2 + gt_afru-gmnga.
+        WHEN 'BZ0001'.
+          lv_ism03 = lv_ism03 + gt_afru-ism01.
+          lv_gmnga3 = lv_gmnga3 + gt_afru-gmnga.
+        WHEN OTHERS.
+      ENDCASE.
+      IF gt_afru-steus = 'Z001'.
+        lv_xmnga = lv_xmnga + gt_afru-xmnga.
+      ENDIF.
+      PERFORM frm_dosum USING gt_afru-zjhcpfl  gt_afru-dauat gt_afru-gmnga lv_row 'AFRU' gt_afru-arbpl.
+    ENDLOOP.
+    mac_fill_cell lv_row 28 lv_ism01.
+    mac_fill_cell lv_row 42 lv_ism02.
+    mac_fill_cell lv_row 56 lv_ism03.
+
+    LOOP AT gt_aufm WHERE aedat = gt_out-aedat.
+      PERFORM frm_dosum USING gt_aufm-zjhcpfl  gt_aufm-dauat gt_aufm-menge lv_row 'AUFM' '0010'.
+      lv_menge = lv_menge + gt_aufm-menge.
+    ENDLOOP.
+    mac_fill_cell lv_row 69 lv_menge.
+
+    CLEAR lv_menge1.
+    lv_menge1 = lv_menge / lv_pgmng * 100.
+    mac_fill_cell lv_row 70 lv_menge1.
+
+*********************************************组装计划达成率%
+*    SELECT b~pgmng AS pgmng c~arbid  a~gstrp INTO CORRESPONDING FIELDS OF TABLE lt_afpo
+*      FROM afko AS a INNER JOIN afpo AS b ON a~aufnr = b~aufnr
+*      INNER JOIN afvc AS c ON a~aufpl = c~aufpl
+*      FOR ALL ENTRIES IN gt_pp
+*      WHERE a~plnbez = gt_pp-matnr
+*      AND a~gstrp BETWEEN date1 AND date2.
+
+*    SELECT  a~psmng b~gstrp a~pgmng b~aufpl INTO CORRESPONDING FIELDS OF TABLE lt_afpo
+*      FROM afpo AS a INNER JOIN afko AS b ON a~aufnr = b~aufnr
+*      FOR ALL ENTRIES IN gt_pp
+*      WHERE matnr = gt_pp-matnr
+*          AND a~dauat IN ('W001' , 'X001' ,'F001')
+*          AND b~gstrp BETWEEN date1 AND date2.
+*
+*    LOOP AT lt_afpo.
+*      SELECT SINGLE arbid INTO lv_arbid FROM afvc WHERE aufpl = lt_afpo-aufpl.
+*      SELECT SINGLE arbpl INTO lt_afpo-arbpl FROM crhd WHERE objid = lv_arbid.
+*      MODIFY lt_afpo.
+*      CLEAR lv_arbid.
+*    ENDLOOP.
+*
+*    LOOP AT lt_afpo WHERE gstrp+0(6) = gt_out-aedat.
+**      SELECT SINGLE arbpl INTO lv_arbpl FROM crhd  WHERE objid = lt_afpo-arbid.
+*      CASE lt_afpo-arbpl.
+**      CASE lv_arbpl.
+*        WHEN 'ZZ0001' OR  'DJZZ01'.
+*          lv_lp1 = lv_lp1 + lt_afpo-pgmng.
+*        WHEN 'LH0001'.
+*          lv_lp2 = lv_lp2 + lt_afpo-pgmng.
+*        WHEN OTHERS.
+*      ENDCASE.
+*      CLEAR lv_arbpl.
+*    ENDLOOP.
+    CLEAR lv_menge1.
+    lv_menge1 = lv_gmnga1 / lv_pgmng * 100.
+*      lv_menge1 = lv_gmnga1 / lv_lp1 * 100.
+    mac_fill_cell lv_row 71 lv_menge1.
+
+
+    CLEAR lv_menge1.
+*    lv_menge1 = lv_gmnga2 / lv_gmnga1 * 100.
+    lv_menge1 = lv_gmnga2 / lv_pgmng * 100.
+*      lv_menge1 = lv_gmnga2 / lv_lp2 * 100.
+    mac_fill_cell lv_row 72 lv_menge1.
+
+*********************************************工单完工统计
+    SELECT b~objnr a~gltri a~gltrp a~gstrp INTO CORRESPONDING FIELDS OF TABLE  lt_aufk  FROM afko AS a INNER JOIN aufk AS b ON a~aufnr = b~aufnr
+       INNER JOIN afpo AS c ON a~aufnr = c~aufnr
+          WHERE a~gstrp BETWEEN date1 AND date2  .
+
+    DATA lt_status LIKE TABLE OF  jstat WITH HEADER LINE.
+    LOOP AT lt_aufk WHERE gstrp+0(6) = gt_out-aedat..
+
+      CALL FUNCTION 'STATUS_READ'
+        EXPORTING
+          client           = sy-mandt
+          objnr            = lt_aufk-objnr
+          only_active      = 'X'
+        TABLES
+          status           = lt_status
+        EXCEPTIONS
+          object_not_found = 1
+          OTHERS           = 2.
+      IF sy-subrc <> 0.
+* Implement suitable error handling here
+      ENDIF.
+
+      READ TABLE lt_status WITH  KEY stat = 'I0012'.
+      IF sy-subrc = 0.
+        lv1 = lv1 + 1.
+        IF lt_aufk-gltri <= lt_aufk-gltrp.
+          lv2 = lv2 + 1.
+        ENDIF.
+      ENDIF.
+      lv = lv + 1.
+
+    ENDLOOP.
+    CLEAR lv_menge1.
+    lv_menge1 = lv2 / lv * 100.
+    mac_fill_cell lv_row 73 lv_menge1.
+    CLEAR lv_menge1.
+    lv_menge1 = lv1 / lv * 100.
+    mac_fill_cell lv_row 74 lv_menge1.
+*************************************************
+    CLEAR lv_menge1.
+    lv_menge1 = lv_xmnga / lv_pgmng * 100. "不良率
+    mac_fill_cell lv_row 75 lv_menge1.
+
+*人均产能
+    CLEAR lv_menge1.
+    lv_menge1 = lv_menge / ( lv_ism01 + lv_ism02 + lv_ism03 ).
+    mac_fill_cell lv_row 76 lv_menge1.
+
+    lv_row = lv_row + 1.
+    CLEAR: lv_ism01,lv_ism02,lv_ism03.
+    CLEAR: lv_gmnga1 ,lv_gmnga2 ,lv_gmnga3 .
+    CLEAR: lv_psmng,lv_pgmng,lv_menge,lv_menge1.
+    CLEAR: lv,lv1,lv2,lt_aufk[].
+    REFRESH lt_aufk[].
+  ENDLOOP.
+
+
+  CALL METHOD OF lo_sheet 'CELLS' = lo_cell EXPORTING #1 = 1 #2 = 1.
+  CALL METHOD OF lo_cell 'SELECT'.
+  SET PROPERTY OF lo_excel 'CutCopyMode' = 0.
+
+  CALL METHOD OF lo_workbook 'SAVE'.
+  SET PROPERTY OF lo_excel 'VISIBLE' = 1.
+  FREE OBJECT:lo_excel,lo_workbooks,lo_workbook,lo_sheet,lo_range,lo_cell.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DOSUM
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_GT_PP_ZJHCPFL  text
+*      -->P_GT_AFPO_DAUAT  text
+*      -->P_GT_AFPO_PSMNG  text
+*      -->P_LV_ROW  text
+*----------------------------------------------------------------------*
+FORM frm_dosum  USING    p_zjhcpfl
+                         p_dauat
+                         p_num
+                         p_row
+                         p_s
+                         p_arbpl.
+
+  READ TABLE gt_col WITH  KEY zjhcpfl = p_zjhcpfl dauat = p_dauat table = p_s arbpl = p_arbpl.
+  IF sy-subrc = 0.
+    mac_fill_cell p_row gt_col-zindex p_num.
+  ENDIF.
+
+
+
+ENDFORM.
+
+FORM fieldcat_int  USING   p_col_pos         " 1
+                            p_fieldname       " 2
+                            p_seltext_l       " 4
+                            p_filename
+                            p_talbename.
+
+  wa_fieldcat-col_pos       = p_col_pos.
+  wa_fieldcat-fieldname     = p_fieldname.
+  wa_fieldcat-coltext     = p_seltext_l.
+  wa_fieldcat-ref_field   = p_filename.
+  wa_fieldcat-ref_table    = p_talbename.
+  wa_fieldcat-tipddictxt       = 'L'.
+
+
+  APPEND wa_fieldcat TO gt_fcat.
+  p_col_pos = p_col_pos + 1.
+  CLEAR: wa_fieldcat.
+ENDFORM.                    " FIELDCAT_INT
+
+FORM alv_user_command USING r_ucomm LIKE sy-ucomm  rs_selfield TYPE slis_selfield.
+*   获取ALV中的鼠标勾选记录
+  DATA: l_grid TYPE REF TO cl_gui_alv_grid.
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = l_grid.
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  r_ucomm = sy-ucomm.
+
+  CASE r_ucomm.
+      "打印
+    WHEN 'ZPRINT'.
+      PERFORM frm_output_data .
+  ENDCASE.
+
+
+ENDFORM.
+
+FORM set_pf_status USING rt_extab TYPE slis_t_extab.
+
+  DATA: wa_extab TYPE slis_extab.
+
+  SET PF-STATUS '0100' EXCLUDING rt_extab.
+
+ENDFORM.                    "set_pf_status1

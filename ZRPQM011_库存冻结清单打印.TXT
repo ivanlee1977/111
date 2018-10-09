@@ -1,0 +1,29 @@
+*& 程序名： ZRPQM011
+*& 创建者(公司)/日期： 雷鸣涛/20171103
+*& 程序描述：库存冻结清单打印
+*&---------------------------------------------------------------------*
+
+*&---------------------------------------------------------------------*
+REPORT zrpqm011.
+
+INCLUDE ZRPQM011_T01.
+INCLUDE ZRPQM011_S01.
+INCLUDE ZRPQM011_F01.
+
+
+
+INITIALIZATION.
+
+
+AT SELECTION-SCREEN .
+
+START-OF-SELECTION.
+*  IF  s_ebeln[] IS INITIAL AND s_ekgrp[] IS INITIAL
+*  AND   s_bedat[] IS INITIAL AND s_lifnr[] IS INITIAL .
+*    MESSAGE '请输入相应查找条件！' TYPE 'E'.
+*    RETURN.
+*  ENDIF.
+
+  PERFORM frm_getdata.
+  PERFORM frm_getfact.
+  PERFORM frm_show.

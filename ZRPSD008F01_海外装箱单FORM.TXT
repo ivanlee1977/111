@@ -1,0 +1,538 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPSD008F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_MODIFY_SCREEN
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_modify_screen .
+  IF r1 = 'X'.
+    LOOP AT SCREEN.
+      IF screen-group1 = 'M2'.
+        screen-active = 0.
+        screen-invisible = 1.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+  ELSE.
+    LOOP AT SCREEN.
+      IF screen-group1 = 'M1'.
+        screen-active = 0.
+        screen-invisible = 1.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:lt_ztsd003jhdy LIKE ztsd003jhdy OCCURS 0 WITH HEADER LINE.
+  DATA:BEGIN OF lt_kna1 OCCURS 0,
+         kunnr LIKE kna1-kunnr,
+         name1 LIKE kna1-name1,
+         name2 LIKE kna1-name2,
+       END OF lt_kna1.
+
+  DATA:BEGIN OF lt_so_data OCCURS 0,
+         vbeln  LIKE vbap-vbeln,
+         posnr  LIKE vbap-posnr,
+         kzwi1  LIKE vbap-kzwi1,
+         kwmeng LIKE vbap-kwmeng,
+         kvgr1  LIKE vbak-kvgr1,
+         bzirk  TYPE vbkd-bzirk,        "大区
+         inco1  TYPE vbkd-inco1,
+         inco2  TYPE vbkd-inco2,
+       END OF lt_so_data.
+
+  DATA:lt_tvv1t LIKE tvv1t OCCURS 0 WITH HEADER LINE, "销售代表描述
+       lt_t171t LIKE t171t OCCURS 0 WITH HEADER LINE. "大区描述
+
+  DATA:BEGIN OF lt_adrc OCCURS 0,
+         kunnr      LIKE kna1-kunnr,
+         adrnr      LIKE kna1-adrnr,
+         street     LIKE adrc-street,
+         str_suppl3 LIKE adrc-str_suppl3,
+       END OF lt_adrc.
+
+  IF r1 = 'X'. "未装箱清单
+    SELECT a~kunag
+           a~wadat_ist
+           a~vbeln
+           b~posnr
+           b~matnr
+           b~arktx
+           b~lfimg
+           a~kunnr
+           b~vgbel
+           b~vgpos
+           a~vkorg
+           a~erdat
+      INTO CORRESPONDING FIELDS OF TABLE gt_out
+      FROM likp AS a
+      INNER JOIN lips AS b
+      ON a~vbeln = b~vbeln
+      INNER JOIN vbuk AS c
+      ON a~vbeln = c~vbeln
+      WHERE a~vkorg = p_vkorg
+        AND a~kunag IN s_kunag
+        AND a~wadat_ist IN s_datum
+        AND a~vbeln IN s_vbeln
+        AND c~wbstk = 'C'.
+***排除退货单 add by wsk 2018.01.15
+    IF gt_out[] IS NOT INITIAL.
+      DELETE gt_out WHERE vbeln >= '0084000000'.
+    ENDIF.
+
+***排除已经装箱的交货单
+    IF gt_out[] IS NOT INITIAL.
+      SELECT *
+        INTO CORRESPONDING FIELDS OF TABLE lt_ztsd003jhdy
+        FROM ztsd003jhdy
+        FOR ALL ENTRIES IN gt_out
+        WHERE vbeln = gt_out-vbeln
+          AND posnr = gt_out-posnr.
+    ENDIF.
+    SORT lt_ztsd003jhdy BY vbeln posnr.
+    LOOP AT gt_out.
+      READ TABLE lt_ztsd003jhdy WITH KEY vbeln = gt_out-vbeln posnr = gt_out-posnr BINARY SEARCH.
+      IF sy-subrc EQ 0.
+        DELETE gt_out.
+      ENDIF.
+    ENDLOOP.
+  ELSE.
+    SELECT a~kunag
+           a~wadat_ist
+           a~vbeln
+           b~posnr
+           b~matnr
+           b~arktx
+           b~lfimg
+           a~kunnr
+           b~vgbel
+           b~vgpos
+           a~vkorg
+           a~erdat
+           c~zzxno
+     INTO CORRESPONDING FIELDS OF TABLE gt_out
+     FROM likp AS a
+     INNER JOIN lips AS b
+     ON a~vbeln = b~vbeln
+     INNER JOIN ztsd003jhdy AS c
+     ON b~vbeln = c~vbeln
+     AND b~posnr = c~posnr
+      INNER JOIN ztsd003zxdb AS d
+      ON c~zzxno = d~zzxno
+     WHERE a~kunag IN s_kunag
+       AND d~zzxno IN s_zzxno
+       AND d~erdat IN s_erdat.
+  ENDIF.
+
+  CHECK gt_out[] IS NOT INITIAL.
+***抓取客户名称
+  SELECT kunnr name1 name2
+    INTO CORRESPONDING FIELDS OF TABLE lt_kna1
+    FROM kna1
+    FOR ALL ENTRIES IN gt_out
+    WHERE kunnr = gt_out-kunag
+       OR kunnr = gt_out-kunnr.
+
+***抓取销售订单数据
+  SELECT a~vbeln
+         a~posnr
+         a~kzwi1
+         a~kwmeng
+         b~kvgr1
+         c~bzirk
+         c~inco1
+         c~inco2
+    INTO CORRESPONDING FIELDS OF TABLE lt_so_data
+    FROM vbap AS a
+    INNER JOIN vbak AS b
+    ON a~vbeln = b~vbeln
+    INNER JOIN vbkd AS c
+    ON b~vbeln = c~vbeln
+    AND c~posnr = '000000'
+    FOR ALL ENTRIES IN gt_out
+    WHERE a~vbeln = gt_out-vgbel
+      AND a~posnr = gt_out-vgpos.
+
+***销售代表描述
+  SELECT * INTO TABLE lt_tvv1t FROM tvv1t WHERE spras = sy-langu.
+***大区描述
+  SELECT * INTO TABLE lt_t171t FROM t171t WHERE spras = sy-langu.
+***送货地址
+  SELECT a~kunnr
+         a~adrnr
+         b~street
+         b~str_suppl3
+    INTO CORRESPONDING FIELDS OF TABLE lt_adrc
+    FROM kna1 AS a
+    INNER JOIN adrc AS b
+    ON a~adrnr = b~addrnumber
+    FOR ALL ENTRIES IN gt_out
+    WHERE a~kunnr = gt_out-kunnr.
+
+  SORT lt_kna1 BY kunnr.
+  SORT lt_so_data BY vbeln posnr.
+  SORT lt_adrc  BY kunnr.
+  SORT lt_tvv1t BY kvgr1.
+  SORT lt_t171t BY bzirk.
+***整理数据到输出表
+  LOOP AT gt_out.
+***售达方名称
+    READ TABLE lt_kna1 WITH KEY kunnr = gt_out-kunag BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-zname_sold = lt_kna1-name1 && lt_kna1-name2.
+    ENDIF.
+
+    READ TABLE lt_so_data WITH KEY vbeln = gt_out-vgbel posnr = gt_out-vgpos BINARY SEARCH.
+    IF sy-subrc = 0.
+***单价
+      IF lt_so_data-kwmeng NE 0.
+        gt_out-netpr = lt_so_data-kzwi1 / lt_so_data-kwmeng.
+      ENDIF.
+***国家贸易条款
+      gt_out-zgjmy = lt_so_data-inco1 && lt_so_data-inco2.
+      gt_out-kvgr1 = lt_so_data-kvgr1.
+      gt_out-bzirk = lt_so_data-bzirk.
+    ENDIF.
+***价税合计
+    gt_out-amount = gt_out-lfimg * gt_out-netpr.
+***送达方名字
+    READ TABLE lt_kna1 WITH KEY kunnr = gt_out-kunnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-zname_ship = lt_kna1-name1 && lt_kna1-name2.
+    ENDIF.
+***送达方地址
+    READ TABLE lt_adrc WITH KEY kunnr = gt_out-kunnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-zstreet = lt_adrc-street && lt_adrc-str_suppl3.
+    ENDIF.
+***销售代表描述
+    READ TABLE lt_tvv1t WITH KEY kvgr1 = gt_out-kvgr1 BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-bezei = lt_tvv1t-bezei.
+    ENDIF.
+***销售大区描述
+    READ TABLE lt_t171t WITH KEY bzirk = gt_out-bzirk BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-bztxt = lt_t171t-bztxt.
+    ENDIF.
+***销售代表电话
+    SELECT SINGLE tel INTO gt_out-tel FROM ztsd002 WHERE kvgr1 = gt_out-kvgr1.
+    MODIFY gt_out.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  mcr_build_fieldcat: 'ZZXNO'       '装箱单号'     'ZZXNO'   'ZTSD003ZXDB'      ''  '',
+                      'KUNAG'       '售达方'       'KUNAG'   'LIKP'             ''  '',
+                      'ZNAME_SOLD'  '售达方名称'    ''   ''  'C'   '70',
+                      'WADAT_IST'   '交货日期'     'WADAT_IST'   'LIKP'  ''   '',
+                      'VBELN'       '交货单号'     'VBELN'   'LIKP'  ''   '',
+                      'POSNR'       '交货单项目'   'POSNR'   'LIPS'  ''   '',
+                      'MATNR'       '物料号码'     'MATNR'   'LIPS'  ''   '',
+                      'ARKTX'       '物料描述'     'ARKTX'   'LIPS'  ''   '',
+                      'NETPR'       '单价'         ''        ''     'P'  '15',
+                      'LFIMG'       '数量'         'LFIMG'  'LIPS'  ''   '',
+                      'AMOUNT'      '金额'         ''        ''     'P'  '15',
+                      'ZGJMY'       '国际贸易条件'  ''   ''  'C'   '32',
+                      'KUNNR'       '送达方'       'KUNNR'   'LIKP'             ''  '',
+                      'ZNAME_SHIP'  '送达方名称'   ''   ''  'C'   '70',
+                      'ZSTREET'     '送达方地址'   ''   ''  'C'   '100',
+                      'KVGR1'       '销售代表'     'KVGR1'   'VBAK'   ''  '',
+                      'BEZEI'       '销售代表描述' 'BEZEI'   'TVV1T'   ''  '',
+                      'TEL'         '销售代表电话' 'TEL'     'ZTSD002'   ''  '',
+                      'BZIRK'       '大区'         'BZIRK'   'VBKD'   ''  '',
+                      'BZTXT'       '大区描述'     'BZTXT'   'T171T'   ''  '',
+                      'VGBEL'       '销售订单'     'VGBEL'   'LIPS'   ''  '',
+                      'VGPOS'       '订单项目'     'VGPOS'   'LIPS'   ''  '',
+                      'VKORG'       '销售组织'     'VKORG'   'LIKP'   ''  '',
+                      'ERDAT'       '创建日期'     'ERDAT'   'LIKP'   ''  ''.
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+  gs_layout-box_fname = 'CHECK'.
+  gs_layout-sel_mode  = 'A'.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK        = ' '
+*     I_BYPASSING_BUFFER       =
+*     I_BUFFER_ACTIVE          =
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'FRM_SET_PF_STATUS'
+      i_callback_user_command  = 'FRM_USER_COMMAND'
+*     I_CALLBACK_TOP_OF_PAGE   = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME         =
+*     I_BACKGROUND_ID          = ' '
+*     I_GRID_TITLE             =
+*     I_GRID_SETTINGS          =
+      is_layout_lvc            = gs_layout
+      it_fieldcat_lvc          = gt_fcat[]
+*     IT_EXCLUDING             =
+*     IT_SPECIAL_GROUPS_LVC    =
+*     IT_SORT_LVC              =
+*     IT_FILTER_LVC            =
+*     IT_HYPERLINK             =
+*     IS_SEL_HIDE              =
+      i_default                = 'X'
+      i_save                   = 'A'
+*     IS_VARIANT               =
+*     IT_EVENTS                =
+*     IT_EVENT_EXIT            =
+*     IS_PRINT_LVC             =
+*     IS_REPREP_ID_LVC         =
+*     I_SCREEN_START_COLUMN    = 0
+*     I_SCREEN_START_LINE      = 0
+*     I_SCREEN_END_COLUMN      = 0
+*     I_SCREEN_END_LINE        = 0
+*     I_HTML_HEIGHT_TOP        =
+*     I_HTML_HEIGHT_END        =
+*     IT_ALV_GRAPHICS          =
+*     IT_EXCEPT_QINFO_LVC      =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER  =
+*     ES_EXIT_CAUSED_BY_USER   =
+    TABLES
+      t_outtab                 = gt_out[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_PF_STATUS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_set_pf_status USING rt_extab TYPE slis_t_extab.
+  IF r1 = 'X'.
+    SET PF-STATUS 'PF_1000' EXCLUDING 'ZDELETE'.
+  ELSEIF r2 = 'X'.
+    SET PF-STATUS 'PF_1000' EXCLUDING 'ZCREATE'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_USER_COMMAND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_user_command USING r_ucomm LIKE sy-ucomm
+                            rs_selfield TYPE slis_selfield..
+
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CASE r_ucomm.
+    WHEN 'ZCREATE'.  "生成装箱单
+      PERFORM frm_generate_zxd.
+    WHEN 'ZDELETE'.  "删除装箱单
+      PERFORM frm_delete_zxd.
+    WHEN '&IC1'.
+      CHECK  rs_selfield-fieldname = 'VBELN'.
+      SET PARAMETER ID 'VL' FIELD rs_selfield-value.
+      CALL TRANSACTION 'VL03N' AND SKIP FIRST SCREEN.
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GENERATE_ZXD
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_generate_zxd .
+  DATA:lv_zzxno LIKE ztsd003zxdb-zzxno.
+  DATA:lt_ztsd003zxdb LIKE ztsd003zxdb OCCURS 0 WITH HEADER LINE,
+       lt_ztsd003jhdy LIKE ztsd003jhdy OCCURS 0 WITH HEADER LINE.
+  DATA:lt_data LIKE gt_out OCCURS 0 WITH HEADER LINE.
+
+  READ TABLE gt_out WITH KEY check = 'X'.
+  IF sy-subrc NE 0.
+    MESSAGE '请至少选择一行数据' TYPE 'I'.
+  ENDIF.
+
+  LOOP AT gt_out WHERE check = 'X' AND zzxno IS NOT INITIAL.
+    MESSAGE '选择的数据中包含了已经生成装箱单的数据,请检查' TYPE 'I'.
+    EXIT.
+  ENDLOOP.
+  IF sy-subrc = 0.
+    EXIT.
+  ENDIF.
+
+  APPEND LINES OF gt_out TO lt_data.
+  DELETE lt_data WHERE check EQ  space.
+  SORT lt_data BY kunag.
+  DELETE ADJACENT DUPLICATES FROM lt_data COMPARING kunag.
+
+***按照客户生成装箱单数据
+  LOOP AT lt_data.
+    CLEAR:lv_zzxno.
+    PERFORM frm_get_zzxno USING lv_zzxno. "获取装箱号码
+    CHECK lv_zzxno IS NOT INITIAL.
+
+    LOOP AT gt_out WHERE check = 'X' AND kunag = lt_data-kunag.
+      gt_out-zzxno = lv_zzxno.
+      MODIFY gt_out.
+***装箱单表
+      lt_ztsd003zxdb-kunag = gt_out-kunag.
+      lt_ztsd003zxdb-zzxno = lv_zzxno.
+      lt_ztsd003zxdb-erdat = sy-datum.
+      APPEND lt_ztsd003zxdb.
+      CLEAR lt_ztsd003zxdb.
+***装箱单与交货对应关系表
+      lt_ztsd003jhdy-zzxno = gt_out-zzxno.
+      lt_ztsd003jhdy-vbeln = gt_out-vbeln.
+      lt_ztsd003jhdy-posnr = gt_out-posnr.
+      APPEND lt_ztsd003jhdy.
+      CLEAR lt_ztsd003jhdy.
+    ENDLOOP.
+  ENDLOOP.
+
+  SORT lt_ztsd003zxdb.
+  DELETE ADJACENT DUPLICATES FROM lt_ztsd003zxdb COMPARING ALL FIELDS.
+
+  MODIFY ztsd003zxdb FROM TABLE lt_ztsd003zxdb.
+  MODIFY ztsd003jhdy FROM TABLE lt_ztsd003jhdy.
+  IF sy-subrc = 0.
+    COMMIT WORK AND WAIT.
+    MESSAGE '生成装箱单成功' TYPE 'S'.
+  ELSE.
+    ROLLBACK WORK.
+    MESSAGE '生成装箱单失败' TYPE 'E'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DELETE_ZXD
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_delete_zxd .
+  DATA:lt_data LIKE gt_out OCCURS 0 WITH HEADER LINE.
+
+  READ TABLE gt_out WITH KEY check = 'X'.
+  IF sy-subrc NE 0.
+    MESSAGE '请至少选择一行数据' TYPE 'I'.
+    EXIT.
+  ENDIF.
+
+  APPEND LINES OF gt_out TO lt_data.
+  DELETE lt_data WHERE check EQ space.
+  SORT lt_data BY zzxno.
+  DELETE ADJACENT DUPLICATES FROM lt_data COMPARING zzxno.
+
+  LOOP AT lt_data.
+    DELETE gt_out WHERE zzxno = lt_data-zzxno.
+    DELETE FROM ztsd003zxdb WHERE zzxno = lt_data-zzxno.
+    DELETE FROM ztsd003jhdy WHERE zzxno = lt_data-zzxno.
+  ENDLOOP.
+
+  COMMIT WORK AND WAIT.
+  MESSAGE '删除装箱单成功' TYPE 'S'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_ZZXNO
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LV_ZZXNO  text
+*----------------------------------------------------------------------*
+FORM frm_get_zzxno  USING  u_zzxno LIKE ztsd003zxdb-zzxno.
+  CLEAR u_zzxno.
+
+  CALL FUNCTION 'NUMBER_GET_NEXT'
+    EXPORTING
+      nr_range_nr             = '01'
+      object                  = 'ZSD_ZXNO'
+*     QUANTITY                = '1'
+*     SUBOBJECT               = ' '
+*     TOYEAR                  = '0000'
+*     IGNORE_BUFFER           = ' '
+    IMPORTING
+      number                  = u_zzxno
+*     QUANTITY                =
+*     RETURNCODE              =
+    EXCEPTIONS
+      interval_not_found      = 1
+      number_range_not_intern = 2
+      object_not_found        = 3
+      quantity_is_0           = 4
+      quantity_is_not_1       = 5
+      interval_overflow       = 6
+      buffer_overflow         = 7
+      OTHERS                  = 8.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_AUTH
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_auth .
+  IF sy-ucomm = 'ONLI'.
+    IF r1 = 'X'.
+      AUTHORITY-CHECK OBJECT 'V_VBAK_VKO'
+               ID 'VKORG' FIELD p_vkorg
+               ID 'VTWEG' DUMMY
+               ID 'SPART' DUMMY
+               ID 'ACTVT' FIELD '03'.
+      IF sy-subrc <> 0.
+        MESSAGE '没有销售组织的权限' TYPE 'E'.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+ENDFORM.

@@ -1,0 +1,29 @@
+*& 程序名： ZRPMM035
+*& 创建者(公司)/日期： 雷鸣涛/20171218
+*& 程序描述：采购订单交期确认表
+*&---------------------------------------------------------------------*
+
+*&---------------------------------------------------------------------*
+REPORT zrpmm035.
+
+INCLUDE ZRPMM035_T01.
+INCLUDE ZRPMM035_S01.
+INCLUDE ZRPMM035_F01.
+
+
+INITIALIZATION.
+
+AT SELECTION-SCREEN .
+  CHECK sy-ucomm EQ 'ONLI'.
+*  PERFORM frm_check_auth.
+
+
+START-OF-SELECTION.
+  IF s_aedat[] IS INITIAL  AND p_ekgrp IS INITIAL  AND s_lifnr[] IS INITIAL AND s_matkl[] IS INITIAL .
+    MESSAGE '请输入相应查找条件！' TYPE 'E'.
+    RETURN.
+  ENDIF.
+
+  PERFORM frm_getdata.
+  PERFORM frm_getfact.
+  PERFORM frm_show.

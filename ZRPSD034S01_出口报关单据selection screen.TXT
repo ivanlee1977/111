@@ -1,0 +1,15 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPSD011S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+
+SELECT-OPTIONS:
+                s_zzxno FOR ztsd003jhdy-zzxno ,
+                s_vgbel FOR lips-vgbel,
+                s_vbeln FOR ztsd003jhdy-vbeln,
+                s_zysdh FOR ztsd003zxdb-zysdh,
+                s_zbgdh FOR ztsd003zxdb-zbgdh,
+                s_kunnr FOR likp-kunnr,
+                s_ernam FOR vbak-ernam.
+
+SELECTION-SCREEN END OF BLOCK blc.

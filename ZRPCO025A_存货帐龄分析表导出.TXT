@@ -1,0 +1,217 @@
+*&---------------------------------------------------------------------*
+*& Report ZRPCO025A
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT zrpco025a.
+
+TABLES : ztco025.
+
+DATA:  gt_co LIKE TABLE OF ztco025 WITH HEADER LINE.
+
+DATA: date TYPE sy-datum.
+
+DATA:lo_excel     TYPE ole2_object,
+     lo_workbooks TYPE ole2_object,
+     lo_workbook  TYPE ole2_object,
+     rows         TYPE ole2_object,
+     lo_sheet     TYPE ole2_object,
+
+     lo_range     TYPE ole2_object,
+     lo_cell      TYPE ole2_object,
+     lo_cell1     TYPE ole2_object.
+DATA lv_file LIKE rlgrap-filename.
+
+DATA lv_row TYPE i.
+DATA lv_col TYPE i.
+
+DEFINE mac_fill_cell.
+  CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+    EXPORTING
+      #1 = &1
+      #2 = &2.
+  SET PROPERTY OF lo_cell 'VALUE' = &3.
+END-OF-DEFINITION.
+
+PARAMETERS: p_budat TYPE ztco025-zdate.
+PARAMETERS: p_bukrs TYPE t001-bukrs DEFAULT '1000'.
+
+INITIALIZATION.
+
+AT SELECTION-SCREEN OUTPUT.
+  DATA lv_date TYPE sy-datum.
+  SELECT zdate FROM ztco025 ORDER BY zdate DESCENDING INTO @lv_date UP TO 1 ROWS.ENDSELECT.
+  p_budat = lv_date.
+
+START-OF-SELECTION.
+  CALL FUNCTION 'BKK_GET_MONTH_LASTDAY'
+    EXPORTING
+      i_date = p_budat   "输入日期
+    IMPORTING
+      e_date = date.
+  PERFORM frm_output .
+
+FORM frm_output .
+  DATA:ls_key   TYPE wwwdatatab,
+       lv_subrc TYPE sy-subrc.
+  DATA lv_file LIKE rlgrap-filename.
+
+  DATA: fullpath    TYPE string,
+        filename    TYPE string,
+        path        TYPE string,
+        user_action TYPE i,
+        encoding    TYPE abap_encoding.
+  CONCATENATE 'C:\FI\' sy-title '-'   sy-datum '.xls' INTO lv_file.
+
+  CONSTANTS:gcst_excel_template TYPE w3objid VALUE 'ZCO025'.
+  ls_key-relid = 'MI'.
+  ls_key-objid = gcst_excel_template.
+  CALL FUNCTION 'DOWNLOAD_WEB_OBJECT'
+    EXPORTING
+      key         = ls_key
+      destination = lv_file
+    IMPORTING
+      rc          = lv_subrc.
+  IF lv_subrc <> 0.
+    MESSAGE '下载模板出错，请检查，谢谢' TYPE 'E'.
+    EXIT.
+  ENDIF.
+
+
+***填充EXCEL数据
+  PERFORM frm_filldata_excel USING lv_file.
+ENDFORM.
+
+FORM frm_filldata_excel  USING iv_file TYPE rlgrap-filename.
+
+  DATA:
+    lv_srzb  TYPE p DECIMALS 2,
+    lv_ml    TYPE p DECIMALS 2,
+    lv_ml_hj TYPE p DECIMALS 2,
+    lv_mlzb  TYPE p DECIMALS 2.
+  DATA:ls_data LIKE LINE OF gt_co.
+
+  DATA:lv_text_ny TYPE string,
+       lv_text_dw TYPE string.
+  DATA:lv_butxt LIKE t001-butxt.
+*******程序主体*******
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE gt_co FROM ztco025 WHERE zdate = date AND zno <> ''.
+
+
+*填充excel
+  CREATE OBJECT lo_excel 'EXCEL.APPLICATION'.
+  CALL METHOD OF lo_excel 'WORKBOOKS' = lo_workbooks.
+  CALL METHOD OF lo_workbooks 'OPEN' = lo_workbook EXPORTING #1 = iv_file.
+  CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = 1.
+
+***年月编制单位
+
+  CONCATENATE date+0(4) '年' date+4(2) '月' date+6(2) '日' INTO lv_text_ny.
+  mac_fill_cell 2 1 lv_text_ny.
+  DATA l_bukrs TYPE string.
+  SELECT SINGLE butxt INTO lv_butxt FROM t001 WHERE bukrs = p_bukrs.
+  CONCATENATE '编制单位：' lv_butxt INTO l_bukrs.
+  mac_fill_cell 3 1 l_bukrs.
+
+*  SORT gt_co BY hrkft .
+
+*  lv_row = 6.
+  LOOP AT gt_co.
+    CASE gt_co-hrkft.
+      WHEN '40'.
+        lv_row = 6.
+        PERFORM frm_loopdata USING gt_co-hrkft .
+      WHEN '30'.
+        lv_row = 7.
+        PERFORM frm_loopdata USING gt_co-hrkft .
+      WHEN '60'.
+        lv_row = 8.
+        PERFORM frm_loopdata USING gt_co-hrkft .
+      WHEN '10'.
+        lv_row = 9.
+        PERFORM frm_loopdata USING gt_co-hrkft .
+      WHEN '50'.
+        lv_row = 10.
+        PERFORM frm_loopdata USING gt_co-hrkft .
+      WHEN '99' OR '20'.
+        lv_row = 11.
+        PERFORM frm_loopdata USING gt_co-hrkft .
+      WHEN '1000' OR '1001' OR '1002' OR '1003'.
+        lv_row = 13.
+
+        PERFORM frm_loopdata USING gt_co-hrkft .
+      WHEN '1004' OR '1005' OR  '1006' OR '1007' OR '1008'.
+        lv_row = 14.
+        PERFORM frm_loopdata USING gt_co-hrkft .
+      WHEN '1009'.
+        lv_row = 15.
+        PERFORM frm_loopdata USING gt_co-hrkft .
+      WHEN '1010'.
+        lv_row = 16.
+        PERFORM frm_loopdata USING gt_co-hrkft .
+      WHEN '1099' OR   '1011' OR  '1012' OR  '1013'.
+        lv_row = 17.
+        PERFORM frm_loopdata USING gt_co-hrkft .
+      WHEN '1098'.
+        lv_row = 19.
+        PERFORM frm_loopdata USING gt_co-hrkft .
+      WHEN '9920'.
+        lv_row = 20.
+        PERFORM frm_loopdata USING gt_co-hrkft .
+      WHEN '9930'.
+        lv_row = 21.
+        PERFORM frm_loopdata USING gt_co-hrkft .
+      WHEN '9940'.
+        lv_row = 22.
+        PERFORM frm_loopdata USING gt_co-hrkft .
+      WHEN '9999'.
+        lv_row = 24.
+        PERFORM frm_loopdata USING gt_co-hrkft .
+      WHEN OTHERS.
+    ENDCASE.
+
+  ENDLOOP.
+  DELETE ztco025 FROM TABLE gt_co.
+
+  CALL METHOD OF lo_sheet 'CELLS' = lo_cell EXPORTING #1 = 1 #2 = 1.
+  CALL METHOD OF lo_cell 'SELECT'.
+  SET PROPERTY OF lo_excel 'CutCopyMode' = 0.
+
+  CALL METHOD OF lo_workbook 'SAVE'.
+  SET PROPERTY OF lo_excel 'VISIBLE' = 1.
+  FREE OBJECT:lo_excel,lo_workbooks,lo_workbook,lo_sheet,lo_range,lo_cell.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_LOOPDATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_GT_CO_HRKFT  text
+*----------------------------------------------------------------------*
+FORM frm_loopdata  USING    p_gt_co_hrkft .
+  FIELD-SYMBOLS: <f1> TYPE any .
+  FIELD-SYMBOLS: <f2> TYPE any .
+  DATA : lv_tabix TYPE char1, tmp1 TYPE char12,tmp2 TYPE char10.
+  READ TABLE gt_co WITH  KEY hrkft = p_gt_co_hrkft zdate = p_budat.
+  IF sy-subrc = 0.
+    lv_col = 3.
+    mac_fill_cell lv_row lv_col gt_co-lbkum.
+    lv_col = lv_col + 1.
+    mac_fill_cell lv_row lv_col gt_co-kst.
+    lv_col = lv_col + 1.
+    DO 5 TIMES.
+      lv_tabix = sy-index.
+      CONCATENATE 'GT_CO-LBKUM' lv_tabix INTO tmp1.
+      ASSIGN (tmp1) TO <f1>.
+      mac_fill_cell lv_row lv_col <f1>.
+      lv_col = lv_col + 1.
+      CONCATENATE 'GT_CO-KST' lv_tabix INTO tmp2.
+      ASSIGN (tmp2) TO <f2>.
+      mac_fill_cell lv_row lv_col <f2>.
+      lv_col = lv_col + 1.
+      CLEAR: <f1>,<f2>.
+    ENDDO.
+  ENDIF.
+*  lv_row = lv_row + 1.
+  CLEAR: tmp1,tmp2.
+ENDFORM.

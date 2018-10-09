@@ -1,0 +1,17 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPSD008S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001 .
+PARAMETERS:r1 RADIOBUTTON GROUP ra DEFAULT 'X' USER-COMMAND uom,
+           r2 RADIOBUTTON GROUP ra.
+SELECTION-SCREEN END OF BLOCK blc.
+
+SELECTION-SCREEN BEGIN OF BLOCK blc1 WITH FRAME TITLE TEXT-002.
+PARAMETERS:p_vkorg LIKE likp-vkorg OBLIGATORY DEFAULT '1200' MODIF ID m1.
+SELECT-OPTIONS:s_kunag FOR likp-kunag ,
+               s_datum FOR likp-wadat_ist MODIF ID m1,
+               s_vbeln FOR likp-vbeln MODIF ID m1,
+               s_zzxno FOR ztsd003zxdb-zzxno MODIF ID m2,
+               s_erdat FOR ztsd003zxdb-erdat MODIF ID m2.
+SELECTION-SCREEN END OF BLOCK blc1.

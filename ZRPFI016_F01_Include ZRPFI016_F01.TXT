@@ -1,0 +1,361 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI016_F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GETDATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_getdata .
+  DATA: l_gjahr1 LIKE bseg-gjahr,
+        l_kbetr  LIKE t007v-kbetr,
+        l_lifnr  LIKE bseg-lifnr,
+        l_dmbtr1 LIKE bseg-dmbtr,
+        l_dmbtr2 LIKE bseg-dmbtr,
+        l_wrbtr1 LIKE bseg-wrbtr,
+        l_wrbtr2 LIKE bseg-wrbtr,
+        l_tabix  LIKE sy-tabix,
+        l_mwskz  LIKE  ekpo-mwskz.
+  DATA:l_date LIKE tcurr-gdatu,l_day LIKE sy-datum.
+  DATA:l_rate LIKE tcurr-ukurs.
+  DATA chdat(8) TYPE c.
+  DATA chdat2(8) TYPE c.
+
+  l_gjahr1 = p_gjahr - 1.
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE gt_last FROM bseg AS a JOIN bkpf AS b
+    ON a~bukrs = b~bukrs AND a~belnr = b~belnr AND a~gjahr = b~gjahr
+    FOR ALL ENTRIES IN gt_t001
+    WHERE  a~bukrs EQ gt_t001-bukrs
+*    WHERE  a~bukrs IN s_bukrs
+    AND a~prctr IN  s_prctr
+    AND a~lifnr IN s_lifnr AND a~lifnr IS NOT NULL
+*    AND b~gjahr IN (p_gjahr,l_gjahr1)
+    AND b~gjahr = p_gjahr
+    AND b~monat IN s_monat
+    AND b~blart = 'WE'
+    AND a~hkont = '2202990100'.
+
+*  CHECK gt_fi[] IS NOT INITIAL.
+*  SORT gt_fi BY lifnr DESCENDING.
+
+*  LOOP AT gt_fi.
+*    IF l_lifnr EQ gt_fi-lifnr .
+
+*      IF gt_fi-shkzg = 'S'.
+*        gt_fi-dmbtr = gt_fi-dmbtr * -1 .
+*        gt_fi-wrbtr = gt_fi-wrbtr * -1 .
+*      ENDIF.
+*      SELECT SINGLE mwskz INTO l_mwskz FROM ekpo WHERE ebeln = gt_fi-ebeln AND ebelp = gt_fi-ebelp.
+*      IF l_mwskz IS NOT INITIAL.
+*        SELECT SINGLE kbetr INTO l_kbetr FROM t007v WHERE mwskz = l_mwskz AND aland = 'CN'.
+*        gt_fi-dmbtr = gt_fi-dmbtr * ( 1 + l_kbetr / 1000 ).
+*        gt_fi-wrbtr = gt_fi-wrbtr * ( 1 + l_kbetr / 1000 ).
+*      ELSE.
+*        gt_fi-dmbtr = gt_fi-dmbtr .
+*        gt_fi-wrbtr = gt_fi-wrbtr .
+*      ENDIF.
+*
+*      IF gt_fi-gjahr = p_gjahr.
+*        gt_last-dmbtr1 = gt_last-dmbtr1 + gt_fi-dmbtr.
+*        l_dmbtr1 = l_dmbtr1 + gt_fi-dmbtr.
+*        gt_last-wrbtr1 = gt_last-wrbtr1 + gt_fi-wrbtr.
+*        l_wrbtr1 = l_wrbtr1 + gt_fi-wrbtr.
+*      ENDIF.
+*      IF gt_fi-gjahr = l_gjahr1.
+*        gt_last-dmbtr2 = gt_last-dmbtr2 + gt_fi-dmbtr.
+*        l_dmbtr2 = l_dmbtr2 + gt_fi-dmbtr.
+*        gt_last-wrbtr2 = gt_last-wrbtr2 + gt_fi-wrbtr.
+*        l_wrbtr2 = l_wrbtr2 + gt_fi-wrbtr.
+*      ENDIF.
+*
+*      gt_last-waers = gt_fi-waers.
+*      MODIFY gt_last INDEX l_tabix.
+*    ELSE.
+*    CLEAR: gt_last-dmbtr1,gt_last-dmbtr1.
+*    CLEAR: gt_last-wrbtr1,gt_last-wrbtr1.
+*    IF gt_fi-shkzg = 'S'.
+*      gt_fi-dmbtr = gt_fi-dmbtr * -1 .
+*      gt_fi-wrbtr = gt_fi-wrbtr * -1 .
+*    ENDIF.
+*    SELECT SINGLE mwskz INTO l_mwskz FROM ekpo WHERE ebeln = gt_fi-ebeln AND ebelp = gt_fi-ebelp.
+*
+*    IF l_mwskz IS NOT INITIAL.
+*      SELECT SINGLE kbetr INTO l_kbetr FROM t007v WHERE mwskz = l_mwskz AND aland = 'CN'.
+*      gt_last-dmbtr1 = gt_fi-dmbtr * ( 1 + l_kbetr / 1000 ).
+*      gt_last-wrbtr1 = gt_fi-wrbtr * ( 1 + l_kbetr / 1000 ).
+*    ELSE.
+*      gt_last-dmbtr1 = gt_fi-dmbtr .
+*      gt_last-wrbtr1 = gt_fi-wrbtr .
+*    ENDIF.
+
+*    gt_last-lifnr = gt_fi-lifnr.
+*    SELECT SINGLE name1 INTO gt_last-name1 FROM lfa1 WHERE lifnr = gt_last-lifnr.
+
+*    IF gt_fi-gjahr = p_gjahr.
+*      gt_last-dmbtr1 = gt_last-dmbtr1 + gt_fi-dmbtr.
+*      l_dmbtr1 = l_dmbtr1 + gt_fi-dmbtr.
+*      gt_last-wrbtr1 = gt_last-wrbtr1 + gt_fi-wrbtr.
+*      l_wrbtr1 = l_wrbtr1 + gt_fi-wrbtr.
+*    ENDIF.
+*    IF gt_fi-gjahr = l_gjahr1.
+*      gt_last-dmbtr2 = gt_last-dmbtr2 + gt_fi-dmbtr.
+*      l_dmbtr2 = l_dmbtr2 + gt_fi-dmbtr.
+*      gt_last-wrbtr2 = gt_last-wrbtr2 + gt_fi-wrbtr.
+*      l_wrbtr2 = l_wrbtr2 + gt_fi-wrbtr.
+*    ENDIF.
+
+*    gt_last-waers = gt_fi-waers.
+*    MOVE-CORRESPONDING gt_fi TO gt_last.
+*    APPEND gt_last.
+*    l_tabix = sy-tabix.
+*    ENDIF.
+
+*    l_lifnr = gt_fi-lifnr.
+*  ENDLOOP.
+  DATA lt_ekpo LIKE TABLE OF ekpo WITH HEADER LINE.
+  LOOP AT  gt_last.
+    SELECT SINGLE name1 INTO gt_last-name1 FROM lfa1 WHERE lifnr = gt_last-lifnr.
+
+*    SELECT SINGLE wemng  eindt INTO ( gt_last-wemng,gt_last-eindt ) FROM eket WHERE ebeln = gt_last-ebeln AND ebelp = gt_last-ebelp.
+    SELECT SINGLE maktx INTO gt_last-maktx FROM makt WHERE matnr = gt_last-matnr and spras = 1.
+    SELECT SINGLE hrktx INTO gt_last-hrktx FROM tkkh2 WHERE hrkft = gt_last-hrkft and spras = 1.
+    SELECT SINGLE matkl INTO gt_last-matkl FROM mara WHERE matnr = gt_last-matnr .
+    SELECT SINGLE wgbez INTO gt_last-wgbez FROM t023t WHERE matkl = gt_last-matkl and spras = 1.
+    SELECT SINGLE bklas INTO gt_last-bklas FROM mbew WHERE matnr = gt_last-matnr AND bwkey = '1000'.
+    PERFORM get_zorh USING gt_last-matnr CHANGING gt_last-zroh_pcbcs.
+
+    SELECT SINGLE * INTO CORRESPONDING FIELDS OF lt_ekpo FROM ekpo   WHERE ebeln = gt_last-ebeln AND ebelp = gt_last-ebelp.
+    gt_last-mwskz = lt_ekpo-mwskz.
+    SELECT SINGLE kbetr INTO gt_last-kbetr FROM t007v WHERE mwskz = lt_ekpo-mwskz AND aland = 'CN'.
+
+    gt_last-zdj = gt_last-dmbtr / gt_last-menge.
+    gt_last-zdj1 = gt_last-zdj * ( 1 + gt_last-kbetr / 1000 ).
+    gt_last-zzj = gt_last-dmbtr.
+    gt_last-zzj1 = gt_last-dmbtr * ( 1 + gt_last-kbetr / 1000 ).
+    gt_last-zsum = gt_last-zzj1 - gt_last-zzj .
+
+    gt_last-bzdj = gt_last-wrbtr / gt_last-menge.
+    gt_last-bzdj1 = gt_last-bzdj * ( 1 + gt_last-kbetr / 1000 ).
+    gt_last-bzzj = gt_last-wrbtr.
+    gt_last-bzzj1 = gt_last-wrbtr * ( 1 + gt_last-kbetr / 1000 ).
+    gt_last-bzsum = gt_last-bzzj1 - gt_last-bzzj .
+
+
+    gt_last-menge1 = lt_ekpo-menge.
+    gt_last-meins = lt_ekpo-meins.
+
+    IF gt_last-shkzg = 'S'.
+      gt_last-zzj = gt_last-zzj * -1 .
+      gt_last-zzj1 = gt_last-zzj1 * -1 .
+      gt_last-zsum = gt_last-zsum * -1 .
+      gt_last-bzzj = gt_last-bzzj * -1 .
+      gt_last-bzzj1 = gt_last-bzzj1 * -1 .
+      gt_last-bzsum = gt_last-bzsum * -1 .
+      gt_last-menge = gt_last-menge  * -1 .
+    ENDIF.
+    MODIFY gt_last.
+    CLEAR lt_ekpo.
+    REFRESH lt_ekpo.
+  ENDLOOP.
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GETFACT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_getfact .
+  DATA : col_pos TYPE i VALUE 1.
+  CLEAR: gt_fcat,gs_layout.
+  REFRESH: gt_fcat.
+
+
+
+  PERFORM fieldcat_int USING col_pos    'LIFNR' '供应商编码' 'LIFNR' 'BSEG'.
+  PERFORM fieldcat_int USING col_pos    'NAME1' '供应商描述' 'LIFNR' 'BSEG'.
+  PERFORM fieldcat_int USING col_pos    'BUDAT' '收货日期' 'BUDAT' 'BKPF'.
+  PERFORM fieldcat_int USING col_pos    'MENGE' '收货数量' 'MENGE' 'BSEG'.
+  PERFORM fieldcat_int USING col_pos    'WAERS' '币别' 'WAERS' 'BSEG'.
+
+
+  PERFORM fieldcat_int USING col_pos    'ZDJ' '单价（不含税）-本币' '' '' .
+  PERFORM fieldcat_int USING col_pos    'ZDJ1' '单价（含税）-本币' '' ''.
+  PERFORM fieldcat_int USING col_pos    'ZZJ' '收货总金额（不含税）-本币' 'BRTWR' 'EKPO' .
+  PERFORM fieldcat_int USING col_pos    'ZZJ1' '收货总金额（含税）-本币' 'BRTWR' 'EKPO' .
+  PERFORM fieldcat_int USING col_pos    'MWSKZ' '税率' 'MWSKZ' 'EKPO' .
+  PERFORM fieldcat_int USING col_pos    'ZSUM' '税额-本币' 'BRTWR' 'EKPO' .
+
+  PERFORM fieldcat_int USING col_pos    'BZDJ' '单价（不含税）-原币' '' '' .
+  PERFORM fieldcat_int USING col_pos    'BZDJ1' '单价（含税）-原币' '' ''.
+  PERFORM fieldcat_int USING col_pos    'BZZJ' '收货总金额（不含税）-原币' 'BRTWR' 'EKPO' .
+  PERFORM fieldcat_int USING col_pos    'BZZJ1' '收货总金额（含税）-原币' 'BRTWR' 'EKPO' .
+  PERFORM fieldcat_int USING col_pos    'BZSUM' '税额-原币' 'BRTWR' 'EKPO' .
+
+  PERFORM fieldcat_int USING col_pos  'MATKL' '物料组' 'MATKL' 'MARA'  .
+  PERFORM fieldcat_int USING col_pos  'WGBEZ' '物料组名称' 'WGBEZ' 'T023T'  .
+  PERFORM fieldcat_int USING col_pos  'EBELN' '采购订单号' 'EBELN' 'BSEG'  .
+  PERFORM fieldcat_int USING col_pos  'EBELP' '采购订单行项目' 'EBELP' 'BSEG'  .
+  PERFORM fieldcat_int USING col_pos  'MATNR' '物料' 'MATNR' 'BSEG'  .
+  PERFORM fieldcat_int USING col_pos  'MAKTX' '描述' 'MAKTX' 'MAKT'  .
+  PERFORM fieldcat_int USING col_pos  'MENGE1' '订单数量' 'MENGE' 'EKPO'  .
+  PERFORM fieldcat_int USING col_pos  'MEINS' '订单单位' 'MEINS' 'EKPO'  .
+  PERFORM fieldcat_int USING col_pos  'HRKFT' '原始组' 'HRKFT' 'BSEG'  .
+  PERFORM fieldcat_int USING col_pos  'HRKTX' '原始组名称' 'HRKTX' 'TKKH2'  .
+  PERFORM fieldcat_int USING col_pos  'ZROH_PCBCS' 'PCB参数' '' ''  .
+  PERFORM fieldcat_int USING col_pos  'BKLAS' '评估类' 'BKLAS' 'MBEW'  .
+
+
+  gs_layout-zebra = 'X'.
+  gs_layout-cwidth_opt = 'X'."
+*  gs_layout-stylefname = 'FIELD_STYLE'. " 将内表中的字段名存入显示格式
+*  gs_layout-box_fname        = 'CHK'.
+
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SHOW
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM  frm_show .
+  PERFORM frm_getfact.
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program       = sy-repid
+      is_layout_lvc            = gs_layout
+      it_fieldcat_lvc          = gt_fcat
+*     it_events                = it_events
+      i_save                   = 'A'
+      i_callback_pf_status_set = 'FRM_PF_STATUS'
+      i_callback_user_command  = 'FRM_USER_COMMAND'
+*     i_grid_settings          = i_grid_settings
+    TABLES
+      t_outtab                 = gt_last[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+           WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+
+ENDFORM.
+
+FORM frm_pf_status USING rt_extab TYPE slis_t_extab.
+  DATA: BEGIN OF tab OCCURS 0,
+          fcode LIKE rsmpe-func,
+        END OF tab.
+*
+*  tab-fcode = '&ETA'. APPEND tab.
+*  tab-fcode = '&SL'. APPEND tab.
+*  tab-fcode = '&OL0'. APPEND tab.
+*  tab-fcode = '&INFO'. APPEND tab.
+
+  SET PF-STATUS '0100'
+  EXCLUDING tab IMMEDIATELY.
+ENDFORM.
+
+FORM frm_user_command  USING r_ucomm LIKE sy-ucomm
+                           rs_selfield TYPE slis_selfield.
+
+  DATA: lv_grid TYPE REF TO cl_gui_alv_grid.
+  DATA: ls_stable TYPE lvc_s_stbl.       ls_stable-row = 'X'.
+
+*  CASE r_ucomm.
+*    WHEN 'BB'.
+*      gv_bb = 'B'.
+*      PERFORM frm_getfact.
+*    WHEN 'YB'.
+*      gv_bb = 'Y'.
+*      PERFORM frm_getfact.
+*    WHEN OTHERS.
+*  ENDCASE.
+*  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+*    IMPORTING
+*      e_grid = lv_grid.
+*  CALL METHOD lv_grid->set_frontend_fieldcatalog
+*    EXPORTING
+*      it_fieldcatalog = gt_fcat[].
+*  CALL METHOD lv_grid->refresh_table_display.
+*  CALL METHOD cl_gui_cfw=>flush.
+*  rs_selfield-refresh = 'X'.
+*  rs_selfield-col_stable = 'X'.
+*  rs_selfield-row_stable = 'X'.
+*    EXPORTING
+*      is_stable      = ls_stable
+*      i_soft_refresh = 'X'.
+ENDFORM.
+
+FORM fieldcat_int  USING   p_col_pos         " 1
+                            p_fieldname       " 2
+                            p_seltext_l       " 4
+                            p_refname
+                           p_talbename
+                            .
+
+  wa_fieldcat-col_pos       = p_col_pos.
+  wa_fieldcat-fieldname     = p_fieldname.
+  wa_fieldcat-coltext     = p_seltext_l.
+  wa_fieldcat-ref_field   = p_refname.
+  wa_fieldcat-ref_table    = p_talbename.
+  wa_fieldcat-tipddictxt       = 'L'.
+
+  APPEND wa_fieldcat TO gt_fcat.
+  p_col_pos = p_col_pos + 1.
+  CLEAR: wa_fieldcat.
+ENDFORM.                    " FIELDCAT_INT
+
+FORM get_zorh  USING    p_gt_last_matnr
+               CHANGING p_zroh_pcbcs.
+  DATA :lv_objek LIKE ausp-objek.
+  DATA: ls_class      LIKE TABLE OF sclass WITH HEADER LINE,
+        ls_objectdata LIKE TABLE OF clobjdat WITH HEADER LINE.
+
+  lv_objek = p_gt_last_matnr.
+  CALL FUNCTION 'CLAF_CLASSIFICATION_OF_OBJECTS'
+    EXPORTING
+*     CLASS              = ' '
+*     CLASSTEXT          = 'X'
+      classtype          = '001'
+*     CLINT              = 0
+*     FEATURES           = 'X'
+      language           = sy-langu
+      object             = lv_objek
+      objecttable        = 'MARA'
+*     KEY_DATE           = SY-DATUM
+*     INITIAL_CHARACT    = 'X'
+*     NO_VALUE_DESCRIPT  =
+*     CHANGE_SERVICE_CLF = 'X'
+*     INHERITED_CHAR     = ' '
+*     CHANGE_NUMBER      = ' '
+    TABLES
+      t_class            = ls_class
+      t_objectdata       = ls_objectdata
+*     I_SEL_CHARACTERISTIC       =
+*     T_NO_AUTH_CHARACT  =
+    EXCEPTIONS
+      no_classification  = 1
+      no_classtypes      = 2
+      invalid_class_type = 3
+      OTHERS             = 4.
+
+  LOOP AT ls_objectdata WHERE ausp1 <> '?'.
+    CASE ls_objectdata-atnam.
+      WHEN 'ZROH_PCBCS'.
+        p_zroh_pcbcs = ls_objectdata-ausp1.
+      WHEN OTHERS.
+    ENDCASE.
+  ENDLOOP.
+ENDFORM.

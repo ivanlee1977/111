@@ -1,0 +1,78 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZXQQMU08
+*&---------------------------------------------------------------------*
+data:lv_index LIKE sy-tabix.
+
+e_viqmel-udate = sy-datum.
+e_viqmel-utime = sy-uzeit.
+
+LOOP AT gt_data.
+  IF gt_data-fecod IS NOT INITIAL.
+    READ TABLE gt_ztcs003_total WITH KEY zindx = gt_data-zindx.
+    IF sy-subrc NE 0.
+      gt_ztcs003_total-qmnum = gt_data-qmnum.
+      gt_ztcs003_total-zindx = gt_data-zindx.
+      gt_ztcs003_total-fenum = '10'.
+      gt_ztcs003_total-fecod = gt_data-fecod.
+      SELECT SINGLE codegruppe INTO gt_ztcs003_total-fegrp FROM qpcd WHERE katalogart = 'C' AND code = gt_data-fecod."每个代码配置为唯一
+      SELECT SINGLE kurztext
+        INTO gt_ztcs003_total-txtcdfe
+        FROM qpct
+       WHERE katalogart = 'C'
+         AND codegruppe = gt_ztcs003_total-fegrp
+         AND code       = gt_data-fecod
+         AND sprache    = '1'.
+      APPEND gt_ztcs003_total.
+      CLEAR gt_ztcs003_total.
+    ELSE.
+      lv_index = sy-tabix.
+      IF gt_data-fecod NE gt_ztcs003_total-fecod.
+        gt_ztcs003_total-fecod = gt_data-fecod.
+        SELECT SINGLE codegruppe INTO gt_ztcs003_total-fegrp FROM qpcd WHERE katalogart = 'C' AND code = gt_data-fecod."每个代码配置为唯一
+        SELECT SINGLE kurztext
+          INTO gt_ztcs003_total-txtcdfe
+          FROM qpct
+         WHERE katalogart = 'C'
+           AND codegruppe = gt_ztcs003_total-fegrp
+           AND code       = gt_data-fecod
+           AND sprache    = '1'.
+        MODIFY gt_ztcs003_total INDEX lv_Index.
+        CLEAR gt_ztcs003_total.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+  IF gt_data-urcod IS NOT INITIAL.
+    READ TABLE gt_ztcs004_total WITH KEY zindx = gt_data-zindx.
+    IF sy-subrc NE 0.
+      gt_ztcs004_total-qmnum = gt_data-qmnum.
+      gt_ztcs004_total-zindx = gt_data-zindx.
+      gt_ztcs004_total-fenum = '10'.
+      gt_ztcs004_total-urcod = gt_data-urcod.
+      SELECT SINGLE codegruppe INTO gt_ztcs004_total-urgrp FROM qpcd WHERE katalogart = '5' AND code = gt_data-urcod."每个代码配置为唯一
+      SELECT SINGLE kurztext
+        INTO gt_ztcs004_total-txtcdfe
+        FROM qpct
+       WHERE katalogart = '5'
+         AND codegruppe = gt_ztcs004_total-urgrp
+         AND code       = gt_data-urcod
+         AND sprache    = '1'.
+      APPEND gt_ztcs004_total.
+      CLEAR gt_ztcs004_total.
+    ELSE.
+      lv_Index = sy-tabix.
+      IF gt_data-urcod NE gt_ztcs004_total-urcod.
+        gt_ztcs004_total-urcod = gt_data-urcod.
+        SELECT SINGLE codegruppe INTO gt_ztcs004_total-urgrp FROM qpcd WHERE katalogart = 'C' AND code = gt_data-urcod."每个代码配置为唯一
+        SELECT SINGLE kurztext
+          INTO gt_ztcs004_total-txtcdfe
+          FROM qpct
+         WHERE katalogart = '5'
+           AND codegruppe = gt_ztcs004_total-urgrp
+           AND code       = gt_data-urcod
+           AND sprache    = '1'.
+        MODIFY gt_ztcs004_total INDEX lv_index.
+        CLEAR gt_ztcs004_total.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+ENDLOOP.

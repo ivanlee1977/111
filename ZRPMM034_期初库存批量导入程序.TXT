@@ -1,0 +1,45 @@
+*&---------------------------------------------------------------------*
+*& Report ZRPMM034
+*& 创建者(公司)/日期： PFT/20171109
+*& 程序描述:期初库存批量导入
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    PFT             20171109     创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpmm034.
+
+INCLUDE zrpmm034t01.  "全局数据定义
+INCLUDE zrpmm034s01.  "选择界面定义
+INCLUDE zrpmm034f01.  "子例程定义
+
+INITIALIZATION.
+  functxt-icon_id   = icon_import.
+  functxt-icon_text = '下载导入模板'.
+  sscrfields-functxt_01 = functxt.
+  sscrfields-ucomm = 'FC01'.
+
+AT SELECTION-SCREEN.
+  CASE  sscrfields-ucomm.
+    WHEN 'FC01'.
+      PERFORM frm_generate_template USING 'ZMM034'.
+    WHEN 'ONLI'.
+      IF p_fname IS INITIAL .
+        MESSAGE e398(00) WITH '文件路径为空，请您输入文件路径！' DISPLAY LIKE 'E'.
+        STOP.
+      ENDIF.
+    WHEN OTHERS.
+  ENDCASE.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_fname.
+  PERFORM frm_get_fname USING p_fname.
+
+
+START-OF-SELECTION.
+
+  PERFORM frm_upload_data.
+
+  PERFORM frm_check_data.
+
+  PERFORM sub_build_fieldcat."设置ALV显示栏位
+
+  PERFORM frm_output_data.

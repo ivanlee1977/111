@@ -1,0 +1,716 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI011_F01
+*&---------------------------------------------------------------------*
+FORM frm_getdata .
+  DATA: BEGIN OF lt_field OCCURS 0,
+          fieldname(30) TYPE c,
+        END OF lt_field.
+  DATA:lv_times  TYPE i,
+       ryear1    LIKE faglflext-ryear,
+       lv_num(2) TYPE n.
+  IF s_rpmax-high IS  INITIAL.
+    s_rpmax-high = s_rpmax-low.
+  ENDIF.
+
+  lt_field-fieldname =  'RBUKRS'.
+  APPEND lt_field.
+  lt_field-fieldname =  'PRCTR'.
+  APPEND lt_field.
+  lt_field-fieldname =  'RYEAR'.
+  APPEND lt_field.
+  lt_field-fieldname =  'RACCT'.
+  APPEND lt_field.
+  lt_field-fieldname =  'DRCRK'.
+  APPEND lt_field.
+  lt_field-fieldname =  'HSLVT'.
+  APPEND lt_field.
+
+  lv_times = s_rpmax-high - s_rpmax-low + 1.
+  lv_num = s_rpmax-low.
+  DO lv_times TIMES.
+    CONCATENATE 'HSL' lv_num INTO lt_field-fieldname.
+    APPEND lt_field.
+    lv_num = lv_num + 1.
+  ENDDO.
+  IF s_rpmax-high EQ 12.
+    MOVE 'HSL13' TO lt_field-fieldname.
+    APPEND lt_field.
+    MOVE 'HSL14' TO lt_field-fieldname.
+    APPEND lt_field.
+    MOVE 'HSL15' TO lt_field-fieldname.
+    APPEND lt_field.
+    MOVE 'HSL16' TO lt_field-fieldname.
+    APPEND lt_field.
+  ENDIF.
+*  ryear1 = s_ryear - 1.
+  SELECT (lt_field) INTO CORRESPONDING FIELDS OF TABLE gt_fi  FROM faglflext
+    WHERE rbukrs IN r_bukrs
+    AND prctr IN s_prctr
+    AND ryear = s_ryear .
+
+  CHECK gt_fi[] IS NOT INITIAL.
+
+  LOOP AT gt_fi.
+
+    CASE gt_fi-racct.
+      WHEN '1601010000'.    "房屋
+        gt_last-hsl11 = gt_fi-hslvt.
+        IF gt_fi-drcrk = 'S'.
+          gt_last-hsl12 = gt_last-hsl12 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+       gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+        IF gt_fi-drcrk = 'H'.
+          gt_last-hsl13 = gt_last-hsl13 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+          gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+      WHEN '1601020000'.    "办公设备
+        gt_last-hsl21 = gt_fi-hslvt.
+        IF gt_fi-drcrk = 'S'.
+          gt_last-hsl22 = gt_last-hsl22 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+       gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+        IF gt_fi-drcrk = 'H'.
+          gt_last-hsl23 = gt_last-hsl23 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+          gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+      WHEN '1601030000'.    "模具设备
+        gt_last-hsl31 = gt_fi-hslvt.
+        IF gt_fi-drcrk = 'S'.
+          gt_last-hsl32 = gt_last-hsl32 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+       gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+        IF gt_fi-drcrk = 'H'.
+          gt_last-hsl33 = gt_last-hsl33 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+          gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+      WHEN '1601040000'.    "生产设备
+        gt_last-hsl41 = gt_fi-hslvt.
+        IF gt_fi-drcrk = 'S'.
+          gt_last-hsl42 = gt_last-hsl42 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+       gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+        IF gt_fi-drcrk = 'H'.
+          gt_last-hsl43 = gt_last-hsl43 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+          gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+      WHEN '1601050000'.    "仪器设备
+        gt_last-hsl51 = gt_fi-hslvt.
+        IF gt_fi-drcrk = 'S'.
+          gt_last-hsl52 = gt_last-hsl52 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+       gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+        IF gt_fi-drcrk = 'H'.
+          gt_last-hsl53 = gt_last-hsl53 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+          gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+      WHEN '1601060000'.    "运输设备
+        gt_last-hsl61 = gt_fi-hslvt.
+        IF gt_fi-drcrk = 'S'.
+          gt_last-hsl62 = gt_last-hsl62 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+       gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+        IF gt_fi-drcrk = 'H'.
+          gt_last-hsl63 = gt_last-hsl63 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+          gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+      WHEN '1601070000'.    "展具设备
+        gt_last-hsl71 = gt_fi-hslvt.
+        IF gt_fi-drcrk = 'S'.
+          gt_last-hsl72 = gt_last-hsl72 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+       gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+        IF gt_fi-drcrk = 'H'.
+          gt_last-hsl73 = gt_last-hsl73 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+          gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+      WHEN '1601090000'.    "其他设备
+        gt_last-hsl81 = gt_fi-hslvt.
+        IF gt_fi-drcrk = 'S'.
+          gt_last-hsl82 = gt_last-hsl82 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+       gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+        IF gt_fi-drcrk = 'H'.
+          gt_last-hsl83 = gt_last-hsl83 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+          gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+**************************************************************************************************************折旧
+      WHEN '1602010000'.    "房屋
+        gt_last-hsl15 = gt_fi-hslvt * -1.
+        IF gt_fi-drcrk = 'S'.
+          gt_last-hsl16 = gt_last-hsl16 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+       gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+        IF gt_fi-drcrk = 'H'.
+          gt_last-hsl17 = gt_last-hsl17 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+          gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+      WHEN '1602020000'.    "办公设备
+        gt_last-hsl25 = gt_fi-hslvt * -1 .
+        IF gt_fi-drcrk = 'S'.
+          gt_last-hsl26 = gt_last-hsl26 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+       gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+        IF gt_fi-drcrk = 'H'.
+          gt_last-hsl27 = gt_last-hsl27 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+          gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+      WHEN '1602030000'.    "模具设备
+        gt_last-hsl35 = gt_fi-hslvt * -1.
+        IF gt_fi-drcrk = 'S'.
+          gt_last-hsl36 = gt_last-hsl36 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+       gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+        IF gt_fi-drcrk = 'H'.
+          gt_last-hsl37 = gt_last-hsl37 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+          gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+      WHEN '1602040000'.    "生产设备
+        gt_last-hsl45 = gt_fi-hslvt * -1.
+        IF gt_fi-drcrk = 'S'.
+          gt_last-hsl46 = gt_last-hsl46 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+       gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+        IF gt_fi-drcrk = 'H'.
+          gt_last-hsl47 = gt_last-hsl47 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+          gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+      WHEN '1602050000'.    "仪器设备
+        gt_last-hsl55 = gt_fi-hslvt * -1.
+        IF gt_fi-drcrk = 'S'.
+          gt_last-hsl56 = gt_last-hsl56 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+       gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+        IF gt_fi-drcrk = 'H'.
+          gt_last-hsl57 = gt_last-hsl57 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+          gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+      WHEN '1602060000'.    "运输设备
+        gt_last-hsl65 = gt_fi-hslvt * -1.
+        IF gt_fi-drcrk = 'S'.
+          gt_last-hsl66 = gt_last-hsl66 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+       gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+        IF gt_fi-drcrk = 'H'.
+          gt_last-hsl67 = gt_last-hsl67 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+          gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+      WHEN '1602070000'.    "展具设备
+        gt_last-hsl75 = gt_fi-hslvt * -1.
+        IF gt_fi-drcrk = 'S'.
+          gt_last-hsl76 = gt_last-hsl76 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+       gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+        IF gt_fi-drcrk = 'H'.
+          gt_last-hsl77 = gt_last-hsl77 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+          gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+      WHEN '1602090000'.    "其他设备
+        gt_last-hsl85 = gt_fi-hslvt * -1.
+        IF gt_fi-drcrk = 'S'.
+          gt_last-hsl86 = gt_last-hsl86 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+       gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+        IF gt_fi-drcrk = 'H'.
+          gt_last-hsl87 = gt_last-hsl87 + gt_fi-hsl01 + gt_fi-hsl02 + gt_fi-hsl03 + gt_fi-hsl04 + gt_fi-hsl05 + gt_fi-hsl06 + gt_fi-hsl07 +
+          gt_fi-hsl08 + gt_fi-hsl09 + gt_fi-hsl10 + gt_fi-hsl11 + gt_fi-hsl12 + gt_fi-hsl13 + gt_fi-hsl14 + gt_fi-hsl15 + gt_fi-hsl16.
+        ENDIF.
+
+      WHEN  OTHERS.
+
+    ENDCASE.
+
+
+  ENDLOOP.
+  gt_last-hsl16 = gt_last-hsl16 * -1.
+  gt_last-hsl17 = gt_last-hsl17 * -1.
+  gt_last-hsl26 = gt_last-hsl26 * -1.
+  gt_last-hsl27 = gt_last-hsl27 * -1.
+  gt_last-hsl36 = gt_last-hsl36 * -1.
+  gt_last-hsl37 = gt_last-hsl37 * -1.
+  gt_last-hsl46 = gt_last-hsl46 * -1.
+  gt_last-hsl47 = gt_last-hsl47 * -1.
+  gt_last-hsl56 = gt_last-hsl56 * -1.
+  gt_last-hsl57 = gt_last-hsl57 * -1.
+  gt_last-hsl66 = gt_last-hsl66 * -1.
+  gt_last-hsl67 = gt_last-hsl67 * -1.
+  gt_last-hsl76 = gt_last-hsl76 * -1.
+  gt_last-hsl77 = gt_last-hsl77 * -1.
+  gt_last-hsl86 = gt_last-hsl86 * -1.
+  gt_last-hsl87 = gt_last-hsl87 * -1.
+  APPEND gt_last.
+  CLEAR gt_fi.
+  FREE gt_fi.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_TOEXCEL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_toexcel .
+
+  DATA:lv_file   TYPE string,
+       lv_result TYPE c. "标识: 空表示文件不存在;否则,表示存在
+  DATA lv_answer TYPE c.
+  DATA:li_lines TYPE i.
+  DATA:ls_key   TYPE wwwdatatab,
+       lv_subrc TYPE sy-subrc.
+  DATA lv_file1 LIKE rlgrap-filename.
+
+
+  CONCATENATE 'C:\FI\' sy-title '-'   sy-datum '.xls' INTO lv_file.
+
+  CALL METHOD cl_gui_frontend_services=>file_exist
+    EXPORTING
+      file                 = lv_file
+    RECEIVING
+      result               = lv_result
+    EXCEPTIONS
+      cntl_error           = 1
+      error_no_gui         = 2
+      wrong_parameter      = 3
+      not_supported_by_gui = 4
+      OTHERS               = 5.
+  IF lv_result IS NOT  INITIAL. "文件已经存在
+    CALL FUNCTION 'POPUP_TO_CONFIRM'
+      EXPORTING
+        titlebar              = '请确认'
+        text_question         = '文件已经存在，是否要覆盖?'
+        text_button_1         = '是'
+        text_button_2         = '否'
+        default_button        = '2' "缺省选中按钮: 1 是; 2 否
+        display_cancel_button = ''  "标识: 为空,不显示 取消按钮
+      IMPORTING
+        answer                = lv_answer "标识： 1 是;
+      EXCEPTIONS
+        text_not_found        = 1
+        OTHERS                = 2.
+    IF lv_answer NE '1'.
+      EXIT.
+    ENDIF.
+  ENDIF.
+
+  ls_key-relid = 'MI'.
+  ls_key-objid = gcst_excel_template.
+  lv_file1 = lv_file.
+  CALL FUNCTION 'DOWNLOAD_WEB_OBJECT'
+    EXPORTING
+      key         = ls_key
+      destination = lv_file1
+    IMPORTING
+      rc          = lv_subrc.
+  IF lv_subrc <> 0.
+    MESSAGE '下载模板出错，请检查，谢谢' TYPE 'E'.
+    EXIT.
+  ENDIF.
+
+***填充EXCEL数据
+  PERFORM frm_filldata_excel USING lv_file.
+
+ENDFORM.
+
+FORM frm_filldata_excel USING iv_file TYPE string..
+
+  DATA:lo_excel     TYPE ole2_object,
+       lo_workbooks TYPE ole2_object,
+       lo_workbook  TYPE ole2_object,
+       lo_sheet     TYPE ole2_object,
+       lo_range     TYPE ole2_object,
+       lo_cell      TYPE ole2_object,
+       lo_cell1     TYPE ole2_object.
+  DATA: lv_file LIKE rlgrap-filename.
+  DATA:lt_excel_in                    "内表：从源文件中读取到的数据
+         TYPE STANDARD TABLE OF alsmex_tabline WITH HEADER LINE.
+
+  DATA lv_value TYPE char200.
+
+  CREATE OBJECT lo_excel 'EXCEL.APPLICATION'.
+  CALL METHOD OF lo_excel 'WORKBOOKS' = lo_workbooks.
+  CALL METHOD OF lo_workbooks 'OPEN' = lo_workbook EXPORTING #1 = iv_file.
+  CALL METHOD OF lo_workbook 'WORKSHEETS' = lo_sheet EXPORTING #1 = 1.
+
+  DATA lt_t001 LIKE TABLE OF t001 WITH HEADER LINE.
+  DATA lv_txt(200) TYPE c.
+
+  SELECT  butxt  INTO CORRESPONDING FIELDS OF TABLE lt_t001 FROM t001 WHERE bukrs IN s_rbukrs.
+  LOOP AT lt_t001.
+    CONCATENATE lv_txt lt_t001-butxt INTO lv_txt SEPARATED BY ' '.
+
+  ENDLOOP.
+  CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+    EXPORTING
+      #1      = 3
+      #2      = 2.
+  SET PROPERTY OF lo_cell 'VALUE' = lv_txt.
+
+  CONCATENATE s_ryear '年' INTO lv_txt.
+  CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+  EXPORTING
+    #1      = 2
+    #2      = 5.
+  SET PROPERTY OF lo_cell 'VALUE' = lv_txt.
+
+  READ TABLE gt_last.
+  IF sy-subrc = 0.
+
+*************************************************填充B列
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+          EXPORTING
+            #1      = 6
+            #2      = 2.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl11.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+          EXPORTING
+            #1      = 9
+            #2      = 2.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl21.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+      EXPORTING
+        #1      = 11
+        #2      = 2.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl31.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+      EXPORTING
+        #1      = 10
+        #2      = 2.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl41.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+      EXPORTING
+        #1      = 7
+        #2      = 2.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl51.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+      EXPORTING
+        #1      = 8
+        #2      = 2.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl61.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+      EXPORTING
+        #1      = 12
+        #2      = 2.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl71.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+      EXPORTING
+        #1      = 13
+        #2      = 2.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl81.
+
+****************************************************填充C列
+
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+          EXPORTING
+            #1      = 6
+            #2      = 3.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl12.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+          EXPORTING
+            #1      = 9
+            #2      = 3.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl22.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+          EXPORTING
+            #1      = 11
+            #2      = 3.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl32.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+         EXPORTING
+           #1      = 10
+           #2      = 3.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl42.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+        EXPORTING
+          #1      = 7
+          #2      = 3.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl52.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+        EXPORTING
+          #1      = 8
+          #2      = 3.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl62.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+        EXPORTING
+          #1      = 12
+          #2      = 3.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl72.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+        EXPORTING
+          #1      = 13
+          #2      = 3.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl82.
+
+
+******************************************填充D列
+    DATA lv_hsl  LIKE faglflext-hslvt.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+          EXPORTING
+            #1      = 6
+            #2      = 4.
+    CLEAR lv_hsl.
+    lv_hsl = gt_last-hsl13 * -1.
+    SET PROPERTY OF lo_cell 'VALUE' = lv_hsl.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+          EXPORTING
+            #1      = 9
+            #2      = 4.
+    CLEAR lv_hsl.
+    lv_hsl = gt_last-hsl23 * -1.
+    SET PROPERTY OF lo_cell 'VALUE' = lv_hsl.
+*    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl23.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+          EXPORTING
+            #1      = 11
+            #2      = 4.
+    CLEAR lv_hsl.
+    lv_hsl = gt_last-hsl33 * -1.
+    SET PROPERTY OF lo_cell 'VALUE' = lv_hsl.
+*    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl33.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+         EXPORTING
+           #1      = 10
+           #2      = 4.
+    CLEAR lv_hsl.
+    lv_hsl = gt_last-hsl43 * -1.
+    SET PROPERTY OF lo_cell 'VALUE' = lv_hsl.
+*    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl43.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+        EXPORTING
+          #1      = 7
+          #2      = 4.
+    CLEAR lv_hsl.
+    lv_hsl = gt_last-hsl53 * -1.
+    SET PROPERTY OF lo_cell 'VALUE' = lv_hsl.
+*    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl53.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+        EXPORTING
+          #1      = 8
+          #2      = 4.
+    CLEAR lv_hsl.
+    lv_hsl = gt_last-hsl63 * -1.
+    SET PROPERTY OF lo_cell 'VALUE' = lv_hsl.
+*    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl63.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+        EXPORTING
+          #1      = 12
+          #2      = 4.
+    CLEAR lv_hsl.
+    lv_hsl = gt_last-hsl73 * -1.
+    SET PROPERTY OF lo_cell 'VALUE' = lv_hsl.
+*    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl73.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+        EXPORTING
+          #1      = 13
+          #2      = 4.
+    CLEAR lv_hsl.
+    lv_hsl = gt_last-hsl83 * -1.
+    SET PROPERTY OF lo_cell 'VALUE' = lv_hsl.
+*    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl83.
+
+*    ******************************************填充G列
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+          EXPORTING
+            #1      = 6
+            #2      = 7.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl15.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+          EXPORTING
+            #1      = 9
+            #2      = 7.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl25.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+          EXPORTING
+            #1      = 11
+            #2      = 7.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl35.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+         EXPORTING
+           #1      = 10
+           #2      = 7.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl45.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+        EXPORTING
+          #1      = 7
+          #2      = 7.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl55.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+        EXPORTING
+          #1      = 8
+          #2      = 7.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl65.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+        EXPORTING
+          #1      = 12
+          #2      = 7.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl75.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+        EXPORTING
+          #1      = 13
+          #2      = 7.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl85.
+
+*    ******************************************填充H列
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+          EXPORTING
+            #1      = 6
+            #2      = 8.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl17.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+          EXPORTING
+            #1      = 9
+            #2      = 8.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl27.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+          EXPORTING
+            #1      = 11
+            #2      = 8.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl37.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+         EXPORTING
+           #1      = 10
+           #2      = 8.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl47.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+        EXPORTING
+          #1      = 7
+          #2      = 8.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl57.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+        EXPORTING
+          #1      = 8
+          #2      = 8.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl67.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+        EXPORTING
+          #1      = 12
+          #2      = 8.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl77.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+        EXPORTING
+          #1      = 13
+          #2      = 8.
+    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl87.
+
+*    ******************************************填充J列
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+          EXPORTING
+            #1      = 6
+            #2      = 9.
+    CLEAR lv_hsl.
+    lv_hsl = gt_last-hsl16 * -1.
+    SET PROPERTY OF lo_cell 'VALUE' = lv_hsl.
+*    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl16.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+          EXPORTING
+            #1      = 9
+            #2      = 9.
+    CLEAR lv_hsl.
+    lv_hsl = gt_last-hsl26 * -1.
+    SET PROPERTY OF lo_cell 'VALUE' = lv_hsl.
+*    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl26.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+          EXPORTING
+            #1      = 11
+            #2      = 9.
+    CLEAR lv_hsl.
+    lv_hsl = gt_last-hsl36 * -1.
+    SET PROPERTY OF lo_cell 'VALUE' = lv_hsl.
+*    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl36.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+         EXPORTING
+           #1      = 10
+           #2      = 9.
+    CLEAR lv_hsl.
+    lv_hsl = gt_last-hsl46 * -1.
+    SET PROPERTY OF lo_cell 'VALUE' = lv_hsl.
+*    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl46.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+        EXPORTING
+          #1      = 7
+          #2      = 9.
+    CLEAR lv_hsl.
+    lv_hsl = gt_last-hsl56 * -1.
+    SET PROPERTY OF lo_cell 'VALUE' = lv_hsl.
+*    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl56.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+        EXPORTING
+          #1      = 8
+          #2      = 9.
+    CLEAR lv_hsl.
+    lv_hsl = gt_last-hsl66 * -1.
+    SET PROPERTY OF lo_cell 'VALUE' = lv_hsl.
+*    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl66.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+        EXPORTING
+          #1      = 12
+          #2      = 9.
+    CLEAR lv_hsl.
+    lv_hsl = gt_last-hsl76 * -1.
+    SET PROPERTY OF lo_cell 'VALUE' = lv_hsl.
+*    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl76.
+    CALL METHOD OF lo_sheet 'CELLS' = lo_cell
+        EXPORTING
+          #1      = 13
+          #2      = 9.
+    CLEAR lv_hsl.
+    lv_hsl = gt_last-hsl86 * -1.
+    SET PROPERTY OF lo_cell 'VALUE' = lv_hsl.
+*    SET PROPERTY OF lo_cell 'VALUE' = gt_last-hsl86.
+
+  ENDIF.
+
+*存入文件
+  CALL METHOD OF lo_sheet 'CELLS' = lo_cell EXPORTING #1 = 1 #2 = 1.
+  CALL METHOD OF lo_cell 'SELECT'.
+  SET PROPERTY OF lo_excel 'CutCopyMode' = 0.
+
+  CALL METHOD OF lo_workbook 'SAVE'.
+  SET PROPERTY OF lo_excel 'VISIBLE' = 1.
+
+*
+*  CALL METHOD OF lo_workbook 'CLOSE'. "关闭工作区
+*  CALL METHOD OF lo_excel 'QUIT'. " 退出excel
+*  WRITE 'DONE'.                              "退出成功，输出done
+
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CHECK_AUTH
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_check_auth .
+  DATA:BEGIN OF lt_bukrs OCCURS 0,
+         bukrs LIKE t001-bukrs,
+       END OF lt_bukrs.
+  CHECK sy-ucomm = 'ONLI'.
+  REFRESH r_bukrs.
+
+  SELECT bukrs INTO TABLE lt_bukrs FROM t001 WHERE bukrs IN s_rbukrs.
+  IF sy-subrc NE 0.
+    MESSAGE '输入公司代码无效' TYPE 'E'.
+  ELSE.
+    LOOP AT lt_bukrs.
+      AUTHORITY-CHECK OBJECT 'F_BKPF_BUK'
+                    ID 'BUKRS' FIELD lt_bukrs-bukrs
+                    ID 'ACTVT' FIELD '03'.
+      IF sy-subrc <> 0.
+        DELETE lt_bukrs.
+      ELSE.
+        r_bukrs = 'IEQ'.
+        r_bukrs-low = lt_bukrs-bukrs.
+        APPEND r_bukrs.
+        CLEAR r_bukrs.
+      ENDIF.
+    ENDLOOP.
+    IF r_bukrs[] IS INITIAL.
+      MESSAGE '你没有公司代码的权限' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+ENDFORM.

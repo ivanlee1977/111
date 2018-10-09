@@ -1,0 +1,61 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPSD001T01
+*&---------------------------------------------------------------------*
+TABLES:sscrfields,
+       ztsd001a,
+       ztsd001b,
+       ztsd001c,
+       knvv.
+
+DATA:gt_upload LIKE alsmex_tabline OCCURS 0 WITH HEADER LINE.
+FIELD-SYMBOLS:<fs_data> LIKE LINE OF gt_upload.
+
+DATA:BEGIN OF gt_data_a OCCURS 0.
+DATA:zstat(30) TYPE c.
+    INCLUDE STRUCTURE ztsd001a.
+DATA:sortl     LIKE kna1-sortl,
+     maktx     LIKE makt-maktx,
+     kvgr1     LIKE knvv-kvgr1,
+     zmsg(200) TYPE c.
+DATA:END OF gt_data_a.
+
+DATA:BEGIN OF gt_data_b OCCURS 0.
+DATA:zstat(30) TYPE c.
+    INCLUDE STRUCTURE ztsd001b.
+DATA:bztxt     LIKE t171t-bztxt,
+     maktx     LIKE makt-maktx,
+     zmsg(200) TYPE c.
+DATA:END OF gt_data_b.
+
+DATA:BEGIN OF gt_data_c OCCURS 0.
+DATA:zstat(30) TYPE c.
+    INCLUDE STRUCTURE ztsd001c.
+DATA:maktx     LIKE makt-maktx,
+     zmsg(200) TYPE c.
+DATA:END OF gt_data_c.
+
+DEFINE mcr_convert_data.
+  IF &1 IS NOT INITIAL.
+    REPLACE ALL OCCURRENCES OF ',' IN &1 WITH space.
+    CONDENSE &1.
+    &2 = &1.
+  ENDIF.
+END-OF-DEFINITION.
+
+***ALV data define
+DATA:gs_layout TYPE slis_layout_alv,
+     gt_fcat   TYPE slis_t_fieldcat_alv WITH HEADER LINE.
+
+CONSTANTS:c_pf_status    TYPE slis_formname VALUE 'FRM_SET_PF_STATUS',
+          c_user_command TYPE slis_formname VALUE 'FRM_USER_COMMAND'.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-seltext_l = &2.
+  gt_fcat-seltext_m = &2.
+  gt_fcat-seltext_s = &2.
+  gt_fcat-inttype   = &3.
+  gt_fcat-intlen    = &4.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

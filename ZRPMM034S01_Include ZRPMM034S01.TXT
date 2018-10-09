@@ -1,0 +1,9 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPMM034S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK b0 WITH FRAME TITLE TEXT-001.
+SELECTION-SCREEN FUNCTION KEY :1.
+PARAMETERS:p_datum LIKE sy-datum OBLIGATORY,
+           p_fname LIKE rlgrap-filename,
+           p_test  LIKE bapi2017_gm_gen-testrun.
+SELECTION-SCREEN END OF BLOCK b0.

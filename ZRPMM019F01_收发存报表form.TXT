@@ -1,0 +1,529 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM019F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:BEGIN OF lt_makt OCCURS 0,
+         matnr LIKE makt-matnr,
+         maktx LIKE makt-maktx,
+       END OF lt_makt.
+
+  DATA:lt_mard_bq LIKE mard OCCURS 0 WITH HEADER LINE,
+       lt_mard_sq LIKE mard OCCURS 0 WITH HEADER LINE.
+
+  DATA:lv_period   LIKE sy-datum(6).
+  DATA:lv_date LIKE sy-datum.
+  DATA:lv_date_from LIKE sy-datum,
+       lv_date_to   LIKE sy-datum.
+
+  DATA:lt_ztmm002 LIKE ztmm002 OCCURS 0 WITH HEADER LINE.
+  DATA:lt_t023t LIKE t023t OCCURS 0 WITH HEADER LINE,
+       lt_tspat LIKE tspat OCCURS 0 WITH HEADER LINE.
+  DATA:BEGIN OF lt_t001l OCCURS 0,
+         werks LIKE t001l-werks,
+         lgort LIKE t001l-lgort,
+         lgobe LIKE t001l-lgobe,
+       END OF lt_t001l.
+
+  DATA:lv_index LIKE sy-tabix.
+
+***上个期间
+  CALL FUNCTION 'BKK_ADD_MONTH_TO_DATE'
+    EXPORTING
+      months  = '-1'
+      olddate = s_budat-low
+    IMPORTING
+      newdate = lv_date.
+
+  lv_period = lv_date(6).
+
+  SELECT a~matnr
+         a~werks
+         b~matkl
+         b~spart
+         a~lgort
+    INTO CORRESPONDING FIELDS OF TABLE gt_detail
+    FROM mard AS a
+    INNER JOIN mara AS b
+    ON a~matnr = b~matnr
+    WHERE a~matnr IN s_matnr
+      AND a~werks IN s_werks
+      AND a~lgort IN s_lgort
+      AND b~matkl IN s_matkl
+      AND b~spart IN s_spart.
+
+  CHECK gt_detail[] IS NOT INITIAL.
+***抓取物料描述
+  SELECT matnr maktx
+    INTO CORRESPONDING FIELDS OF TABLE lt_makt
+    FROM makt
+    FOR ALL ENTRIES IN gt_detail
+    WHERE matnr = gt_detail-matnr
+      AND spras = sy-langu.
+
+***获取本期结存数据
+*  PERFORM frm_get_jcsl TABLES lt_mard_bq USING p_period.
+***获取上期结存数据
+  PERFORM frm_get_jcsl TABLES lt_mard_sq USING lv_period.
+
+***抓取物料凭证数据
+  SELECT * INTO TABLE lt_ztmm002 FROM ztmm002.
+  IF sy-subrc NE 0.
+    MESSAGE '请先用事物代码:ZMM019A维护移动类型配置表信息' TYPE 'I'.
+    STOP.
+  ENDIF.
+
+  CONCATENATE s_budat-low(6) '01' INTO lv_date_from.
+  IF s_budat-high IS INITIAL.
+    lv_date_to = lv_date_from..
+  ELSE.
+    lv_date_to = s_budat-high.
+  ENDIF.
+
+  SELECT mblnr
+         mjahr
+         budat_mkpf AS budat
+         zeile
+         bwart
+         matnr
+         werks
+         lgort
+         menge
+         shkzg
+    INTO CORRESPONDING FIELDS OF TABLE gt_mseg
+    FROM mseg
+    FOR ALL ENTRIES IN gt_detail
+    WHERE matnr = gt_detail-matnr
+      AND werks = gt_detail-werks
+      AND lgort = gt_detail-lgort
+      AND budat_mkpf BETWEEN lv_date_from AND lv_date_to.
+
+***物料组描述
+  SELECT * INTO TABLE lt_t023t FROM t023t WHERE spras = sy-langu.
+***产品组描述
+  SELECT * INTO TABLE lt_tspat FROM tspat WHERE spras = sy-langu.
+***库位描述
+  SELECT werks lgort lgobe INTO TABLE lt_t001l FROM t001l FOR ALL ENTRIES IN gt_detail WHERE werks = gt_detail-werks AND lgort = gt_detail-lgort.
+
+***整理数据到明细表中
+* SORT lt_mard_bq BY matnr werks lgort lfgja DESCENDING lfmon DESCENDING.
+  SORT lt_mard_sq BY matnr werks lgort lfgja DESCENDING lfmon DESCENDING.
+
+  SORT gt_detail BY matnr werks lgort.
+  SORT gt_mseg BY matnr werks lgort.
+  SORT lt_makt BY matnr.
+  SORT lt_t023t BY matkl.
+  SORT lt_tspat BY spart.
+  SORT lt_t001l BY werks lgort.
+
+  LOOP AT gt_detail.
+***物料描述
+    READ TABLE lt_makt WITH KEY matnr = gt_detail-matnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_detail-maktx = lt_makt-maktx.
+    ENDIF.
+***物料组描述
+    READ TABLE lt_t023t WITH KEY matkl = gt_detail-matkl BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_detail-wgbez = lt_t023t-wgbez.
+    ENDIF.
+***产品组描述
+    READ TABLE lt_tspat WITH KEY spart = gt_detail-spart BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_detail-vtext = lt_tspat-vtext.
+    ENDIF.
+***库位描述
+    READ TABLE lt_t001l WITH KEY werks = gt_detail-werks lgort = gt_detail-lgort BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_detail-lgobe = lt_t001l-lgobe.
+    ENDIF.
+
+*    READ TABLE lt_mard_bq WITH KEY matnr = gt_detail-matnr werks = gt_detail-werks lgort = gt_detail-lgort BINARY SEARCH.
+*    IF sy-subrc = 0.
+*      gt_detail-zbqjc = lt_mard_bq-labst + lt_mard_bq-umlme + lt_mard_bq-insme + lt_mard_bq-speme.
+*    ENDIF.
+    READ TABLE lt_mard_sq WITH KEY matnr = gt_detail-matnr werks = gt_detail-werks lgort = gt_detail-lgort BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_detail-zsqjc = lt_mard_sq-labst + lt_mard_sq-umlme + lt_mard_sq-insme + lt_mard_sq-speme.
+    ENDIF.
+
+
+    LOOP AT gt_mseg  FROM lv_index WHERE matnr = gt_detail-matnr AND werks = gt_detail-werks AND lgort = gt_detail-lgort.
+      lv_index = sy-tabix.
+*** ADD BY PFT 20180125
+*  修改期初库存，不考虑ZTMM002配置表，直接过帐日期小于屏幕日期范围最小值，S正H负
+      IF gt_mseg-budat < s_budat-low.
+        IF gt_mseg-shkzg = 'S'.
+          gt_detail-zsqjc = gt_detail-zsqjc + gt_mseg-menge.
+        ELSEIF gt_mseg-shkzg = 'H'.
+          gt_detail-zsqjc = gt_detail-zsqjc - gt_mseg-menge.
+        ENDIF.
+      ENDIF.
+*** END BY PFT 20180125
+      LOOP AT lt_ztmm002 WHERE bwart_l = gt_mseg-bwart OR ( bwart_l <= gt_mseg-bwart AND bwart_h >= gt_mseg-bwart ).
+*   CHANGE BY PFT 20180125
+*   取消此段逻辑，期初库存更改为 不考虑ZTMM002配置表，直接过帐日期小于屏幕日期范围最小值，S正H负
+*        IF gt_mseg-budat < s_budat-low.
+*          IF gt_mseg-shkzg = 'S'.
+*            gt_detail-zsqjc = gt_detail-zsqjc + gt_mseg-menge.
+*          ELSEIF gt_mseg-shkzg = 'H'.
+*            gt_detail-zsqjc = gt_detail-zsqjc - gt_mseg-menge.
+*          ENDIF.
+*        ELSE.
+        IF gt_mseg-budat >= s_budat-low.
+*   END BY PFT 20180125
+          CASE lt_ztmm002-zsfbs.
+            WHEN 'S'.
+              IF gt_mseg-shkzg = 'S'.
+                IF lt_ztmm002-zjxfh EQ '+'.
+                  gt_detail-zbqsr = gt_detail-zbqsr + gt_mseg-menge.
+                ELSEIF lt_ztmm002-zjxfh EQ '-'.
+                  gt_detail-zbqsr = gt_detail-zbqsr - gt_mseg-menge.
+                ENDIF.
+              ELSEIF gt_mseg-shkzg = 'H'.
+                IF lt_ztmm002-zdxfh EQ '+'.
+                  gt_detail-zbqsr = gt_detail-zbqsr + gt_mseg-menge.
+                ELSEIF lt_ztmm002-zdxfh EQ '-'.
+                  gt_detail-zbqsr = gt_detail-zbqsr - gt_mseg-menge.
+                ENDIF.
+              ENDIF.
+            WHEN 'F'.
+              IF gt_mseg-shkzg = 'S'.
+                IF lt_ztmm002-zjxfh EQ '+'.
+                  gt_detail-zbqfc = gt_detail-zbqfc + gt_mseg-menge.
+                ELSEIF lt_ztmm002-zjxfh EQ '-'.
+                  gt_detail-zbqfc = gt_detail-zbqfc - gt_mseg-menge.
+                ENDIF.
+              ELSEIF gt_mseg-shkzg = 'H'.
+                IF lt_ztmm002-zdxfh EQ '+'.
+                  gt_detail-zbqfc = gt_detail-zbqfc + gt_mseg-menge.
+                ELSEIF lt_ztmm002-zdxfh EQ '-'.
+                  gt_detail-zbqfc = gt_detail-zbqfc - gt_mseg-menge.
+                ENDIF.
+              ENDIF.
+            WHEN OTHERS.
+          ENDCASE.
+        ENDIF.
+      ENDLOOP.
+    ENDLOOP.
+    gt_detail-zbqjc = gt_detail-zsqjc + gt_detail-zbqsr - gt_detail-zbqfc.
+    MODIFY gt_detail.
+  ENDLOOP.
+
+  IF p_chk = 'X'.
+    DELETE gt_detail WHERE zbqsr EQ 0 AND zbqfc EQ 0
+                       AND zsqjc EQ 0 AND zbqjc EQ 0.
+  ENDIF.
+
+***汇总显示
+  IF r2 = 'X'.
+    LOOP AT gt_detail.
+      MOVE-CORRESPONDING gt_detail TO gt_sum.
+      COLLECT gt_sum.
+      CLEAR gt_sum.
+    ENDLOOP.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_JCSL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LT_MARD_BQ  text
+*      -->P_P_PERIOD  text
+*----------------------------------------------------------------------*
+FORM frm_get_jcsl  TABLES   lt_mard STRUCTURE mard
+                    USING   u_period LIKE sy-datum(6).
+
+  DATA:lt_mard_temp LIKE lt_mard OCCURS 0 WITH HEADER LINE,
+       lt_mardh     LIKE lt_mard OCCURS 0 WITH HEADER LINE.
+
+  REFRESH lt_mard.
+
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE lt_mard
+    FROM mard
+     FOR ALL ENTRIES IN gt_detail
+   WHERE werks = gt_detail-werks
+     AND matnr = gt_detail-matnr
+     AND lgort = gt_detail-lgort.
+
+  APPEND LINES OF lt_mard TO lt_mard_temp.
+  DELETE lt_mard WHERE ( lfgja = u_period(4)  AND lfmon > u_period+4(2) ) OR lfgja > u_period(4).
+  DELETE lt_mard_temp WHERE ( lfgja = u_period(4)  AND lfmon <= u_period+4(2) ) OR lfgja < u_period(4).
+
+  SELECT *
+ APPENDING CORRESPONDING FIELDS OF TABLE lt_mard
+    FROM mardh
+     FOR ALL ENTRIES IN gt_detail
+   WHERE werks = gt_detail-werks
+     AND matnr = gt_detail-matnr
+     AND lgort = gt_detail-lgort
+     AND lfgja = u_period(4) AND lfmon = u_period+4(2).
+
+  LOOP AT lt_mard_temp.
+    READ TABLE lt_mard WITH KEY matnr = lt_mard_temp-matnr werks = lt_mard_temp-werks lgort = lt_mard_temp-lgort
+                                lfgja = u_period(4)        lfmon = u_period+4(2).
+    IF sy-subrc = 0.
+      DELETE lt_mard_temp.
+    ENDIF.
+  ENDLOOP.
+
+  IF lt_mard_temp[] IS NOT INITIAL.
+    SELECT *
+      INTO CORRESPONDING FIELDS OF TABLE lt_mardh
+      FROM mardh
+       FOR ALL ENTRIES IN lt_mard_temp
+     WHERE werks = lt_mard_temp-werks
+       AND matnr = lt_mard_temp-matnr
+       AND lgort = lt_mard_temp-lgort
+       AND ( ( lfgja = u_period(4)  AND lfmon > u_period+4(2) ) OR lfgja > u_period(4) ).
+    SORT lt_mardh BY matnr werks lgort lfgja lfmon.
+    DELETE ADJACENT DUPLICATES FROM lt_mardh COMPARING matnr werks lgort.
+    APPEND LINES OF lt_mardh TO lt_mard.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  IF r1 = 'X'.
+    mcr_build_fieldcat:'WERKS'    '工厂'          'WERKS'     'MARD'    ''     '',
+                       'MATNR'    '物料'          'MATNR'     'MARD'    ''     '',
+                       'MAKTX'    '物料描述'      'MAKTX'     'MAKT'    ''     '',
+                       'MATKL'    '物料组'        'MATKL'     'MARA'    ''     '',
+                       'WGBEZ'    '物料组描述'    'WGBEZ'     'T023T'   ''     '',
+                       'SPART'    '产品组'        'SPART'     'MARA'    ''     '',
+                       'VTEXT'    '产品组描述'    'VTEXT'     'TSPAT'   ''     '',
+                       'LGORT'    '库位'          'LGORT'     'MARD'    ''     '',
+                       'LGOBE'    '库位描述'      'LGOBE'     'T001L'    ''     '',
+                       'ZSQJC'    '上期结存'      ''          ''        'P'    '15',
+                       'ZBQSR'    '本期收入'      ''          ''        'P'    '15',
+                       'ZBQFC'    '本期发出'      ''          ''        'P'    '15',
+                       'ZBQJC'    '本期结存'      ''          ''        'P'    '15'.
+  ENDIF.
+
+  IF r2 = 'X'.
+    mcr_build_fieldcat:'WERKS'    '工厂'          'WERKS'     'MARD'    ''     '',
+                       'MATKL'    '物料组'        'MATKL'     'MARA'    ''     '',
+                       'WGBEZ'    '物料组描述'    'WGBEZ'     'T023T'   ''     '',
+                       'SPART'    '产品组'        'SPART'     'MARA'    ''     '',
+                       'VTEXT'    '产品组描述'    'VTEXT'     'TSPAT'   ''     '',
+                       'LGORT'    '库位'          'LGORT'     'MARD'    ''     '',
+                       'LGOBE'    '库位描述'      'LGOBE'     'T001L'    ''     '',
+                       'ZSQJC'    '上期结存'      ''          ''        'P'    '15',
+                       'ZBQSR'    '本期收入'      ''          ''        'P'    '15',
+                       'ZBQFC'    '本期发出'      ''          ''        'P'    '15',
+                       'ZBQJC'    '本期结存'      ''          ''        'P'    '15'.
+  ENDIF.
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  FIELD-SYMBOLS:<fs_tab> TYPE STANDARD TABLE.
+  IF r1 = 'X'.
+    ASSIGN gt_detail[] TO <fs_tab>.
+  ELSEIF r2 = 'X'.
+    ASSIGN gt_sum[] TO <fs_tab>.
+  ENDIF.
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK       = ' '
+*     I_BYPASSING_BUFFER      =
+*     i_buffer_active         =
+      i_callback_program      = sy-repid
+*     i_callback_pf_status_set = ' '
+      i_callback_user_command = 'FRM_USER_COMMAND'
+*     I_CALLBACK_TOP_OF_PAGE  = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME        =
+*     I_BACKGROUND_ID         = ' '
+*     I_GRID_TITLE            =
+*     I_GRID_SETTINGS         =
+      is_layout_lvc           = gs_layout
+      it_fieldcat_lvc         = gt_fcat[]
+*     IT_EXCLUDING            =
+*     IT_SPECIAL_GROUPS_LVC   =
+*     IT_SORT_LVC             =
+*     IT_FILTER_LVC           =
+*     IT_HYPERLINK            =
+*     IS_SEL_HIDE             =
+      i_default               = 'X'
+      i_save                  = 'A'
+*     IS_VARIANT              =
+*     IT_EVENTS               =
+*     IT_EVENT_EXIT           =
+*     IS_PRINT_LVC            =
+*     IS_REPREP_ID_LVC        =
+*     I_SCREEN_START_COLUMN   = 0
+*     I_SCREEN_START_LINE     = 0
+*     I_SCREEN_END_COLUMN     = 0
+*     I_SCREEN_END_LINE       = 0
+*     I_HTML_HEIGHT_TOP       =
+*     I_HTML_HEIGHT_END       =
+*     IT_ALV_GRAPHICS         =
+*     IT_EXCEPT_QINFO_LVC     =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER =
+*     ES_EXIT_CAUSED_BY_USER  =
+    TABLES
+      t_outtab                = <fs_tab>
+    EXCEPTIONS
+      program_error           = 1
+      OTHERS                  = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_USER_COMMAND
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_user_command USING r_ucomm LIKE sy-ucomm
+                            rs_selfield TYPE slis_selfield..
+  DATA:lv_grid TYPE REF TO cl_gui_alv_grid.
+
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = lv_grid.
+  DATA lv_mblnr TYPE mseg-mblnr.
+  lv_mblnr = rs_selfield-value.
+  CASE r_ucomm.
+    WHEN '&IC1'.
+      IF rs_selfield-fieldname EQ 'MBLNR' AND rs_selfield-value IS NOT INITIAL.
+*        SET PARAMETER ID 'ACTION' FIELD 'A04'.
+*        SET PARAMETER ID 'MBN' FIELD rs_selfield-value.
+*        CALL TRANSACTION 'MIGO' AND SKIP FIRST SCREEN.
+        CALL FUNCTION 'MIGO_DIALOG'
+          EXPORTING
+            i_action            = 'A04'
+            i_refdoc            = 'R02'
+            i_notree            = 'X'
+            i_skip_first_screen = 'X'
+            i_okcode            = 'OK_GO'
+            i_mblnr             = lv_mblnr
+*           i_mjahr             = itab-gjahr
+          EXCEPTIONS
+            illegal_combination = 1
+            OTHERS              = 2.
+      ENDIF.
+      CHECK r1 = 'X'.
+      PERFORM frm_display_matdoc_detail_data USING rs_selfield.
+
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DISPLAY_MATDOC_DETAIL_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_RS_SELFIELD  text
+*----------------------------------------------------------------------*
+FORM frm_display_matdoc_detail_data  USING rs_selfield TYPE slis_selfield.
+  DATA:lt_detail_show LIKE gt_mseg OCCURS 0 WITH HEADER LINE.
+***alv data define
+  DATA:ls_layout TYPE lvc_s_layo,
+       lt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+  DEFINE mcr_build_fieldcat.
+    lt_fcat-fieldname = &1.
+    lt_fcat-coltext   = &2.
+    lt_fcat-scrtext_l = &2.
+    lt_fcat-scrtext_m = &2.
+    lt_fcat-scrtext_s = &2.
+    lt_fcat-ref_field = &3.
+    lt_fcat-ref_table = &4.
+    APPEND lt_fcat.
+    CLEAR lt_fcat.
+  END-OF-DEFINITION.
+  DATA lv TYPE int4 VALUE 1.
+  DATA lv_menge TYPE mseg-menge .
+  SORT gt_mseg BY budat mblnr.
+  READ TABLE gt_detail INDEX  rs_selfield-tabindex.
+  LOOP AT gt_mseg WHERE matnr = gt_detail-matnr AND werks = gt_detail-werks AND lgort = gt_detail-lgort AND budat IN s_budat.
+    MOVE-CORRESPONDING gt_mseg TO lt_detail_show.
+    SELECT SINGLE maktx INTO lt_detail_show-maktx FROM makt WHERE matnr = lt_detail_show-matnr AND spras = sy-langu.
+    IF gt_mseg-shkzg = 'H'.
+      lt_detail_show-menge = -1 * lt_detail_show-menge.
+    ENDIF.
+    IF lv = 1.
+      lt_detail_show-zsqjc = gt_detail-zsqjc.
+    ELSE.
+      lt_detail_show-zsqjc = lv_menge.
+    ENDIF.
+    lt_detail_show-zbqjc = lt_detail_show-zsqjc + lt_detail_show-menge.
+    lv_menge = lt_detail_show-zbqjc.
+    APPEND lt_detail_show.
+    lv = lv + 1.
+    CLEAR lt_detail_show.
+
+  ENDLOOP.
+
+***ALV DATA DEFINE
+  mcr_build_fieldcat:'MBLNR'   '物料凭证号'   'MBLNR'    'MSEG',
+                     'MJAHR'   '会计年度'     'MJAHR'    'MSEG',
+                     'BUDAT'   '过账日期'     'BUDAT'    'MKPF',
+                     'ZEILE'   '项次'         'ZEILE'    'MSEG',
+                     'BWART'   '移动类型'     'BWART'    'MSEG',
+                     'MATNR'   '物料号码'     'MATNR'    'MSEG',
+                     'MAKTX'   '物料描述'     'MAKTX'    'MSEG',
+                     'WERKS'   '工厂'         'WERKS'    'MSEG',
+                     'LGORT'   '库位'         'LGORT'    'MSEG',
+                     'MENGE'   '数量'         'MENGE'    'MSEG',
+                     'SHKZG'   '借贷标识'     'SHKZG'    'MSEG',
+                     'ZSQJC'   '期初数量'     'MENGE'    'MSEG',
+                     'ZBQJC'   '期末数量'     'MENGE'    'MSEG'
+                     .
+  ls_layout-cwidth_opt = 'X'.
+  ls_layout-zebra = 'X'.
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program      = sy-repid
+      is_layout_lvc           = ls_layout
+      i_callback_user_command = 'FRM_USER_COMMAND'
+      it_fieldcat_lvc         = lt_fcat[]
+      i_default               = 'X'
+      i_save                  = 'A'
+    TABLES
+      t_outtab                = lt_detail_show[]
+    EXCEPTIONS
+      program_error           = 1
+      OTHERS                  = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+ENDFORM.

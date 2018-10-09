@@ -1,0 +1,24 @@
+*&---------------------------------------------------------------------*
+*& Report ZRPFI006
+*&---------------------------------------------------------------------*
+*&财务费用明细表
+*制作人：雷鸣涛
+*制作时间：2017-7-25
+*&---------------------------------------------------------------------*
+REPORT zrpfi006.
+
+
+INCLUDE zrpfi006_t01.
+
+INCLUDE zrpfi006_f01.
+
+AT SELECTION-SCREEN OUTPUT.
+
+AT SELECTION-SCREEN.
+  PERFORM frm_check_atuh.
+
+START-OF-SELECTION.
+
+  PERFORM frm_getdata.
+
+  PERFORM frm_toexcel.

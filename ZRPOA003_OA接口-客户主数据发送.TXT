@@ -1,0 +1,103 @@
+*&---------------------------------------------------------------------*
+*& 程序名： ZRPOA003
+*& 创建者(公司)/日期： LIJS/20170731
+*& 程序描述:OA主数据发送接口
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    LIJS           20170731      创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpoa003.
+TABLES:kna1.
+
+DATA:BEGIN OF gt_data OCCURS 0,
+       bukrs LIKE knb1-bukrs, "公司
+       kunnr LIKE kna1-kunnr, "客户编码
+       name1 LIKE kna1-name1, "客户描述
+       ktokd LIKE kna1-ktokd,
+       sperr LIKE knb1-sperr, "冻结标志
+     END OF gt_data.
+
+***selection screen define
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_kunnr FOR kna1-kunnr.
+SELECTION-SCREEN END OF BLOCK blc.
+
+START-OF-SELECTION.
+
+  PERFORM frm_get_data.
+  PERFORM frm_send_data.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  SELECT
+         a~name1
+         a~kunnr
+         a~ktokd
+         b~bukrs
+         b~sperr
+    INTO CORRESPONDING FIELDS OF TABLE gt_data
+    FROM kna1 AS a
+    JOIN knb1 AS b
+    ON a~kunnr EQ b~kunnr
+    WHERE b~bukrs = '1000'
+      AND a~kunnr IN s_kunnr.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SEND_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_send_data .
+
+  DATA:cl_si_customer_out TYPE REF TO zco_si_customer_out."成本中心 name
+  DATA:cl_cx_ai_system_fault      TYPE REF TO cx_ai_system_fault,
+       cl_cx_ai_application_fault TYPE REF TO cx_ai_application_fault.
+  DATA:ls_output        TYPE zmt_customer_out,
+       lt_customer_data TYPE zdt_customer_tab,
+       ls_customer_data TYPE LINE OF zdt_customer_tab.
+  DATA:lv_msg TYPE string.
+
+  TRY.
+      CREATE OBJECT cl_si_customer_out.
+    CATCH cx_ai_system_fault INTO cl_cx_ai_system_fault.
+      lv_msg = cl_cx_ai_system_fault->get_text( ).
+      WRITE:/ lv_msg.
+      EXIT.
+  ENDTRY.
+
+  LOOP AT gt_data.
+    ls_customer_data-bukrs = gt_data-bukrs.
+    ls_customer_data-kunnr = gt_data-kunnr.
+    ls_customer_data-xspeb = gt_data-sperr.
+    ls_customer_data-name1 = gt_data-name1.
+    ls_customer_data-ktokd = gt_data-ktokd.
+    APPEND ls_customer_data TO lt_customer_data.
+    CLEAR ls_customer_data.
+  ENDLOOP.
+
+  ls_output-mt_customer_out-row = lt_customer_data.
+
+  TRY.
+      CALL METHOD cl_si_customer_out->si_customer_out
+        EXPORTING
+          output = ls_output.
+    CATCH cx_ai_system_fault INTO cl_cx_ai_system_fault.
+      lv_msg =  cl_cx_ai_system_fault->get_text( ).
+      WRITE:/ lv_msg.
+      EXIT.
+    CATCH cx_ai_application_fault INTO cl_cx_ai_application_fault.
+      lv_msg = cl_cx_ai_application_fault->get_text( ).
+      WRITE:/ lv_msg.
+      EXIT.
+  ENDTRY.
+  COMMIT WORK AND WAIT.
+ENDFORM.

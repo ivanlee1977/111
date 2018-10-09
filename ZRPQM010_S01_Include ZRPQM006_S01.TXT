@@ -1,0 +1,16 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPQM001_S01
+*&---------------------------------------------------------------------*
+DATA: c32 TYPE char32, c20 TYPE char20,c40 TYPE char40.
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+
+SELECT-OPTIONS:
+       s_cdate FOR sy-datum,
+       s_bussno FOR c32.      .
+PARAMETERS       p_status   TYPE char5   .
+SELECT-OPTIONS:
+        s_sortX FOR  c20,
+        s_cgy FOR c40 ,
+*        s_matnr FOR c32 .
+s_matnr FOR vbap-matnr.
+SELECTION-SCREEN END OF BLOCK b1.

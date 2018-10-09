@@ -1,0 +1,203 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZSDRP014T01
+*&---------------------------------------------------------------------*
+TABLES: knvv,likp,ausp,mara,vbak,vbap.
+
+*  取销售订单信息
+DATA: BEGIN OF gt_alv OCCURS 0,
+        vkorg       LIKE vbak-vkorg, "销售组织
+        vkorg_vtext LIKE tvkot-vtext, "销售组织名称
+        vtweg       LIKE knvv-vtweg, "分销渠道
+        vtweg_vtext LIKE tvtwt-vtext, "分销渠道名称
+        matkl       LIKE mara-matkl, "物料组
+        wgbez       LIKE t023t-wgbez, "物料组描述
+        spart       LIKE mara-spart, "产品组
+        spart_vtext LIKE tspat-vtext, "产品组名称
+        auart       LIKE vbak-auart, "订单类型
+        auart_vtext LIKE tvakt-bezei, "订单类型描述
+        kunnr       LIKE vbak-kunnr, "客户编码
+        name1       TYPE c LENGTH 50, "客户名称
+        sortl       LIKE kna1-sortl, "客户简称
+        vbeln       LIKE vbak-vbeln, "销售订单号
+        posnr       LIKE vbap-posnr, "销售订单行项目号
+        erdat       LIKE vbak-erdat, "创建日期
+        matnr       LIKE vbap-matnr, "物料号
+        arktx       LIKE vbap-arktx, "物料描述
+        kwmeng      LIKE vbap-kwmeng, "订单数量
+        kzwi1       LIKE vbap-kzwi1, "金额
+        price       LIKE vbap-kzwi1, "单价（KZWI1 / KWMENG）
+        bstkd       LIKE vbkd-bstkd, "客户采购订单号
+        lifsk       LIKE vbak-lifsk, "审批状态
+        lifsk_vtext LIKE tvlst-vtext, "审批状态描述
+        zterm       LIKE vbkd-zterm, "付款条件
+        zterm_vtext LIKE tvzbt-vtext, "付款条件描述
+        inco1       LIKE vbkd-inco1, "国际贸易条款1
+        inco2       LIKE vbkd-inco2, "国际贸易条款2
+        inco        TYPE c LENGTH 50, "国际贸易条款
+        augru       LIKE vbak-augru, "订单原因
+        augru_vtext LIKE tvaut-bezei, "订单原因描述
+        abgru       LIKE vbap-abgru, "拒绝原因
+        abgru_vtext LIKE tvagt-bezei, "拒绝原因描述
+        bzirk       LIKE knvv-bzirk, "销售大区
+        bzirk_vtext LIKE t171t-bztxt, "销售大区描述
+        vkbur       LIKE knvv-vkbur, "行办代码
+        vkbur_vtext LIKE tvkbt-bezei, "行办描述
+        vkgrp       LIKE knvv-vkgrp, "销售组代码
+        vkgrp_vtext LIKE tvgrt-bezei, "销售组描述
+        kvgr1       LIKE knvv-kvgr1, "销售工程师/代表代码
+        kvgr1_vtext LIKE tvv1t-bezei, "销售工程师/代表描述
+        kvgr2       LIKE knvv-kvgr2, "商务
+        kvgr2_vtext LIKE tvv2t-bezei, "商务描述
+        zdyzxh      LIKE ausp-atwrt, "对应主型号
+        zxl         LIKE ausp-atwrt, "系列
+        zzxl        LIKE ausp-atwrt, "子系列
+        zcpx        LIKE ausp-atwrt, "产品线
+        zpp         LIKE ausp-atwrt, "品牌/厂家
+        kvgr3       LIKE vbak-kvgr3, "运输方式
+        kvgr3_vtext LIKE tvv3t-bezei, "运输方式描述
+        kvgr4       LIKE vbak-kvgr4, "发票类型
+        kvgr4_vtext LIKE tvv4t-bezei, "发票类型描述
+        ktgrd       LIKE vbkd-ktgrd, "账户组
+        ktgrd_vtext LIKE tvktt-vtext, "帐户组描述
+        ihrez_e     LIKE vbkd-ihrez_e, "订单平台号
+        bname       LIKE vbak-bname, "交货地点
+        gbsta       LIKE vbup-gbsta, "总览状态代码
+        gbsta_vtext TYPE c LENGTH 10, "总览状态描述
+        lfimg_col   LIKE lips-lfimg, "交货数量
+        zje_jh      LIKE vbap-kzwi1, "交货金额
+        bstkd_e     LIKE vbkd-bstkd_e, "采购申请号
+        posex_e     LIKE vbkd-bstkd_e, "采购申请项目
+        banfn       LIKE ekpo-banfn, "采购申请号
+        bnfpo       LIKE ekpo-bnfpo, "采购申请行项目号
+        lifnr       LIKE ekko-lifnr, "供应商
+        name_lifnr  LIKE lfa1-name1, "供应商名称
+        ebeln       LIKE ekpo-ebeln, "采购订单号
+        ebelp       LIKE ekpo-ebelp, "采购订单行项目号
+        eindt       LIKE eket-eindt, "采购计划交货日期
+        menge       LIKE ekpo-menge, "采购订单数量
+        menge_ys    LIKE ekbe-menge, "采购收货数量
+        budat       LIKE ekbe-budat, "采购收货日期
+        menge_ws    LIKE ekbe-menge, "采购未收货数量
+        wadat_ist   LIKE likp-wadat_ist, "销售交货日期
+        lfimg_wjh   LIKE lips-lfimg, "销售未交货数量
+        zje_wjh     LIKE vbap-kzwi1, "销售未交货金额
+        vbeln_shdh  TYPE c LENGTH 255, "收货凭证
+        lfimg_shsl  TYPE c LENGTH 255, "收货数量
+
+      END OF gt_alv,
+      gt_alv_temp LIKE gt_alv OCCURS 0 WITH HEADER LINE.
+
+* 取出订单的总览状态
+DATA:gt_vbup LIKE vbup OCCURS 0 WITH HEADER LINE.
+
+*  交货单信息
+DATA:BEGIN OF gt_lips OCCURS 0,
+       vbeln     LIKE lips-vbeln, "交货单号
+       posnr     LIKE lips-posnr, "交货单行项目号
+       lfimg     LIKE lips-lfimg, "交货数量
+       vgbel     LIKE lips-vgbel, "销售订单号
+       vgpos     LIKE lips-vgpos, "销售订单行项目号
+       wadat_ist LIKE likp-wadat_ist, "过帐日期
+     END OF gt_lips.
+
+*  采购订单信息
+DATA:BEGIN OF gt_ekko OCCURS 0,
+       ebeln LIKE ekpo-ebeln, "采购订单号
+       ebelp LIKE ekpo-ebelp, "采购订单行项目号
+       banfn LIKE ekpo-banfn, "采购申请号
+       bnfpo LIKE ekpo-bnfpo, "采购申请行项目号
+       menge LIKE ekpo-menge, "数量
+       lifnr LIKE ekko-lifnr, "供应商编号
+     END OF gt_ekko.
+*  采购订单计划交货数据
+DATA: gt_eket LIKE eket OCCURS 0 WITH HEADER LINE,
+*      gt_ekbe LIKE ekbe OCCURS 0 WITH HEADER LINE,
+      gt_lfa1 LIKE lfa1 OCCURS 0 WITH HEADER LINE. "供应商描述
+*  取采购收货凭证
+DATA: BEGIN OF gt_mseg OCCURS 0 ,
+        mblnr      LIKE mseg-mblnr,
+        mjahr      LIKE mseg-mjahr,
+        zeile      LIKE mseg-zeile,
+        smbln      LIKE mseg-smbln,
+        lfbja      LIKE mseg-lfbja,
+        smblp      LIKE mseg-smblp,
+        bwart      LIKE mseg-bwart,
+        menge      LIKE mseg-menge,
+        ebeln      LIKE mseg-ebeln,
+        ebelp      LIKE mseg-ebelp,
+        budat_mkpf LIKE mseg-budat_mkpf,
+      END OF gt_mseg.
+*  取客户描述
+DATA:gt_knvv LIKE knvv OCCURS 0 WITH HEADER LINE,
+     gt_kna1 LIKE kna1 OCCURS 0 WITH HEADER LINE,
+     gt_mara LIKE mara OCCURS 0 WITH HEADER LINE,
+     gt_makt LIKE makt OCCURS 0 WITH HEADER LINE.
+
+
+*  系列内表
+DATA:BEGIN OF gt_xl OCCURS 0,
+       atwrt LIKE ausp-atwrt,
+     END OF gt_xl,
+     gt_zxl LIKE gt_xl OCCURS 0 WITH HEADER LINE. "子系列内表
+
+*  获取主型号、系列、产品线
+DATA: BEGIN OF gt_ausp OCCURS 0,
+        objek LIKE ausp-objek,
+        atinn LIKE ausp-atinn,
+        atwrt LIKE ausp-atwrt,
+        atnam LIKE cabn-atnam,
+      END OF gt_ausp.
+
+
+DATA: d_ref      TYPE REF TO data,
+      d_ref1     TYPE REF TO   data,
+      lt_alv_cat TYPE TABLE OF lvc_s_fcat,
+      ls_alv_cat LIKE LINE OF  lt_alv_cat.
+DATA:i_layout_lvc TYPE lvc_s_layo .
+DATA: gt_events TYPE slis_t_event WITH HEADER LINE.
+DATA:gv_repid  LIKE sy-repid VALUE sy-repid,
+     gs_layout TYPE slis_layout_alv,
+     gt_fcat   TYPE slis_t_fieldcat_alv WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  ls_alv_cat-fieldname = &1.
+  ls_alv_cat-scrtext_l = &2.
+  ls_alv_cat-ref_field = &3.
+  ls_alv_cat-ref_table = &4.
+  ls_alv_cat-outputlen = &5.
+  ls_alv_cat-no_zero = &6.
+  APPEND ls_alv_cat TO lt_alv_cat.
+  CLEAR ls_alv_cat.
+END-OF-DEFINITION.
+
+DATA: BEGIN OF lt_month OCCURS 0,
+        zmonth LIKE ztsd001a-zmonth,
+        dlymo  TYPE t5a4a-dlymo,
+      END OF lt_month.
+
+DATA: lt_table LIKE TABLE OF dntab.
+DATA: ls_table TYPE dntab.
+DATA: dyn_table  TYPE REF TO data,
+      dyn_table1 TYPE REF TO data.
+DATA: dyn_wa  TYPE REF TO data,
+      dyn_wa1 TYPE REF TO data.
+
+DATA: l_dyname LIKE d020s-prog,                             "INS 415471
+      l_dynumb LIKE d020s-dnum.
+FIELD-SYMBOLS :
+  <dyn_table>  TYPE table,
+  <dyn_wa>     TYPE any,
+  <dyn_field>  TYPE any,
+  <dyn_table1> TYPE table,
+  <dyn_wa1>    TYPE any,
+  <fs_str>     TYPE any.
+
+DEFINE mcr_add_zero.
+  IF &1 IS NOT INITIAL.
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+    EXPORTING
+      input  = &1
+    IMPORTING
+      output = &1.
+  ENDIF.
+END-OF-DEFINITION.

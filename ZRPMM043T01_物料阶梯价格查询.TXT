@@ -1,0 +1,63 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPMM039T01
+*&---------------------------------------------------------------------*
+TABLES:mara,konm,a017,lfa1,eina,eine.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       matnr  TYPE mara-matnr,
+       maktx  TYPE makt-maktx,
+       lifnr  TYPE lfa1-lifnr,
+       esokz  TYPE eine-esokz,
+       name1  TYPE lfa1-name1,
+       matkl  TYPE mara-matkl,
+       wgbez  TYPE t023t-wgbez,
+       ekgrp  TYPE eine-ekgrp,
+       eknam  TYPE t024-eknam,
+       infnr  TYPE eina-infnr,
+       knumh  TYPE a017-knumh,
+       kpein  TYPE konp-kpein,
+       kmein  TYPE konp-kmein,
+       konwa  TYPE konp-konwa,
+       kbetr1 TYPE konm-kbetr,
+       kbetr2 TYPE konm-kbetr,
+       kbetr3 TYPE konm-kbetr,
+       kbetr4 TYPE konm-kbetr,
+       kbetr5 TYPE konm-kbetr,
+       kbetr6 TYPE konm-kbetr,
+       kbetr7 TYPE konm-kbetr,
+       kbetr8 TYPE konm-kbetr,
+       s1     TYPE string,
+       s2     TYPE string,
+       s3     TYPE string,
+       s4     TYPE string,
+       s5     TYPE string,
+       s6     TYPE string,
+       s7     TYPE string,
+       s8     TYPE string,
+       umren  TYPE eina-umren,
+       meins  TYPE eina-meins,
+       umrez  TYPE eina-umrez,
+       lmein  TYPE eina-lmein,
+       atwrt  TYPE ausp-atwrt,
+       atwrt1 TYPE ausp-atwrt,
+     END OF gt_out.
+
+***ALV Data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+IF &5 =  'X' .
+gt_fcat-qfieldname = 'KMEIN'.
+gt_fcat-tabname = 'GT_OUT'.
+ENDIF.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

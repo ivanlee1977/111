@@ -1,0 +1,53 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI009_S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK blc1 WITH FRAME TITLE TEXT-005.
+PARAMETERS:r1 RADIOBUTTON GROUP ra DEFAULT 'X',
+           r2 RADIOBUTTON GROUP ra.
+SELECTION-SCREEN END OF BLOCK blc1.
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+PARAMETERS:     p_bukrs LIKE t001-bukrs OBLIGATORY DEFAULT '1000'.
+SELECT-OPTIONS: s_prctr FOR bsik-prctr,"利润中心
+                s_lifnr FOR bsik-lifnr,"客户编码
+                s_hkont FOR bsik-hkont OBLIGATORY."总账科目
+PARAMETERS:     p_budat LIKE bsik-budat OBLIGATORY."报表日期
+PARAMETERS:p_check TYPE c AS CHECKBOX. "是否含暂估
+SELECTION-SCREEN END OF BLOCK b1.
+
+SELECTION-SCREEN BEGIN OF BLOCK b2.
+SELECTION-SCREEN BEGIN OF LINE.
+SELECTION-SCREEN COMMENT 01(30) TEXT-003 FOR FIELD p_date1 MODIF ID old.
+SELECTION-SCREEN POSITION POS_LOW.
+PARAMETERS: p_date1  TYPE idcn_segm DEFAULT '0010' MODIF ID old."like rfpdo1-allgrogr DEFAULT '010'.
+PARAMETERS: p_date2  TYPE idcn_segm DEFAULT '0020' MODIF ID old."like rfpdo1-allgrogr DEFAULT '020'.
+PARAMETERS: p_date3  TYPE idcn_segm DEFAULT '0030' MODIF ID old."like rfpdo1-allgrogr DEFAULT '030'.
+PARAMETERS: p_date4  TYPE idcn_segm DEFAULT '0060' MODIF ID old."like rfpdo1-allgrogr DEFAULT '040'.
+PARAMETERS: p_date5  TYPE idcn_segm DEFAULT '0090' MODIF ID old."like rfpdo1-allgrogr DEFAULT '050'.
+PARAMETERS: p_date6  TYPE idcn_segm DEFAULT '0180' MODIF ID old."like rfpdo1-allgrogr DEFAULT '060'.
+PARAMETERS: p_date7  TYPE idcn_segm DEFAULT '0360' MODIF ID old."like rfpdo1-allgrogr DEFAULT '070'.
+PARAMETERS: p_date8  TYPE idcn_segm DEFAULT '0720' MODIF ID old."like rfpdo1-allgrogr DEFAULT '080'.
+PARAMETERS: p_date9  TYPE idcn_segm DEFAULT '' MODIF ID old."like rfpdo1-allgrogr DEFAULT '010'.
+PARAMETERS: p_date10 TYPE idcn_segm DEFAULT '' MODIF ID old."like rfpdo1-allgrogr DEFAULT '020'.
+PARAMETERS: p_date11 TYPE idcn_segm DEFAULT '' MODIF ID old."like rfpdo1-allgrogr DEFAULT '030'.
+PARAMETERS: p_date12 TYPE idcn_segm DEFAULT '' MODIF ID old."like rfpdo1-allgrogr DEFAULT '040'.
+
+SELECTION-SCREEN END OF LINE.
+
+SELECTION-SCREEN BEGIN OF LINE.
+SELECTION-SCREEN COMMENT 01(30) TEXT-004 FOR FIELD p_date13 MODIF ID old.
+SELECTION-SCREEN POSITION POS_LOW.
+PARAMETERS: p_date13 TYPE idcn_segm DEFAULT '' MODIF ID old."like rfpdo1-allgrogr DEFAULT '050'.
+PARAMETERS: p_date14  TYPE idcn_segm DEFAULT '' MODIF ID old."like rfpdo1-allgrogr DEFAULT '060'.
+PARAMETERS: p_date15  TYPE idcn_segm DEFAULT '' MODIF ID old."like rfpdo1-allgrogr DEFAULT '070'.
+PARAMETERS: p_date16  TYPE idcn_segm DEFAULT '' MODIF ID old."like rfpdo1-allgrogr DEFAULT '080'.
+PARAMETERS: p_date17  TYPE idcn_segm DEFAULT '' MODIF ID old."like rfpdo1-allgrogr DEFAULT '010'.
+PARAMETERS: p_date18 TYPE idcn_segm DEFAULT '' MODIF ID old."like rfpdo1-allgrogr DEFAULT '020'.
+PARAMETERS: p_date19 TYPE idcn_segm DEFAULT '' MODIF ID old."like rfpdo1-allgrogr DEFAULT '030'.
+PARAMETERS: p_date20 TYPE idcn_segm DEFAULT '' MODIF ID old."like rfpdo1-allgrogr DEFAULT '040'.
+PARAMETERS: p_date21 TYPE idcn_segm DEFAULT '' MODIF ID old."like rfpdo1-allgrogr DEFAULT '050'.
+PARAMETERS: p_date22  TYPE idcn_segm DEFAULT '' MODIF ID old."like rfpdo1-allgrogr DEFAULT '060'.
+PARAMETERS: p_date23  TYPE idcn_segm DEFAULT '' MODIF ID old."like rfpdo1-allgrogr DEFAULT '070'.
+PARAMETERS: p_date24  TYPE idcn_segm DEFAULT '' MODIF ID old."like rfpdo1-allgrogr DEFAULT '080'.
+SELECTION-SCREEN END OF LINE.
+SELECTION-SCREEN END OF BLOCK b2.

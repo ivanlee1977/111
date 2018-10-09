@@ -1,0 +1,464 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM001_F01
+*&---------------------------------------------------------------------*
+
+
+FORM frm_show."ALV显示界面
+
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'SET_PF_STATUS'
+      i_callback_user_command  = 'ALV_USER_COMMAND'
+      is_layout                = gs_layout1
+      it_fieldcat              = gt_fcat[]
+    TABLES
+      t_outtab                 = gt_item[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+           WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+ENDFORM.
+
+FORM set_pf_status USING rt_extab TYPE slis_t_extab.
+
+  DATA: wa_extab TYPE slis_extab.
+
+*  SET PF-STATUS '0100' EXCLUDING rt_extab.
+  SET PF-STATUS '0100'.
+ENDFORM.                    "set_pf_status1
+
+FORM alv_user_command USING r_ucomm LIKE sy-ucomm  rs_selfield TYPE slis_selfield.
+*   获取ALV中的鼠标勾选记录
+  DATA: l_grid TYPE REF TO cl_gui_alv_grid.
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = l_grid.
+
+  CALL METHOD l_grid->check_changed_data( ).
+
+
+  CASE r_ucomm.
+      "打印
+    WHEN '&IC1'.
+      CLEAR gv_matnr.
+      READ TABLE gt_item INDEX rs_selfield-tabindex.
+      gv_matnr = gt_item-matnr.
+      CLEAR gt_alv.
+      REFRESH gt_alv.
+      PERFORM frm_callbom USING gt_item-webaz gt_item-psttr.
+*      CALL METHOD l_grid->refresh_table_display.
+    WHEN OTHERS.
+  ENDCASE.
+
+
+ENDFORM.                    "alv_user_command
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GETDATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_getdata .
+  DATA: lv_date TYPE sy-datum,lv_num TYPE num15.
+  CLEAR:gt_item[].
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE gt_item FROM plaf
+    WHERE     dispo IN       s_dispo
+       AND    matnr IN       s_matnr
+       AND    plnum IN       s_plnum
+       AND    beskz IN       s_beskz
+       AND    sobes IN       s_sobes
+       AND    pertr IN       s_pertr
+       AND    psttr IN       s_psttr
+       AND    pedtr IN       s_pedtr
+  .
+
+  LOOP AT gt_item .
+    IF r_1 = 'X'.
+      IF gt_item-auffx <> 'X'.
+        DELETE gt_item.
+        CONTINUE.
+      ENDIF.
+    ENDIF.
+    lv_num = gt_item-pstmp.
+    MOVE lv_num+1(8) TO lv_date.
+    IF s_date-high <> '00000000'.
+      IF lv_date LE s_date-high AND lv_date GE s_date-low.
+      ELSE.
+        DELETE gt_item.
+        CONTINUE.
+      ENDIF.
+    ELSE.
+      IF lv_date <> s_date-low.
+        DELETE gt_item.
+        CONTINUE.
+      ENDIF.
+    ENDIF.
+
+    SELECT SINGLE maktx INTO gt_item-maktx FROM makt WHERE matnr = gt_item-matnr AND spras = 1.
+    MODIFY gt_item.
+  ENDLOOP.
+
+ENDFORM.
+
+FORM frm_getfact .
+  g_fieldfcat:
+    'PLNUM' '计划订单号' 'PLNUM' 'PLAF' '',
+    'MATNR' '物料代码' 'MATNR' 'PLAF' '',
+    'MAKTX' '物料描述' 'MAKTX' 'MAKT' '',
+    'GSMNG' '订单数量' 'GSMNG' 'PLAF' '',
+    'MEINS' '单位' 'MEINS' 'PLAF' '',
+    'PSTTR' '计划开始日期' 'PSTTR' 'PLAF' '',
+    'PEDTR' '计划完工日期' 'PEDTR' 'PLAF' '',
+    'PERTR' '未清日期' 'PERTR' 'PLAF' '',
+    'DISPO' 'MRP控制者' 'DISPO' 'PLAF' '',
+    'PAART' '订单类型' 'PAART' 'PLAF' '',
+    'BESKZ' '采购类型' 'BESKZ' 'PLAF' '',
+    'SOBES' '特殊采购类型' 'SOBES' 'PLAF' '',
+    'AUFFX' '固定标识' 'AUFFX' 'PLAF' ''
+  .
+
+  gs_layout1-colwidth_optimize = 'X'.
+*  gs_layout-box_fieldname = 'CHK'.
+*  gs_layout-box_tabname = 'gt_item'.
+  gs_layout1-zebra = 'X'.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_EXPLO_BOM
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_explo_bom  TABLES   lt_stpo STRUCTURE stpox
+                             lt_matcat STRUCTURE cscmat
+                     USING    u_matnr LIKE mara-matnr
+                              u_werks LIKE marc-werks
+                              u_mehrs TYPE c
+                              u_stlal LIKE mast-stlal
+                    CHANGING ls_cstmat LIKE cstmat.
+
+
+  REFRESH:lt_stpo,lt_matcat.
+  CLEAR:ls_cstmat.
+  CALL FUNCTION 'CS_BOM_EXPL_MAT_V2'
+    EXPORTING
+      capid                 = 'PP01'
+      datuv                 = sy-datum
+*     mehrs                 = ' '
+      mtnrv                 = u_matnr
+      werks                 = u_werks
+      stlal                 = u_stlal
+*     mdmps                 = ' '
+    IMPORTING
+      topmat                = ls_cstmat
+    TABLES
+      matcat                = lt_matcat
+      stb                   = lt_stpo
+    EXCEPTIONS
+      alt_not_found         = 1
+      call_invalid          = 2
+      material_not_found    = 3
+      missing_authorization = 4
+      no_bom_found          = 5
+      no_plant_data         = 6
+      no_suitable_bom_found = 7
+      conversion_error      = 8
+      OTHERS                = 9.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_CALLBOM
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_callbom USING p_webaz TYPE plaf-webaz
+      p_psttr TYPE plaf-psttr.
+  DATA:lt_mast LIKE mast OCCURS 0 WITH HEADER LINE.
+  DATA:ls_cstmat       LIKE cstmat,
+       lt_stpo         LIKE stpox OCCURS 0 WITH HEADER LINE,
+       lt_matcat       LIKE cscmat OCCURS 0 WITH HEADER LINE,
+       lt_stpo_total   LIKE stpox OCCURS 0 WITH HEADER LINE,
+       lt_matcat_total LIKE cscmat OCCURS 0 WITH HEADER LINE,
+       lt_stpu         LIKE stpu OCCURS 0 WITH HEADER LINE.
+
+***抓取满足条件的BOM数据
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE lt_mast
+    FROM mast AS a
+    INNER JOIN stko AS b
+    ON a~stlnr = b~stlnr
+    AND a~stlal = b~stlal
+    WHERE a~matnr = gv_matnr
+*      AND a~werks IN s_werks
+      AND b~stlty = 'M'.
+
+
+  LOOP AT lt_mast.
+    PERFORM frm_explo_bom TABLES lt_stpo lt_matcat USING lt_mast-matnr lt_mast-werks ' ' lt_mast-stlal CHANGING ls_cstmat. "展开BOM
+    APPEND LINES OF lt_stpo TO lt_stpo_total.
+  ENDLOOP.
+  CHECK lt_stpo_total[] IS NOT INITIAL.
+  SORT lt_stpo_total BY idnrk.
+  DELETE ADJACENT DUPLICATES FROM lt_stpo_total COMPARING idnrk.
+
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE gt_alv FROM plaf
+    FOR ALL ENTRIES IN lt_stpo_total
+    WHERE matnr = lt_stpo_total-idnrk.
+*  DELETE ADJACENT DUPLICATES FROM gt_alv COMPARING matnr.
+  DELETE gt_alv WHERE matnr = gv_matnr.
+  CHECK gt_alv[] IS NOT INITIAL.
+  DATA lt_alv TYPE TABLE OF gs_alv WITH HEADER LINE.
+  DATA: lv_tabix TYPE sy-tabix,lv_pedtr TYPE plaf-pedtr,lv_webaz TYPE vtbbewe-atage.
+  DATA: date TYPE vtbbewe-dvalut.
+
+
+  LOOP AT gt_alv.
+    lv_tabix = sy-tabix.
+    lv_webaz = gt_alv-webaz * -1.
+    CALL FUNCTION 'FIMA_DATE_CREATE'
+      EXPORTING
+        i_date = p_psttr
+        i_days = lv_webaz     "
+      IMPORTING
+        e_date = date.
+
+    CALL FUNCTION 'DATE_CONVERT_TO_FACTORYDATE'
+      EXPORTING
+        correct_option               = '+'            "表示工作日计算方式的标记
+        date                         = date     "必须转换的日期
+        factory_calendar_id          = 'CN'           "工厂日历ID
+      IMPORTING
+        date                         = date           "工厂日历日期
+      EXCEPTIONS
+        calendar_buffer_not_loadable = 1
+        correct_option_invalid       = 2
+        date_after_range             = 3
+        date_before_range            = 4
+        date_invalid                 = 5
+        factory_calendar_not_found   = 6
+        OTHERS                       = 7.
+    IF gt_alv-pedtr > date.
+      DELETE gt_alv.
+      CONTINUE.
+    ENDIF.
+
+    SELECT SINGLE maktx INTO gt_alv-maktx FROM makt WHERE matnr = gt_alv-matnr AND spras = 1.
+    SELECT SINGLE nfmat INTO gt_alv-nfmat FROM marc WHERE matnr = gt_alv-matnr .
+    MODIFY gt_alv INDEX lv_tabix.
+
+    IF gt_alv-nfmat <> ''.
+      SELECT * INTO CORRESPONDING FIELDS OF TABLE lt_alv FROM plaf WHERE matnr =  gt_alv-nfmat AND pedtr <= date.
+      LOOP AT lt_alv.
+        lv_tabix = lv_tabix + 1.
+        INSERT lt_alv INTO gt_alv INDEX lv_tabix .
+      ENDLOOP.
+
+    ENDIF.
+  ENDLOOP.
+  SORT gt_alv BY matnr plnum.
+  DELETE ADJACENT DUPLICATES FROM gt_alv COMPARING plnum.
+*  CALL SCREEN 100 STARTING AT 5 8 ENDING AT 150 20.
+  PERFORM frm_display_detail_data.
+  REFRESH:lt_stpo,lt_matcat.
+  CLEAR:ls_cstmat,lt_stpo,lt_matcat..
+ENDFORM.
+
+FORM f_alv_set_fieldcats .
+  CLEAR: gt_alv_fcat[],  gs_alv_fcat.
+
+  PERFORM f_alv_set_fieldcat USING 'PLNUM' '计划订单号'     'PLNUM' 'PLAF'.
+  PERFORM f_alv_set_fieldcat USING 'MATNR' '物料代码'     'MATNR' 'PLAF'.
+  PERFORM f_alv_set_fieldcat USING 'MAKTX' '物料描述'      'MAKTX' 'MAKT'.
+  PERFORM f_alv_set_fieldcat USING 'GSMNG' '订单数量'        'GSMNG' 'PLAF' .
+  PERFORM f_alv_set_fieldcat USING 'MEINS' '单位' 'MEINS' 'PLAF' .
+  PERFORM f_alv_set_fieldcat USING 'PSTTR' '计划开始日期' 'PSTTR' 'PLAF' .
+  PERFORM f_alv_set_fieldcat USING 'PEDTR' '计划完工日期' 'PEDTR' 'PLAF' .
+  PERFORM f_alv_set_fieldcat USING 'PERTR' '未清日期' 'PERTR' 'PLAF' .
+  PERFORM f_alv_set_fieldcat USING 'DISPO' 'MRP控制者' 'DISPO' 'PLAF' .
+  PERFORM f_alv_set_fieldcat USING 'PAART' '订单类型' 'PAART' 'PLAF' .
+  PERFORM f_alv_set_fieldcat USING 'BESKZ' '采购类型' 'BESKZ' 'PLAF' .
+  PERFORM f_alv_set_fieldcat USING 'SOBES' '特殊采购类型' 'SOBES' 'PLAF' .
+  PERFORM f_alv_set_fieldcat USING 'AUFFX' '固定标识' 'AUFFX' 'PLAF' .
+
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  F_ALV_SET_LAYOUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM f_alv_set_layout .
+  CLEAR gs_layout.
+  gs_layout-smalltitle = ''.
+  gs_layout-grid_title = ''.
+  gs_layout-zebra      =  'X'.
+  gs_layout-sel_mode   = 'B'.
+  gs_layout-no_toolbar = ''.
+  gs_layout-no_rowmark = 'X'.
+  gs_layout-edit_mode  = ''.
+  gs_layout-detailinit = 'X'.
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-stylefname = 'STYLE'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  F_ALV_EXCLUDE_TOOLBAR
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM f_alv_exclude_toolbar .
+  CLEAR: gt_toolbar_excluding.
+  APPEND:
+  cl_gui_alv_grid=>mc_fc_print               TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_lystyle_drag_drop_rows TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_lystyle_no_delete_rows TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_lystyle_no_insert_rows TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_to_office           TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_call_abc            TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_call_chain          TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_call_crbatch        TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_call_crweb          TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_call_lineitems      TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_call_master_data    TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_call_more           TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_call_report         TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_call_xint           TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_graph               TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_help                TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_html                TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_info                TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_pc_file             TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_views               TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_loc_append_row      TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_loc_copy            TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_loc_copy_row        TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_loc_cut             TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_loc_delete_row      TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_loc_insert_row      TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_loc_move_row        TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_loc_paste           TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_loc_paste_new_row   TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_refresh             TO gt_toolbar_excluding,
+  cl_gui_alv_grid=>mc_fc_loc_undo            TO gt_toolbar_excluding.
+ENDFORM.
+
+FORM f_alv_set_fieldcat  USING p_field
+                               p_text
+*                               p_outlen
+*                               p_edit
+*                               p_zero
+*                               p_ckbox
+*                               p_key
+                               p_reffield
+                               p_reftable
+                               .
+  gs_alv_fcat-fieldname = p_field.
+  gs_alv_fcat-coltext   = p_text.
+*  gs_alv_fcat-outputlen = p_outlen.
+*  gs_alv_fcat-edit      = p_edit.
+*  gs_alv_fcat-no_zero   = p_zero.
+*  gs_alv_fcat-checkbox  = p_ckbox.
+*  gs_alv_fcat-just      = 'C'.
+*  gs_alv_fcat-key       = p_key.
+  gs_alv_fcat-ref_table = p_reftable.
+  gs_alv_fcat-ref_field = p_reffield.
+
+  APPEND gs_alv_fcat TO gt_alv_fcat.
+  CLEAR: gs_alv_fcat.
+ENDFORM.
+
+FORM f_class_set_toolbar  CHANGING p_e_object
+  TYPE REF TO cl_alv_event_toolbar_set.
+  DATA: ls_toolbar TYPE stb_button.
+  CLEAR ls_toolbar-butn_type.
+  APPEND ls_toolbar TO p_e_object->mt_toolbar.
+
+ENDFORM.
+
+FORM f_refresh_alv_display .
+  CALL METHOD cl_alv->refresh_table_display
+    EXPORTING
+      is_stable      = gs_refresh
+      i_soft_refresh = ''.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_DISPLAY_DETAIL_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_display_detail_data .
+  DATA:ls_layout TYPE lvc_s_layo,
+       lt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+  DEFINE mcr_build_fieldcat.
+    lt_fcat-fieldname = &1.
+    lt_fcat-coltext   = &2.
+    lt_fcat-scrtext_l = &2.
+    lt_fcat-scrtext_m = &2.
+    lt_fcat-scrtext_s = &2.
+    lt_fcat-ref_field = &3.
+    lt_fcat-ref_table = &4.
+    APPEND lt_fcat.
+    CLEAR lt_fcat.
+  END-OF-DEFINITION.
+
+***ALV DATA DEFINE
+  mcr_build_fieldcat:    'PLNUM' '计划订单号'     'PLNUM' 'PLAF',
+                         'MATNR' '物料代码'     'MATNR' 'PLAF',
+                         'MAKTX' '物料描述'      'MAKTX' 'MAKT',
+                         'GSMNG' '订单数量'        'GSMNG' 'PLAF' ,
+                         'MEINS' '单位' 'MEINS' 'PLAF' ,
+                         'PSTTR' '计划开始日期' 'PSTTR' 'PLAF' ,
+                         'PEDTR' '计划完工日期' 'PEDTR' 'PLAF' ,
+                         'PERTR' '未清日期' 'PERTR' 'PLAF' ,
+                         'DISPO' 'MRP控制者' 'DISPO' 'PLAF' ,
+                         'PAART' '订单类型' 'PAART' 'PLAF' ,
+                         'BESKZ' '采购类型' 'BESKZ' 'PLAF' ,
+                         'SOBES' '特殊采购类型' 'SOBES' 'PLAF' ,
+                         'AUFFX' '固定标识' 'AUFFX' 'PLAF' ,
+                         'NFMAT' '后续物料' 'NFMAT' 'MARC' .
+
+  ls_layout-cwidth_opt = 'X'.
+  ls_layout-zebra = 'X'.
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program = sy-repid
+      is_layout_lvc      = ls_layout
+      it_fieldcat_lvc    = lt_fcat[]
+      i_default          = 'X'
+      i_save             = 'A'
+    TABLES
+      t_outtab           = gt_alv[]
+    EXCEPTIONS
+      program_error      = 1
+      OTHERS             = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+ENDFORM.

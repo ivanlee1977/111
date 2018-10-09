@@ -1,0 +1,22 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPQM001_S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:
+       s_pdatub  FOR qamr-pruefdatub OBLIGATORY DEFAULT sy-datum,
+       s_aufnr   FOR qals-aufnr.
+PARAMETERS       p_werk   TYPE qals-werk OBLIGATORY DEFAULT '1000'. "工厂
+SELECT-OPTIONS:
+       s_matnr   FOR qals-matnr, "物料编码
+       s_maktx   FOR makt-maktx,
+       s_cpx     FOR c30,
+       s_xl      FOR c30,
+       s_zxl     FOR c30.
+
+
+SELECTION-SCREEN END OF BLOCK b1.
+
+SELECTION-SCREEN BEGIN OF BLOCK blc1 WITH FRAME TITLE TEXT-002.
+PARAMETERS: p_r1 RADIOBUTTON GROUP r0 , "按物料分类汇总
+            p_r2 RADIOBUTTON GROUP r0 . "按供应商汇总
+SELECTION-SCREEN END OF BLOCK blc1.

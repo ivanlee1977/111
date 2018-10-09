@@ -1,0 +1,125 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPFI011_T01
+*&---------------------------------------------------------------------*
+TABLES:faglflext.
+TYPE-POOLS:sils.
+
+DATA: BEGIN OF gt_fi OCCURS 0,
+        rbukrs LIKE faglflext-rbukrs,
+        prctr  LIKE faglflext-prctr,
+        ryear  LIKE faglflext-ryear,
+        rpmax  LIKE faglflext-rpmax,
+        racct  LIKE faglflext-racct,
+        hslvt  LIKE faglflext-hslvt,
+        hsl01  LIKE faglflext-hslvt,
+        hsl02  LIKE faglflext-hslvt,
+        hsl03  LIKE faglflext-hslvt,
+        hsl04  LIKE faglflext-hslvt,
+        hsl05  LIKE faglflext-hslvt,
+        hsl06  LIKE faglflext-hslvt,
+        hsl07  LIKE faglflext-hslvt,
+        hsl08  LIKE faglflext-hslvt,
+        hsl09  LIKE faglflext-hslvt,
+        hsl10  LIKE faglflext-hslvt,
+        hsl11  LIKE faglflext-hslvt,
+        hsl12  LIKE faglflext-hslvt,
+        hsl13  LIKE faglflext-hslvt,
+        hsl14  LIKE faglflext-hslvt,
+        hsl15  LIKE faglflext-hslvt,
+        hsl16  LIKE faglflext-hslvt,
+        drcrk  LIKE faglflext-drcrk,
+
+      END OF gt_fi.
+
+DATA: BEGIN OF gt_last OCCURS 0,
+        hsl11  LIKE faglflext-hslvt,
+        hsl12  LIKE faglflext-hslvt,
+        hsl13  LIKE faglflext-hslvt,
+        hsl14  LIKE faglflext-hslvt,
+        hsl15  LIKE faglflext-hslvt,
+        hsl16  LIKE faglflext-hslvt,
+        hsl17  LIKE faglflext-hslvt,
+        hsl18  LIKE faglflext-hslvt,
+
+        hsl21  LIKE faglflext-hslvt,
+        hsl22  LIKE faglflext-hslvt,
+        hsl23  LIKE faglflext-hslvt,
+        hsl24  LIKE faglflext-hslvt,
+        hsl25  LIKE faglflext-hslvt,
+        hsl26  LIKE faglflext-hslvt,
+        hsl27  LIKE faglflext-hslvt,
+        hsl28  LIKE faglflext-hslvt,
+
+        hsl31  LIKE faglflext-hslvt,
+        hsl32  LIKE faglflext-hslvt,
+        hsl33  LIKE faglflext-hslvt,
+        hsl34  LIKE faglflext-hslvt,
+        hsl35  LIKE faglflext-hslvt,
+        hsl36  LIKE faglflext-hslvt,
+        hsl37  LIKE faglflext-hslvt,
+        hsl38  LIKE faglflext-hslvt,
+
+        hsl41  LIKE faglflext-hslvt,
+        hsl42  LIKE faglflext-hslvt,
+        hsl43  LIKE faglflext-hslvt,
+        hsl44  LIKE faglflext-hslvt,
+        hsl45  LIKE faglflext-hslvt,
+        hsl46  LIKE faglflext-hslvt,
+        hsl47  LIKE faglflext-hslvt,
+        hsl48  LIKE faglflext-hslvt,
+
+        hsl51  LIKE faglflext-hslvt,
+        hsl52  LIKE faglflext-hslvt,
+        hsl53  LIKE faglflext-hslvt,
+        hsl54  LIKE faglflext-hslvt,
+        hsl55  LIKE faglflext-hslvt,
+        hsl56  LIKE faglflext-hslvt,
+        hsl57  LIKE faglflext-hslvt,
+        hsl58  LIKE faglflext-hslvt,
+
+        hsl61  LIKE faglflext-hslvt,
+        hsl62  LIKE faglflext-hslvt,
+        hsl63  LIKE faglflext-hslvt,
+        hsl64  LIKE faglflext-hslvt,
+        hsl65  LIKE faglflext-hslvt,
+        hsl66  LIKE faglflext-hslvt,
+        hsl67  LIKE faglflext-hslvt,
+        hsl68  LIKE faglflext-hslvt,
+
+        hsl71  LIKE faglflext-hslvt,
+        hsl72  LIKE faglflext-hslvt,
+        hsl73  LIKE faglflext-hslvt,
+        hsl74  LIKE faglflext-hslvt,
+        hsl75  LIKE faglflext-hslvt,
+        hsl76  LIKE faglflext-hslvt,
+        hsl77  LIKE faglflext-hslvt,
+        hsl78  LIKE faglflext-hslvt,
+
+        hsl81  LIKE faglflext-hslvt,
+        hsl82  LIKE faglflext-hslvt,
+        hsl83  LIKE faglflext-hslvt,
+        hsl84  LIKE faglflext-hslvt,
+        hsl85  LIKE faglflext-hslvt,
+        hsl86  LIKE faglflext-hslvt,
+        hsl87  LIKE faglflext-hslvt,
+        hsl88  LIKE faglflext-hslvt,
+
+        total1 LIKE faglflext-hslvt,
+        total2 LIKE faglflext-hslvt,
+        total3 LIKE faglflext-hslvt,
+        total4 LIKE faglflext-hslvt,
+        total5 LIKE faglflext-hslvt,
+        total6 LIKE faglflext-hslvt,
+        total7 LIKE faglflext-hslvt,
+        total8 LIKE faglflext-hslvt,
+
+
+      END OF gt_last.
+
+CONSTANTS:gcst_excel_template TYPE w3objid VALUE 'ZFI011'.
+DATA fmoney LIKE faglflext-hslvt.
+
+
+DATA:  fieldname TYPE string.
+
+ranges:r_bukrs FOR t001-bukrs.

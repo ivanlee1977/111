@@ -1,0 +1,72 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPFI008_T01
+*&---------------------------------------------------------------------*
+
+
+TABLES:faglflext.
+
+DATA: BEGIN OF gt_fi OCCURS 0,
+        rbukrs LIKE faglflext-rbukrs,
+        prctr  LIKE faglflext-prctr,
+        ryear  LIKE faglflext-ryear,
+        rpmax  LIKE faglflext-rpmax,
+        racct  LIKE faglflext-racct,
+        hsl01  LIKE faglflext-hslvt,
+        hsl02  LIKE faglflext-hslvt,
+        hsl03  LIKE faglflext-hslvt,
+        hsl04  LIKE faglflext-hslvt,
+        hsl05  LIKE faglflext-hslvt,
+        hsl06  LIKE faglflext-hslvt,
+        hsl07  LIKE faglflext-hslvt,
+        hsl08  LIKE faglflext-hslvt,
+        hsl09  LIKE faglflext-hslvt,
+        hsl10  LIKE faglflext-hslvt,
+        hsl11  LIKE faglflext-hslvt,
+        hsl12  LIKE faglflext-hslvt,
+        hsl13  LIKE faglflext-hslvt,
+        hsl14  LIKE faglflext-hslvt,
+        hsl15  LIKE faglflext-hslvt,
+        hsl16  LIKE faglflext-hslvt,
+      END OF gt_fi.
+
+DATA: BEGIN OF gt_last OCCURS 0,
+        hsl1   LIKE faglflext-hslvt,
+        hsl2   LIKE faglflext-hslvt,
+        hsl3   LIKE faglflext-hslvt,
+        hsl4   LIKE faglflext-hslvt,
+        hsl5   LIKE faglflext-hslvt,
+        hsl6   LIKE faglflext-hslvt,
+        hsl7   LIKE faglflext-hslvt,
+        hsl8   LIKE faglflext-hslvt,
+        hsl9   LIKE faglflext-hslvt,
+        hsl10  LIKE faglflext-hslvt,
+        total1 LIKE faglflext-hslvt,
+        total2 LIKE faglflext-hslvt,
+        hsl11  LIKE faglflext-hslvt,
+        hsl12  LIKE faglflext-hslvt,
+        hsl13  LIKE faglflext-hslvt,
+        hsl14  LIKE faglflext-hslvt,
+        hsl15  LIKE faglflext-hslvt,
+        hsl16  LIKE faglflext-hslvt,
+        hsl17  LIKE faglflext-hslvt,
+        hsl18  LIKE faglflext-hslvt,
+        hsl19  LIKE faglflext-hslvt,
+        hsl20  LIKE faglflext-hslvt,
+        total11 LIKE faglflext-hslvt,
+        total12 LIKE faglflext-hslvt,
+      END OF gt_last.
+
+CONSTANTS:gcst_excel_template TYPE w3objid VALUE 'ZFI008'.
+
+DATA fmoney LIKE faglflext-hslvt.
+DATA fmoney1 LIKE faglflext-hslvt.
+
+DATA:  fieldname TYPE string.
+
+ranges:r_bukrs FOR t001-bukrs.
+
+SELECT-OPTIONS:
+        s_rbukrs FOR faglflext-rbukrs,
+        s_prctr FOR faglflext-prctr.
+PARAMETERS s_ryear TYPE faglflext-ryear OBLIGATORY.
+SELECT-OPTIONS:s_rpmax FOR faglflext-rpmax OBLIGATORY NO-EXTENSION.

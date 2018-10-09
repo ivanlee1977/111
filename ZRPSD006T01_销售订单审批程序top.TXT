@@ -1,0 +1,86 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPSD006T01
+*&---------------------------------------------------------------------*
+TABLES:vbak,vbkd.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       vbeln       LIKE vbak-vbeln,  "销售订单号
+       posnr       LIKE vbap-posnr,  "项次
+       kunnr       LIKE vbak-kunnr,  "客户
+       name1       LIKE kna1-name1,  "客户名称
+       audat       LIKE vbak-audat,  "订单日期
+       lifsk       LIKE vbak-lifsk,  "订单状态
+       vtext       LIKE tvlst-vtext, "订单状态描述
+       matnr       LIKE vbap-matnr,  "物料号码
+       arktx       LIKE vbap-arktx,  "物料描述
+       kwmeng      LIKE vbap-kwmeng, "数量
+       zmeng       LIKE vbap-zmeng, "数量
+       meins       LIKE vbap-meins,  "单位
+       netpr       TYPE p DECIMALS 2, "单价
+       netwr       TYPE vbap-netwr,  "不含税金额
+       mwsbp       TYPE vbap-mwsbp,  "税
+       amount      TYPE p DECIMALS 2, "金额
+       waerk       TYPE vbak-waerk,  "币别
+       zswqr       TYPE sy-datum,    "商务确认日期
+       zjlqr       TYPE sy-datum,    "经理\主管确认日期
+       kvgr2       TYPE vbak-kvgr2,  "商务人员
+       bezei       TYPE tvv2t-bezei, "商务人员描述
+       vkorg       TYPE vbak-vkorg,  "销售组织
+       vtweg       TYPE vbak-vtweg,  "分销渠道
+       spart       TYPE vbak-spart,  "产品组
+       bzirk       TYPE vbkd-bzirk, "大区
+       bztxt       TYPE t171t-bztxt, "大区描述
+       vkbur       TYPE vbak-vkbur,  "行办
+       vkbur_txt   TYPE tvkbt-bezei, "行办描述
+       kvgr1       TYPE vbak-kvgr1,  "业务员
+       kvgr1_txt   TYPE tvv1t-bezei, "业务员描述
+       kdgrp       TYPE vbkd-kdgrp,  "行业
+       kdgrp_txt   TYPE t151t-ktext, "行业描述
+       kukla       TYPE kna1-kukla,  "客户分类
+       kukla_txt   TYPE tkukt-vtext, "客户分类描述
+       zterm       TYPE vbkd-zterm,  "付款条件
+       zterm_txt   TYPE tvzbt-vtext, "付款条件描述
+       objectid    TYPE cdhdr-objectid,  "对象号
+       auart       LIKE vbak-auart, "订单类型
+       bezei_auart LIKE tvakt-bezei, "订单类型描述
+       werks       LIKE vbap-werks,
+       lgort       LIKE vbap-lgort,  "仓库
+       lgobe       LIKE t001l-lgobe, "仓库描述
+       augru       LIKE vbak-augru,  "订单原因代码
+       augru_txt   LIKE TVAUT-bezei, "订单原因代码描述
+       ztext1(255) TYPE c,           "订单文本-注意事项
+       ztext2(255) TYPE c,           "订单文本-提单要求
+       ztext3(255) TYPE c,           "订单文本-标签要求
+       ztext4(255) TYPE c,           "订单文本-箱唛要求
+       ztext5(255) TYPE c,           "订单文本-随货单证
+       ztext6(255) TYPE c,           "订单文本-特殊包装
+       ztext7(255) TYPE c,           "借贷项文本
+       check       TYPE c,           "选择
+       zstat(30)   TYPE c,           "状态
+       zmsg(200)   TYPE c,           "消息
+     END OF gt_out.
+
+DATA:gv_lifsk LIKE vbak-lifsk.
+
+RANGES:r_kvgr1 FOR tvv1-kvgr1.
+
+***alv data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  gt_fcat-inttype = &5.
+  gt_fcat-intlen = &6.
+*  IF &1 = 'ZMSG' OR &1 = 'ZSTAT'.
+*    gt_fcat-tech = 'X'.
+*  ENDIF.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

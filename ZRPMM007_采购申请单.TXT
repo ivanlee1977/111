@@ -1,0 +1,25 @@
+*& 程序名： ZRPMM007
+*& 创建者(公司)/日期： 雷鸣涛/20170810
+*& 程序描述：采购申请单打印
+*&---------------------------------------------------------------------*
+
+*&---------------------------------------------------------------------*
+REPORT zrpmm007.
+
+INCLUDE zrpmm007_t01.
+INCLUDE zrpmm007_s01.
+INCLUDE zrpmm007_f01.
+
+INITIALIZATION.
+
+  s_plifz-low = 24.
+  s_plifz-option = 'GE'.
+  APPEND s_plifz.
+
+AT SELECTION-SCREEN .
+
+START-OF-SELECTION.
+
+  PERFORM frm_getdata.
+  PERFORM frm_getfact.
+  PERFORM frm_show.

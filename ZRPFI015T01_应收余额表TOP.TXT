@@ -1,0 +1,43 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI015T01
+*&---------------------------------------------------------------------*
+TABLES:bsid,bsad.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       kkber LIKE bsid-kkber,  "控制范围
+       kunnr LIKE bsid-kunnr,  "客户号码
+       name1 LIKE kna1-name1,  "客户名称
+       bzirk LIKE knvv-bzirk,  "大区代码
+       bztxt LIKE t171t-bztxt, "大区描述
+       vkbur LIKE knvv-vkbur,  "部门代码
+       bezei LIKE tvkbt-bezei, "部门描述
+       kvgr1 LIKE knvv-kvgr1,  "业务员
+       ztext LIKE tvv1t-bezei,  "业务员描述
+       waers LIKE bsid-waers,
+       zqcye TYPE p DECIMALS 2, "期初余额
+       zbqys TYPE p DECIMALS 2, "本期应收
+       zbqss TYPE p DECIMALS 2, "本期实收
+       zbnys TYPE p DECIMALS 2, "本年应收
+       zbnss TYPE p DECIMALS 2, "本年实收
+       zqmye TYPE p DECIMALS 2, "期末余额
+     END OF gt_out.
+
+***alv data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  gt_fcat-inttype = &5.
+  gt_fcat-intlen = &6.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.
+
+ranges:r_bukrs FOR t001-bukrs.

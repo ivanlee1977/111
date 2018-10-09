@@ -1,0 +1,34 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM016_TOP
+*&---------------------------------------------------------------------*
+TYPE-POOLS:truxs,slis.
+DATA:xlstab TYPE truxs_t_text_data.
+TABLES:cdhdr,lfa1.
+********************ALV 事件****************
+DATA:
+  it_fieldcat TYPE lvc_t_fcat,
+  wa_fieldcat LIKE LINE OF it_fieldcat,
+  gs_layout   TYPE lvc_s_layo,
+  it_events   TYPE slis_t_event, ""事件属性
+  wa_events   TYPE slis_alv_event.
+
+
+DATA:BEGIN OF gw_item,"展示内表
+       objectid    LIKE cdhdr-objectid, "供应商
+       name1       LIKE lfa1-name1    , "供应商名称
+       udate       LIKE cdhdr-udate   , "变更日期
+       utime       LIKE cdhdr-utime   , "变更时间
+       tcode       LIKE cdhdr-tcode   , "事务码
+       tabname     LIKE cdpos-tabname , "变更表
+       fname       LIKE cdpos-fname   , "变更字段
+       scrtext_l   LIKE dd04t-scrtext_l, "变更简述
+       chngind     LIKE cdpos-chngind , "更改标识符
+       ggbs_txt    TYPE  char40       , "更改标识描述
+       value_old   LIKE cdpos-value_old, "变更前
+       value_new   LIKE cdpos-value_new, "更改后
+       username    LIKE cdhdr-username , "变更人员
+       ddtext      LIKE dd02t-ddtext   ,"变更表名
+*       field_style TYPE lvc_t_styl, " 为内表添加设置编辑状态所需的字段
+     END OF gw_item.
+DATA:gt_item LIKE gw_item OCCURS 0.
+DATA: i_grid_settings TYPE lvc_s_glay.

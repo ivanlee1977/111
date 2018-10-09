@@ -1,0 +1,61 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPSD011T01
+*&---------------------------------------------------------------------*
+
+TABLES:ztsd003zxdb,likp.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       vbeln         LIKE lips-vbeln,
+       posnr         LIKE lips-posnr,
+       country       LIKE adrc-country, "贸易国地区
+       landx         LIKE t005t-landx,  "贸易国地区描述
+       country_t     LIKE adrc-country, "运抵国（地区）
+       landx_t       LIKE t005t-landx,  "运抵国（地区）描述
+       zzxno         LIKE ztsd003zxdb-zzxno, "合同协议号(装箱单号)
+       zsno          LIKE ztsd003zxdb-zsno,  "件数（开始箱号）
+       zeno          LIKE ztsd003zxdb-zeno,  "件数(结束箱号)
+       brgew         LIKE ztsd003zxdb-brgew, "毛重
+       lfimg         LIKE lips-lfimg,        "数量
+       netpr         TYPE p DECIMALS 2,      "单价
+       netpr_t       TYPE p DECIMALS 2,      "总价
+       waerk         LIKE vbak-waerk,        "币别
+       erdat         LIKE ztsd003zxdb-erdat, "创建日期
+       zbuyer(70)    TYPE c,                "Buyers
+       zaddress(120) TYPE c,                "Address
+       zpost         TYPE adrc-post_code1,  "邮编
+       ztel          TYPE adrc-tel_number,  "tel
+       ztotal        TYPE p DECIMALS 2,     "Total USD
+       zvalue        TYPE p DECIMALS 2,     "Total Value
+       zzcqx         TYPE sy-datum,         "装船期限
+       zship(120)    TYPE c,                "Ship to
+       znw           TYPE p DECIMALS 2,     "N.W.(KG)
+       uepos         LIKE lips-uepos,
+       spart         LIKE lips-spart,       "产品组
+       spart_txt     LIKE tspat-vtext,      "产品组描述
+       vgbel         LIKE lips-vgbel,
+       vgpos         LIKE lips-vgpos.
+    INCLUDE       STRUCTURE ztsd003cpys.
+DATA:END OF gt_out.
+
+CONSTANTS:gcst_excel_template TYPE w3objid VALUE 'ZSD011'.
+
+***alv data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  gt_fcat-inttype = &5.
+  gt_fcat-intlen = &6.
+  IF &1 = 'ZMSG' OR &1 = 'ZSTAT'.
+    gt_fcat-tech = 'X'.
+  ENDIF.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

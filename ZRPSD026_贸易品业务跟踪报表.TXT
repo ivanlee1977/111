@@ -1,0 +1,61 @@
+*&---------------------------------------------------------------------*
+*& Report ZRPSD026
+*& 创建者(公司)/日期： PFT/20171113
+*& 程序描述:贸易品业务跟踪报表
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    PFT           20171113     创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpsd026 MESSAGE-ID z001.
+
+INCLUDE zrpsd026t01.
+
+INCLUDE zrpsd026s01.
+
+INCLUDE zrpsd026f01.
+
+************************************************************************
+*INITIALIZATION.
+************************************************************************
+INITIALIZATION.
+  PERFORM frm_get_ausp."取产品线和系列
+************************************************************************
+*AT SELECTION-SCREEN ON VALUE_REQUEST.
+************************************************************************
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_cpx-low.
+  PERFORM sub_search_help_zxl USING 'CPX' 'S_CPX'  'ZFER_CPX'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_cpx-high.
+  PERFORM sub_search_help_zxl USING 'CPX' 'S_CPX'  'ZFER_CPX'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_xl-low.
+  PERFORM sub_search_help_zxl USING 'XL' 'S_XL' 'ZFER_XL'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_xl-high.
+  PERFORM sub_search_help_zxl USING 'XL' 'S_XL'  'ZFER_XL'.
+
+************************************************************************
+* AT SELECTION-SCREEN OUTPUT
+************************************************************************
+AT SELECTION-SCREEN OUTPUT.
+************************************************************************
+************************************************************************
+AT SELECTION-SCREEN.
+  CHECK sy-ucomm EQ 'ONLI'.
+  AUTHORITY-CHECK OBJECT 'V_VBAK_VKO'
+           ID 'VKORG' FIELD '1200'
+           ID 'VTWEG' DUMMY
+           ID 'SPART' DUMMY
+           ID 'ACTVT' FIELD '03'.
+  IF sy-subrc <> 0.
+    MESSAGE '没有销售组织的权限' TYPE 'E'.
+  ENDIF.
+************************************************************************
+************************************************************************
+* START-OF-SELECTION
+************************************************************************
+START-OF-SELECTION.
+  PERFORM frm_get_data."取数
+  PERFORM frm_process_data."对取出的数据进行处理
+  PERFORM sub_build_fieldcat.
+  PERFORM frm_output_data TABLES gt_alv.

@@ -1,0 +1,38 @@
+*& 程序名： ZRPfi030
+*& 创建者(公司)/日期： 雷鸣涛/20170906
+*& 程序描述：实付账款统计表
+*&---------------------------------------------------------------------*
+
+*&---------------------------------------------------------------------*
+REPORT zrpfi030.
+
+INCLUDE zrpfi030_t01.
+INCLUDE zrpfi030_s01.
+INCLUDE zrpfi030_f01.
+
+INITIALIZATION.
+
+AT SELECTION-SCREEN .
+  CHECK sy-ucomm EQ 'ONLI'.
+*  取出公司代码主数据
+  SELECT * INTO TABLE gt_t001 FROM t001 WHERE bukrs IN s_zgsdm.
+  LOOP AT gt_t001.
+    AUTHORITY-CHECK OBJECT 'F_BKPF_BUK'
+                  ID 'BUKRS' FIELD gt_t001-bukrs
+                  ID 'ACTVT' FIELD '03'.
+    IF sy-subrc <> 0.
+      DELETE gt_t001.
+      CONTINUE.
+    ENDIF.
+  ENDLOOP.
+  IF gt_t001[] IS INITIAL.
+    MESSAGE '没有公司代码的权限' TYPE 'E'.
+  ENDIF.
+
+
+START-OF-SELECTION.
+
+
+  PERFORM frm_getdata.
+  PERFORM frm_getfact.
+  PERFORM frm_show.

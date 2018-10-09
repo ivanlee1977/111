@@ -1,0 +1,66 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPSD021T01
+*&---------------------------------------------------------------------*
+TABLES:knvv,ztsd003zxdb.
+
+DATA:BEGIN OF gt_alv_zxd OCCURS 0,
+       kunnr     LIKE kna1-kunnr,
+       name1     LIKE kna1-name1,
+       sortl     LIKE kna1-sortl,
+       zzxno     LIKE ztsd003zxdb-zzxno, "装箱单号
+       brgew     LIKE ztsd003zxdb-brgew, "毛重
+       zsno      LIKE ztsd003zxdb-zsno,
+       zeno      LIKE ztsd003zxdb-zeno,  "箱数
+       zfhrq     LIKE ztsd003zxdb-zfhrq, "发货日期
+       zqsrq     LIKE ztsd003zxdb-zqsrq, "签收日期
+       zsjyf     LIKE ztsd003zxdb-zsjyf, "实际运费
+       waers     LIKE ztsd003zxdb-waers, "币别
+       vsart     LIKE ztsd003zxdb-vsart, "运输方式
+       zbgdh     LIKE ztsd003zxdb-zbgdh, "报关单号
+       zbz       LIKE ztsd003zxdb-zbz, "备注
+       vsart_txt LIKE t173t-bezei,       "运输方式描述
+       zysdh     LIKE ztsd003zxdb-zysdh, "运输单号
+       zdn(5000) TYPE c,                 "交货单
+       zso(5000) TYPE c,                 "销售订单
+       zysyf     TYPE p DECIMALS 2,      "预收运费
+       land1     LIKE kna1-land1,        "国家
+       landx     LIKE t005t-landx,       "国家描述
+       kvgr1     LIKE knvv-kvgr1,        "业务员
+       bezei     LIKE tvv1t-bezei,       "业务员名称
+       waerk     LIKE vbak-waerk, "订单币别
+     END OF gt_alv_zxd.
+
+DATA:gs_alv_zxd LIKE LINE OF gt_alv_zxd.
+
+DATA:BEGIN OF gt_alv_so OCCURS 0,
+       kunnr LIKE kna1-kunnr,
+       name1 LIKE kna1-name1,
+       sortl LIKE kna1-sortl,
+       vbeln LIKE vbak-vbeln,
+       zysyf TYPE p DECIMALS 2,      "预收运费
+       kzwi1 LIKE vbap-kzwi1,        "订单金额
+       waerk LIKE vbak-waerk,
+       kvgr1 LIKE knvv-kvgr1,        "业务员
+       bezei LIKE tvv1t-bezei,       "业务员名称
+     END OF gt_alv_so.
+
+DATA:gs_alv_so LIKE gt_alv_so.
+
+
+***ALV data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  gt_fcat-inttype = &5.
+  gt_fcat-intlen = &6.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

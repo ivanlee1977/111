@@ -1,0 +1,163 @@
+*&---------------------------------------------------------------------*
+*& 程序名： ZRPWMS003
+*& 创建者(公司)/日期： PFT/20170926
+*& 程序描述: WMS接口：供应商主数据推送
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    PFT           20170926      创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpwms003.
+TABLES:lfa1.
+
+DATA:BEGIN OF gt_data OCCURS 0,
+       lifnr LIKE lfa1-lifnr, "供应商
+       name1 LIKE lfa1-name1, "供应商名称
+     END OF gt_data.
+
+***selection screen define
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_datum FOR sy-datum OBLIGATORY.
+SELECTION-SCREEN END OF BLOCK blc.
+
+START-OF-SELECTION.
+
+  PERFORM frm_get_data.
+  PERFORM frm_send_data_to_wms.
+  PERFORM frm_send_data_to_bpm.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  REFRESH: gt_data.
+  SELECT lifnr name1
+    INTO CORRESPONDING FIELDS OF TABLE gt_data
+    FROM lfa1.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SEND_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_send_data_to_wms.
+
+  DATA:cl_si_wms_supplier_out TYPE REF TO zco_si_wms_supplier_out.
+  DATA:cl_cx_ai_system_fault      TYPE REF TO cx_ai_system_fault,
+       cl_cx_ai_application_fault TYPE REF TO cx_ai_application_fault.
+  DATA:ls_output        TYPE zmt_wms_supplier_req,
+       ls_input         TYPE zmt_wms_common_res,
+       lt_supplier_data TYPE TABLE OF zdt_wms_supplier_req_muli_mata,
+       ls_supplier_data TYPE zdt_wms_supplier_req_muli_mata.
+  DATA:lv_msg TYPE string.
+
+  WRITE:/ '准备将数据推送到WMS系统:'.
+
+  TRY.
+      CREATE OBJECT cl_si_wms_supplier_out.
+    CATCH cx_ai_system_fault INTO cl_cx_ai_system_fault.
+      lv_msg = cl_cx_ai_system_fault->get_text( ).
+      WRITE:/ lv_msg.
+      EXIT.
+  ENDTRY.
+
+  LOOP AT gt_data.
+    ls_supplier_data-lifnr = gt_data-lifnr.
+    ls_supplier_data-name1 = gt_data-name1.
+    APPEND ls_supplier_data TO lt_supplier_data.
+    CLEAR ls_supplier_data.
+  ENDLOOP.
+
+  ls_output-mt_wms_supplier_req-muli_matas = lt_supplier_data.
+
+
+  TRY.
+      CALL METHOD cl_si_wms_supplier_out->si_wms_supplier_out
+        EXPORTING
+          output = ls_output
+        IMPORTING
+          input  = ls_input.
+      lv_msg = ls_input-mt_wms_common_res-message .
+      WRITE:/ lv_msg.
+    CATCH cx_ai_system_fault INTO cl_cx_ai_system_fault.
+      lv_msg =  cl_cx_ai_system_fault->get_text( ).
+      WRITE:/ lv_msg.
+      EXIT.
+    CATCH cx_ai_application_fault INTO cl_cx_ai_application_fault.
+      lv_msg = cl_cx_ai_application_fault->get_text( ).
+      WRITE:/ lv_msg.
+      EXIT.
+  ENDTRY.
+
+  IF ls_input-mt_wms_common_res-type = 'S'.
+    WRITE:/ '将数据推送到WMS系统成功'.
+  ENDIF.
+
+  COMMIT WORK AND WAIT.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SEND_DATA_TO_BPM
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_send_data_to_bpm .
+
+  DATA:cl_si_bpm_vendor_out TYPE REF TO zco_si_bpm_vendor_out.
+  DATA:cl_cx_ai_system_fault      TYPE REF TO cx_ai_system_fault,
+       cl_cx_ai_application_fault TYPE REF TO cx_ai_application_fault.
+  DATA:ls_output      TYPE zasyn_vendors_request,
+       lt_vendor_data TYPE zvendor_tab,
+       ls_vendor_data TYPE zvendor.
+  DATA:lv_msg TYPE string.
+
+  WRITE:/ sy-uline.
+  WRITE:/ '准备将数据推送到BPM系统:'.
+
+  TRY.
+      CREATE OBJECT cl_si_bpm_vendor_out.
+    CATCH cx_ai_system_fault INTO cl_cx_ai_system_fault.
+      lv_msg = cl_cx_ai_system_fault->get_text( ).
+      WRITE:/ lv_msg.
+      EXIT.
+  ENDTRY.
+
+  LOOP AT gt_data.
+    ls_vendor_data-lifnr = gt_data-lifnr.
+    ls_vendor_data-name1 = gt_data-name1.
+    APPEND ls_vendor_data TO lt_vendor_data.
+    CLEAR ls_vendor_data.
+  ENDLOOP.
+
+  ls_output-vendors = lt_vendor_data.
+
+  TRY.
+      CALL METHOD cl_si_bpm_vendor_out->si_bpm_vendor_out
+        EXPORTING
+          output = ls_output.
+    CATCH cx_ai_system_fault INTO cl_cx_ai_system_fault.
+      lv_msg =  cl_cx_ai_system_fault->get_text( ).
+      WRITE:/ lv_msg.
+      EXIT.
+    CATCH cx_ai_application_fault INTO cl_cx_ai_application_fault.
+      lv_msg = cl_cx_ai_application_fault->get_text( ).
+      WRITE:/ lv_msg.
+      EXIT.
+  ENDTRY.
+
+  WRITE:/ '将数据推送到BPM系统成功'.
+
+  COMMIT WORK AND WAIT.
+
+
+ENDFORM.

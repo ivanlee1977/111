@@ -1,0 +1,44 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM031_TOP
+*&---------------------------------------------------------------------*
+TYPE-POOLS:TRUXS,SLIS.
+DATA:XLSTAB TYPE TRUXS_T_TEXT_DATA.
+TABLES:EKPO,EKKO,MARA.
+********************ALV 事件****************
+DATA:
+  IT_FIELDCAT TYPE LVC_T_FCAT,
+  WA_FIELDCAT LIKE LINE OF IT_FIELDCAT,
+  GS_LAYOUT   TYPE LVC_S_LAYO,
+  IT_EVENTS   TYPE SLIS_T_EVENT, ""事件属性
+  WA_EVENTS   TYPE SLIS_ALV_EVENT.
+
+
+DATA:BEGIN OF GW_ITEM,"展示内表
+       SEL(1) TYPE C,
+       LIFNR  LIKE EKKO-LIFNR, "供应商
+       NAME1  LIKE LFA1-NAME1, "供应商名称
+       EKGRP  LIKE EKKO-EKGRP, "采购组
+       EBELN  LIKE EKPO-EBELN, "采购订单号
+       EBELP  LIKE EKPO-EBELP, "项次
+       MATNR  LIKE EKPO-MATNR, "物料编码
+       TXZ01  LIKE EKPO-TXZ01, "物料描述
+       MENGE  LIKE EKPO-MENGE, "数量
+       LMEIN  LIKE EKPO-MEINS, "单位
+       AEDAT  LIKE EKPO-AEDAT, "凭证日期
+       EINDT  LIKE EKET-EINDT, "交货日期
+       WEMNG  LIKE EKET-WEMNG, "已交数量
+       DDWJSL LIKE EKPO-MENGE, "未交数量
+       DDGQTS TYPE P, " 过期天数
+       ERNAM  LIKE EKKO-ERNAM, "采购员
+       BUKRS  LIKE EKPO-BUKRS, "公司
+       EKORG  LIKE EKKO-EKORG, "采购组织
+     END OF GW_ITEM.
+DATA:GT_ITEM LIKE GW_ITEM OCCURS 0.
+
+DATA: I_GRID_SETTINGS TYPE LVC_S_GLAY.
+
+DATA:OK_CODE   TYPE SY-UCOMM,
+     SAVE_OK   TYPE SY-UCOMM,
+     ERRORCODE TYPE I.
+DATA: L_GRID TYPE REF TO CL_GUI_ALV_GRID,
+      STBL   TYPE LVC_S_STBL. ""稳定刷新

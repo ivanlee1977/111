@@ -1,0 +1,9 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPFI016_S01
+*&---------------------------------------------------------------------*
+SELECT-OPTIONS:
+    s_bukrs FOR bkpf-bukrs OBLIGATORY,
+    s_prctr FOR bseg-prctr,
+    s_lifnr FOR bseg-lifnr.
+PARAMETERS p_gjahr TYPE bkpf-gjahr OBLIGATORY.
+SELECT-OPTIONS:s_monat FOR bkpf-monat OBLIGATORY NO-EXTENSION.

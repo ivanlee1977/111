@@ -1,0 +1,17 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPSD001S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN: FUNCTION KEY 1. "工具栏启用标准铵1=>导入数据
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+PARAMETERS:r1 RADIOBUTTON GROUP ra DEFAULT 'X' USER-COMMAND um,
+           r2 RADIOBUTTON GROUP ra.
+SELECTION-SCREEN END OF BLOCK blc.
+
+SELECTION-SCREEN BEGIN OF BLOCK blc1 WITH FRAME TITLE TEXT-002.
+PARAMETERS:p_month LIKE sy-datum(6) OBLIGATORY DEFAULT sy-datum(6).
+PARAMETERS:p_file TYPE rlgrap-filename MODIF ID m1.
+SELECT-OPTIONS:s_cpx FOR ztsd007-zfer_cpx MODIF ID m2,"产品线
+               s_xl FOR ztsd007-zfer_xl MODIF ID m2,"系列
+               s_dyzxh FOR ztsd007-zfer_dyzxh MODIF ID m2."主型号
+SELECTION-SCREEN END OF BLOCK blc1.

@@ -1,0 +1,20 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI012T01
+*&---------------------------------------------------------------------*
+
+TABLES:faglflext,bseg,bkpf.
+
+TYPES:BEGIN OF tps_item,
+        zexno(2)   TYPE c,
+        zamount_ye TYPE tslvt12, "本月数
+        zamount_mo TYPE tslvt12, "本年数
+      END OF tps_item.
+DATA gt_item TYPE tps_item OCCURS 0 WITH HEADER LINE .
+
+DATA:lv_rpmax    TYPE monat,
+     lv_rpmin    TYPE monat,
+     lv_index(2) TYPE n.
+
+CONSTANTS:gcst_excel_template TYPE w3objid VALUE 'ZFI012'.
+
+RANGES:r_bukrs FOR t001-bukrs.

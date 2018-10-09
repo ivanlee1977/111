@@ -1,0 +1,189 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZSDRP014T01
+*&---------------------------------------------------------------------*
+INCLUDE <icon>.
+TYPE-POOLS: truxs,soi,cntl,cntb,abap,slis,vrm.
+
+TABLES: ztfi002,bsis,ztsd005,ztsd004,ztsd006,vbrp,vbrk,knvv,vbak,vbap..
+
+*DATA: BEGIN OF gt_alv OCCURS 0 ,
+*        box    TYPE c,
+*        zyhzh  TYPE ztfi002-zyhzh,
+*        zyhlsh TYPE ztfi002-zyhlsh,
+*        bukrs  TYPE ztfi002-bukrs,
+*        prctr  TYPE ztfi002-prctr,
+*        zjyrq  TYPE ztfi002-zjyrq,
+*        zzy    TYPE ztfi002-zzy,
+*        zje    TYPE ztfi002-zje,
+*        zsfdz  TYPE ztfi002-zsfdz,
+*        zdzrq  TYPE ztfi002-zdzrq,
+*      END OF gt_alv.
+
+DATA: BEGIN OF gt_alv OCCURS 0 ,
+        box    TYPE c,
+*        kunnr     LIKE kna1-kunnr, "客户
+*        name1(70),"客户名称
+*        matnr     LIKE lips-matnr, "物料
+*        arktx     LIKE vbrp-arktx, "物料描述
+*        vgbel     LIKE vbrp-vgbel, "交货单号
+*        vgpos     LIKE vbrp-vgpos, "交货单行项目
+*        aubel     LIKE vbrp-aubel, "销售订单号
+*        aupos     LIKE vbrp-aupos, "销售订单行项目号
+*        kzwi1     LIKE vbrp-kzwi1, "总价
+*        fkimg_fp  LIKE vbrp-fkimg. "数量
+*    INCLUDE STRUCTURE ztsd006.
+*DATA: vkorg  LIKE vbrk-vkorg, "销售组织
+*      vtweg  LIKE vbrk-vtweg, "分销渠道
+*      bezei  LIKE t173t-bezei, "快递公司名称
+*      zpric  TYPE dmbtr, "金额
+      style  TYPE lvc_t_styl, " 为内表添加设置编辑状态所需的字段
+*      adrnr  TYPE kna1-adrnr, "地址号码
+*      kvgr1  LIKE vbak-kvgr1, "业务员
+*      kvgr2  LIKE vbak-kvgr2, "商务
+        zyhzh  TYPE ztfi002-zyhzh,
+        zyhlsh TYPE ztfi002-zyhlsh,
+        bukrs  TYPE ztfi002-bukrs,
+        prctr  TYPE ztfi002-prctr,
+        zjyrq  TYPE ztfi002-zjyrq,
+        zzy    TYPE ztfi002-zzy,
+        zje    TYPE ztfi002-zje,
+        zje1   TYPE ztfi002-zje,
+        zje2   TYPE ztfi002-zje,
+        zsfdz  TYPE ztfi002-zsfdz,
+        zdzrq  TYPE ztfi002-zdzrq,
+        zfjs   TYPE ztfi002-zfjs,
+        zbz    TYPE ztfi002-zbz,
+        zye    TYPE ztfi002-zje,
+        zuser  TYPE ztfi002-zuser,
+      END OF gt_alv.
+
+DATA: BEGIN OF gt_vbak OCCURS 0,
+        vbeln LIKE vbak-vbeln, "销售订单号
+        kunnr LIKE vbak-kunnr, "客户
+        kvgr1 LIKE vbak-kvgr1, "业务员
+        kvgr2 LIKE vbak-kvgr2, "商务
+        vkorg LIKE vbak-vkorg, "销售组织
+        vtweg LIKE vbak-vtweg, "分销渠道
+      END OF gt_vbak.
+
+DATA:gt_ztsd005 LIKE ztsd005 OCCURS 0 WITH HEADER LINE, "计划开票数据
+     gt_knvv    LIKE knvv OCCURS 0 WITH HEADER LINE, "客户主记录销售数据
+     gt_kna1    LIKE kna1 OCCURS 0 WITH HEADER LINE. "客户主数据
+
+*  打印时根据客户分页
+DATA: BEGIN OF lt_kunnr OCCURS 0,
+        kunnr     LIKE kna1-kunnr,
+        name1(70),"客户名称
+        adrnr     LIKE kna1-adrnr,
+        kvgr1     LIKE vbak-kvgr1, "业务员
+        kvgr2     LIKE vbak-kvgr2, "商务
+        vkorg     LIKE vbak-vkorg, "销售组织
+      END OF lt_kunnr.
+
+*  判断是否为回车事件
+DATA:lv_enter   TYPE REF TO cl_gui_event,
+     lv_eventid TYPE i.
+*  回车检查消息
+DATA:lv_msgv1     TYPE bapi_msg,
+     lv_fieldname TYPE lvc_fname,
+     lv_row       TYPE int4.
+
+DATA: ls_stylerow TYPE lvc_s_styl,
+      lt_styletab TYPE lvc_t_styl.
+
+*-------------------ALV属性声明区---------------------------------*
+DATA: gt_alv_fcat          TYPE  lvc_t_fcat WITH HEADER LINE,
+      "字段属性
+      gs_alv_fcat          LIKE  LINE OF gt_alv_fcat,
+      gt_sort              TYPE lvc_t_sort WITH HEADER LINE,
+      gt_toolbar_excluding TYPE  ui_functions, "删除功能内表
+      gs_layout            TYPE  lvc_s_layo,   "ALV布局
+      gs_variant           TYPE  disvariant,   "是否保存变式
+      gt_ddval             TYPE  lvc_t_drop,   "下拉列表内表
+      gs_ddval             TYPE  lvc_s_drop,   "下拉列表结构
+      gt_f4                TYPE  lvc_t_f4,     "f4帮助内表
+      gs_f4                TYPE  lvc_s_f4.     "f4帮助结构
+
+DATA: BEGIN OF gs_refresh,
+        row TYPE char1 VALUE 'X',
+        col TYPE char1 VALUE 'X',
+      END OF gs_refresh.
+
+DATA: ok_code  LIKE sy-ucomm,
+      save_ok  LIKE ok_code,
+      gv_repid LIKE sy-repid.
+
+*-------------------控件声明区------------------------------------*
+DATA: cl_alv       TYPE REF TO cl_gui_alv_grid,
+      cl_container TYPE REF TO cl_gui_custom_container.
+
+CLASS lcl_event_receiver DEFINITION.
+  PUBLIC SECTION.
+    METHODS:
+      handle_toolbar FOR EVENT toolbar OF cl_gui_alv_grid
+        IMPORTING e_object e_interactive,
+
+      handle_user_command FOR EVENT user_command OF cl_gui_alv_grid
+        IMPORTING e_ucomm,
+
+      handle_double_click  FOR EVENT double_click  OF cl_gui_alv_grid
+        IMPORTING e_row e_column es_row_no,
+
+      handle_on_f4 FOR EVENT onf4 OF cl_gui_alv_grid
+        IMPORTING e_fieldname  e_fieldvalue   es_row_no
+                    er_event_data  et_bad_cells   e_display,
+
+      handle_data_changed FOR EVENT data_changed OF cl_gui_alv_grid
+        IMPORTING er_data_changed,
+
+      handle_data_changed_finished FOR EVENT data_changed_finished OF cl_gui_alv_grid
+        IMPORTING e_modified et_good_cells.
+
+ENDCLASS.
+
+*---------------------------------------------------------------------*
+*       CLASS lcl_event_receiver IMPLEMENTATION
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+CLASS lcl_event_receiver IMPLEMENTATION.
+  METHOD handle_toolbar.
+    PERFORM f_class_set_toolbar CHANGING e_object ."e_interactive.
+  ENDMETHOD.
+
+  METHOD handle_user_command.
+    PERFORM  f_class_toolbar_user_command USING e_ucomm.
+  ENDMETHOD.
+
+  METHOD handle_double_click.
+*    PERFORM double_click USING e_row.
+  ENDMETHOD.
+
+  METHOD handle_on_f4.
+    PERFORM f_class_on_f4 CHANGING e_fieldname  e_fieldvalue
+      es_row_no    er_event_data
+      et_bad_cells   e_display.
+  ENDMETHOD.
+
+  METHOD handle_data_changed.
+    PERFORM f_class_data_changed USING er_data_changed.
+  ENDMETHOD.
+
+  METHOD  handle_data_changed_finished.
+*    BREAK-POINT.
+*    CLEAR: lv_enter,lv_eventid.
+**   获取当前事件
+*    lv_enter   = cl_alv->cur_event.
+**   实例化成功的时候
+*    IF lv_enter IS NOT INITIAL.
+*      lv_eventid = lv_enter->eventid.
+*    ENDIF.
+**   只有在[回车]事件的时候，再进行检查(18:代表回车事件)
+*    IF ( lv_eventid = 4 OR lv_eventid = 18 ) AND sy-ucomm   = ''.
+    PERFORM f_class_data_changed_finished USING e_modified et_good_cells.
+*    ENDIF.
+
+  ENDMETHOD.
+ENDCLASS.
+
+DATA: cl_button_event TYPE REF TO lcl_event_receiver.

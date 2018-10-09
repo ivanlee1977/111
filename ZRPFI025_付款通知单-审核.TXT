@@ -1,0 +1,28 @@
+*&---------------------------------------------------------------------*
+*& 程序名： ZRPFI002
+*& 创建者(公司)/日期： QUYT/20170626
+*& 程序描述：收款通知单-审核
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    QUYT           20170626      创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpfi025.
+
+INCLUDE zrpfi025_top.    "全局数据定义
+INCLUDE zrpfi025_s01.    "选择界面定义
+INCLUDE zrpfi025_f01.   "子程序定义
+INCLUDE zrpfi025_m01.   "Module
+
+INITIALIZATION.
+  "初始化
+  PERFORM initit_data.
+
+AT SELECTION-SCREEN .
+  "检查公司权限
+  PERFORM frm_check_authority.
+
+START-OF-SELECTION.
+  "取数
+  PERFORM get_data.
+  "显示
+  CALL SCREEN 100.

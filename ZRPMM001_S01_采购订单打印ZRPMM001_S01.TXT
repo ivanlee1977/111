@@ -1,0 +1,23 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM001_S01
+*&---------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS: s_bukrs FOR ekko-bukrs OBLIGATORY DEFAULT '1000',
+                s_ebeln FOR ekpo-ebeln,
+                s_ekgrp FOR ekko-ekgrp,
+                s_bedat FOR ekko-bedat,
+                s_lifnr FOR ekko-lifnr.
+SELECTION-SCREEN END OF BLOCK b1.
+
+SELECTION-SCREEN BEGIN OF BLOCK b2 WITH FRAME TITLE TEXT-002.
+PARAMETERS:p_bz RADIOBUTTON GROUP gr1, "标准采购订单(默认)
+           p_ww RADIOBUTTON GROUP gr1 , "委外采购订单
+           p_mj RADIOBUTTON GROUP gr1, "模具采购订单
+           p_pcb RADIOBUTTON GROUP gr1."PCB采购订单
+SELECTION-SCREEN END OF BLOCK b2.
+
+SELECTION-SCREEN BEGIN OF BLOCK b3 WITH FRAME TITLE TEXT-003.
+PARAMETERS:p_ch RADIOBUTTON GROUP gr2, "中文(默认)
+           p_en RADIOBUTTON GROUP gr2. "英文
+SELECTION-SCREEN END OF BLOCK b3.

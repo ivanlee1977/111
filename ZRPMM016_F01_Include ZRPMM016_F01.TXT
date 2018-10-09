@@ -1,0 +1,264 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM016_F01
+*&---------------------------------------------------------------------*
+FORM get_data."取数据
+  SELECT  a~objectid
+          a~udate
+          a~utime
+          a~tcode
+          a~username
+
+          b~tabname
+          b~fname
+          b~chngind
+          b~value_new
+          b~value_old
+         INTO CORRESPONDING FIELDS OF TABLE gt_item
+       FROM cdhdr AS a
+    LEFT JOIN cdpos AS b ON a~objectid EQ b~objectid AND a~changenr EQ b~changenr
+                        AND a~objectclas EQ b~objectclas
+    WHERE a~objectid IN s_lifnr
+      AND a~udate  IN s_udate
+      AND a~tcode IN ('MK02','FX02','XK02','MK05','FK05','XK05').
+
+ENDFORM.
+
+
+FORM process_data."处理数据
+  DATA:it_lfa1 LIKE lfa1 OCCURS 0 WITH HEADER LINE .
+  DATA:BEGIN OF it_dd04t OCCURS 0,
+         tabname   LIKE dd03l-tabname,
+         fieldname LIKE dd03l-fieldname,
+         as4local  LIKE dd03l-as4local,
+         as4vers   LIKE dd03l-as4vers,
+         position  LIKE dd03l-position,
+         rollname  LIKE dd03l-rollname,
+         scrtext_l LIKE dd04t-scrtext_l,
+         ddtext    LIKE dd02t-ddtext,
+       END OF it_dd04t.
+
+  DATA:BEGIN OF it_dd02t OCCURS 0,
+         tabname   LIKE dd03l-tabname,
+         fieldname LIKE dd03l-fieldname,
+         as4local  LIKE dd03l-as4local,
+         as4vers   LIKE dd03l-as4vers,
+         position  LIKE dd03l-position,
+         ddtext    LIKE dd02t-ddtext,
+       END OF it_dd02t.
+
+  DATA:
+    lv_return    TYPE sy-subrc,
+    i_dom_apstt  TYPE STANDARD TABLE OF dd07v,
+    lv_wa_domtab TYPE dd07v.
+
+  DATA:it_cdpos LIKE cdpos OCCURS 0 WITH HEADER LINE .
+  DATA: BEGIN OF it_lifnr OCCURS 0,
+          lifnr LIKE lfa1-lifnr,
+        END OF it_lifnr.
+
+  CLEAR it_lifnr[].
+  LOOP AT gt_item INTO gw_item.
+    it_lifnr-lifnr = gw_item-objectid.
+    APPEND it_lifnr.
+  ENDLOOP.
+
+
+  IF gt_item[] IS NOT INITIAL .
+    "ddo4t
+    SELECT
+         a~tabname
+         a~fieldname
+         a~as4local
+         a~as4vers
+         a~position
+         a~rollname
+         b~scrtext_l
+         b~ddlanguage
+        INTO CORRESPONDING FIELDS OF TABLE it_dd04t
+       FROM dd03l AS a
+  JOIN dd04t AS b ON a~rollname EQ b~rollname
+      FOR ALL ENTRIES IN gt_item
+      WHERE a~fieldname EQ gt_item-fname
+        AND a~tabname   EQ gt_item-tabname
+        AND b~ddlanguage EQ sy-langu.
+
+    "dd02t
+    SELECT
+         a~tabname
+         a~as4local
+         a~as4vers
+         a~position
+         c~ddtext
+        INTO CORRESPONDING FIELDS OF TABLE it_dd02t
+       FROM dd03l AS a
+  JOIN dd02t AS c ON a~tabname EQ c~tabname AND a~as4local EQ c~as4local AND a~as4vers EQ c~as4vers
+      FOR ALL ENTRIES IN gt_item
+      WHERE
+*            a~fieldname EQ gt_item-fname AND
+         a~tabname   EQ gt_item-tabname
+      AND c~ddlanguage EQ sy-langu.
+  ENDIF.
+
+  IF it_lifnr[] IS NOT INITIAL .
+    "lfa1
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE it_lfa1 FROM lfa1
+      FOR ALL ENTRIES IN it_lifnr WHERE lifnr EQ it_lifnr-lifnr.
+  ENDIF.
+
+  LOOP AT gt_item INTO gw_item.
+    READ TABLE it_lfa1 WITH KEY lifnr = gw_item-objectid.
+    IF sy-subrc EQ 0.
+      gw_item-name1 = it_lfa1-name1.
+    ENDIF.
+
+    READ TABLE it_dd04t WITH KEY tabname = gw_item-tabname fieldname = gw_item-fname.
+    IF sy-subrc EQ 0.
+      gw_item-scrtext_l = it_dd04t-scrtext_l.
+    ENDIF.
+
+    READ TABLE it_dd02t WITH KEY tabname = gw_item-tabname.
+    IF sy-subrc EQ 0.
+      gw_item-ddtext    = it_dd02t-ddtext.
+    ENDIF.
+
+
+    IF i_dom_apstt IS INITIAL.
+      CALL FUNCTION 'DD_DOMVALUES_GET'
+        EXPORTING
+          domname        = 'CDCHNGIND'   "域名
+          text           = 'X'
+          langu          = sy-langu
+        IMPORTING
+          rc             = lv_return
+        TABLES
+          dd07v_tab      = i_dom_apstt
+        EXCEPTIONS
+          wrong_textflag = 1
+          OTHERS         = 2.
+    ENDIF.
+    LOOP AT i_dom_apstt  INTO lv_wa_domtab WHERE domvalue_l = gw_item-chngind.
+      gw_item-ggbs_txt = lv_wa_domtab-ddtext.
+    ENDLOOP.
+
+
+*    CASE gw_item-chngind.
+*      WHEN 'U'.
+*        gw_item-ggbs_txt = '更新'.
+*      WHEN 'I'.
+*        gw_item-ggbs_txt = '插入'.
+*      WHEN 'E'.
+*        gw_item-ggbs_txt = '删除（单字段文档）'.
+*      WHEN 'D'.
+*        gw_item-ggbs_txt = '删除'.
+*      WHEN 'J'.
+*        gw_item-ggbs_txt = '插入（单字段文档）'.
+*      WHEN OTHERS.
+*    ENDCASE.
+
+    MODIFY gt_item FROM gw_item.
+  ENDLOOP.
+ENDFORM .
+
+FORM get_alv."ALV显示界面
+  DATA : col_pos TYPE i VALUE 1.
+
+  CLEAR:it_fieldcat,wa_fieldcat.
+
+  gs_layout-zebra = 'X'.
+  gs_layout-cwidth_opt = 'X'."
+*  gs_layout-stylefname = 'FIELD_STYLE'. " 将内表中的字段名存入显示格式
+*  gs_layout-box_fname        = 'SEL'.
+  i_grid_settings-edt_cll_cb = 'X'.
+*  wa_events-name = 'CALLER_EXIT'.
+*  wa_events-form = 'CALLER_EXIT'.
+*  APPEND wa_events TO it_events.
+
+  PERFORM fieldcat_int USING col_pos  'OBJECTID'   ' '   '供应商编号'   ''  'LIFNR' 'LFA1' '' ''.
+  PERFORM fieldcat_int USING col_pos  'NAME1'   ' '   '供应商名称'   ''  '' '' '' ''.
+  PERFORM fieldcat_int USING col_pos  'UDATE'   ' '   '变更日期'   ''  'UDATE' 'CDHDR' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'UTIME'   ' '   '变更时间'   ''  '' '' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'TCODE'   ' '   '事务码'   ''  '' '' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'TABNAME'   ' '   '变更表'   ''  '' '' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'DDTEXT'   ' '   '变更表名'   ''  '' '' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'FNAME'   ' '   '变更字段'   ''  '' '' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'SCRTEXT_L'   ' '   '变更简述'   ''  '' '' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'CHNGIND'   ' '   '变更标识符'   ''  '' '' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'GGBS_TXT'   ' '   '变更标识描述'   ''  '' '' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'VALUE_OLD'   ' '   '变更前'   ''  '' '' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'VALUE_NEW'   ' '   '更改后'   ''  '' '' ''   ''.
+  PERFORM fieldcat_int USING col_pos  'USERNAME'   ' '   '变更人员'   ''  '' '' ''   ''.
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program = sy-repid
+      is_layout_lvc      = gs_layout
+      it_fieldcat_lvc    = it_fieldcat
+      it_events          = it_events
+      i_save             = 'A'
+*     i_callback_pf_status_set = 'SET_PF_STATUS'
+*     i_callback_user_command  = 'ALV_USER_COMMAND'
+      i_grid_settings    = i_grid_settings
+    TABLES
+      t_outtab           = gt_item[]
+    EXCEPTIONS
+      program_error      = 1
+      OTHERS             = 2.
+
+  IF sy-subrc <> 0.
+* MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+*         WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+  ENDIF.
+ENDFORM.
+
+
+*FORM set_pf_status USING rt_extab TYPE slis_t_extab.
+*
+*  DATA: wa_extab TYPE slis_extab.
+*
+*  SET PF-STATUS 'ZRPQM001_STATUS' EXCLUDING rt_extab.
+*
+*ENDFORM.                    "set_pf_status1
+
+*FORM alv_user_command USING r_ucomm LIKE sy-ucomm  rs_selfield TYPE slis_selfield.
+**   获取ALV中的鼠标勾选记录
+*  DATA: l_grid TYPE REF TO cl_gui_alv_grid.
+*  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+*    IMPORTING
+*      e_grid = l_grid.
+*  rs_selfield-refresh = 'X'.
+*  rs_selfield-col_stable = 'X'.
+*  rs_selfield-row_stable = 'X'.
+*
+*  r_ucomm = sy-ucomm.
+*  save_ok =  r_ucomm .
+*  CASE r_ucomm.
+*      "打印
+*    WHEN 'C_PRINT'.
+*      PERFORM print_report.
+*  ENDCASE.
+*
+*
+*ENDFORM.                    "alv_user_command
+
+FORM fieldcat_int  USING   p_col_pos         " 1
+                            p_fieldname       " 2
+                            p_key             " 3
+                            p_seltext_l       " 4
+                            p_zero
+                            p_filename
+                            p_talbename
+                            p_outputlen
+                            p_edit .
+
+  wa_fieldcat-col_pos       = p_col_pos.
+  wa_fieldcat-fieldname     = p_fieldname.
+  wa_fieldcat-key           = p_key.
+  wa_fieldcat-coltext     = p_seltext_l.
+  wa_fieldcat-no_zero        = p_zero.
+  wa_fieldcat-ref_field   = p_filename.
+  wa_fieldcat-ref_table    = p_talbename.
+  wa_fieldcat-tipddictxt       = 'L'.
+  wa_fieldcat-edit           = p_edit  .
+  APPEND wa_fieldcat TO it_fieldcat.
+  p_col_pos = p_col_pos + 1.
+  CLEAR: wa_fieldcat.
+ENDFORM.                    " FIELDCAT_INT

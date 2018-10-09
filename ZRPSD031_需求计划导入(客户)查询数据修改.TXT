@@ -1,0 +1,123 @@
+*&---------------------------------------------------------------------*
+*& Report ZRPSDTEST
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT  ZRPSD031 NO STANDARD PAGE HEADING.
+
+DATA: gs_ztsd001a   LIKE ztsd001a,
+      gt_ztsd001a   LIKE TABLE OF gs_ztsd001a,
+
+      gs_vimsellist LIKE vimsellist,
+      gt_vimsellist LIKE TABLE OF gs_vimsellist.
+
+TABLES ztsd001a.
+SELECT-OPTIONS:
+    s_zmonth FOR ztsd001a-zmonth,
+    s_vkorg FOR ztsd001a-vkorg,
+    s_kunnr FOR ztsd001a-kunnr,
+    s_matnr FOR ztsd001a-matnr,
+    s_ernam FOR ztsd001a-ernam,
+    s_erdat FOR ztsd001a-erdat,
+    s_uzeit FOR ztsd001a-uzeit.
+
+IF s_zmonth IS NOT INITIAL.
+  LOOP AT s_zmonth.
+    gs_vimsellist-viewfield  = 'ZMONTH'.
+    gs_vimsellist-operator   = 'EQ'.
+    gs_vimsellist-value    =  s_zmonth-low.
+    gs_vimsellist-and_or    = 'AND'.
+    APPEND gs_vimsellist TO gt_vimsellist.
+  ENDLOOP.
+ENDIF.
+
+IF s_vkorg IS NOT INITIAL.
+  LOOP AT s_vkorg.
+    gs_vimsellist-viewfield  = 'VKORG'.
+    gs_vimsellist-operator   = 'EQ'.
+    gs_vimsellist-value    =  s_vkorg-low.
+    gs_vimsellist-and_or    = 'AND'.
+    APPEND gs_vimsellist TO gt_vimsellist.
+  ENDLOOP.
+ENDIF.
+
+IF s_kunnr IS NOT INITIAL.
+  LOOP AT s_kunnr.
+    gs_vimsellist-viewfield  = 'KUNNR'.
+    gs_vimsellist-operator   = 'EQ'.
+    gs_vimsellist-value    =  s_kunnr-low.
+    gs_vimsellist-and_or    = 'AND'.
+    APPEND gs_vimsellist TO gt_vimsellist.
+  ENDLOOP.
+ENDIF.
+
+IF s_matnr IS NOT INITIAL.
+  LOOP AT s_matnr.
+    gs_vimsellist-viewfield  = 'MATNR'.
+    gs_vimsellist-operator   = 'EQ'.
+    gs_vimsellist-value    =  s_matnr-low.
+    gs_vimsellist-and_or    = 'AND'.
+    APPEND gs_vimsellist TO gt_vimsellist.
+  ENDLOOP.
+ENDIF.
+
+IF s_ernam IS NOT INITIAL.
+  LOOP AT s_ernam.
+    gs_vimsellist-viewfield  = 'ERNAM'.
+    gs_vimsellist-operator   = 'EQ'.
+    gs_vimsellist-value    =  s_ernam-low.
+    gs_vimsellist-and_or    = 'AND'.
+    APPEND gs_vimsellist TO gt_vimsellist.
+  ENDLOOP.
+ENDIF.
+
+IF s_erdat IS NOT INITIAL.
+  LOOP AT s_erdat.
+    gs_vimsellist-viewfield  = 'ERDAT'.
+    gs_vimsellist-operator   = 'EQ'.
+    gs_vimsellist-value    =  s_erdat-low.
+    gs_vimsellist-and_or    = 'AND'.
+    APPEND gs_vimsellist TO gt_vimsellist.
+  ENDLOOP.
+ENDIF.
+
+IF s_uzeit IS NOT INITIAL.
+  LOOP AT s_uzeit.
+    gs_vimsellist-viewfield  = 'UZEIT'.
+    gs_vimsellist-operator   = 'EQ'.
+    gs_vimsellist-value    =  s_uzeit-low.
+    gs_vimsellist-and_or    = 'AND'.
+    APPEND gs_vimsellist TO gt_vimsellist.
+  ENDLOOP.
+ENDIF.
+
+
+
+
+
+CALL FUNCTION 'VIEW_MAINTENANCE_CALL'
+  EXPORTING
+    action                       = 'U'
+    view_name                    = 'ZTSD001A'
+  TABLES
+    dba_sellist                  = gt_vimsellist
+  EXCEPTIONS
+    client_reference             = 1
+    foreign_lock                 = 2
+    invalid_action               = 3
+    no_clientindependent_auth    = 4
+    no_database_function         = 5
+    no_editor_function           = 6
+    no_show_auth                 = 7
+    no_tvdir_entry               = 8
+    no_upd_auth                  = 9
+    only_show_allowed            = 10
+    system_failure               = 11
+    unknown_field_in_dba_sellist = 12
+    view_not_found               = 13
+    maintenance_prohibited       = 14
+    OTHERS                       = 15.
+IF sy-subrc <> 0.
+  MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+          WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+ENDIF.

@@ -1,0 +1,48 @@
+*&---------------------------------------------------------------------*
+*& Report ZRPFI021
+*& 创建者(公司)/日期： QUYT/20170803
+*& 程序描述:应付账款余额表
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    QUYT           20170803      创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpfi021.
+
+INCLUDE zrpfi021t01.  "全局数据定义
+INCLUDE zrpfi021s01.  "选择界面定义
+INCLUDE zrpfi021f01.  "子例程定义
+
+************************************************************************
+*INITIALIZATION.
+************************************************************************
+INITIALIZATION.
+************************************************************************
+* AT SELECTION-SCREEN OUTPUT
+************************************************************************
+AT SELECTION-SCREEN OUTPUT.
+************************************************************************
+* AT SELECTION-SCREEN
+************************************************************************
+AT SELECTION-SCREEN.
+  CHECK sy-ucomm EQ 'ONLI'.
+  SELECT * INTO TABLE gt_t001 FROM t001 WHERE bukrs IN s_bukrs.
+  LOOP AT gt_t001.
+    AUTHORITY-CHECK OBJECT 'F_BKPF_BUK'
+                  ID 'BUKRS' FIELD gt_t001-bukrs
+                  ID 'ACTVT' FIELD '03'.
+    IF sy-subrc <> 0.
+      DELETE gt_t001.
+      CONTINUE.
+    ENDIF.
+  ENDLOOP.
+  IF gt_t001[] IS INITIAL.
+    MESSAGE '没有公司代码的权限' TYPE 'E'.
+  ENDIF.
+************************************************************************
+* START-OF-SELECTION
+************************************************************************
+START-OF-SELECTION.
+
+  PERFORM frm_get_data.
+  PERFORM frm_get_fieldcat.
+  PERFORM frm_output_data.

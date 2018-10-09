@@ -1,0 +1,118 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPSD002T01
+*&---------------------------------------------------------------------*
+TABLES:ztsd001a,ztsd001b,ztsd001c,kna1,knvv.
+
+DATA:BEGIN OF gt_out_a OCCURS 0,
+       vkorg     LIKE knvv-vkorg,         "销售组织
+       kunnr     LIKE knvv-kunnr,         "客户
+       kvgr1     LIKE knvv-kvgr1,         "销售工程师
+       bezei     LIKE tvv1t-bezei,        "销售工程师名字
+       sortl     LIKE kna1-sortl,         "客户简称
+       matnr     LIKE ztsd001a-matnr,     "物料号码
+       maktx     LIKE makt-maktx,         "物料描述
+       zsyjh     TYPE p DECIMALS 2,       "上月计划
+       zsysj     TYPE p DECIMALS 2,       "上月实际
+       zsydcl    TYPE p DECIMALS 1,                  "上月达成率
+       zbyjh_yw  LIKE ztsd001a-zbyjh_yw,  "本月计划-业务
+       zydyc_yw1 LIKE ztsd001a-zydyc_yw1, "月度预测1-业务
+       zydyc_yw2 LIKE ztsd001a-zydyc_yw2, "月度预测2-业务
+       zbyjh_sw  LIKE ztsd001a-zbyjh_sw, "本月计划-商务
+       zydyc_sw1 LIKE ztsd001a-zydyc_sw1, "月度预测1-商务
+       zydyc_sw2 LIKE ztsd001a-zydyc_sw2, "月度预测2-商务
+       spart     LIKE mara-spart,         "产品组
+       spart_txt LIKE tspat-vtext,        "产品组描述
+       matkl     LIKE mara-matkl,         "物料组
+       matkl_txt LIKE t023t-wgbez,        "物料组描述
+       zsysj1    TYPE p DECIMALS 2,       "前一个月实际销量
+       zsysj2    TYPE p DECIMALS 2,       "前二个月实际销量
+       zsysj3    TYPE p DECIMALS 2,       "前三个月实际销量
+     END OF gt_out_a.
+
+DATA:BEGIN OF gt_out_b OCCURS 0,
+       vkorg      LIKE knvv-vkorg,         "销售组织
+       bzirk      LIKE knvv-bzirk,         "销售大区
+       bztxt      LIKE t171t-bztxt,        "销售大区文本
+       matnr      LIKE ztsd001b-matnr,     "物料号码
+       maktx      LIKE makt-maktx,         "物料描述
+       zsyjh      TYPE p DECIMALS 2,       "上月计划
+       zsysj      TYPE p DECIMALS 2,       "上月实际
+       zsydcl     TYPE p DECIMALS 1,                  "上月达成率
+       zbyjh      TYPE p DECIMALS 2,       "本月计划
+       zbyyc1     TYPE p DECIMALS 2,       "本月预测1
+       zbyyc2     TYPE p DECIMALS 2,       "本月预测2
+       zbyjh_cy   TYPE p DECIMALS 2,        "本月计划差异
+       zbyyc1_cy  TYPE p DECIMALS 2,       "月预测1-差异
+       zbyyc2_cy  TYPE p DECIMALS 2,       "月预测2-差异
+       zname(500) TYPE c,                  "客户名称及数量
+       zbyjh_sw   TYPE p DECIMALS 2,       "本月计划商务
+       zbyyc1_sw  TYPE p DECIMALS 2,       "月预测1-商务
+       zbyyc2_sw  TYPE p DECIMALS 2,       "月预测2-商务
+       spart      LIKE mara-spart,         "产品组
+       spart_txt  LIKE tspat-vtext,        "产品组描述
+       matkl      LIKE mara-matkl,         "物料组
+       matkl_txt  LIKE t023t-wgbez,        "物料组描述
+       zsysj1     TYPE p DECIMALS 2,       "前一个月实际销量
+       zsysj2     TYPE p DECIMALS 2,       "前二个月实际销量
+       zsysj3     TYPE p DECIMALS 2,       "前三个月实际销量
+     END OF gt_out_b.
+
+DATA:BEGIN OF gt_out_c OCCURS 0,
+       matnr      LIKE ztsd001c-matnr,      "物料号码
+       maktx      LIKE makt-maktx,          "产品型号
+       zsyjh      TYPE p DECIMALS 2,        "上月计划
+       zsysj      TYPE p DECIMALS 2,        "上月实际
+       zsydcl     TYPE p DECIMALS 1,                   "上月达成率
+       zbyjh      TYPE p DECIMALS 2,        "本月计划
+       zbyyc1     TYPE p DECIMALS 2,        "月预测1
+       zbyyc2     TYPE p DECIMALS 2,        "月预测2
+       zbyjh_cy   TYPE p DECIMALS 2,        "本月计划差异
+       zbyyc1_cy  TYPE p DECIMALS 2,        "月预测1-差异
+       zbyyc2_cy  TYPE p DECIMALS 2,        "月预测2-差异
+       zname(500) TYPE c,                  "客户名称及数量
+       zbyjh_dq   TYPE p DECIMALS 2,       "本月计划-大区
+       zbyyc1_dq  TYPE p DECIMALS 2,       "月预测1-大区
+       zbyyc2_dq  TYPE p DECIMALS 2,       "月预测2-大区
+       spart      LIKE mara-spart,         "产品组
+       spart_txt  LIKE tspat-vtext,        "产品组描述
+       matkl      LIKE mara-matkl,         "物料组
+       matkl_txt  LIKE t023t-wgbez,        "物料组描述
+       dispo      LIKE marc-dispo,         "MRP控制者
+       zsysj1     TYPE p DECIMALS 2,       "前一个月实际销量
+       zsysj2     TYPE p DECIMALS 2,       "前二个月实际销量
+       zsysj3     TYPE p DECIMALS 2,       "前三个月实际销量
+     END OF gt_out_c.
+
+DATA:BEGIN OF gt_dn_data_sum OCCURS 0,    "add by leimt 20180403
+       vkorg  LIKE likp-vkorg,
+       kunnr  LIKE likp-kunnr,
+       bzirk  LIKE knvv-bzirk,
+       matnr  LIKE lips-matnr,
+       lfimg  LIKE lips-lfimg,
+       lfimg1 LIKE lips-lfimg,
+       lfimg2 LIKE lips-lfimg,
+       lfimg3 LIKE lips-lfimg,
+     END OF gt_dn_data_sum.
+
+***ALV data define
+DATA:gs_layout TYPE slis_layout_alv,
+     gt_fcat   TYPE slis_t_fieldcat_alv WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-seltext_l = &2.
+  gt_fcat-seltext_m = &2.
+  gt_fcat-seltext_s = &2.
+  gt_fcat-inttype   = &3.
+  gt_fcat-intlen    = &4.
+  gt_fcat-ref_fieldname = &5.
+  gt_fcat-ref_tabname = &6.
+  IF &1 = 'KUNNR' OR &1 = 'MATNR'.
+    gt_fcat-no_zero = 'X'.
+  ENDIF.
+  IF &1 = 'ZSYDCL' .
+    gt_fcat-decimals_out = 1.
+  ENDIF.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

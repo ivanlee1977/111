@@ -1,0 +1,56 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPCO008T01
+*&---------------------------------------------------------------------*
+TABLES:faglflext,bsid.
+
+DATA : BEGIN OF gt_out OCCURS 0,
+         rtcur       LIKE faglflext-rtcur, "币别
+         racct_km(4),"科目前四位
+         racct       LIKE faglflext-racct, "科目
+         txt50       LIKE skat-txt50, "科目名称
+         tslvt       TYPE wrbtr, "原币金额
+         hslvt       TYPE wrbtr, "本币金额
+       END OF gt_out.
+
+DATA:BEGIN OF gt_total OCCURS 0,
+       rtcur LIKE faglflext-rtcur, "币别
+       tslvt TYPE wrbtr, "原币金额
+       hslvt TYPE wrbtr, "本币金额
+     END OF gt_total.
+
+DATA:gt_faglflext LIKE faglflext OCCURS 0 WITH HEADER LINE,
+     gt_skat      LIKE skat OCCURS 0 WITH HEADER LINE,
+     gt_t001      LIKE t001 OCCURS 0 WITH HEADER LINE.
+
+RANGES:r_racct FOR faglflext-racct.
+DATA:lv_rpmax    TYPE monat,
+     lv_times(2) TYPE n,
+     lv_index(2) TYPE n.
+DATA:lv_fieldname_tsl TYPE fieldname,
+     lv_fieldname_hsl TYPE fieldname.
+FIELD-SYMBOLS <fs_hslvt>   TYPE hslvt12.
+FIELD-SYMBOLS:<fs_list> LIKE LINE OF gt_out.
+
+DEFINE mcr_add_racct.
+  r_racct = 'ICP'.
+  r_racct-low = &1.
+  APPEND r_racct.
+  CLEAR r_racct.
+END-OF-DEFINITION.
+
+CONSTANTS:gcst_excel_template TYPE w3objid VALUE 'ZFI036'.
+
+DATA:lv_row   TYPE i,
+     lv_row_c TYPE i.
+DATA: lv_xj_sum   TYPE wrbtr, "现金小计
+      lv_yhck_sum TYPE wrbtr, "银行存款小计
+      lv_sum      TYPE wrbtr. "合计
+*******数据定义*******
+DATA:lo_excel     TYPE ole2_object,
+     lo_workbooks TYPE ole2_object,
+     lo_workbook  TYPE ole2_object,
+     lo_sheet     TYPE ole2_object,
+     lo_range     TYPE ole2_object,
+     lo_cell      TYPE ole2_object,
+     lo_cell1     TYPE ole2_object.
+DATA lv_file LIKE rlgrap-filename.

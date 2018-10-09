@@ -1,0 +1,13 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM013S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_matnr FOR mseg-matnr,"物料
+               s_werks FOR mseg-werks DEFAULT '1000',"工厂
+*               s_bwart FOR mseg-bwart ,"移动类型 CHANGE BY PFT 20180125  取消移动类型
+               s_lgort FOR mseg-lgort,"库存地点
+               s_matkl FOR mara-matkl,"物料组
+               s_spart FOR mara-spart,"产品组
+               s_budat FOR mkpf-budat OBLIGATORY NO-EXTENSION."过帐日期
+PARAMETERS:p_chk AS CHECKBOX DEFAULT 'X'.
+SELECTION-SCREEN END OF BLOCK blc.

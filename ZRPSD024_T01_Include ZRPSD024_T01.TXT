@@ -1,0 +1,124 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPSD024_T01
+*&---------------------------------------------------------------------*
+
+TABLES : vbak,vbap,vbfa,ausp,vbkd,knvv.
+TYPE-POOLS:sils,icon.
+CONSTANTS:con_active   TYPE c VALUE '1', con_inactive TYPE c VALUE '0'.
+DATA : BEGIN OF gw_out,
+          status   TYPE icon_d,
+         vkorg       LIKE vbak-vkorg, "销售组织
+         vtext_xstxt LIKE tvkot-vtext, "销售组织名称
+         vtweg       LIKE vbak-vtweg, "分销渠道
+         vtext_fxtxt LIKE tvtwt-vtext, "分销渠道名称
+         spart       LIKE vbap-spart, "产品组
+         vtext_sptxt LIKE tspat-vtext, "产品组名称
+         auart       LIKE  vbak-auart, "订单类型
+         bezei_ddtxt LIKE tvakt-bezei, "订单类型描述
+         kunnr       LIKE vbak-kunnr, "客户编码
+         name1       LIKE kna1-name1, "客户名称1
+         name2       LIKE kna1-name2, "客户名称1
+         zkhmc(70)   TYPE c, "客户名称 KNA1-NAME1 + KNA1-NAME2
+         sortl       LIKE kna1-sortl, "客户简称
+         vbeln       LIKE vbak-vbeln, "销售订单号
+         posnr       LIKE vbap-posnr, "订单项目
+         erdat       LIKE vbak-erdat, "创建日期
+         matnr       LIKE vbap-matnr, "物料号
+         arktx       LIKE vbap-arktx , "物料描述
+         kwmeng      LIKE vbap-kwmeng, "单价分母 订单数量
+         kzwi1       LIKE vbap-kzwi1, "单价分子 金额
+         zdj         LIKE vbap-kzwi1, "单价
+         bstkd       LIKE vbkd-bstkd , "客户采购订单号
+         lifsk       LIKE vbak-lifsk , "交货冻结代码
+         vtext_jhtxt LIKE  tvlst-vtext, "交货冻结
+         zterm       LIKE vbkd-zterm, "付款条件
+         inco1       LIKE vbkd-inco1, "国际贸易条件1
+         inco2       LIKE vbkd-inco2, "国际贸易条件2
+         zgjmytj(40) TYPE c, "国际贸易条件
+         augru       LIKE vbak-augru, "订单原因代码
+         bezei       LIKE tvaut-bezei, "订单原因描述
+         bzirk       LIKE vbkd-bzirk, "销售大区代码
+         bztxt       LIKE t171t-bztxt, "销售大区描述
+         vkbur       LIKE vbak-vkbur, "行办代码
+         bezei_hbtxt LIKE tvkbt-bezei, "行办
+         vkgrp       LIKE vbak-vkgrp, "销售组代码
+         bezei_xstxt LIKE tvgrt-bezei , "销售组
+         kvgr1       LIKE vbak-kvgr1, "销售工程师/代表代码
+         bezei_dbtxt LIKE tvv1t-bezei, "销售工程师/代表
+         kvgr2       LIKE vbak-kvgr2, "商务代码
+         bezei_swtxt LIKE tvv2t-bezei, "商务
+         kvgr3       LIKE vbak-kvgr3, "运输方式代码
+         bezei_ystxt LIKE tvv3t-bezei, "运输方式
+         kvgr4       LIKE vbak-kvgr4, "发票类型代码
+         bezei_fbtxt LIKE tvv4t-bezei, "发票类型
+         ktgrd       LIKE vbkd-ktgrd, "账户组
+         vtext_zhtxt LIKE tvktt-vtext, "账户组描述
+         bname       LIKE vbak-bname, "交货地点
+         ihrez       LIKE vbkd-ihrez, "试用期
+         vbeln1      LIKE lips-vbeln, "交货单
+         posnr1      LIKE lips-posnr, "交货项目
+         wadat_ist   LIKE likp-wadat_ist, "交货日期
+         lfimg       LIKE lips-lfimg, "交货数量
+         zjhje       LIKE vbap-kzwi1, "交货金额
+         wbstk       LIKE vbuk-wbstk, "交货过账标识
+         zgzzt(10)   TYPE c, "交货过账状态
+         atwrt       LIKE ausp-atwrt, "对应主型号
+         objek       LIKE ausp-objek, "物料号
+         atinn       LIKE ausp-atinn, "标识
+         atwrt_xl    LIKE ausp-atwrt, "系列
+         atwrt_zxl   LIKE ausp-atwrt, "子系列
+         atwrt_cpx   LIKE ausp-atwrt, "产品线
+
+         ihrez_e     LIKE vbkd-ihrez_e,
+         abgru       LIKE vbap-abgru,
+         bezei_abgru LIKE tvagt-bezei,
+         matkl       LIKE vbap-matkl,
+         wgbez       LIKE t023t-wgbez,
+         gbsta       LIKE vbup-gbsta,
+         zstatv      TYPE char5,
+         vbelv       LIKE vbfa-vbelv,
+         posnv       LIKE vbfa-posnv,
+         zihrez      TYPE n3,
+         zrfmng1     TYPE vbfa-rfmng,
+         zrfmng2     TYPE vbfa-rfmng,
+         zrfmng3     TYPE vbfa-rfmng,
+         zrfmng4     TYPE vbfa-rfmng,
+         zdate1      TYPE vbfa-erdat,
+         zdate2      TYPE vbfa-erdat,
+         zdate3      TYPE vbfa-erdat,
+         zno2        TYPE char100,
+         zno1        TYPE char100,
+         zno3        TYPE char100,
+         zje         TYPE netwr,
+         kulab       LIKE msku-kulab,
+         zje1        TYPE netwr,
+         werks       LIKE vbap-werks,
+         zjyrq       LIKE vbfa-erdat,
+         zdqrq       LIKE vbfa-erdat,
+         ztext1(200) type c,
+
+       END OF gw_out,
+       gt_out LIKE TABLE OF gw_out WITH HEADER LINE.
+
+
+DATA:BEGIN OF gt_ausp OCCURS 0,
+       objek LIKE ausp-objek,
+       atwrt LIKE ausp-atwrt,
+       atinn LIKE ausp-atinn,
+     END OF gt_ausp.
+
+DATA: gt_fcat   TYPE slis_t_fieldcat_alv WITH HEADER LINE,
+      gs_layout TYPE slis_layout_alv.
+
+DATA: gs_option  TYPE ssfcompop,
+      gs_control TYPE ssfctrlop.
+
+DEFINE g_fieldfcat .
+  gt_fcat-fieldname = &1.
+  gt_fcat-seltext_s = &2.
+  gt_fcat-ddictxt = 'S'.
+  gt_fcat-ref_fieldname = &3.
+  gt_fcat-ref_tabname = &4.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

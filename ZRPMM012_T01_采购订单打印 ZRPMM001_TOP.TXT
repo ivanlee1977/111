@@ -1,0 +1,54 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM001_TOP
+*&---------------------------------------------------------------------*
+TYPE-POOLS:slis,vrm.
+
+TABLES:mara,MBEW,TKKH2.
+
+
+DATA:BEGIN OF gt_mm  OCCURS 0,"展示内表
+       chk   TYPE c1,
+       matnr LIKE mara-matnr,
+       maktx LIKE makt-maktx,
+       ersda LIKE mara-ersda,
+       ernam LIKE mara-ernam,
+       laeda LIKE mara-laeda,
+       aenam LIKE mara-aenam,
+       spart LIKE mara-spart,
+       vtext LIKE tspat-vtext,
+       mtart LIKE mara-mtart,
+       matkl LIKE mara-matkl,
+       wgbez LIKE t023t-wgbez,
+       bismt TYPE mara-bismt,
+       meins TYPE mara-meins,
+       kznfm TYPE mara-kznfm,
+       mstae TYPE mara-mstae,
+       mtstb TYPE t141t-mtstb,
+       mfrpn TYPE mara-mfrpn,
+       mfrnr TYPE mara-mfrnr,
+       bmatn TYPE mara-bmatn,
+       xchpf TYPE mara-xchpf,
+       HRKFT TYPE MBEW-HRKFT,
+       HRKTX type TKKH2-HRKTX,
+     END OF gt_mm.
+
+
+DATA:ok_code   TYPE sy-ucomm,
+     save_ok   TYPE sy-ucomm,
+     errorcode TYPE i.
+
+DATA: gt_fcat   TYPE slis_t_fieldcat_alv WITH HEADER LINE,
+      gs_layout TYPE slis_layout_alv.
+
+CONSTANTS:gcst_excel_template TYPE w3objid VALUE 'ZMM007'.
+
+DEFINE g_fieldfcat .
+  gt_fcat-fieldname = &1.
+  gt_fcat-seltext_s = &2.
+  gt_fcat-ddictxt = 'S'.
+  gt_fcat-ref_fieldname = &3.
+  gt_fcat-ref_tabname = &4.
+*  gt_fcat-decimals_out = &5.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

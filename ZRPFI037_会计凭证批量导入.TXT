@@ -1,0 +1,50 @@
+*&---------------------------------------------------------------------*
+*& Report ZRPFI037
+*& 创建者(公司)/日期： PFT/20171109
+*& 程序描述:会计凭证批量导入
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    PFT             20171109     创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpfi037.
+
+INCLUDE zrpfi037t01.
+INCLUDE zrpfi037s01.
+INCLUDE zrpfi037f01.
+
+************************************************************************
+*INITIALIZATION.
+************************************************************************
+INITIALIZATION.
+  PERFORM frm_initial_data.
+************************************************************************
+*AT SELECTION-SCREEN ON VALUE-REQUEST
+************************************************************************
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_file.
+  PERFORM frm_filename_find USING p_file.
+************************************************************************
+* AT SELECTION-SCREEN OUTPUT
+************************************************************************
+AT SELECTION-SCREEN OUTPUT.
+************************************************************************
+* AT SELECTION-SCREEN
+************************************************************************
+AT SELECTION-SCREEN.
+  CASE  sscrfields-ucomm.
+    WHEN 'FC01'.
+      PERFORM frm_download_template USING 'ZFI037' CHANGING p_file.
+    WHEN 'ONLI'.
+      IF p_file IS INITIAL .
+        MESSAGE e398(00) WITH '文件路径为空，请您输入文件路径！' DISPLAY LIKE 'E'.
+        STOP.
+      ENDIF.
+    WHEN OTHERS.
+  ENDCASE.
+************************************************************************
+* START-OF-SELECTION
+************************************************************************
+START-OF-SELECTION.
+
+  PERFORM frm_upload_data.
+  PERFORM frm_get_fieldcat.
+  PERFORM frm_output_data.

@@ -1,0 +1,68 @@
+*&---------------------------------------------------------------------*
+*& 程序名： ZRPMM008
+*& 创建者(公司)/日期： QUYT/20170810
+*& 程序描述: 物料主数据批量导入
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    QUYT           20170810      创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpmm008.
+
+INCLUDE zrpmm008t01.  "全局数据定义
+INCLUDE zrpmm008s01.  "选择界面定义
+INCLUDE zrpmm008f01.  "子例程定义
+
+************************************************************************
+*INITIALIZATION.
+************************************************************************
+INITIALIZATION.
+  PERFORM frm_initial_data.
+************************************************************************
+*AT SELECTION-SCREEN ON VALUE-REQUEST
+************************************************************************
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_file.
+  PERFORM frm_filename_find CHANGING p_file.
+************************************************************************
+* AT SELECTION-SCREEN OUTPUT
+************************************************************************
+AT SELECTION-SCREEN OUTPUT.
+************************************************************************
+* AT SELECTION-SCREEN
+************************************************************************
+AT SELECTION-SCREEN.
+  CLEAR sy-ucomm.
+  CASE sscrfields-ucomm.
+    WHEN 'FC01'.  "开启文件
+      CASE 'X'.
+        WHEN r1. "基本视图及分类
+          PERFORM frm_download_template USING 'ZMM008A' CHANGING p_file.
+        WHEN r2. "销售视图
+          PERFORM frm_download_template USING 'ZMM008B' CHANGING p_file.
+        WHEN r3."采购视图
+          PERFORM frm_download_template USING 'ZMM008C' CHANGING p_file.
+        WHEN r4.
+          PERFORM frm_download_template USING 'ZMM008D' CHANGING p_file.
+        WHEN r5.
+          PERFORM frm_download_template USING 'ZMM008E' CHANGING p_file.
+        WHEN r6.
+          PERFORM frm_download_template USING 'ZMM008F' CHANGING p_file.
+        WHEN r7.
+          PERFORM frm_download_template USING 'ZMM008G' CHANGING p_file.
+        WHEN r8.
+          PERFORM frm_download_template USING 'ZMM008H' CHANGING p_file.
+        WHEN r9.
+          PERFORM frm_download_template USING 'ZMM008I' CHANGING p_file.
+        WHEN r10.
+          PERFORM frm_download_template USING 'ZMM008F' CHANGING p_file.
+        WHEN OTHERS.
+      ENDCASE.
+    WHEN OTHERS.
+  ENDCASE.
+************************************************************************
+* START-OF-SELECTION
+************************************************************************
+START-OF-SELECTION.
+
+  PERFORM frm_upload_data.
+  PERFORM frm_get_fieldcat.
+  PERFORM frm_output_data.

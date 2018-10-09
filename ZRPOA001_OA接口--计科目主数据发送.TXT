@@ -1,0 +1,101 @@
+*&---------------------------------------------------------------------*
+*& 程序名： ZRPOA001
+*& 创建者(公司)/日期： QUYT/20170731
+*& 程序描述:OA主数据发送接口
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    QUYT           20170731      创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpoa001.
+TABLES:skb1.
+
+DATA:BEGIN OF gt_data OCCURS 0,
+       bukrs LIKE skb1-bukrs,
+       saknr LIKE skb1-saknr,
+       xspeb LIKE skb1-xspeb,
+       txt50 LIKE skat-txt50,
+     END OF gt_data.
+
+***selection screen define
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_saknr FOR skb1-saknr.
+SELECTION-SCREEN END OF BLOCK blc.
+
+START-OF-SELECTION.
+
+  PERFORM frm_get_data.
+  PERFORM frm_send_data.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  SELECT a~bukrs
+         a~saknr
+         a~xspeb
+         b~txt50
+    INTO CORRESPONDING FIELDS OF TABLE gt_data
+    FROM skb1 AS a
+    LEFT JOIN skat AS b
+    ON a~saknr = b~saknr
+    AND b~spras = '1'
+    AND b~ktopl = '1000'
+    WHERE  a~saknr IN s_saknr.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_SEND_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_send_data .
+
+  DATA:cl_si_account_out TYPE REF TO zco_si_account_out.
+  DATA:cl_cx_ai_system_fault      TYPE REF TO cx_ai_system_fault,
+       cl_cx_ai_application_fault TYPE REF TO cx_ai_application_fault.
+  DATA:ls_output       TYPE zmt_account_out,
+       lt_account_data TYPE zdt_account_tab,
+       ls_account_data TYPE LINE OF zdt_account_tab.
+  DATA:lv_msg TYPE string.
+
+  TRY.
+      CREATE OBJECT cl_si_account_out.
+    CATCH cx_ai_system_fault INTO cl_cx_ai_system_fault.
+      lv_msg = cl_cx_ai_system_fault->get_text( ).
+      WRITE:/ lv_msg.
+      EXIT.
+  ENDTRY.
+
+  LOOP AT gt_data.
+    ls_account_data-bukrs = gt_data-bukrs.
+    ls_account_data-saknr = gt_data-saknr.
+    ls_account_data-txt50 = gt_data-txt50.
+    ls_account_data-xspeb = gt_data-xspeb.
+    APPEND ls_account_data TO lt_account_data.
+    CLEAR ls_account_data.
+  ENDLOOP.
+
+  ls_output-mt_account_out-row = lt_account_data.
+
+  TRY.
+      CALL METHOD cl_si_account_out->si_account_out
+        EXPORTING
+          output = ls_output.
+    CATCH cx_ai_system_fault INTO cl_cx_ai_system_fault.
+      lv_msg =  cl_cx_ai_system_fault->get_text( ).
+      WRITE:/ lv_msg.
+      EXIT.
+    CATCH cx_ai_application_fault INTO cl_cx_ai_application_fault.
+      lv_msg = cl_cx_ai_application_fault->get_text( ).
+      WRITE:/ lv_msg.
+      EXIT.
+  ENDTRY.
+
+  COMMIT WORK AND WAIT.
+ENDFORM.

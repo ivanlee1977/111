@@ -1,0 +1,120 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM001_F01
+*&---------------------------------------------------------------------*
+
+
+FORM frm_show."ALV显示界面
+
+
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'SET_PF_STATUS'
+      i_callback_user_command  = 'ALV_USER_COMMAND'
+      is_layout                = gs_layout
+      it_fieldcat              = gt_fcat[]
+    TABLES
+      t_outtab                 = gt_item[]
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+           WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+ENDFORM.
+
+FORM set_pf_status USING rt_extab TYPE slis_t_extab.
+
+  DATA: wa_extab TYPE slis_extab.
+
+  SET PF-STATUS '0100' EXCLUDING rt_extab.
+
+ENDFORM.                    "set_pf_status1
+
+FORM alv_user_command USING r_ucomm LIKE sy-ucomm  rs_selfield TYPE slis_selfield.
+*   获取ALV中的鼠标勾选记录
+  DATA: l_grid TYPE REF TO cl_gui_alv_grid.
+  CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+    IMPORTING
+      e_grid = l_grid.
+  rs_selfield-refresh = 'X'.
+  rs_selfield-col_stable = 'X'.
+  rs_selfield-row_stable = 'X'.
+
+*  r_ucomm = sy-ucomm.
+*  save_ok =  r_ucomm .
+*  CASE r_ucomm.
+*      "打印
+*    WHEN 'ZPRINT'.
+*      gv_type = 'FORM'.
+*      PERFORM frm_print.
+*    WHEN 'TOEXCEL'.
+*      gv_type = 'EXCE'.
+*      PERFORM frm_excel.
+*  ENDCASE.
+
+
+ENDFORM.                    "alv_user_command
+
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GETDATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_getdata .
+  CLEAR:gt_item[].
+  SELECT
+       a~matnr
+       a~lgort
+       a~labst
+       a~insme
+       a~umlme
+       b~eisbe
+       b~eislo
+       c~meins
+       INTO CORRESPONDING FIELDS OF TABLE gt_item
+        FROM mard AS a
+        INNER JOIN marc AS b ON a~matnr EQ b~matnr AND a~werks = b~werks
+        INNER JOIN mara AS c ON a~matnr = c~matnr
+        WHERE a~matnr IN s_matnr
+         AND  a~werks IN s_werks
+         AND  a~lgort IN s_lgort
+         AND  c~mtart IN s_mtart
+         AND  c~matkl IN s_matkl
+.
+
+  LOOP AT gt_item .
+    SELECT SINGLE maktx INTO gt_item-maktx FROM makt WHERE matnr = gt_item-matnr AND spras = 1.
+    SELECT SINGLE lgobe INTO  gt_item-lgobe FROM t001l WHERE lgort = gt_item-lgort.
+    MODIFY gt_item .
+  ENDLOOP.
+
+ENDFORM.
+
+FORM frm_getfact .
+  g_fieldfcat:
+    'MATNR' '物料编码' 'MATNR' 'MARD' ,
+    'MAKTX' '物料描述' 'MAKTX' 'MAKT' ,
+    'LGORT' '库存地点' 'LGORT' 'MARD' ,
+    'LGOBE' '库存地点描述' 'LGOBE' 'T001L' ,
+    'LABST' '非限制库存数量' 'LABST' 'MARD' ,
+    'MEINS' '单位' 'MEINS' 'MARA' ,
+
+    'INSME' '质检库存' 'INSME' 'MARD' ,
+    'UMLME' '在途' 'UMLME' 'MARD' ,
+    'EISBE' '安全库存' 'EISBE' 'MARC' ,
+    'EISLO' '最小安全库存' 'EISLO' 'MARC'
+  .
+
+  gs_layout-colwidth_optimize = 'X'.
+*  gs_layout-box_fieldname = 'CHK'.
+*  gs_layout-box_tabname = 'gt_item'.
+  gs_layout-zebra = 'X'.
+
+ENDFORM.

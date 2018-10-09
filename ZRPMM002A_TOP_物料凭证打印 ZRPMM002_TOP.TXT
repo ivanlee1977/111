@@ -1,0 +1,150 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM002_TOP
+*&---------------------------------------------------------------------*
+*REPORT zrpmm002.
+TYPE-POOLS:slis.
+
+TABLES:ekko, "采购单表头
+       mseg, "物料凭证行项目
+       mkpf, "物料凭证抬头
+       makt, "物料描述
+       lfa1, "供应商
+       vbak, "销售订单抬头
+       likp, "交货单表头
+       lips, "交货单行项目
+       kna1, "客户
+       vbfa,
+       zprintnum,
+       qamb
+       . "销售凭证流
+
+DATA : BEGIN OF wa_mseg ,
+         fuxuan(1)  TYPE c, "复选框
+         matnr      LIKE mseg-matnr, "物料号码
+         charg      LIKE mseg-charg, "批次
+         bwart      LIKE mseg-bwart, "移动类型
+         menge      LIKE mseg-menge, "数量
+         meins      LIKE mseg-meins, "单位
+         werks      LIKE mseg-werks, "工厂代码
+         aufnr      LIKE mseg-aufnr , "生产订单
+         kostl      LIKE mseg-kostl, "成本中心
+         lgort      LIKE mseg-lgort, "库存地点
+         lgobe      LIKE t001l-lgobe, "库存地方
+         lifnr      LIKE mseg-lifnr, " 供应商代码
+         ebeln      LIKE mseg-ebeln, "采购订单
+         ebelp      LIKE mseg-ebelp,
+         mblnr      LIKE mseg-mblnr, "物料凭证
+         zeile      LIKE mseg-zeile,
+         mjahr      LIKE mseg-mjahr, "
+         budat      LIKE mseg-budat_mkpf, "过账日期
+         sgtxt      LIKE mseg-sgtxt, "备注
+         menge1     LIKE mseg-menge, "实发
+         erfmg      LIKE mseg-erfmg, "交货数量
+         erfme      LIKE mseg-erfme, "单位
+         rsnum      LIKE mseg-rsnum, " 预留/相关需求的编号
+         kzbew      LIKE mseg-kzbew, "移动标识
+         umlgo      LIKE mseg-umlgo, "调入仓库
+         umlgo_txt  LIKE t001l-lgobe, "
+         xauto      LIKE mseg-xauto, "项目自动创建
+         line_id    LIKE mseg-line_id,
+         parent_id  LIKE mseg-parent_id,
+         vbeln_im   LIKE mseg-vbeln_im, "交货单号
+
+         ernam      LIKE ekko-ernam, "采购员
+         bsart      LIKE ekko-bsart, "采购订单类型
+
+         reslo      LIKE ekpo-reslo, "调出仓库
+         reslo_txt  LIKE t001l-lgobe, "
+         lgort1     LIKE ekpo-lgort, "调入仓库
+         lgort1_txt LIKE t001l-lgobe, "
+
+         mblnr1     LIKE mkpf-mblnr, "物料凭证编号
+         usnam      LIKE mkpf-usnam, "制单人
+         budat1     LIKE mkpf-budat, "过账日期
+         bktxt      LIKE mkpf-bktxt, "抬头文本
+
+         dauat      LIKE afpo-dauat, "订单类型
+         matnr1     LIKE afpo-matnr, "生产型号
+         maktx1     LIKE makt-maktx, "生产型号描述
+         aufnr1     LIKE afpo-aufnr, "生产订单
+         psmng      LIKE afpo-psmng, "订单数量
+         wemng      LIKE afpo-wemng, "已收数量
+
+         vbeln      LIKE vbak-vbeln, "销售订单
+         name1      LIKE lfa1-name1, "供应商名称
+*         maktx      LIKE makt-maktx, "物料描述
+         maktx(60)  TYPE c,
+         ktext      LIKE cskt-ktext , "部门描述
+         bdmng      LIKE resb-bdmng, "应发
+         rgekz      LIKE marc-rgekz, "标识
+         auart_txt  LIKE t003p-txt, "订单类型描述
+         lv_menge   LIKE mseg-menge,
+         lv_usrname TYPE char100, "采购员名称
+         lv_ernam   TYPE char100,
+
+         grund      LIKE mseg-grund, "退货原因
+         grtxt      LIKE t157e-grtxt, "退货原因文本
+         gamng      LIKE afko-gamng,
+
+         vsart      LIKE likp-vsart, "
+         vsart_txt  TYPE char200,
+         head_txt   TYPE char200,
+         vbeln_li   TYPE likp-vbeln,
+         zsum       LIKE  zprintnum-zsum,
+         zmeng      LIKE mseg-menge,  "合格数量
+         prueflos   LIKE qamb-prueflos, "检验批
+         menge_ww   LIKE ekpo-menge, "ADD BY PFT 20171207 委外调拨单增加采购数量
+       END OF wa_mseg.
+
+DATA it_mseg LIKE wa_mseg OCCURS 0.
+
+DATA:gw_main LIKE wa_mseg,
+     gt_main LIKE wa_mseg OCCURS 0.
+
+DATA : BEGIN OF wa_ekko ,
+*         ebeln     LIKE mseg-ebeln,
+*         umlgo     LIKE mseg-umlgo,
+*         xauto     LIKE mseg-xauto,
+*         parent_id LIKE mseg-parent_id,
+*         line_id   LIKE mseg-line_id,
+*         bsart     LIKE ekko-bsart,
+         ebeln LIKE ekpo-ebeln,
+         ebelp LIKE ekpo-ebelp,
+         umlgo LIKE ekpo-lgort,
+       END OF wa_ekko,
+       it_ekko LIKE wa_ekko OCCURS 0.
+
+
+DATA:BEGIN OF it_mblnr OCCURS 0,
+       mblnr LIKE mseg-mblnr,
+       mjahr LIKE mseg-mjahr,
+       zeile LIKE vbfa-posnn,
+     END OF it_mblnr.
+
+DATA: fieldcatalog TYPE slis_t_fieldcat_alv WITH HEADER LINE.
+DATA: it_fieldcat  TYPE lvc_t_fcat,     "slis_t_fieldcat_alv WITH HEADER LINE,
+      wa_fieldcat  TYPE lvc_s_fcat,
+
+      gd_tab_group TYPE slis_t_sp_group_alv,
+      gd_layout    TYPE lvc_s_layo,     "slis_layout_alv,
+      gd_repid     LIKE sy-repid.
+DATA: job_output_options TYPE ssfcresop.""SF使用参数
+DATA: l_tdsfname TYPE tdsfname."智能表: 表格名称
+
+DATA:l_wa_ssfcompop    TYPE  ssfcompop,  "Smart Forms: 智能写作器 (传输) 选项
+     l_wa_ssfctrlop    TYPE  ssfctrlop,  "Smart Forms: 控制结构
+     w_job_output_info TYPE ssfcrescl . "取值预览打印还是打印
+DATA:funname           TYPE rs38l_fnam.        "Smart Forms: 函数
+*       ls_composer_param TYPE ssfcompop.
+
+
+DATA: it_head LIKE zsmm001 OCCURS 0 WITH HEADER LINE.
+DATA: it_item LIKE zsmm002 OCCURS 0 WITH HEADER LINE .
+
+
+DATA:m_ucomm LIKE sy-ucomm.
+DATA: lr_grid TYPE REF TO cl_gui_alv_grid.
+
+DATA: lv_date LIKE ekko-bedat. "当前日期往前推1天
+
+DATA gv_print TYPE char7.

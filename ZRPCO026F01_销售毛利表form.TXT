@@ -1,0 +1,551 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPCO026F01
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_data .
+  DATA:lt_ce11000 LIKE ce11000 OCCURS 0 WITH HEADER LINE.
+  DATA:lt_t171t LIKE t171t OCCURS 0 WITH HEADER LINE,
+       lt_t151t LIKE t151t OCCURS 0 WITH HEADER LINE,
+       lt_tvv1t LIKE tvv1t OCCURS 0 WITH HEADER LINE,
+       lt_tvv2t LIKE tvv2t OCCURS 0 WITH HEADER LINE,
+       lt_t023t LIKE t023t OCCURS 0 WITH HEADER LINE,
+       lt_tspat LIKE tspat OCCURS 0 WITH HEADER LINE,
+       lt_tvkbt LIKE tvkbt OCCURS 0 WITH HEADER LINE,
+       lt_tvtwt LIKE tvtwt OCCURS 0 WITH HEADER LINE,
+       lt_t25a0 LIKE t25a0 OCCURS 0 WITH HEADER LINE.
+  DATA:BEGIN OF lt_kna1 OCCURS 0,
+         kunnr LIKE kna1-kunnr,
+         name1 LIKE kna1-name1,
+       END OF lt_kna1.
+  DATA: lv_pvprs TYPE ckmlcr-pvprs,lv_peinh TYPE ckmlcr-peinh,lv_kalnr TYPE ckmlcr-kalnr.
+***抓取满足条件的数据
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE lt_ce11000
+    FROM ce11000
+    WHERE perio IN s_perio
+      AND kaufn IN s_kaufn
+      AND bukrs IN s_bukrs
+      AND kndnr IN s_kndnr
+      AND artnr IN s_artnr
+      AND paledger = '01'
+      AND vrgar = 'F'.
+
+  CHECK lt_ce11000[] IS NOT INITIAL.
+***销售大区名称
+  SELECT * INTO TABLE lt_t171t FROM t171t WHERE spras = sy-langu.
+***行业名称
+  SELECT * INTO TABLE lt_t151t FROM t151t WHERE spras = sy-langu.
+***销售工程师/销售代表名称
+  SELECT * INTO TABLE lt_tvv1t FROM tvv1t WHERE spras = sy-langu.
+***商务名称
+  SELECT * INTO TABLE lt_tvv2t FROM tvv2t WHERE spras = sy-langu.
+***物料组名称
+  SELECT * INTO TABLE lt_t023t FROM t023t WHERE spras = sy-langu.
+***产品组名称
+  SELECT * INTO TABLE lt_tspat FROM tspat WHERE spras = sy-langu.
+***销售行办名称
+  SELECT * INTO TABLE lt_tvkbt FROM tvkbt WHERE spras = sy-langu.
+***分销渠道名称
+  SELECT * INTO TABLE lt_tvtwt FROM tvtwt WHERE spras = sy-langu.
+***产品分类名称
+  SELECT * INTO TABLE lt_t25a0 FROM t25a0 WHERE spras = sy-langu.
+***客户名称
+
+  SELECT kunnr name1
+    INTO CORRESPONDING FIELDS OF TABLE lt_kna1
+    FROM kna1
+    FOR ALL ENTRIES IN lt_ce11000
+    WHERE kunnr = lt_ce11000-kndnr.
+
+  SORT lt_t171t BY bzirk.
+  SORT lt_t151t BY kdgrp.
+  SORT lt_tvv1t BY kvgr1.
+  SORT lt_tvv2t BY kvgr2.
+  SORT lt_t023t BY matkl.
+  SORT lt_tspat BY spart.
+  SORT lt_tvkbt BY vkbur.
+  SORT lt_tvtwt BY vtweg.
+  SORT lt_t25a0 BY ww001.
+  SORT lt_kna1 BY kunnr.
+
+  LOOP AT lt_ce11000.
+    MOVE-CORRESPONDING lt_ce11000 TO gt_out.
+***销售大区名称
+    READ TABLE lt_t171t WITH KEY bzirk = lt_ce11000-bzirk BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-bzirk_txt = lt_t171t-bztxt.
+    ENDIF.
+***行业名称
+    READ TABLE lt_t151t WITH KEY kdgrp = lt_ce11000-kmkdgr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-kmkdgr_txt = lt_t151t-ktext.
+    ENDIF.
+***销售工程师/销售代表名称
+    READ TABLE lt_tvv1t WITH KEY kvgr1 = lt_ce11000-kvgr1 BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-kvgr1_txt = lt_tvv1t-bezei.
+    ENDIF.
+***商务名称
+    READ TABLE lt_tvv2t WITH KEY kvgr2 = lt_ce11000-kvgr2 BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-kvgr2_txt = lt_tvv2t-bezei.
+    ENDIF.
+***物料组名称
+    READ TABLE lt_t023t WITH KEY matkl = lt_ce11000-matkl BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-matkl_txt = lt_t023t-wgbez.
+    ENDIF.
+***产品组名称
+    READ TABLE lt_tspat WITH KEY spart = lt_ce11000-spart BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-spart_txt = lt_tspat-vtext.
+    ENDIF.
+***销售行办名称
+    READ TABLE lt_tvkbt WITH KEY vkbur = lt_ce11000-vkbur BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-vkbur_txt = lt_tvkbt-bezei.
+    ENDIF.
+***分销渠道名称
+    READ TABLE lt_tvtwt WITH KEY vtweg = lt_ce11000-vtweg BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-vtweg_txt = lt_tvtwt-vtext.
+    ENDIF.
+***产品分类名称
+    READ TABLE lt_t25a0 WITH KEY ww001 = lt_ce11000-ww001 BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-ww001_txt = lt_t25a0-bezek.
+    ENDIF.
+***客户名称
+    READ TABLE lt_kna1 WITH KEY kunnr = lt_ce11000-kndnr BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-name1 = lt_kna1-name1.
+    ENDIF.
+***销售行办（销售订单）
+    READ TABLE lt_tvkbt WITH KEY vkbur = lt_ce11000-ww015 BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-ww015_txt = lt_tvkbt-bezei.
+    ENDIF.
+***销售大区（销售订单）
+    READ TABLE lt_t171t WITH KEY bzirk = lt_ce11000-ww016 BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-ww016_txt = lt_t171t-bztxt.
+    ENDIF.
+***商务（销售订单）
+    READ TABLE lt_tvv2t WITH KEY kvgr2 = lt_ce11000-ww017 BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-ww017_txt = lt_tvv2t-bezei.
+    ENDIF.
+***销售代表（销售订单）
+    READ TABLE lt_tvv1t WITH KEY kvgr1 = lt_ce11000-ww018 BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-ww018_txt = lt_tvv1t-bezei.
+    ENDIF.
+    gt_out-waers = lt_ce11000-rec_waers.
+    gt_out-matnr = gt_out-artnr.
+    SELECT SINGLE maktx INTO gt_out-maktx FROM makt WHERE matnr = gt_out-matnr AND spras = 1.
+    COLLECT gt_out.
+    CLEAR gt_out.
+  ENDLOOP.
+
+***计算其它字段值
+  PERFORM frm_kon.
+  DATA lv_date TYPE sy-datum.
+  LOOP AT gt_out.
+    PERFORM frm_getbom USING gt_out-matnr .
+    IF gt_out-zmatnr <> ''.
+      SELECT SINGLE pvprs peinh INTO (lv_pvprs,lv_peinh) FROM ckmlcr AS a INNER JOIN ckmlhd AS b ON a~kalnr = b~kalnr
+        WHERE b~matnr = gt_out-zmatnr
+        AND a~bdatj = gt_out-perio+0(4)
+        AND a~poper = gt_out-perio+4(3)
+        AND a~curtp = 10 AND vprsv = 'V'.
+      IF sy-subrc = 0 .
+*        ***不含软件金额 modi by leimt 20180408
+        gt_out-vv207_new = lv_pvprs / lv_peinh * gt_out-absmg.
+      ENDIF.
+      SELECT SINGLE maktx INTO gt_out-zmaktx FROM makt WHERE matnr = gt_out-zmatnr AND spras = 1.
+    ENDIF.
+    IF gt_out-kaufn+2(1) <> 7.
+      gt_out-zbhrj1 = gt_out-vv200 - gt_out-vv207_new.
+    ELSE.
+      gt_out-vv207_new = 0.
+    ENDIF.
+
+*    gt_out-zbhrj = gt_out-vv200 - gt_out-vv207.
+
+***毛利率
+    IF gt_out-vv001 NE 0.
+      gt_out-zmlv = ( gt_out-vv001 - gt_out-zbhrj1 ) / gt_out-vv001 * 100.
+    ENDIF.
+**********************************************************************新增字段 20180521 leimt
+    "实时零售
+    READ TABLE gt_konh WITH  KEY matnr = gt_out-matnr kschl = 'ZPR2' BINARY SEARCH.
+    IF sy-subrc = 0 AND ( sy-datum BETWEEN  gt_konh-datab AND gt_konh-datbi ).
+      gt_out-kbetr1 = gt_konh-kbetr.
+    ENDIF.
+
+    "历史零售
+    CONCATENATE gt_out-perio(4) gt_out-perio+5(2) '01' INTO lv_date.
+    LOOP AT gt_konh WHERE matnr = gt_out-matnr AND  kschl = 'ZPR2' AND ( datab LE lv_date AND datbi GE lv_date ).
+      gt_out-kbetr2 = gt_konh-kbetr.
+      EXIT.
+    ENDLOOP.
+
+    "实时结算
+    LOOP AT gt_konh1 WHERE  vakey+6(18) = gt_out-matnr AND ( datab LE sy-datum AND datbi GE sy-datum ) AND vakey(4) = gt_out-vkorg AND vakey+4(2) = gt_out-kmkdgr.
+      gt_out-kbetr3 = gt_konh1-kbetr.
+      EXIT.
+    ENDLOOP.
+    IF sy-subrc <> 0.
+      READ TABLE gt_konh WITH  KEY matnr = gt_out-matnr kschl = 'ZPR5'  BINARY SEARCH.
+      IF sy-subrc = 0 AND ( sy-datum BETWEEN  gt_konh-datab AND gt_konh-datbi ).
+        gt_out-kbetr3 = gt_konh-kbetr.
+      ENDIF.
+    ENDIF.
+
+    "历史结算
+    LOOP AT gt_konh1 WHERE  vakey+6(18) = gt_out-matnr AND ( datab LE lv_date AND datbi GE lv_date ) AND vakey(4) = gt_out-vkorg AND vakey+4(2) = gt_out-kmkdgr..
+      gt_out-kbetr4 = gt_konh1-kbetr.
+      CONTINUE.
+    ENDLOOP.
+    IF sy-subrc <> 0.
+      LOOP AT gt_konh WHERE matnr = gt_out-matnr AND  kschl = 'ZPR5' AND  datab LE lv_date .
+        gt_out-kbetr4 = gt_konh-kbetr.
+        EXIT.
+      ENDLOOP.
+    ENDIF.
+    SELECT SINGLE ktext INTO gt_out-ktext1 FROM ztco004 WHERE kdgrp1 = gt_out-kmkdgr.  "大行业
+    MODIFY gt_out.
+    CLEAR: lv_kalnr,lv_pvprs,lv_peinh.
+    CLEAR lv_date.
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GET_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_get_fieldcat .
+  mcr_build_fieldcat:'PERIO'     '期间/年度'          'PERIO'     'CE11000',
+                     'BUKRS'     '公司代码'           'BUKRS'     'CE11000',
+                     'WAERS'     '货币码'             'WAERS'     'CE11000',
+                     'ABSMG'     '销售数量'           'ABSMG'     'CE11000',
+                     'ABSMG_ME'  '单位'               'ABSMG_ME'  'CE11000',
+                     'KTEXT1'     '大行业'           ''     '',
+                     'BZIRK'     '销售大区'           'BZIRK'     'CE11000',
+                     'BZIRK_TXT' '销售大区描述'       'BZTXT'     'T171T',
+*                     'FKART'     '开票类型'           'FKART'     'CE11000',
+                     'KAUFN'     '销售订单'           'KAUFN'     'CE11000',
+                     'KDPOS'     '销售订单项次'       'KDPOS'     'CE11000',
+                     'KMKDGR'    '行业'               'KMKDGR'    'CE11000',
+                     'KMKDGR_TXT' '行业描述'          'KTEXT'     'T151T',
+                     'KNDNR'     '客户'               'KNDNR'     'CE11000',
+                     'NAME1'     '客户名称'           'NAME1'     'KNA1',
+                     'KTGRD'     '客户账户组'         'KTGRD'     'CE11000',
+*                    'KURSF'     '汇率'               'KURSF'     'CE11000',
+                     'KVGR1'     '业务员'             'KVGR1'     'CE11000',
+                     'KVGR1_TXT' '业务员描述'         'BEZEI'     'TVV1T',
+                     'KVGR2'     '商务'               'KVGR2'     'CE11000',
+                     'KVGR2_TXT' '商务描述'           'BEZEI'     'TVV2T',
+                     'LAND1'     '国家/地区'          'LAND1'     'CE11000',
+                     'MATKL'     '物料组'             'MATKL'     'CE11000',
+                     'MATKL_TXT' '物料组描述'         'WGBEZ'     'T023T',
+                     'PERDE'     '过帐期间'           'PERDE'     'CE11000',
+                     'PRCTR'     '利润中心'           'PRCTR'     'CE11000',
+                     'PRODH'     '产品层次'           'PRODH'     'CE11000',
+                     'RKAUFNR'   '订单'               'RKAUFNR'   'CE11000',
+                     'SPART'     '产品组'             'SPART'     'CE11000',
+                     'SPART_TXT' '产品组描述'         'VTEXT'     'TSPAT',
+                     'VKBUR'     '销售行办'           'VKBUR'     'CE11000',
+                     'VKBUR_TXT' '销售行办描述'       'BEZEI'     'TVKBT',
+                     'VKORG'     '销售组织'           'VKORG'     'CE11000',
+                     'VTWEG'     '分销渠道'           'VTWEG'     'CE11000',
+                     'VTWEG_TXT'  '分销渠道描述'           'VTEXT'     'TVTWT',
+                     'VV001'     '销售收入（不含税）'   'VV001'     'CE11000',
+                     'VV002'     '销售收入（含税）'   'VV002'     'CE11000',
+                     'VV100'     '标准成本'           'VV100'     'CE11000',
+                     'VV101'     '标准-电阻电容'      'VV101'     'CE11000',
+                     'VV102'     '标准-二三极管'      'VV102'     'CE11000',
+                     'VV103'     '标准-端子插座'      'VV103'     'CE11000',
+                     'VV104'     '标准-IC'            'VV104'     'CE11000',
+                     'VV105'     '标准-PCB板'         'VV105'     'CE11000',
+                     'VV106'     '标准-结构件'        'VV106'     'CE11000',
+                     'VV107'     '标准-软件'          'VV107'     'CE11000',
+                     'VV108'     '标准-其他类'        'VV108'     'CE11000',
+                     'VV109'     '标准-委外加工费'    'VV109'     'CE11000',
+                     'VV110'     '标准-人工及福利'    'VV110'     'CE11000',
+                     'VV111'     '标准-租赁费'        'VV111'     'CE11000',
+                     'VV112'     '标准-折旧摊销'      'VV112'     'CE11000',
+                     'VV113'     '标准-水电'          'VV113'     'CE11000',
+                     'VV114'     '标准-其他制费'      'VV114'     'CE11000',
+                     'VV115'     '标准-电机'          'VV115'     'CE11000',
+                     'VV200'     '实际成本'           'VV200'     'CE11000',
+                     'VV201'     '实际-电阻电容'      'VV201'     'CE11000',
+                     'VV202'     '实际-二三极管'      'VV202'     'CE11000',
+                     'VV203'     '实际-端子插座'      'VV203'     'CE11000',
+                     'VV204'     '实际-IC'            'VV204'     'CE11000',
+                     'VV205'     '实际-PCB板'         'VV205'     'CE11000',
+                     'VV206'     '实际-结构件'        'VV206'     'CE11000',
+                     'VV207'     '实际-软件'          'VV207'     'CE11000',
+                     'VV208'     '实际-其他类'        'VV208'     'CE11000',
+                     'VV209'     '实际-委外加工费'    'VV209'     'CE11000',
+                     'VV210'     '实际-人工及福利'    'VV210'     'CE11000',
+                     'VV211'     '实际-租赁费'        'VV211'     'CE11000',
+                     'VV212'     '实际-折旧摊销'      'VV212'     'CE11000',
+                     'VV213'     '实际-水电'          'VV213'     'CE11000',
+                     'VV214'     '实际-其他制费'      'VV214'     'CE11000',
+                     'VV215'     '录入成本'           'VV215'     'CE11000',
+                     'VV216'     '实际-电机'          'VV216'     'CE11000',
+                     'VV301'     '费用'               'VV301'     'CE11000',
+                     'WW001'     '产品分类'           'WW001'     'CE11000',
+                     'WW001_TXT' '产品分类描述'       'BEZEK'     'T25A0',
+                     'WW002'     '新客户开始计算日期' 'WW002'     'CE11000',
+                     'WW003'     '产品线'             'WW003'     'CE11000',
+                     'WW004'     '新产品类型'         'WW004'     'CE11000',
+                     'WW005'     '产品型号'           'WW005'     'CE11000',
+                     'WW006'     '对应主型号'         'WW006'     'CE11000',
+                     'WW007'     '系列'               'WW007'     'CE11000',
+                     'WW008'     '子系列'             'WW008'     'CE11000',
+                     'WW009'     '品牌/厂家'          'WW009'     'CE11000',
+*                    'WW012'     '新品开始时间'       'WW012'     'CE11000',
+*                    'WW013'     '新品结束时间'       'WW013'     'CE11000',
+                     'WW015'     '销售行办（销售订单）'  'WW015'     'CE11000',
+                     'WW015_TXT' '销售行办描述（销售订单）'  'BEZEI'     'TVKBT',
+                     'WW016'     '销售大区（销售订单）'  'WW016'     'CE11000',
+                     'WW016_TXT'     '销售大区描述（销售订单）'  'BZTXT'     'T171T',
+                     'WW017'     '商务（销售订单）'  'WW017'     'CE11000',
+                     'WW017_TXT'     '商务描述（销售订单）'  'BEZEI'     'TVV2T',
+                     'WW018'     '销售代表（销售订单）'  'WW018'     'CE11000',
+                     'WW018_TXT'     '销售代表描述（销售订单）'  'BEZEI'     'TVV1T',
+                     'ZBHRJ1'     '不含软件金额'       'VV200'     'CE11000',
+                     'ZMLV'      '毛利率%'       'VV200'     'CE11000',
+                     'MATNR'     '物料名称'       'MATNR'     'MAKT',
+                     'MAKTX'     '物料描述'       'MAKTX'     'MAKT',
+                     'ZMATNR'     '软件名称'       'MATNR'     'MAKT',
+                     'ZMAKTX'     '软件描述'       'MAKTX'     'MAKT',
+                     'VV207_NEW'     '软件实际成本（新）'       'VV207'     'CE11000',
+                      'KBETR1'     '实时零售价'        'VV206'     'CE11000',
+                      'KBETR2'     '历史零售价'        'VV206'     'CE11000',
+                      'KBETR3'     '实时结算价'        'VV206'     'CE11000',
+                      'KBETR4'     '历史结算价'        'VV206'     'CE11000'.
+
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-zebra = 'X'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_OUTPUT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM frm_output_data .
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+*     I_INTERFACE_CHECK  = ' '
+*     I_BYPASSING_BUFFER =
+*     I_BUFFER_ACTIVE    =
+      i_callback_program = sy-repid
+*     I_CALLBACK_PF_STATUS_SET          = ' '
+*     I_CALLBACK_USER_COMMAND           = ' '
+*     I_CALLBACK_TOP_OF_PAGE            = ' '
+*     I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*     I_CALLBACK_HTML_END_OF_LIST       = ' '
+*     I_STRUCTURE_NAME   =
+*     I_BACKGROUND_ID    = ' '
+*     I_GRID_TITLE       =
+*     I_GRID_SETTINGS    =
+      is_layout_lvc      = gs_layout
+      it_fieldcat_lvc    = gt_fcat[]
+*     IT_EXCLUDING       =
+*     IT_SPECIAL_GROUPS_LVC             =
+*     IT_SORT_LVC        =
+*     IT_FILTER_LVC      =
+*     IT_HYPERLINK       =
+*     IS_SEL_HIDE        =
+      i_default          = 'X'
+      i_save             = 'A'
+*     IS_VARIANT         =
+*     IT_EVENTS          =
+*     IT_EVENT_EXIT      =
+*     IS_PRINT_LVC       =
+*     IS_REPREP_ID_LVC   =
+*     I_SCREEN_START_COLUMN             = 0
+*     I_SCREEN_START_LINE               = 0
+*     I_SCREEN_END_COLUMN               = 0
+*     I_SCREEN_END_LINE  = 0
+*     I_HTML_HEIGHT_TOP  =
+*     I_HTML_HEIGHT_END  =
+*     IT_ALV_GRAPHICS    =
+*     IT_EXCEPT_QINFO_LVC               =
+*     IR_SALV_FULLSCREEN_ADAPTER        =
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER           =
+*     ES_EXIT_CAUSED_BY_USER            =
+    TABLES
+      t_outtab           = gt_out[]
+    EXCEPTIONS
+      program_error      = 1
+      OTHERS             = 2.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_GETBOM
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_GT_OUT_MATNR  text
+*----------------------------------------------------------------------*
+FORM frm_getbom  USING    p_matnr.
+  DATA:lt_mast LIKE mast OCCURS 0 WITH HEADER LINE.
+  DATA:ls_cstmat       LIKE cstmat,
+       lt_stpo         LIKE stpox OCCURS 0 WITH HEADER LINE,
+       lt_matcat       LIKE cscmat OCCURS 0 WITH HEADER LINE,
+       lt_matcat_total LIKE cscmat OCCURS 0 WITH HEADER LINE,
+       lt_stpu         LIKE stpu OCCURS 0 WITH HEADER LINE.
+  DATA :lv_objek LIKE ausp-objek,lv TYPE num.
+  DATA: ls_class      LIKE TABLE OF sclass WITH HEADER LINE,
+        ls_objectdata LIKE TABLE OF clobjdat WITH HEADER LINE.
+
+***抓取满足条件的BOM数据
+  SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE lt_mast
+    FROM mast AS a
+    INNER JOIN stko AS b
+    ON a~stlnr = b~stlnr
+    AND a~stlal = b~stlal
+    WHERE a~matnr = p_matnr
+      AND a~werks = '1000'
+      AND b~stlty = 'M'.
+***如果输入了物料，需要展到底层，如果没有输入物料，则导出工厂所有BOM
+  IF lt_mast[] IS INITIAL.
+    EXIT.
+  ENDIF.
+
+  READ TABLE lt_mast INDEX 1.
+  PERFORM frm_explo_bom TABLES lt_stpo lt_matcat USING lt_mast-matnr lt_mast-werks '' lt_mast-stlal CHANGING ls_cstmat.
+  IF lt_stpo[] IS NOT INITIAL.
+    SORT lt_stpo BY idnrk.
+    READ TABLE lt_stpo WITH  KEY idnrk+10(2) = '75' BINARY SEARCH.
+    IF sy-subrc = 0.
+      gt_out-zmatnr = lt_stpo-idnrk.
+    ENDIF.
+  ENDIF.
+  CLEAR lt_mast.
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  FRM_EXPLO_BOM
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LT_STPO  text
+*      -->P_LT_MATCAT  text
+*      -->P_LT_MAST_MATNR  text
+*      -->P_LT_MAST_WERKS  text
+*      -->P_1259   text
+*      -->P_LT_MAST_STLAL  text
+*      <--P_LS_CSTMAT  text
+*----------------------------------------------------------------------*
+FORM frm_explo_bom  TABLES   lt_stpo STRUCTURE stpox
+                             lt_matcat STRUCTURE cscmat
+                     USING    u_matnr LIKE mara-matnr
+                              u_werks LIKE marc-werks
+                              u_mehrs TYPE c
+                              u_stlal LIKE mast-stlal
+                    CHANGING ls_cstmat LIKE cstmat.
+  REFRESH:lt_stpo,lt_matcat.
+  CLEAR:ls_cstmat.
+  CALL FUNCTION 'CS_BOM_EXPL_MAT_V2'
+    EXPORTING
+      capid                 = 'ZP02'
+      datuv                 = sy-datum
+      mehrs                 = u_mehrs
+      mtnrv                 = u_matnr
+      werks                 = u_werks
+      stlal                 = u_stlal
+    IMPORTING
+      topmat                = ls_cstmat
+    TABLES
+      matcat                = lt_matcat
+      stb                   = lt_stpo
+    EXCEPTIONS
+      alt_not_found         = 1
+      call_invalid          = 2
+      material_not_found    = 3
+      missing_authorization = 4
+      no_bom_found          = 5
+      no_plant_data         = 6
+      no_suitable_bom_found = 7
+      conversion_error      = 8
+      OTHERS                = 9.
+
+ENDFORM.
+
+FORM frm_kon.
+  DATA:lv_knumh TYPE konh-knumh,lv_matnr TYPE mara-matnr,lv_vakey TYPE konh-vakey,lv_date TYPE konh-datab.
+  SELECT
+        a~knumh
+*        a~kotabnr
+        a~kschl
+        a~vakey AS matnr
+        a~datab
+        a~datbi
+        b~kbetr
+     INTO CORRESPONDING FIELDS OF TABLE gt_konh FROM konh AS a INNER JOIN konp AS b ON a~knumh = b~knumh
+    WHERE  a~kotabnr = '903'  AND ( a~kschl = 'ZPR2' OR a~kschl = 'ZPR5' ) .
+  SORT gt_konh BY matnr kschl knumh DESCENDING datab DESCENDING.
+  LOOP AT gt_konh .
+    AT NEW matnr.
+      lv_matnr = gt_konh-matnr.
+      READ TABLE gt_konh INDEX sy-tabix.
+      lv_knumh = gt_konh-knumh.
+      lv_date = gt_konh-datab.
+      CONTINUE.
+    ENDAT.
+    IF lv_matnr = gt_konh-matnr AND gt_konh-knumh LT lv_knumh AND lv_date = gt_konh-datab..
+      DELETE gt_konh.
+      CONTINUE.
+    ENDIF.
+  ENDLOOP.
+
+
+  SELECT
+        a~knumh
+        a~vakey
+        a~datab
+        a~datbi
+        b~kbetr
+     INTO CORRESPONDING FIELDS OF TABLE gt_konh1 FROM konh AS a INNER JOIN konp AS b ON a~knumh = b~knumh
+    WHERE  a~kotabnr = '902'  AND  a~kschl = 'ZPR2'  .
+
+  SORT gt_konh1 BY knumh DESCENDING datab DESCENDING.
+
+  LOOP AT gt_konh1 .
+    AT NEW vakey.
+      lv_vakey = gt_konh1-vakey.
+      READ TABLE gt_konh1 INDEX sy-tabix.
+      lv_knumh = gt_konh1-knumh.
+      lv_date = gt_konh1-datab.
+      CONTINUE.
+    ENDAT.
+    IF lv_vakey = gt_konh1-vakey AND gt_konh1-knumh LT lv_knumh AND lv_date = gt_konh1-datab.
+      DELETE gt_konh1.
+      CONTINUE.
+    ENDIF.
+  ENDLOOP.
+ENDFORM.

@@ -1,0 +1,55 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZXMBCU04
+*&---------------------------------------------------------------------*
+*BREAK xul.
+TABLES: cawn.
+DATA: l_atinn  TYPE atinn,
+      lv_licha TYPE mch1-licha, "供应商批次
+      lv_hsdat TYPE mch1-hsdat. "生产日期
+DATA: ls_mara  TYPE mara,
+      lv_ematn TYPE ekpo-ematn,
+      lv_mfrnr TYPE mara-mfrnr.
+IF i_mseg-bwart EQ '101'.
+  CLEAR: lv_licha,lv_hsdat,ls_mara,lv_ematn,lv_mfrnr.
+*  根据物料+批次取供应商批次和生产日期
+  SELECT SINGLE licha hsdat
+    INTO (lv_licha,lv_hsdat)
+    FROM mch1
+    WHERE matnr = i_mseg-matnr
+      AND charg = i_mseg-charg.
+
+*  根据物料取MPROF
+  SELECT SINGLE * INTO ls_mara FROM mara WHERE matnr = i_mseg-matnr.
+  IF ls_mara-mprof IS NOT INITIAL.
+    SELECT SINGLE ematn INTO lv_ematn FROM ekpo WHERE ebeln =  i_mseg-ebeln AND ebelp = i_mseg-ebelp.
+    SELECT SINGLE mfrnr INTO lv_mfrnr FROM mara WHERE matnr = lv_ematn.
+    LOOP AT values WHERE atnam = 'Z_BATCH_MFRPN'.ENDLOOP.
+    IF sy-subrc <> 0.
+      CLEAR: l_atinn.
+      LOOP AT characters WHERE atnam = 'Z_BATCH_MFRPN'.
+        l_atinn = characters-atinn.
+        EXIT.
+      ENDLOOP.
+      values-atinn = l_atinn.
+      values-atnam = 'Z_BATCH_MFRPN'.
+      values-atwtb = lv_mfrnr.
+      APPEND values.
+    ENDIF.
+  ENDIF.
+
+*  判断MCH1-HSDAT 等于空，将当前日期写入特性Z_BATCH_PDATE.
+  IF lv_hsdat EQ '00000000'.
+    LOOP AT values WHERE atnam = 'Z_BATCH_PDATE'.ENDLOOP.
+    IF sy-subrc <> 0.
+      CLEAR: l_atinn.
+      LOOP AT characters WHERE atnam = 'Z_BATCH_PDATE'.
+        l_atinn = characters-atinn.
+        EXIT.
+      ENDLOOP.
+      values-atinn = l_atinn.
+      values-atnam = 'Z_BATCH_PDATE'.
+      values-atwtb = sy-datum.
+      APPEND values.
+    ENDIF.
+  ENDIF.
+ENDIF.

@@ -1,0 +1,31 @@
+*& 程序名： ZRPMM004
+*& 创建者(公司)/日期： 雷鸣涛/20170803
+*& 程序描述：采购对帐单
+*&---------------------------------------------------------------------*
+
+*&---------------------------------------------------------------------*
+REPORT zrpmm004.
+
+INCLUDE zrpmm004_t01.
+INCLUDE zrpmm004_s01.
+INCLUDE zrpmm004_f01.
+
+
+
+INITIALIZATION.
+PERFORM frm_createdate.
+
+AT SELECTION-SCREEN .
+
+
+
+START-OF-SELECTION.
+  IF s_bukrs[] IS INITIAL AND s_ebeln[] IS INITIAL AND s_ekgrp[] IS INITIAL AND s_ekorg[] IS INITIAL
+  AND   s_budat[] IS INITIAL AND s_lifnr[] IS INITIAL .
+    MESSAGE '请输入相应查找条件！' TYPE 'E'.
+    RETURN.
+  ENDIF.
+
+  PERFORM frm_getdata.
+  PERFORM frm_getfact.
+  PERFORM frm_show.

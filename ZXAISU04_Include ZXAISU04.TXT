@@ -1,0 +1,17 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZXAISU04
+*&---------------------------------------------------------------------*
+
+DATA:lv_invnr LIKE anla-invnr,
+     lv_str   TYPE string VALUE '(SAPLAIST)ANLA'.
+FIELD-SYMBOLS:<fs_anla> LIKE anla.
+
+IF sy-ucomm = 'BUCH' OR SY-UCOMM = 'YES'.
+  ASSIGN (lv_str) TO <fs_anla>.
+  IF sy-subrc = 0 AND <fs_anla>-invnr IS NOT INITIAL.
+    SELECT SINGLE invnr INTO lv_invnr FROM anla WHERE bukrs = <fs_anla>-bukrs AND invnr = <fs_anla>-invnr AND anln1 NE <fs_anla>-anln1.
+    IF sy-subrc = 0.
+      MESSAGE '资产编号已存在，请重新输入！' TYPE 'E' .
+    ENDIF.
+  ENDIF.
+ENDIF.

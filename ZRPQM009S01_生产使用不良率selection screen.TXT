@@ -1,0 +1,24 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPQM009S01
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK blc WITH FRAME TITLE TEXT-001.
+SELECT-OPTIONS:s_lifnr FOR mseg-lifnr,
+               s_matnr FOR mseg-matnr,
+               s_matnr2 for mseg-matnr,
+               s_matkl FOR mara-matkl,
+               s_aufnr FOR mseg-aufnr,
+               s_budat FOR mkpf-budat OBLIGATORY no-EXTENSION,
+               s_werks FOR mseg-werks.
+SELECTION-SCREEN END OF BLOCK blc.
+SELECTION-SCREEN BEGIN OF BLOCK blc1 WITH FRAME TITLE TEXT-002.
+PARAMETERS:r1 RADIOBUTTON GROUP ra DEFAULT 'X',
+           r2 RADIOBUTTON GROUP ra.
+SELECTION-SCREEN END OF BLOCK blc1.
+SELECTION-SCREEN BEGIN OF BLOCK blc2 WITH FRAME TITLE TEXT-003.
+PARAMETERS:r3 RADIOBUTTON GROUP rb DEFAULT 'X',
+           r4 RADIOBUTTON GROUP rb,
+           r5 RADIOBUTTON GROUP rb,
+           r6 RADIOBUTTON GROUP rb,
+           r7 RADIOBUTTON GROUP rb,
+           r8 RADIOBUTTON GROUP rb.
+SELECTION-SCREEN END OF BLOCK blc2.

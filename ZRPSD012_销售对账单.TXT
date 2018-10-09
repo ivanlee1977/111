@@ -1,0 +1,63 @@
+*&---------------------------------------------------------------------*
+*& Report ZRPSD012
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT zrpsd012 MESSAGE-ID z001.
+
+INCLUDE zrpsd012t01.  "全局数据定义
+INCLUDE zrpsd012s01.  "选择界面定义
+INCLUDE zrpsd012p01.  "处理数据定义
+INCLUDE zrpsd012f01.  "子程序定义
+************************************************************************
+*INITIALIZATION.
+************************************************************************
+INITIALIZATION.
+************************************************************************
+* AT SELECTION-SCREEN
+************************************************************************
+*AT SELECTION-SCREEN.
+
+AT SELECTION-SCREEN OUTPUT.    "当p_wdz值改变时会触发此事件
+  LOOP AT SCREEN.
+    IF p_wdz EQ 'X' AND screen-group1 = 'MR1'.
+      screen-active = '0'.          "设置组内设置屏幕的显示和隐藏
+    ENDIF.
+
+    IF p_ydz EQ 'X' AND screen-group1 = 'MR2'.
+      screen-active = '0'.
+    ENDIF.
+    MODIFY SCREEN.                "把弃置应用到当前屏幕
+  ENDLOOP.
+************************************************************************
+*AT SELECTION-SCREEN ON VALUE_REQUEST.
+************************************************************************
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_zterm-low.
+  PERFORM sub_search_help USING 'ZTERM' 'S_ZTERM'.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_zterm-high.
+  PERFORM sub_search_help USING 'ZTERM' 'S_ZTERM'.
+
+************************************************************************
+* AT SELECTION-SCREEN
+************************************************************************
+AT SELECTION-SCREEN.
+  CHECK sy-ucomm EQ 'ONLI'.
+  IF p_wdz EQ 'X' AND p_zdate1 IS INITIAL.
+    MESSAGE e398(00) WITH '请输入对账日期'.
+  ENDIF.
+  AUTHORITY-CHECK OBJECT 'V_VBAK_VKO'
+           ID 'VKORG' FIELD p_vkorg
+           ID 'VTWEG' DUMMY
+           ID 'SPART' DUMMY
+           ID 'ACTVT' FIELD '03'.
+  IF sy-subrc <> 0.
+    MESSAGE '没有销售组织的权限' TYPE 'E'.
+  ENDIF.
+************************************************************************
+* START-OF-SELECTION
+************************************************************************
+START-OF-SELECTION.
+
+  PERFORM frm_get_data. "获取数据.
+  PERFORM frm_output_data."输出数据

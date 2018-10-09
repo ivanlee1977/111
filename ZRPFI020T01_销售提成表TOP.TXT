@@ -1,0 +1,41 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPFI020T01
+*&---------------------------------------------------------------------*
+TABLES:ce11000.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       vkorg     LIKE knvv-vkorg,    "销售组织
+       vkorg_txt LIKE tvkot-vtext,   "销售组织描述
+       bzirk     LIKE knvv-bzirk,    "销售大区
+       bzirk_txt LIKE t171t-bztxt,   "销售大区描述
+       vkbur     LIKE knvv-vkbur,    "销售行办
+       vkbur_txt LIKE tvkbt-bezei,   "销售行办描述
+       kndnr     LIKE ce11000-kndnr, "客户编码
+       name1     LIKE kna1-name1,    "客户名称
+*      kvgr1     TYPE knvv-kvgr1,    "业务员
+       bezei     TYPE tvv1t-bezei,   "业务员描述
+       zjshj     TYPE p DECIMALS 2,  "价税合计
+       zhk       TYPE p DECIMALS 2,  "回款
+     END OF gt_out.
+
+DATA: gt_t001 LIKE t001 OCCURS 0 WITH HEADER LINE.
+
+CONSTANTS:gcst_excel_template TYPE w3objid VALUE 'ZFI020'.
+
+***alv data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  gt_fcat-inttype = &5.
+  gt_fcat-intlen = &6.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

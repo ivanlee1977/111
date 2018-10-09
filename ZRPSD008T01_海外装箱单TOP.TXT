@@ -1,0 +1,50 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPSD008T01
+*&---------------------------------------------------------------------*
+TABLES:likp,ztsd003zxdb.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       zzxno          LIKE ztsd003zxdb-zzxno, "装箱单号
+       kunag          LIKE likp-kunag,        "售达方
+       zname_sold(70) TYPE c,                 "售达方名称
+       wadat_ist      LIKE likp-wadat_ist,    "交货日期
+       vbeln          LIKE likp-vbeln,        "交货单号
+       posnr          LIKE lips-posnr,        "交货项目
+       matnr          LIKE lips-matnr,        "产品编码
+       arktx          LIKE lips-arktx,        "产品名称
+       netpr          TYPE p DECIMALS 2,      "单价
+       lfimg          LIKE lips-lfimg,        "数量
+       amount         TYPE p DECIMALS 2,      "价税合计
+       zgjmy(32)      TYPE c,                 "国际贸易条件
+       kunnr          TYPE likp-kunnr,        "送达方
+       zname_ship(70) TYPE c,                 "送达方名字
+       zstreet(100)   TYPE c,                 "送达方地址
+       kvgr1          TYPE vbak-kvgr1,        "销售代表
+       bezei          TYPE tvv1t-bezei,       "销售代表描述
+       tel            TYPE ztsd002-tel,       "销售代表电话
+       bzirk          TYPE vbkd-bzirk,        "大区
+       bztxt          TYPE t171t-bztxt,       "大区描述
+       vgbel          TYPE lips-vgbel,        "销售订单
+       vgpos          TYPE lips-vgpos,        "订单项目
+       vkorg          TYPE likp-vkorg,        "销售组织
+       erdat          TYPE likp-erdat,        "创建日期
+       check          TYPE c,
+     END OF gt_out.
+
+***alv data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  gt_fcat-inttype = &5.
+  gt_fcat-intlen = &6..
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.

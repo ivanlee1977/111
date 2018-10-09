@@ -1,0 +1,41 @@
+*&---------------------------------------------------------------------*
+*&  °üº¬                ZRPPP009T01
+*&---------------------------------------------------------------------*
+TABLES:sscrfields,mara,aeoi,t001w,aenr,mast.
+
+DATA:gt_upload LIKE zalsmex_tabline OCCURS 0 WITH HEADER LINE.
+FIELD-SYMBOLS:<fs_data> LIKE LINE OF gt_upload.
+
+DATA:gt_header TYPE alsmex_tabline OCCURS 0 WITH HEADER LINE.
+
+DATA:BEGIN OF gt_bom_data OCCURS 0.
+    INCLUDE STRUCTURE zspp_bom_data.
+DATA:zicon(20) TYPE c,
+     msgty     LIKE sy-msgty,
+     zmsg      TYPE bapi_msg,
+     END OF gt_bom_data.
+FIELD-SYMBOLS:<gt_bom_data> LIKE LINE OF gt_bom_data.
+
+DATA:gv_structure   TYPE dd02l-tabname,
+     gv_tabname(30) TYPE c.
+
+FIELD-SYMBOLS: <fs_tab_line> TYPE any,
+               <fs_tab>      TYPE STANDARD TABLE.
+
+DATA:   bdcdata LIKE bdcdata    OCCURS 0 WITH HEADER LINE.
+DATA:   messtab LIKE bdcmsgcoll OCCURS 0 WITH HEADER LINE.
+DATA:   gv_mode TYPE c VALUE 'N'.
+
+DEFINE mcr_add_msg.
+  IF &1-zmsg IS INITIAL.
+   &1-zmsg = &2.
+  ELSE.
+    CONCATENATE &1-zmsg &2 INTO &1-zmsg.
+  ENDIF.
+END-OF-DEFINITION.
+
+***alv data definr
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DATA:gv_flag TYPE c.

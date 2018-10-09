@@ -1,0 +1,38 @@
+*&---------------------------------------------------------------------*
+*& 程序名： ZRPSD028
+*& 创建者(公司)/日期： leimt/20171225
+*& 程序描述：需求计划变更
+*&---------------------------------------------------------------------*
+*& 版本     修改者(公司)     日期         修改描述
+*& 1.0.0    LEIMT           20171225      创建程序
+*&---------------------------------------------------------------------*
+REPORT zrpsd028.
+
+INCLUDE ZRPSD028_T01.
+INCLUDE ZRPSD028_S01.
+INCLUDE ZRPSD028_F01.
+
+
+
+
+INITIALIZATION.
+*  DATA date TYPE sy-datum.
+*
+*  CALL FUNCTION 'BKK_GET_MONTH_LASTDAY'
+*    EXPORTING
+*      i_date = sy-datum   "输入日期
+*    IMPORTING
+*      e_date = date.
+*  s_pdatub-low = sy-datum.
+*  s_pdatub-high = date.
+*  APPEND s_pdatub.
+AT SELECTION-SCREEN.
+
+START-OF-SELECTION.
+
+
+  PERFORM get_data."取数据
+  PERFORM process_data."处理数据
+
+END-OF-SELECTION.
+  PERFORM get_alv."ALV显示界面

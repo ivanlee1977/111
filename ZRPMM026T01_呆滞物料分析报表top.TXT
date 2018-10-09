@@ -1,0 +1,47 @@
+*&---------------------------------------------------------------------*
+*&  包含                ZRPMM026T01
+*&---------------------------------------------------------------------*
+TABLES:mara,mard,mkpf.
+
+DATA:BEGIN OF gt_out OCCURS 0,
+       werks   LIKE mard-werks,   "工厂
+       lgort   LIKE mard-lgort,   "库位
+       lgobe   LIKE t001l-lgobe,  "库位描述
+       matnr   LIKE mard-matnr,   "物料号码
+       maktx   LIKE makt-maktx,   "物料描述
+       labst   LIKE mard-labst,   "库存
+       meins   LIKE mara-meins,   "单位
+       zcpwl   LIKE mara-matnr,   "成品物料
+       maktx_c LIKE makt-maktx,   "成品物料描述
+       budat_s LIKE mkpf-budat,   "过账日期--收
+       budat_f LIKE mkpf-budat,   "过账日期--发
+       kunnr   LIKE vbak-kunnr,   "客户号码
+       name1   LIKE kna1-name1,   "客户名称
+       kvgr1   LIKE vbak-kvgr1,   "业务员代码
+       bezei   LIKE tvv1t-bezei,  "业务员名称
+     END OF gt_out.
+
+DATA:BEGIN OF gw_cp_data,
+       zcpwl   LIKE mara-matnr,  "成品料号
+       kunnr   LIKE vbak-kunnr,  "客户
+       name1   LIKE kna1-name1,
+       kvgr1   LIKE vbak-kvgr1,  "业务员代码
+       bezei   LIKE tvv1t-bezei, "业务员名称
+       maktx_c LIKE makt-maktx, "成品物料描述
+     END OF gw_cp_data.
+
+***alv data define
+DATA:gs_layout TYPE lvc_s_layo,
+     gt_fcat   TYPE lvc_t_fcat WITH HEADER LINE.
+
+DEFINE mcr_build_fieldcat.
+  gt_fcat-fieldname = &1.
+  gt_fcat-coltext   = &2.
+  gt_fcat-scrtext_l = &2.
+  gt_fcat-scrtext_m = &2.
+  gt_fcat-scrtext_s = &2.
+  gt_fcat-ref_field = &3.
+  gt_fcat-ref_table = &4.
+  APPEND gt_fcat.
+  CLEAR gt_fcat.
+END-OF-DEFINITION.
